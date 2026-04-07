@@ -2,11 +2,15 @@ use super::approval_support::{
     ensure_human_approval_status, is_terminal_task_status, normalize_recorded_target_branch,
     publish_recorded_target_branch, publish_target_branch, to_domain_merge_method,
 };
-use super::builder_branch_service::BuilderBranchService;
+use super::builder_branch_service::{
+    BuilderBranchContextLoadResult, BuilderBranchService, MissingBuilderWorktree,
+};
 use super::pull_request_provider_service::PullRequestProviderService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
-use host_domain::{GitDiffScope, TaskApprovalContext};
+use host_domain::{GitDiffScope, TaskApprovalContext, TaskApprovalContextLoadResult};
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 use std::path::Path;
 
 pub(super) struct ApprovalContextService<'a> {
@@ -22,7 +26,7 @@ impl<'a> ApprovalContextService<'a> {
         &self,
         repo_path: &str,
         task_id: &str,
-    ) -> Result<TaskApprovalContext> {
+    ) -> Result<TaskApprovalContextLoadResult> {
         let context = self.service.load_task_context(repo_path, task_id)?;
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self
@@ -52,32 +56,46 @@ impl<'a> ApprovalContextService<'a> {
                         .then_some(target.working_directory)
                 });
 
-            return Ok(TaskApprovalContext {
-                task_id: task_id.to_string(),
-                task_status: context.task.status.as_cli_value().to_string(),
-                working_directory,
-                source_branch: direct_merge.source_branch.clone(),
-                target_branch,
-                publish_target,
-                default_merge_method: to_domain_merge_method(config.git.default_merge_method),
-                has_uncommitted_changes: false,
-                uncommitted_file_count: 0,
-                pull_request: metadata.pull_request,
-                direct_merge: Some(direct_merge),
-                suggested_squash_commit_message: None,
-                providers: PullRequestProviderService::new(self.service)
-                    .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
+            return Ok(TaskApprovalContextLoadResult::Ready {
+                approval_context: Box::new(TaskApprovalContext {
+                    task_id: task_id.to_string(),
+                    task_status: context.task.status.as_cli_value().to_string(),
+                    working_directory,
+                    source_branch: direct_merge.source_branch.clone(),
+                    target_branch,
+                    publish_target,
+                    default_merge_method: to_domain_merge_method(config.git.default_merge_method),
+                    has_uncommitted_changes: false,
+                    uncommitted_file_count: 0,
+                    pull_request: metadata.pull_request,
+                    direct_merge: Some(direct_merge),
+                    suggested_squash_commit_message: None,
+                    providers: PullRequestProviderService::new(self.service)
+                        .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
+                }),
             });
         }
 
-        let mut approval = self.load_open_task_approval_context(repo_path, task_id)?;
+        let mut approval =
+            match self.load_open_task_approval_context_with_recovery(repo_path, task_id) {
+                Ok(approval) => approval,
+                Err(ApprovalContextLoadError::MissingBuilderWorktree(_missing)) => {
+                    return Ok(TaskApprovalContextLoadResult::MissingBuilderWorktree {
+                        task_id: task_id.to_string(),
+                        task_status: context.task.status.as_cli_value().to_string(),
+                    });
+                }
+                Err(ApprovalContextLoadError::Other(error)) => return Err(error),
+            };
         approval.suggested_squash_commit_message =
             self.service.git_port.suggested_squash_commit_message(
                 Path::new(&context.repo.repo_path),
                 approval.source_branch.as_str(),
                 approval.target_branch.canonical().as_str(),
             )?;
-        Ok(approval)
+        Ok(TaskApprovalContextLoadResult::Ready {
+            approval_context: Box::new(approval),
+        })
     }
 
     pub(super) fn load_open_task_approval_context(
@@ -85,6 +103,20 @@ impl<'a> ApprovalContextService<'a> {
         repo_path: &str,
         task_id: &str,
     ) -> Result<TaskApprovalContext> {
+        self.load_open_task_approval_context_with_recovery(repo_path, task_id)
+            .map_err(|error| match error {
+                ApprovalContextLoadError::MissingBuilderWorktree(missing) => {
+                    anyhow::anyhow!(missing)
+                }
+                ApprovalContextLoadError::Other(error) => error,
+            })
+    }
+
+    fn load_open_task_approval_context_with_recovery(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<TaskApprovalContext, ApprovalContextLoadError> {
         let context = self.service.load_task_context(repo_path, task_id)?;
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self
@@ -94,11 +126,22 @@ impl<'a> ApprovalContextService<'a> {
             .service
             .task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
         let config = self.service.config_store.load()?;
-        let builder_context = BuilderBranchService::new(self.service).load_builder_branch_context(
-            context.repo.repo_path.as_str(),
-            task_id,
-            "Human approval",
-        )?;
+        let builder_context = match BuilderBranchService::new(self.service)
+            .load_builder_branch_context_result(
+                context.repo.repo_path.as_str(),
+                task_id,
+                "Human approval",
+            )? {
+            BuilderBranchContextLoadResult::Ready(context) => context,
+            BuilderBranchContextLoadResult::MissingContext => {
+                return Err(ApprovalContextLoadError::Other(anyhow::anyhow!(
+                    "Human approval requires a builder worktree for task {task_id}. Start Builder first."
+                )));
+            }
+            BuilderBranchContextLoadResult::MissingWorktree(missing) => {
+                return Err(ApprovalContextLoadError::MissingBuilderWorktree(missing));
+            }
+        };
         let target_branch = BuilderBranchService::new(self.service)
             .target_branch_for_repo(context.repo.repo_path.as_str())?;
         let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
@@ -124,5 +167,35 @@ impl<'a> ApprovalContextService<'a> {
             providers: PullRequestProviderService::new(self.service)
                 .provider_statuses(Path::new(&context.repo.repo_path), &repo_config),
         })
+    }
+}
+
+#[derive(Debug)]
+enum ApprovalContextLoadError {
+    MissingBuilderWorktree(MissingBuilderWorktree),
+    Other(anyhow::Error),
+}
+
+impl Display for ApprovalContextLoadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingBuilderWorktree(missing) => Display::fmt(missing, f),
+            Self::Other(error) => Display::fmt(error, f),
+        }
+    }
+}
+
+impl Error for ApprovalContextLoadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::MissingBuilderWorktree(missing) => Some(missing),
+            Self::Other(error) => Some(error.root_cause()),
+        }
+    }
+}
+
+impl From<anyhow::Error> for ApprovalContextLoadError {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Other(error)
     }
 }

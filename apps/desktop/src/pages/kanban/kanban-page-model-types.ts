@@ -42,10 +42,16 @@ export type KanbanResolvedSessionStartIntent = KanbanSessionStartIntent & {
 export type TaskApprovalMode = "direct_merge" | "pull_request";
 export type PullRequestDraftMode = "manual" | "generate_ai";
 
-export type TaskApprovalModalModel = {
+type TaskApprovalModalBase = {
   open: boolean;
-  stage: "approval" | "complete_direct_merge";
   taskId: string;
+  isSubmitting: boolean;
+  errorMessage: string | null;
+  onOpenChange: (open: boolean) => void;
+};
+
+export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
+  stage: "approval";
   isLoading: boolean;
   mode: TaskApprovalMode;
   mergeMethod: "merge_commit" | "squash" | "rebase";
@@ -61,10 +67,6 @@ export type TaskApprovalModalModel = {
   squashCommitMessageTouched: boolean;
   hasSuggestedSquashCommitMessage: boolean;
   targetBranch: GitTargetBranch | null;
-  publishTarget: GitTargetBranch | null;
-  isSubmitting: boolean;
-  errorMessage: string | null;
-  onOpenChange: (open: boolean) => void;
   onModeChange: (mode: TaskApprovalMode) => void;
   onMergeMethodChange: (mergeMethod: "merge_commit" | "squash" | "rebase") => void;
   onPullRequestDraftModeChange: (mode: PullRequestDraftMode) => void;
@@ -72,9 +74,26 @@ export type TaskApprovalModalModel = {
   onBodyChange: (value: string) => void;
   onSquashCommitMessageChange: (value: string) => void;
   onConfirm: () => void;
+};
+
+export type TaskApprovalMissingBuilderWorktreeModalModel = TaskApprovalModalBase & {
+  stage: "missing_builder_worktree";
+  onCompleteMissingBuilderWorktree: () => void;
+  onResetMissingBuilderWorktree: () => void;
+};
+
+export type TaskApprovalCompletionModalModel = TaskApprovalModalBase & {
+  stage: "complete_direct_merge";
+  targetBranch: GitTargetBranch | null;
+  publishTarget: GitTargetBranch | null;
   onSkipDirectMergeCompletion: () => void;
   onCompleteDirectMerge: () => void;
 };
+
+export type TaskApprovalModalModel =
+  | TaskApprovalApprovalModalModel
+  | TaskApprovalMissingBuilderWorktreeModalModel
+  | TaskApprovalCompletionModalModel;
 
 export type KanbanPageHeaderModel = {
   isLoadingTasks: boolean;

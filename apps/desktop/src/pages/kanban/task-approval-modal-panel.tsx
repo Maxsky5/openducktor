@@ -1,4 +1,4 @@
-import { ArrowRight, Check, LoaderCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
@@ -9,6 +9,9 @@ import { canonicalTargetBranch } from "@/lib/target-branch";
 import { cn } from "@/lib/utils";
 import type {
   PullRequestDraftMode,
+  TaskApprovalApprovalModalModel,
+  TaskApprovalCompletionModalModel,
+  TaskApprovalMissingBuilderWorktreeModalModel,
   TaskApprovalModalModel,
   TaskApprovalMode,
 } from "./kanban-page-model-types";
@@ -28,7 +31,7 @@ const APPROVAL_ACTION_OPTIONS: Array<{
 ];
 
 const MERGE_METHOD_OPTIONS: Array<{
-  value: TaskApprovalModalModel["mergeMethod"];
+  value: TaskApprovalApprovalModalModel["mergeMethod"];
   label: string;
   description: string;
 }> = [
@@ -169,10 +172,15 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): {
   title: string;
   description: string;
 } {
-  const isCompletionStage = model.stage === "complete_direct_merge";
-  const hasPublishTarget = model.publishTarget !== null;
+  if (model.stage === "missing_builder_worktree") {
+    return {
+      title: "Builder Worktree Missing",
+      description:
+        "The builder worktree for this task is no longer available. You can still complete the task or reset the implementation from here.",
+    };
+  }
 
-  if (isCompletionStage && hasPublishTarget) {
+  if (model.stage === "complete_direct_merge" && model.publishTarget !== null) {
     const publishTargetLabel = canonicalTargetBranch(model.publishTarget);
     return {
       title: "Publish And Mark Done",
@@ -180,7 +188,7 @@ export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): {
     };
   }
 
-  if (isCompletionStage) {
+  if (model.stage === "complete_direct_merge") {
     return {
       title: "Complete Direct Merge",
       description:
@@ -203,71 +211,8 @@ export function TaskApprovalModalPanel({
   showHeader?: boolean;
 }): ReactElement {
   const { title, description } = getTaskApprovalModalHeader(model);
-
-  const hasManualPullRequestValidationError =
-    model.stage === "approval" &&
-    model.mode === "pull_request" &&
-    model.pullRequestAvailable &&
-    model.pullRequestDraftMode === "manual" &&
-    (model.title.trim().length === 0 || model.body.trim().length === 0);
-  const hasSquashCommitMessageSubmitError =
-    model.stage === "approval" &&
-    model.mode === "direct_merge" &&
-    model.mergeMethod === "squash" &&
-    model.squashCommitMessage.trim().length === 0;
-  const showSquashCommitMessageValidationError =
-    hasSquashCommitMessageSubmitError &&
-    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
-  const confirmDisabled =
-    model.isLoading ||
-    model.isSubmitting ||
-    model.hasUncommittedChanges ||
-    (model.mode === "pull_request" && !model.pullRequestAvailable) ||
-    hasManualPullRequestValidationError ||
-    hasSquashCommitMessageSubmitError;
-  const isCompletionStage = model.stage === "complete_direct_merge";
-  const hasPublishTarget = model.publishTarget !== null;
-  const hasCompletionBranchContext = model.targetBranch !== null;
-  const completionContextError =
-    isCompletionStage && !hasCompletionBranchContext
-      ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
-      : null;
-  const localBranchName = model.targetBranch ? model.targetBranch.branch : "";
-  const publishTargetLabel = model.publishTarget ? canonicalTargetBranch(model.publishTarget) : "";
-  const publishTargetBranchName = model.publishTarget?.branch ?? "";
-  const dirtyWorktreeMessage =
-    model.uncommittedFileCount === 1
-      ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
-      : `The builder worktree has ${model.uncommittedFileCount} uncommitted files. Commit or discard them before approving this task.`;
   const sectionLabelClass =
     "text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground";
-  const actionOptions = APPROVAL_ACTION_OPTIONS.map((option) => ({
-    value: option.value,
-    label: option.label,
-    disabled: option.value === "pull_request" && !model.pullRequestAvailable,
-  }));
-  let confirmLabel = "Merge Locally";
-  if (model.mode === "pull_request") {
-    confirmLabel =
-      model.pullRequestDraftMode === "manual" ? "Create Pull Request" : "Start PR Generation";
-  }
-  let completionButtonLabel = "Mark Task Done";
-  if (model.isSubmitting && hasPublishTarget) {
-    completionButtonLabel = `Publishing ${publishTargetBranchName}`;
-  } else if (model.isSubmitting) {
-    completionButtonLabel = "Completing Direct Merge";
-  } else if (hasPublishTarget) {
-    completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
-  }
-  let completionStageDescription =
-    "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
-  if (hasPublishTarget) {
-    completionStageDescription =
-      "Finish later to keep the task in Human Review while the local merge stays ready to publish.";
-  }
-  const completionActionDisabled = model.isSubmitting || completionContextError !== null;
-  const finishLaterDisabled = model.isSubmitting;
-  const completionErrorMessage = completionContextError ?? model.errorMessage;
 
   return (
     <>
@@ -280,53 +225,90 @@ export function TaskApprovalModalPanel({
 
       <DialogBody>
         {model.stage === "approval" ? (
-          <TaskApprovalApprovalStage
-            model={model}
-            actionOptions={actionOptions}
-            dirtyWorktreeMessage={dirtyWorktreeMessage}
-            sectionLabelClass={sectionLabelClass}
-            showSquashCommitMessageValidationError={showSquashCommitMessageValidationError}
-          />
+          <TaskApprovalApprovalStage model={model} sectionLabelClass={sectionLabelClass} />
         ) : null}
 
-        {isCompletionStage ? (
-          <TaskApprovalCompletionStage
-            completionContextError={completionContextError}
-            completionErrorMessage={completionErrorMessage}
-            hasPublishTarget={hasPublishTarget}
-            localBranchName={localBranchName}
-            publishTargetLabel={publishTargetLabel}
-            sectionLabelClass={sectionLabelClass}
-          />
+        {model.stage === "missing_builder_worktree" ? (
+          <TaskApprovalMissingBuilderWorktreeStage model={model} />
+        ) : null}
+
+        {model.stage === "complete_direct_merge" ? (
+          <TaskApprovalCompletionStage model={model} sectionLabelClass={sectionLabelClass} />
         ) : null}
       </DialogBody>
-      <TaskApprovalModalFooter
-        model={model}
-        completionActionDisabled={completionActionDisabled}
-        completionButtonLabel={completionButtonLabel}
-        completionStageDescription={completionStageDescription}
-        confirmDisabled={confirmDisabled}
-        confirmLabel={confirmLabel}
-        finishLaterDisabled={finishLaterDisabled}
-        isCompletionStage={isCompletionStage}
-      />
+      <TaskApprovalModalFooter model={model} />
     </>
   );
 }
 
+function getDirectMergeCompletionContextError(
+  model: TaskApprovalCompletionModalModel,
+): string | null {
+  return model.targetBranch === null
+    ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
+    : null;
+}
+
+function getApprovalSubmitValidation(model: TaskApprovalApprovalModalModel): {
+  hasManualPullRequestValidationError: boolean;
+  hasSquashCommitMessageSubmitError: boolean;
+  showSquashCommitMessageValidationError: boolean;
+  confirmDisabled: boolean;
+  confirmLabel: string;
+} {
+  const hasManualPullRequestValidationError =
+    model.mode === "pull_request" &&
+    model.pullRequestAvailable &&
+    model.pullRequestDraftMode === "manual" &&
+    (model.title.trim().length === 0 || model.body.trim().length === 0);
+  const hasSquashCommitMessageSubmitError =
+    model.mode === "direct_merge" &&
+    model.mergeMethod === "squash" &&
+    model.squashCommitMessage.trim().length === 0;
+  const showSquashCommitMessageValidationError =
+    hasSquashCommitMessageSubmitError &&
+    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
+
+  let confirmLabel = "Merge Locally";
+  if (model.mode === "pull_request" && model.pullRequestDraftMode === "manual") {
+    confirmLabel = "Create Pull Request";
+  } else if (model.mode === "pull_request") {
+    confirmLabel = "Start PR Generation";
+  }
+
+  return {
+    hasManualPullRequestValidationError,
+    hasSquashCommitMessageSubmitError,
+    showSquashCommitMessageValidationError,
+    confirmDisabled:
+      model.isLoading ||
+      model.isSubmitting ||
+      model.hasUncommittedChanges ||
+      (model.mode === "pull_request" && !model.pullRequestAvailable) ||
+      hasManualPullRequestValidationError ||
+      hasSquashCommitMessageSubmitError,
+    confirmLabel,
+  };
+}
+
 function TaskApprovalApprovalStage({
   model,
-  actionOptions,
-  dirtyWorktreeMessage,
   sectionLabelClass,
-  showSquashCommitMessageValidationError,
 }: {
-  model: TaskApprovalModalModel;
-  actionOptions: Array<{ value: TaskApprovalMode; label: string; disabled: boolean }>;
-  dirtyWorktreeMessage: string;
+  model: TaskApprovalApprovalModalModel;
   sectionLabelClass: string;
-  showSquashCommitMessageValidationError: boolean;
 }): ReactElement {
+  const { showSquashCommitMessageValidationError } = getApprovalSubmitValidation(model);
+  const actionOptions = APPROVAL_ACTION_OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.label,
+    disabled: option.value === "pull_request" && !model.pullRequestAvailable,
+  }));
+  const dirtyWorktreeMessage =
+    model.uncommittedFileCount === 1
+      ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
+      : `The builder worktree has ${model.uncommittedFileCount} uncommitted files. Commit or discard them before approving this task.`;
+
   if (model.isLoading) {
     return (
       <div className="space-y-6 px-6 py-6 sm:px-8">
@@ -390,12 +372,56 @@ function TaskApprovalApprovalStage({
   );
 }
 
+function TaskApprovalMissingBuilderWorktreeStage({
+  model,
+}: {
+  model: TaskApprovalMissingBuilderWorktreeModalModel;
+}): ReactElement {
+  return (
+    <div className="space-y-4 px-6 py-6 sm:px-8">
+      <div className="rounded-2xl border border-warning-border bg-warning-surface p-5 text-warning-surface-foreground">
+        <div className="flex items-start gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-warning-border/60 bg-card/70 text-warning-muted">
+            <AlertTriangle className="size-5" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold text-warning-surface-foreground">
+              Builder worktree not found
+            </p>
+            <p className="text-sm leading-6 text-warning-surface-foreground">
+              OpenDucktor could not load the latest builder worktree for this task. Normal direct
+              merge and pull request approval options are unavailable without that workspace.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {model.errorMessage ? (
+        <div className="grid gap-1 rounded-2xl border border-destructive-border bg-destructive-surface p-4 text-destructive-surface-foreground">
+          <p className="text-sm font-semibold">Recovery action failed</p>
+          <p className="text-sm text-destructive-muted">{model.errorMessage}</p>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="space-y-1.5">
+          <p className="text-sm font-semibold text-foreground">Choose the next step</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Complete task closes the review and moves this task to Done. Reset implementation opens
+            the existing reset workflow so you can send the task back for more work.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TaskApprovalDirectMergeSection({
   model,
   sectionLabelClass,
   showSquashCommitMessageValidationError,
 }: {
-  model: TaskApprovalModalModel;
+  model: TaskApprovalApprovalModalModel;
   sectionLabelClass: string;
   showSquashCommitMessageValidationError: boolean;
 }): ReactElement {
@@ -450,7 +476,7 @@ function TaskApprovalPullRequestSection({
   model,
   sectionLabelClass,
 }: {
-  model: TaskApprovalModalModel;
+  model: TaskApprovalApprovalModalModel;
   sectionLabelClass: string;
 }): ReactElement {
   return (
@@ -517,20 +543,18 @@ function TaskApprovalPullRequestSection({
 }
 
 function TaskApprovalCompletionStage({
-  completionContextError,
-  completionErrorMessage,
-  hasPublishTarget,
-  localBranchName,
-  publishTargetLabel,
+  model,
   sectionLabelClass,
 }: {
-  completionContextError: string | null;
-  completionErrorMessage: string | null;
-  hasPublishTarget: boolean;
-  localBranchName: string;
-  publishTargetLabel: string;
+  model: TaskApprovalCompletionModalModel;
   sectionLabelClass: string;
 }): ReactElement {
+  const hasPublishTarget = model.publishTarget !== null;
+  const completionContextError = getDirectMergeCompletionContextError(model);
+  const completionErrorMessage = completionContextError ?? model.errorMessage;
+  const localBranchName = model.targetBranch?.branch ?? "";
+  const publishTargetLabel = model.publishTarget ? canonicalTargetBranch(model.publishTarget) : "";
+
   return (
     <div className="grid gap-4 px-6 py-6 sm:px-8">
       {completionErrorMessage ? (
@@ -612,25 +636,8 @@ function TaskApprovalCompletionStage({
   );
 }
 
-function TaskApprovalModalFooter({
-  model,
-  completionActionDisabled,
-  completionButtonLabel,
-  completionStageDescription,
-  confirmDisabled,
-  confirmLabel,
-  finishLaterDisabled,
-  isCompletionStage,
-}: {
-  model: TaskApprovalModalModel;
-  completionActionDisabled: boolean;
-  completionButtonLabel: string;
-  completionStageDescription: string;
-  confirmDisabled: boolean;
-  confirmLabel: string;
-  finishLaterDisabled: boolean;
-  isCompletionStage: boolean;
-}): ReactElement {
+function TaskApprovalModalFooter({ model }: { model: TaskApprovalModalModel }): ReactElement {
+  const isCompletionStage = model.stage === "complete_direct_merge";
   const footerClassName = cn(
     "mt-0 border-t border-border/80 bg-muted/20 px-6 py-4 sm:px-8",
     isCompletionStage
@@ -638,7 +645,23 @@ function TaskApprovalModalFooter({
       : "flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between",
   );
 
-  if (isCompletionStage) {
+  if (model.stage === "complete_direct_merge") {
+    const completionContextError = getDirectMergeCompletionContextError(model);
+    const completionActionDisabled = model.isSubmitting || completionContextError !== null;
+    const finishLaterDisabled = model.isSubmitting;
+    const publishTargetBranchName = model.publishTarget?.branch ?? "";
+    let completionButtonLabel = "Mark Task Done";
+    if (model.isSubmitting && model.publishTarget) {
+      completionButtonLabel = `Publishing ${publishTargetBranchName}`;
+    } else if (model.isSubmitting) {
+      completionButtonLabel = "Completing Direct Merge";
+    } else if (model.publishTarget) {
+      completionButtonLabel = `Push ${publishTargetBranchName} And Mark Done`;
+    }
+    const completionStageDescription = model.publishTarget
+      ? "Finish later to keep the task in Human Review while the local merge stays ready to publish."
+      : "Finish later to keep the task in Human Review until you are ready to close it and clean up the builder workspace.";
+
     return (
       <DialogFooter className={footerClassName}>
         <p className="text-sm text-muted-foreground">{completionStageDescription}</p>
@@ -664,6 +687,41 @@ function TaskApprovalModalFooter({
       </DialogFooter>
     );
   }
+
+  if (model.stage === "missing_builder_worktree") {
+    return (
+      <DialogFooter className="mt-0 flex-col-reverse gap-3 border-t border-border/80 bg-muted/20 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={model.isSubmitting}
+          onClick={() => model.onOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={model.isSubmitting}
+            onClick={model.onResetMissingBuilderWorktree}
+          >
+            Reset Implementation
+          </Button>
+          <Button
+            type="button"
+            disabled={model.isSubmitting}
+            onClick={model.onCompleteMissingBuilderWorktree}
+          >
+            {model.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {model.isSubmitting ? "Completing Task" : "Complete Task"}
+          </Button>
+        </div>
+      </DialogFooter>
+    );
+  }
+
+  const { confirmDisabled, confirmLabel } = getApprovalSubmitValidation(model);
 
   return (
     <DialogFooter className={footerClassName}>

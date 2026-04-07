@@ -4,8 +4,8 @@ use crate::{
 };
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
-    AgentRuntimeKind, DevServerGroupState, PullRequestRecord, RunSummary, TaskApprovalContext,
-    TaskCard, TaskDirectMergeResult, TaskPullRequestDetectResult,
+    AgentRuntimeKind, DevServerGroupState, PullRequestRecord, RunSummary,
+    TaskApprovalContextLoadResult, TaskCard, TaskDirectMergeResult, TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
 
@@ -179,7 +179,7 @@ pub async fn task_approval_context_get(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-) -> Result<TaskApprovalContext, String> {
+) -> Result<TaskApprovalContextLoadResult, String> {
     as_error(
         state
             .service

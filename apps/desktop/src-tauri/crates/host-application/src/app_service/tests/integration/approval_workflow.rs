@@ -3,7 +3,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     GitBranch, GitCurrentBranch, GitFileStatus, GitMergeBranchResult, GitMergeMethod,
-    PullRequestRecord, TaskPullRequestDetectResult, TaskStatus,
+    PullRequestRecord, TaskApprovalContext, TaskApprovalContextLoadResult,
+    TaskPullRequestDetectResult, TaskStatus,
 };
 use host_infra_system::{
     AppConfigStore, GitProviderConfig, GitProviderRepository, HookSet, RepoConfig,
@@ -144,6 +145,17 @@ fn configure_builder_session(
 
     service.workspace_add(repo_path)?;
     Ok(())
+}
+
+fn expect_ready_approval_context(
+    result: TaskApprovalContextLoadResult,
+) -> Result<TaskApprovalContext> {
+    match result {
+        TaskApprovalContextLoadResult::Ready { approval_context } => Ok(*approval_context),
+        TaskApprovalContextLoadResult::MissingBuilderWorktree { task_id, .. } => Err(anyhow!(
+            "expected ready approval context for task {task_id}, got missing builder worktree"
+        )),
+    }
 }
 
 fn setup_pull_request_workflow_fixture(
@@ -822,6 +834,140 @@ fn task_direct_merge_complete_skips_ancestry_probe_when_squash_source_branch_is_
 }
 
 #[test]
+fn task_approval_context_reports_missing_builder_worktree_for_review_tasks() -> Result<()> {
+    let root = unique_temp_path("approval-context-missing-builder-worktree");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let missing_worktree_path = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+
+    fs::create_dir_all(&missing_worktree_path)?;
+    let mut session = make_session("task-1", "session-build");
+    session.working_directory = missing_worktree_path.to_string_lossy().to_string();
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .agent_sessions
+        .push(session);
+    let _ = fs::remove_dir_all(&missing_worktree_path);
+    assert!(!missing_worktree_path.exists());
+
+    let approval = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
+    assert_eq!(
+        approval,
+        TaskApprovalContextLoadResult::MissingBuilderWorktree {
+            task_id: "task-1".to_string(),
+            task_status: TaskStatus::HumanReview.as_cli_value().to_string(),
+        }
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_approval_context_still_errors_when_builder_context_is_missing() -> Result<()> {
+    let root = unique_temp_path("approval-context-missing-builder-context");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+
+    let error = service
+        .task_approval_context_get(repo_path.as_str(), "task-1")
+        .expect_err("missing builder context should fail fast");
+    assert_eq!(
+        error.to_string(),
+        "Human approval requires a builder worktree for task task-1. Start Builder first."
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_approval_context_still_errors_for_detached_builder_branch() -> Result<()> {
+    let root = unique_temp_path("approval-context-detached-builder-branch");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            worktree_path.to_string_lossy().to_string(),
+            GitCurrentBranch {
+                name: None,
+                detached: true,
+                revision: None,
+            },
+        );
+
+    let error = service
+        .task_approval_context_get(repo_path.as_str(), "task-1")
+        .expect_err("detached builder branch should still fail");
+    assert!(error
+        .to_string()
+        .contains("requires a builder branch, but the latest builder workspace is detached"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_worktree() -> Result<()>
 {
     let root = unique_temp_path("approval-direct-merge-reopen");
@@ -875,7 +1021,9 @@ fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_work
     let _ = fs::remove_dir_all(&missing_worktree_path);
     assert!(!missing_worktree_path.exists());
 
-    let approval = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
+    let approval = expect_ready_approval_context(
+        service.task_approval_context_get(repo_path.as_str(), "task-1")?,
+    )?;
     assert_eq!(approval.working_directory, None);
     assert_eq!(approval.source_branch, "odt/task-1");
     assert_eq!(approval.target_branch.checkout_branch(), "main");
@@ -952,7 +1100,9 @@ fn task_approval_context_reports_global_merge_default_and_dirty_worktree() -> Re
         });
     }
 
-    let approval = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
+    let approval = expect_ready_approval_context(
+        service.task_approval_context_get(repo_path.as_str(), "task-1")?,
+    )?;
     assert_eq!(approval.default_merge_method, GitMergeMethod::Rebase);
     assert!(approval.has_uncommitted_changes);
     assert_eq!(approval.uncommitted_file_count, 1);
@@ -1158,7 +1308,9 @@ fn task_approval_context_reports_pull_request_unavailable_when_github_auth_is_mi
     )?;
     service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
 
-    let context = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
+    let context = expect_ready_approval_context(
+        service.task_approval_context_get(repo_path.as_str(), "task-1")?,
+    )?;
     let github = context
         .providers
         .iter()
@@ -1215,7 +1367,9 @@ fn task_approval_context_uses_configured_github_host_for_auth_status() -> Result
         github_repo_config_for_host(&worktree_base, "github.mycorp.com"),
     )?;
 
-    let context = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
+    let context = expect_ready_approval_context(
+        service.task_approval_context_get(repo_path.as_str(), "task-1")?,
+    )?;
     let github = context
         .providers
         .iter()

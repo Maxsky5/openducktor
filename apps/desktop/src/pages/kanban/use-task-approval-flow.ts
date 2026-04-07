@@ -1,4 +1,4 @@
-import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
+import type { TaskApprovalContextLoadResult, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -10,7 +10,12 @@ import {
   loadTaskApprovalContextFromQuery,
   taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
-import type { TaskApprovalModalModel } from "./kanban-page-model-types";
+import type {
+  TaskApprovalApprovalModalModel,
+  TaskApprovalCompletionModalModel,
+  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalModalModel,
+} from "./kanban-page-model-types";
 import {
   completeDirectMergeApproval,
   submitDirectMergeApproval,
@@ -23,6 +28,7 @@ import { submitPullRequestApproval } from "./task-approval-flow-pull-request";
 import {
   CLOSED_TASK_APPROVAL_STATE,
   determineDefaultTaskApprovalMode,
+  isTaskApprovalInteractive,
   isTaskApprovalOpen,
   isTaskApprovalReady,
   taskApprovalFlowReducer,
@@ -33,6 +39,8 @@ type UseTaskApprovalFlowArgs = {
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
+  humanApproveTask: (taskId: string) => Promise<void>;
+  openResetImplementation: (taskId: string) => boolean;
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
 };
 
@@ -55,6 +63,8 @@ export function useTaskApprovalFlow({
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
+  humanApproveTask,
+  openResetImplementation,
   onResolveGitConflict = async (): Promise<boolean> => {
     throw new Error(
       "onResolveGitConflict handler is required to use the Ask Builder conflict-resolution path.",
@@ -112,8 +122,11 @@ export function useTaskApprovalFlow({
 
       const cachedContext = queryClient.getQueryData(
         taskApprovalQueryKeys.context(activeRepo, taskId),
-      ) as TaskApprovalContext | undefined;
-      const effectiveMode = options?.mode ?? determineDefaultTaskApprovalMode(cachedContext);
+      ) as TaskApprovalContextLoadResult | undefined;
+      const cachedApprovalContext =
+        cachedContext?.outcome === "ready" ? cachedContext.approvalContext : undefined;
+      const effectiveMode =
+        options?.mode ?? determineDefaultTaskApprovalMode(cachedApprovalContext);
       const title = task?.title ?? "";
       const body = task?.description ?? "";
       const pullRequestDraftMode = options?.pullRequestDraftMode ?? "manual";
@@ -131,7 +144,7 @@ export function useTaskApprovalFlow({
 
       void (async () => {
         try {
-          const approvalContext = await loadTaskApprovalContextFromQuery(
+          const approvalContextResult = await loadTaskApprovalContextFromQuery(
             queryClient,
             activeRepo,
             taskId,
@@ -139,6 +152,20 @@ export function useTaskApprovalFlow({
           if (approvalRequestVersionRef.current !== requestVersion) {
             return;
           }
+          if (approvalContextResult.outcome === "missing_builder_worktree") {
+            dispatch({
+              type: "load_missing_builder_worktree",
+              taskId,
+              mode: effectiveMode,
+              pullRequestDraftMode,
+              title,
+              body,
+              errorMessage: openErrorMessage,
+            });
+            return;
+          }
+
+          const approvalContext = approvalContextResult.approvalContext;
           const updatedEffectiveMode =
             options?.mode ?? determineDefaultTaskApprovalMode(approvalContext);
           dispatch({
@@ -166,10 +193,32 @@ export function useTaskApprovalFlow({
   );
 
   const confirm = useCallback((): void => {
-    if (!activeRepo || !isTaskApprovalReady(state)) {
+    if (!isTaskApprovalInteractive(state)) {
       return;
     }
     const approvalState = state;
+
+    if (approvalState.stage === "missing_builder_worktree") {
+      void (async () => {
+        dispatch({ type: "clear_error" });
+        dispatch({ type: "start_submitting" });
+        try {
+          await humanApproveTask(approvalState.taskId);
+          reset();
+        } catch (error) {
+          const description = errorMessage(error);
+          dispatch({ type: "return_to_editable", errorMessage: description });
+          toast.error("Approval failed", {
+            description,
+          });
+        }
+      })();
+      return;
+    }
+
+    if (!activeRepo || !isTaskApprovalReady(approvalState)) {
+      return;
+    }
 
     void (async () => {
       dispatch({ type: "start_submitting" });
@@ -238,13 +287,32 @@ export function useTaskApprovalFlow({
         });
         reset();
       } catch (error) {
-        dispatch({ type: "return_to_editable", errorMessage: null });
+        const description = errorMessage(error);
+        dispatch({ type: "return_to_editable", errorMessage: description });
         toast.error("Approval failed", {
-          description: errorMessage(error),
+          description,
         });
       }
     })();
-  }, [activeRepo, queryClient, refreshTasks, requestPullRequestGeneration, reset, state]);
+  }, [
+    activeRepo,
+    humanApproveTask,
+    queryClient,
+    refreshTasks,
+    requestPullRequestGeneration,
+    reset,
+    state,
+  ]);
+
+  const resetMissingBuilderWorktree = useCallback((): void => {
+    if (!isTaskApprovalInteractive(state) || state.stage !== "missing_builder_worktree") {
+      return;
+    }
+
+    if (openResetImplementation(state.taskId)) {
+      reset();
+    }
+  }, [openResetImplementation, reset, state]);
 
   const abortGitConflict = useCallback((): void => {
     if (!activeRepo || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {
@@ -384,12 +452,39 @@ export function useTaskApprovalFlow({
 
   const approvalContext = state.approvalContext;
   const githubProvider = approvalContext?.providers.find((entry) => entry.providerId === "github");
+  const baseModal = {
+    open: true,
+    taskId: state.taskId,
+    isSubmitting: state.phase === "submitting",
+    errorMessage: state.errorMessage,
+    onOpenChange: (open: boolean) => {
+      if (!open) {
+        reset();
+      }
+    },
+  };
 
-  return {
-    taskApprovalModal: {
-      open: true,
-      stage: state.stage,
-      taskId: state.taskId,
+  let taskApprovalModal: TaskApprovalModalModel;
+  if (state.stage === "missing_builder_worktree") {
+    taskApprovalModal = {
+      ...baseModal,
+      stage: "missing_builder_worktree",
+      onCompleteMissingBuilderWorktree: confirm,
+      onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
+    } satisfies TaskApprovalMissingBuilderWorktreeModalModel;
+  } else if (state.stage === "complete_direct_merge") {
+    taskApprovalModal = {
+      ...baseModal,
+      stage: "complete_direct_merge",
+      targetBranch: approvalContext?.targetBranch ?? null,
+      publishTarget: approvalContext?.publishTarget ?? null,
+      onSkipDirectMergeCompletion: reset,
+      onCompleteDirectMerge: completeDirectMerge,
+    } satisfies TaskApprovalCompletionModalModel;
+  } else {
+    taskApprovalModal = {
+      ...baseModal,
+      stage: "approval",
       isLoading: state.phase === "loading",
       mode: state.mode,
       mergeMethod: state.mergeMethod,
@@ -401,18 +496,10 @@ export function useTaskApprovalFlow({
       pullRequestUrl: approvalContext?.pullRequest?.url ?? null,
       title: state.title,
       body: state.body,
-      targetBranch: approvalContext?.targetBranch ?? null,
-      publishTarget: approvalContext?.publishTarget ?? null,
       squashCommitMessage: state.squashCommitMessage,
       squashCommitMessageTouched: state.squashCommitMessageTouched,
       hasSuggestedSquashCommitMessage: approvalContext?.suggestedSquashCommitMessage != null,
-      isSubmitting: state.phase === "submitting",
-      errorMessage: state.errorMessage,
-      onOpenChange: (open) => {
-        if (!open) {
-          reset();
-        }
-      },
+      targetBranch: approvalContext?.targetBranch ?? null,
       onModeChange: (mode) => dispatch({ type: "set_mode", mode }),
       onMergeMethodChange: (mergeMethod) => dispatch({ type: "set_merge_method", mergeMethod }),
       onPullRequestDraftModeChange: (pullRequestDraftMode) =>
@@ -422,9 +509,11 @@ export function useTaskApprovalFlow({
       onSquashCommitMessageChange: (squashCommitMessage) =>
         dispatch({ type: "set_squash_commit_message", squashCommitMessage }),
       onConfirm: confirm,
-      onSkipDirectMergeCompletion: reset,
-      onCompleteDirectMerge: completeDirectMerge,
-    },
+    } satisfies TaskApprovalApprovalModalModel;
+  }
+
+  return {
+    taskApprovalModal,
     taskGitConflictDialog,
     openTaskApproval,
   };

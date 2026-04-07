@@ -6,8 +6,8 @@ use super::pull_request_workflow_service::PullRequestWorkflowService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
 use host_domain::{
-    GitMergeMethod, PullRequestRecord, TaskApprovalContext, TaskCard, TaskDirectMergeResult,
-    TaskPullRequestDetectResult,
+    GitMergeMethod, PullRequestRecord, TaskApprovalContextLoadResult, TaskCard,
+    TaskDirectMergeResult, TaskPullRequestDetectResult,
 };
 
 impl AppService {
@@ -15,7 +15,7 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-    ) -> Result<TaskApprovalContext> {
+    ) -> Result<TaskApprovalContextLoadResult> {
         ApprovalContextService::new(self).task_approval_context_get(repo_path, task_id)
     }
 

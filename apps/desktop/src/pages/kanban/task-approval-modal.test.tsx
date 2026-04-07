@@ -2,15 +2,37 @@ import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { TaskApprovalModalModel } from "./kanban-page-model-types";
+import type {
+  TaskApprovalApprovalModalModel,
+  TaskApprovalCompletionModalModel,
+  TaskApprovalMissingBuilderWorktreeModalModel,
+} from "./kanban-page-model-types";
 import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 const noop = () => {};
 
-const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskApprovalModalModel => ({
+const createCompletionModel = (
+  overrides: Partial<TaskApprovalCompletionModalModel> = {},
+): TaskApprovalCompletionModalModel => ({
   open: true,
   stage: "complete_direct_merge",
+  taskId: "TASK-1",
+  targetBranch: { remote: "origin", branch: "beta" },
+  publishTarget: { remote: "origin", branch: "beta" },
+  isSubmitting: false,
+  errorMessage: null,
+  onOpenChange: noop,
+  onSkipDirectMergeCompletion: noop,
+  onCompleteDirectMerge: noop,
+  ...overrides,
+});
+
+const createApprovalModel = (
+  overrides: Partial<TaskApprovalApprovalModalModel> = {},
+): TaskApprovalApprovalModalModel => ({
+  open: true,
+  stage: "approval",
   taskId: "TASK-1",
   isLoading: false,
   mode: "direct_merge",
@@ -27,7 +49,6 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
   squashCommitMessageTouched: false,
   hasSuggestedSquashCommitMessage: true,
   targetBranch: { remote: "origin", branch: "beta" },
-  publishTarget: { remote: "origin", branch: "beta" },
   isSubmitting: false,
   errorMessage: null,
   onOpenChange: noop,
@@ -38,14 +59,26 @@ const createModel = (overrides: Partial<TaskApprovalModalModel> = {}): TaskAppro
   onBodyChange: noop,
   onSquashCommitMessageChange: noop,
   onConfirm: noop,
-  onSkipDirectMergeCompletion: noop,
-  onCompleteDirectMerge: noop,
+  ...overrides,
+});
+
+const createMissingBuilderWorktreeModel = (
+  overrides: Partial<TaskApprovalMissingBuilderWorktreeModalModel> = {},
+): TaskApprovalMissingBuilderWorktreeModalModel => ({
+  open: true,
+  stage: "missing_builder_worktree",
+  taskId: "TASK-1",
+  isSubmitting: false,
+  errorMessage: null,
+  onOpenChange: noop,
+  onCompleteMissingBuilderWorktree: noop,
+  onResetMissingBuilderWorktree: noop,
   ...overrides,
 });
 
 describe("TaskApprovalModal", () => {
   test("renders the wrapper dialog title and description", () => {
-    const rendered = render(createElement(TaskApprovalModal, { model: createModel() }));
+    const rendered = render(createElement(TaskApprovalModal, { model: createCompletionModel() }));
 
     expect(screen.getByText("Publish And Mark Done")).toBeTruthy();
     expect(
@@ -59,7 +92,7 @@ describe("TaskApprovalModal", () => {
 
   test("renders explicit completion copy for merged local branches", () => {
     const html = renderToStaticMarkup(
-      createElement(TaskApprovalModalPanel, { model: createModel() }),
+      createElement(TaskApprovalModalPanel, { model: createCompletionModel() }),
     );
 
     expect(html).toContain("Publish And Mark Done");
@@ -71,7 +104,7 @@ describe("TaskApprovalModal", () => {
   test("shows a loading label while direct merge completion is pending", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({ isSubmitting: true }),
+        model: createCompletionModel({ isSubmitting: true }),
       }),
     );
 
@@ -79,14 +112,24 @@ describe("TaskApprovalModal", () => {
     expect(html).toContain("animate-spin");
   });
 
+  test("renders recovery copy when the builder worktree is missing", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModalPanel, {
+        model: createMissingBuilderWorktreeModel(),
+      }),
+    );
+
+    expect(html).toContain("Builder Worktree Missing");
+    expect(html).toContain("Builder worktree not found");
+    expect(html).toContain("Normal direct merge and pull request approval options are unavailable");
+    expect(html).toContain("Reset Implementation");
+    expect(html).toContain("Complete Task");
+  });
+
   test("shows a loading indicator for approval submission actions", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
-          stage: "approval",
-          isSubmitting: true,
-          publishTarget: null,
-        }),
+        model: createApprovalModel({ isSubmitting: true }),
       }),
     );
 
@@ -97,11 +140,7 @@ describe("TaskApprovalModal", () => {
   test("renders the squash commit message editor when squash is selected", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
-          stage: "approval",
-          mergeMethod: "squash",
-          publishTarget: null,
-        }),
+        model: createApprovalModel({ mergeMethod: "squash" }),
       }),
     );
 
@@ -113,11 +152,9 @@ describe("TaskApprovalModal", () => {
   test("disables direct merge confirmation when the squash commit message is empty", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
-          stage: "approval",
+        model: createApprovalModel({
           mergeMethod: "squash",
           squashCommitMessage: "",
-          publishTarget: null,
         }),
       }),
     );
@@ -129,13 +166,11 @@ describe("TaskApprovalModal", () => {
   test("does not show a squash validation error before the user interacts when no suggestion exists", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
-          stage: "approval",
+        model: createApprovalModel({
           mergeMethod: "squash",
           squashCommitMessage: "",
           squashCommitMessageTouched: false,
           hasSuggestedSquashCommitMessage: false,
-          publishTarget: null,
         }),
       }),
     );
@@ -148,7 +183,7 @@ describe("TaskApprovalModal", () => {
   test("fails fast when direct-merge completion branch context is missing", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
+        model: createCompletionModel({
           targetBranch: null,
           publishTarget: null,
         }),
@@ -167,11 +202,9 @@ describe("TaskApprovalModal", () => {
   test("renders AI pull request copy for the forked builder workflow", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
-          stage: "approval",
+        model: createApprovalModel({
           mode: "pull_request",
           pullRequestDraftMode: "generate_ai",
-          publishTarget: null,
         }),
       }),
     );
@@ -190,10 +223,8 @@ describe("TaskApprovalModal", () => {
   test("disables pull request confirmation when the provider is unavailable", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {
-        model: createModel({
-          stage: "approval",
+        model: createApprovalModel({
           mode: "pull_request",
-          publishTarget: null,
           pullRequestAvailable: false,
           pullRequestUnavailableReason: "GitHub is not configured for this repository.",
         }),
