@@ -15,7 +15,7 @@ import {
   closeTaskTab,
   ensureActiveTaskTab,
   getAvailableTabTasks,
-  getTabStatusFromSession,
+  getTabStatusForTask,
   parsePersistedTaskTabs,
   resolveFallbackTaskId,
   toPersistedTaskTabs,
@@ -74,14 +74,31 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("prioritizes waiting-input status over running", () => {
-    const status = getTabStatusFromSession(
-      buildSession({
+    const status = getTabStatusForTask({
+      task: buildTask(),
+      session: buildSession({
         status: "running",
         pendingQuestions: [{ requestId: "q-1", questions: [] }],
       }),
-    );
+    });
 
     expect(status).toBe("waiting_input");
+  });
+
+  test("treats blocked tasks as waiting for input even without a live waiting session", () => {
+    expect(
+      getTabStatusForTask({
+        task: buildTask({ status: "blocked" }),
+        session: buildSession({ role: "build", status: "stopped" }),
+      }),
+    ).toBe("waiting_input");
+
+    expect(
+      getTabStatusForTask({
+        task: buildTask({ status: "blocked" }),
+        session: null,
+      }),
+    ).toBe("waiting_input");
   });
 
   test("appends active task tab only once", () => {
@@ -304,6 +321,98 @@ describe("agents-page-session-tabs", () => {
       availability: "available",
       completion: "in_progress",
       liveSession: "stopped",
+    });
+  });
+
+  test("uses warning tone for blocked builder tasks even when the latest session is stopped", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "build", status: "stopped", scenario: "build_implementation_start" }),
+    ]);
+    const states = buildWorkflowStateByRole({
+      task: buildTask({ status: "blocked" }),
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.build).toEqual({
+      tone: "waiting_input",
+      availability: "available",
+      completion: "in_progress",
+      liveSession: "stopped",
+    });
+    expect(states.spec.tone).toBe("done");
+    expect(states.planner.tone).toBe("done");
+    expect(states.qa.tone).toBe("blocked");
+  });
+
+  test("uses warning tone for blocked builder tasks without an existing builder session", () => {
+    const states = buildWorkflowStateByRole({
+      task: buildTask({ status: "blocked" }),
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole: buildRoleSessionSummaryMap([]),
+    });
+
+    expect(states.build).toEqual({
+      tone: "waiting_input",
+      availability: "available",
+      completion: "not_started",
+      liveSession: "none",
+    });
+  });
+
+  test("keeps blocked builder tasks in progress while the live builder session is still running", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "build", status: "running", scenario: "build_implementation_start" }),
+    ]);
+    const states = buildWorkflowStateByRole({
+      task: buildTask({ status: "blocked" }),
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.build).toEqual({
+      tone: "in_progress",
+      availability: "available",
+      completion: "in_progress",
+      liveSession: "running",
+    });
+  });
+
+  test("keeps blocked builder tasks failed when the latest builder session errored", () => {
+    const roleSessionByRole = buildRoleSessionSummaryMap([
+      buildSession({ role: "build", status: "error", scenario: "build_implementation_start" }),
+    ]);
+    const states = buildWorkflowStateByRole({
+      task: buildTask({ status: "blocked" }),
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      roleSessionByRole,
+    });
+
+    expect(states.build).toEqual({
+      tone: "failed",
+      availability: "available",
+      completion: "in_progress",
+      liveSession: "error",
     });
   });
 
@@ -928,6 +1037,37 @@ describe("agents-page-session-tabs", () => {
         taskId: "task-ghost",
         taskTitle: "task-ghost",
         status: "idle",
+        isActive: false,
+      },
+    ]);
+  });
+
+  test("builds blocked task tabs with warning status even when the latest session is idle or absent", () => {
+    const latestByTask = buildLatestSessionByTaskMap([
+      buildSession({ taskId: "task-1", role: "build", status: "idle" }),
+    ]);
+
+    const tabs = buildTaskTabs({
+      tabTaskIds: ["task-1", "task-2"],
+      tasks: [
+        buildTask({ id: "task-1", title: "Blocked with session", status: "blocked" }),
+        buildTask({ id: "task-2", title: "Blocked without session", status: "blocked" }),
+      ],
+      latestSessionByTaskId: latestByTask,
+      activeTaskId: "task-1",
+    });
+
+    expect(tabs).toEqual([
+      {
+        taskId: "task-1",
+        taskTitle: "Blocked with session",
+        status: "waiting_input",
+        isActive: true,
+      },
+      {
+        taskId: "task-2",
+        taskTitle: "Blocked without session",
+        status: "waiting_input",
         isActive: false,
       },
     ]);

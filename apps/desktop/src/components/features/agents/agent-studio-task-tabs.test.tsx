@@ -42,6 +42,7 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain("Ship QA checklist");
     expect(html).toContain('aria-label="Working"');
     expect(html).toContain('aria-label="Waiting input"');
+    expect(html).toContain("text-warning-accent");
     expect(html).toContain('aria-label="Open new task tab"');
     expect(html).toContain("Close tab for Add social login");
     expect(html).toContain("bg-secondary");

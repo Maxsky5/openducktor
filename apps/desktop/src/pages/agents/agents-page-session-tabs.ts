@@ -58,6 +58,8 @@ type RoleSessionSummary = {
   liveSession: AgentWorkflowStepLiveSession;
 };
 
+type TaskAttentionState = "none" | "blocked_needs_input";
+
 const toLiveSessionState = (session: AgentSessionWorkflowSummary): AgentWorkflowStepLiveSession => {
   if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
     return "waiting_input";
@@ -122,6 +124,59 @@ const normalizeTaskTabs = (entries: unknown): string[] => {
       ),
     ),
   );
+};
+
+const createRoleRecord = <Value>(build: (role: AgentRole) => Value): Record<AgentRole, Value> => ({
+  spec: build("spec"),
+  planner: build("planner"),
+  build: build("build"),
+  qa: build("qa"),
+});
+
+const buildSessionsByRole = (
+  sessionsForTask: AgentSessionWorkflowSummary[],
+): Record<AgentRole, AgentSessionWorkflowSummary[]> => {
+  const sessionsByRole = createRoleRecord<AgentSessionWorkflowSummary[]>(() => []);
+
+  for (const session of [...sessionsForTask].sort(compareAgentSessionRecency)) {
+    sessionsByRole[session.role].push(session);
+  }
+
+  return sessionsByRole;
+};
+
+const deriveTaskAttentionState = (task: TaskCard | null | undefined): TaskAttentionState => {
+  return task?.status === "blocked" ? "blocked_needs_input" : "none";
+};
+
+const deriveTaskTabStatusFromAttentionState = (
+  attentionState: TaskAttentionState,
+): AgentStudioTaskTab["status"] => {
+  return attentionState === "blocked_needs_input" ? "waiting_input" : "idle";
+};
+
+const deriveWorkflowToneForRole = (params: {
+  role: AgentRole;
+  taskAttentionState: TaskAttentionState;
+  availability: AgentWorkflowStepAvailability;
+  completion: AgentWorkflowStepState["completion"];
+  liveSession: AgentWorkflowStepLiveSession;
+}): AgentWorkflowStepState["tone"] => {
+  const allowBlockedTaskWarning =
+    params.role === "build" &&
+    params.taskAttentionState === "blocked_needs_input" &&
+    params.liveSession !== "running" &&
+    params.liveSession !== "error";
+
+  if (allowBlockedTaskWarning) {
+    return "waiting_input";
+  }
+
+  return deriveWorkflowTone({
+    availability: params.availability,
+    completion: params.completion,
+    liveSession: params.liveSession,
+  });
 };
 
 export const buildLatestSessionByTaskMap = (
@@ -218,32 +273,13 @@ export const buildWorkflowStateByRole = (params: {
   roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
   roleSessionByRole: Record<AgentRole, RoleSessionSummary>;
 }): Record<AgentRole, AgentWorkflowStepState> => {
-  const stateByRole: Record<AgentRole, AgentWorkflowStepState> = {
-    spec: {
-      tone: "blocked",
-      availability: "blocked",
-      completion: "not_started",
-      liveSession: "none",
-    },
-    planner: {
-      tone: "blocked",
-      availability: "blocked",
-      completion: "not_started",
-      liveSession: "none",
-    },
-    build: {
-      tone: "blocked",
-      availability: "blocked",
-      completion: "not_started",
-      liveSession: "none",
-    },
-    qa: {
-      tone: "blocked",
-      availability: "blocked",
-      completion: "not_started",
-      liveSession: "none",
-    },
-  };
+  const stateByRole = createRoleRecord<AgentWorkflowStepState>(() => ({
+    tone: "blocked",
+    availability: "blocked",
+    completion: "not_started",
+    liveSession: "none",
+  }));
+  const taskAttentionState = deriveTaskAttentionState(params.task);
   const qaRejected = isQaRejectedTask(params.task);
   const qaRejectedInAiReview =
     params.task &&
@@ -284,7 +320,9 @@ export const buildWorkflowStateByRole = (params: {
       completion = "in_progress";
     }
 
-    const tone = deriveWorkflowTone({
+    const tone = deriveWorkflowToneForRole({
+      role,
+      taskAttentionState,
       availability,
       completion,
       liveSession,
@@ -304,62 +342,25 @@ export const buildWorkflowStateByRole = (params: {
 export const buildLatestSessionByRoleMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],
 ): Record<AgentRole, AgentSessionWorkflowSummary | null> => {
-  const map: Record<AgentRole, AgentSessionWorkflowSummary | null> = {
-    spec: null,
-    planner: null,
-    build: null,
-    qa: null,
-  };
-
-  const sortedSessions = [...sessionsForTask].sort(compareAgentSessionRecency);
-
-  for (const role of ALL_AGENT_ROLES) {
-    map[role] = sortedSessions.find((entry) => entry.role === role) ?? null;
-  }
-
-  return map;
+  const sessionsByRole = buildSessionsByRole(sessionsForTask);
+  return createRoleRecord((role) => sessionsByRole[role][0] ?? null);
 };
 
 export const buildRoleSessionSummaryMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],
 ): Record<AgentRole, RoleSessionSummary> => {
-  const sortedSessions = [...sessionsForTask].sort(compareAgentSessionRecency);
-  const map: Record<AgentRole, RoleSessionSummary> = {
-    spec: {
-      latestSession: null,
-      workflowSession: null,
-      liveSession: "none",
-    },
-    planner: {
-      latestSession: null,
-      workflowSession: null,
-      liveSession: "none",
-    },
-    build: {
-      latestSession: null,
-      workflowSession: null,
-      liveSession: "none",
-    },
-    qa: {
-      latestSession: null,
-      workflowSession: null,
-      liveSession: "none",
-    },
-  };
+  const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
 
-  for (const role of ALL_AGENT_ROLES) {
-    const roleSessions = sortedSessions.filter((entry) => entry.role === role);
-    const latestSession = roleSessions[0] ?? null;
+  return createRoleRecord((role) => {
+    const latestSession = latestSessionByRole[role];
     const workflowSession = latestSession;
 
-    map[role] = {
+    return {
       latestSession,
       workflowSession,
       liveSession: workflowSession ? toLiveSessionState(workflowSession) : "none",
     };
-  }
-
-  return map;
+  });
 };
 
 export const buildSessionSelectorGroups = (params: {
@@ -368,9 +369,10 @@ export const buildSessionSelectorGroups = (params: {
   roleLabelByRole: Record<AgentRole, string>;
 }): ComboboxGroup[] => {
   const groups: ComboboxGroup[] = [];
+  const sessionsByRole = buildSessionsByRole(params.sessionsForTask);
 
   for (const role of ALL_AGENT_ROLES) {
-    const roleSessions = params.sessionsForTask.filter((entry) => entry.role === role);
+    const roleSessions = sessionsByRole[role];
     if (roleSessions.length === 0) {
       continue;
     }
@@ -500,7 +502,7 @@ export const getAvailableTabTasks = (tasks: TaskCard[], tabTaskIds: string[]): T
   return tasks.filter((task) => !tabTaskIds.includes(task.id));
 };
 
-export const getTabStatusFromSession = (
+const getTabStatusFromSession = (
   session: AgentSessionWorkflowSummary | null | undefined,
 ): AgentStudioTaskTab["status"] => {
   if (!session) {
@@ -515,20 +517,38 @@ export const getTabStatusFromSession = (
   return "idle";
 };
 
+export const getTabStatusForTask = (params: {
+  task: TaskCard | null | undefined;
+  session: AgentSessionWorkflowSummary | null | undefined;
+}): AgentStudioTaskTab["status"] => {
+  const attentionState = deriveTaskAttentionState(params.task);
+
+  if (attentionState !== "none") {
+    return deriveTaskTabStatusFromAttentionState(attentionState);
+  }
+
+  return getTabStatusFromSession(params.session);
+};
+
 export const buildTaskTabs = (params: {
   tabTaskIds: string[];
   tasks: TaskCard[];
   latestSessionByTaskId: Map<string, AgentSessionWorkflowSummary>;
   activeTaskId: string;
 }): AgentStudioTaskTab[] => {
+  const taskById = new Map(params.tasks.map((task) => [task.id, task]));
+
   return params.tabTaskIds.map((tabTaskId) => {
-    const task = params.tasks.find((entry) => entry.id === tabTaskId);
+    const task = taskById.get(tabTaskId);
     const session = params.latestSessionByTaskId.get(tabTaskId);
 
     return {
       taskId: tabTaskId,
       taskTitle: task?.title ?? tabTaskId,
-      status: getTabStatusFromSession(session),
+      status: getTabStatusForTask({
+        task,
+        session,
+      }),
       isActive: params.activeTaskId === tabTaskId,
     };
   });
