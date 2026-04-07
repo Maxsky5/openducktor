@@ -269,6 +269,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "planSubtaskPrioritySchema",
   "taskActionSchema",
   "taskApprovalContextSchema",
+  "taskApprovalContextLoadResultSchema",
   "taskCardSchema",
   "taskCreateInputSchema",
   "taskDirectMergeInputSchema",
