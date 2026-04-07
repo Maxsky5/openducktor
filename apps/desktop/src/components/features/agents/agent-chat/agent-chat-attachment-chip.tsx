@@ -1,6 +1,6 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
 import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from "lucide-react";
-import { type ReactElement, type SyntheticEvent, useState } from "react";
+import type { ReactElement, SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,21 +78,19 @@ export function AgentChatAttachmentChip(
   });
   const removable = variant === "draft";
   const onRemove = draftProps?.onRemove ?? null;
-  const [failedThumbnailSrc, setFailedThumbnailSrc] = useState<string | null>(null);
-  const thumbnailFailed = failedThumbnailSrc !== null && failedThumbnailSrc === resolvedPreviewSrc;
-  const showPreviewImage = showResolvedPreview && !thumbnailFailed && attachment.kind === "image";
-  const showPreviewVideo = showResolvedPreview && !thumbnailFailed && attachment.kind === "video";
+  const showPreviewImage = showResolvedPreview && attachment.kind === "image";
+  const showPreviewVideo = showResolvedPreview && attachment.kind === "video";
   const showPreviewLoader = isResolvingPreview;
 
   const handleThumbnailError = (
     event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
   ): void => {
-    setFailedThumbnailSrc(
+    const failingSrc =
       event.currentTarget.currentSrc ||
-        event.currentTarget.getAttribute("src") ||
-        resolvedPreviewSrc ||
-        null,
-    );
+      event.currentTarget.getAttribute("src") ||
+      resolvedPreviewSrc ||
+      undefined;
+    markPreviewUnavailable(failingSrc);
   };
 
   const handleDialogPreviewMediaError = (

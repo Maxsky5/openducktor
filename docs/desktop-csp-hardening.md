@@ -1,6 +1,6 @@
 # Desktop CSP Hardening
 
-This document defines the current Content Security Policy baseline for the desktop app and the remaining hardening roadmap.
+This document defines the current Content Security Policy baseline for the desktop app, the attachment preview allowances that depend on it, and the remaining hardening roadmap.
 
 ## Current Baseline
 
@@ -15,12 +15,38 @@ Production CSP constraints:
 - `form-action 'self'`
 - `script-src 'self'`
 - `style-src 'self' 'unsafe-inline'`
-- `img-src 'self' data:`
+- `img-src 'self' data: blob: asset: http://asset.localhost`
+- `media-src 'self' data: blob: asset: http://asset.localhost`
 - `connect-src ipc: http://ipc.localhost http://127.0.0.1:*`
 
-Development CSP retains the same baseline, with only dev-specific allowances for Vite/HMR (`'unsafe-eval'`, `localhost`, and `ws://` endpoints).
+Development CSP retains the same baseline for media loading, with only dev-specific allowances for Vite/HMR (`'unsafe-eval'`, `localhost`, and `ws://` endpoints).
 
 A desktop contract test enforces this baseline in `apps/desktop/src/lib/tauri-csp.contract.test.ts`.
+
+## Attachment Preview Allowances
+
+The desktop attachment preview flow intentionally uses two different transports:
+
+- Composer previews use `blob:` object URLs created from in-memory draft `File` objects in `apps/desktop/src/components/features/agents/agent-chat/use-agent-chat-attachment-preview.ts`.
+- Transcript previews resolve staged local attachment paths through `apps/desktop/src/lib/local-attachment-files.ts` and convert the validated path with Tauri's asset protocol.
+
+That means `img-src` and `media-src` must allow both:
+
+- `blob:` for pre-send composer previews
+- `asset:` and `http://asset.localhost` for staged transcript previews after send
+
+These allowances are intentionally limited to media directives only. The CSP does not broaden `script-src` or add generic fallback transports for attachment rendering.
+
+## Attachment Preview Verification Matrix
+
+The bundled attachment preview fix was validated manually against the real desktop app in all supported desktop targets:
+
+- `bun run tauri:dev`: composer image preview before send, transcript thumbnail after send, and transcript preview dialog render all passed.
+- `bun run tauri:dev:cef`: composer image preview before send, transcript thumbnail after send, and transcript preview dialog render all passed.
+- Packaged default desktop build produced by `bun run tauri:build`: composer image preview before send, transcript thumbnail after send, and transcript preview dialog render all passed.
+- Packaged CEF desktop build produced by `bun run tauri:build:cef`: composer image preview before send, transcript thumbnail after send, and transcript preview dialog render all passed.
+
+Negative-path preview failures remain covered by automated tests in the attachment preview helper, hook, and chip suites.
 
 ## Remaining Risk
 

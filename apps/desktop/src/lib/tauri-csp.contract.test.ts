@@ -60,6 +60,20 @@ describe("tauri CSP contract", () => {
     expect(connectSrc).toContain("http://127.0.0.1:*");
     expect(connectSrc).not.toContain("ws://localhost:*");
     expect(connectSrc).not.toContain("ws://127.0.0.1:*");
+
+    const imgSrc = toSourceList(csp["img-src"]);
+    expect(imgSrc).toContain("'self'");
+    expect(imgSrc).toContain("data:");
+    expect(imgSrc).toContain("blob:");
+    expect(imgSrc).toContain("asset:");
+    expect(imgSrc).toContain("http://asset.localhost");
+
+    const mediaSrc = toSourceList(csp["media-src"]);
+    expect(mediaSrc).toContain("'self'");
+    expect(mediaSrc).toContain("data:");
+    expect(mediaSrc).toContain("blob:");
+    expect(mediaSrc).toContain("asset:");
+    expect(mediaSrc).toContain("http://asset.localhost");
   });
 
   test("keeps development CSP compatible with HMR while retaining baseline hardening", () => {
@@ -83,5 +97,19 @@ describe("tauri CSP contract", () => {
     expect(connectSrc).toContain("ws://localhost:*");
     expect(connectSrc).toContain("http://127.0.0.1:*");
     expect(connectSrc).toContain("ws://127.0.0.1:*");
+
+    const imgSrc = toSourceList(devCsp["img-src"]);
+    expect(imgSrc).toContain("'self'");
+    expect(imgSrc).toContain("data:");
+    expect(imgSrc).toContain("blob:");
+    expect(imgSrc).toContain("asset:");
+    expect(imgSrc).toContain("http://asset.localhost");
+
+    const mediaSrc = toSourceList(devCsp["media-src"]);
+    expect(mediaSrc).toContain("'self'");
+    expect(mediaSrc).toContain("data:");
+    expect(mediaSrc).toContain("blob:");
+    expect(mediaSrc).toContain("asset:");
+    expect(mediaSrc).toContain("http://asset.localhost");
   });
 });

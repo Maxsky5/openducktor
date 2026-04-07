@@ -34,8 +34,8 @@
         "form-action": ["'self'"],
         "script-src": ["'self'"],
         "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
-        "media-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
+        "img-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
+        "media-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
         "connect-src": ["ipc:", "http://ipc.localhost", "http://127.0.0.1:*"]
       },
       "devCsp": {
@@ -46,8 +46,8 @@
         "form-action": ["'self'"],
         "script-src": ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
         "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
-        "media-src": ["'self'", "data:", "asset:", "http://asset.localhost"],
+        "img-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
+        "media-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
         "connect-src": [
           "'self'",
           "ipc:",

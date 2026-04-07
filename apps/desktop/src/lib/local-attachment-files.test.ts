@@ -5,10 +5,33 @@ import {
   resolveLocalAttachmentPreviewSrc,
 } from "./local-attachment-files";
 
+type TestWindow = Window &
+  typeof globalThis & {
+    __TAURI_INTERNALS__?: {
+      convertFileSrc: (path: string, protocol?: string) => string;
+    };
+  };
+
+const testWindow = window as TestWindow;
 const originalResolveLocalAttachmentPath = hostClient.workspaceResolveLocalAttachmentPath;
+const originalTauriInternals = testWindow.__TAURI_INTERNALS__;
+
+const installMockTauriRuntime = (
+  convertFileSrc: (path: string, protocol?: string) => string = (path, protocol = "asset") =>
+    `${protocol}://localhost/${encodeURIComponent(path)}`,
+): void => {
+  testWindow.__TAURI_INTERNALS__ = {
+    convertFileSrc,
+  };
+};
 
 afterEach(() => {
   hostClient.workspaceResolveLocalAttachmentPath = originalResolveLocalAttachmentPath;
+  if (originalTauriInternals) {
+    testWindow.__TAURI_INTERNALS__ = originalTauriInternals;
+    return;
+  }
+  delete testWindow.__TAURI_INTERNALS__;
 });
 
 describe("local-attachment-files", () => {
@@ -24,21 +47,43 @@ describe("local-attachment-files", () => {
     );
   });
 
-  test("resolveLocalAttachmentPreviewSrc treats UNC paths as absolute local paths", async () => {
-    await expect(resolveLocalAttachmentPreviewSrc("\\\\server\\share\\preview.png")).resolves.toBe(
-      "\\\\server\\share\\preview.png",
+  test("resolveLocalAttachmentPreviewSrc validates absolute staged paths before building desktop preview urls", async () => {
+    const stagedPath = "/tmp/openducktor-local-attachments/uuid-preview.png";
+    hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({ path }));
+    installMockTauriRuntime((path, protocol = "asset") => {
+      expect(path).toBe(stagedPath);
+      expect(protocol).toBe("asset");
+      return `${protocol}://localhost/${encodeURIComponent(path)}`;
+    });
+
+    await expect(resolveLocalAttachmentPreviewSrc(stagedPath)).resolves.toBe(
+      "asset://localhost/%2Ftmp%2Fopenducktor-local-attachments%2Fuuid-preview.png",
     );
+    expect(hostClient.workspaceResolveLocalAttachmentPath).toHaveBeenCalledWith({
+      path: stagedPath,
+    });
   });
 
-  test("resolveLocalAttachmentPreviewSrc resolves staged filename tokens before building browser preview urls", async () => {
+  test("resolveLocalAttachmentPreviewSrc resolves staged filename tokens before building desktop preview urls", async () => {
     hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
       path: `/tmp/openducktor-local-attachments/uuid-${path}`,
     }));
+    installMockTauriRuntime();
 
     await expect(
       resolveLocalAttachmentPreviewSrc("Screenshot-2026-03-16-at-23.48.30.png"),
     ).resolves.toBe(
-      "/tmp/openducktor-local-attachments/uuid-Screenshot-2026-03-16-at-23.48.30.png",
+      "asset://localhost/%2Ftmp%2Fopenducktor-local-attachments%2Fuuid-Screenshot-2026-03-16-at-23.48.30.png",
+    );
+  });
+
+  test("resolveLocalAttachmentPreviewSrc surfaces host validation errors for non-staged absolute paths", async () => {
+    hostClient.workspaceResolveLocalAttachmentPath = mock(async () => {
+      throw new Error("Attachment path is not a staged local attachment.");
+    });
+
+    await expect(resolveLocalAttachmentPreviewSrc("/tmp/preview.png")).rejects.toThrow(
+      "Attachment path is not a staged local attachment.",
     );
   });
 });
