@@ -3,10 +3,16 @@ import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import { type AgentChatComposerDraft, createComposerAttachment } from "./agent-chat-composer-draft";
+import {
+  type AgentChatComposerDraft,
+  createComposerAttachment,
+  createFileReferenceSegment,
+  createTextSegment,
+} from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
+let actualComposerSelectionModule: typeof import("./agent-chat-composer-selection");
 const renderMockEditableTextContent = (text: string): string => {
   if (text.length === 0) {
     return "\u200B";
@@ -58,7 +64,10 @@ const getCaretOffsetWithinElementMock = mock(
 );
 
 beforeAll(async () => {
+  actualComposerSelectionModule = await import("./agent-chat-composer-selection");
+
   mock.module("./agent-chat-composer-selection", () => ({
+    ...actualComposerSelectionModule,
     EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
     readEditableTextContent: readMockEditableTextContent,
     renderEditableTextContent: renderMockEditableTextContent,
@@ -227,7 +236,44 @@ const selectComposerContentRange = (container: HTMLElement): HTMLElement => {
   return editorRoot;
 };
 
-const createClipboardData = (plainText: string, htmlText: string) => ({
+const selectRangeAcrossTextSegments = (
+  container: HTMLElement,
+  startOffset: number,
+  endOffset: number,
+): HTMLElement => {
+  const editorRoot = getEditorRoot(container);
+  const textSegments = getTextSegments(container);
+  const startSegment = textSegments[0];
+  const endSegment = textSegments.at(-1);
+  if (!(startSegment instanceof HTMLElement) || !(endSegment instanceof HTMLElement)) {
+    throw new Error("Expected text segments for range selection");
+  }
+
+  const startNode = startSegment.firstChild;
+  const endNode = endSegment.firstChild;
+  if (!(startNode instanceof Text) || !(endNode instanceof Text)) {
+    throw new Error("Expected text nodes for range selection");
+  }
+
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  const selection = globalThis.getSelection?.();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return editorRoot;
+};
+
+const createClipboardData = ({
+  plainText = "",
+  htmlText = "",
+  types = ["text/plain", "text/html"],
+}: {
+  plainText?: string;
+  htmlText?: string;
+  types?: string[];
+}) => ({
+  types,
   getData: (type: string): string => {
     if (type === "text/plain") {
       return plainText;
@@ -333,10 +379,10 @@ describe("AgentChatComposerEditor", () => {
     typeIntoEditor(rendered.container, "hello ");
 
     fireEvent.paste(getEditorRoot(rendered.container), {
-      clipboardData: createClipboardData(
-        "bold words",
-        '<strong>bold</strong><span style="color:red"> words</span>',
-      ),
+      clipboardData: createClipboardData({
+        plainText: "bold words",
+        htmlText: '<strong>bold</strong><span style="color:red"> words</span>',
+      }),
     });
 
     await expectComposerText(rendered.container, "hello bold words");
@@ -353,14 +399,58 @@ describe("AgentChatComposerEditor", () => {
     const editorRoot = selectComposerContentRange(rendered.container);
 
     fireEvent.paste(editorRoot, {
-      clipboardData: createClipboardData(
-        "line one\nline two",
-        "<div>line one</div><div>line two</div>",
-      ),
+      clipboardData: createClipboardData({
+        plainText: "line one\nline two",
+        htmlText: "<div>line one</div><div>line two</div>",
+      }),
     });
 
     await expectComposerText(rendered.container, "line one\nline two");
     expect(screen.getByTestId("draft-state").textContent).toContain("line one\\nline two");
+  });
+
+  test("ignores non-text clipboard payloads without clearing the composer", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    typeIntoEditor(rendered.container, "keep this");
+    selectComposerContentRange(rendered.container);
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({ types: ["Files"] }),
+    });
+
+    await expectComposerText(rendered.container, "keep this");
+    expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
+  });
+
+  test("replaces selections spanning a file chip with normalized plain text", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("before ", "text-before"),
+            createFileReferenceSegment(buildFileSearchResult(), "file-chip"),
+            createTextSegment(" after", "text-after"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const editorRoot = selectRangeAcrossTextSegments(rendered.container, 3, 3);
+
+    fireEvent.paste(editorRoot, {
+      clipboardData: createClipboardData({
+        plainText: "X",
+        htmlText: "<em>X</em>",
+      }),
+    });
+
+    await expectComposerText(rendered.container, "befXter");
+    expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeNull();
+    expect(screen.getByTestId("draft-state").textContent).toContain("befXter");
   });
 
   test("selects the full composer content with the select-all shortcut", () => {

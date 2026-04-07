@@ -26,7 +26,9 @@ import {
 } from "./agent-chat-composer-draft";
 import {
   getCaretOffsetWithinElement,
+  getComposerContentRoot,
   readEditableTextContent,
+  replaceComposerSelectionWithText,
   setCaretOffsetWithinElement,
 } from "./agent-chat-composer-selection";
 
@@ -229,74 +231,6 @@ const filterSlashCommands = (commands: AgentSlashCommand[], query: string): Agen
   }
 
   return commands.filter((command) => command.trigger.toLowerCase().includes(normalizedQuery));
-};
-
-const getComposerContentRoot = (root: HTMLElement): HTMLElement | null => {
-  if (root.hasAttribute("data-composer-content-root")) {
-    return root;
-  }
-  return root.querySelector<HTMLElement>("[data-composer-content-root]");
-};
-
-const createCollapsedRangeAtComposerEnd = (root: HTMLElement): Range | null => {
-  const contentRoot = getComposerContentRoot(root);
-  if (!contentRoot) {
-    return null;
-  }
-
-  const range = root.ownerDocument.createRange();
-  range.selectNodeContents(contentRoot);
-  range.collapse(false);
-  return range;
-};
-
-const replaceComposerSelectionWithText = (root: HTMLDivElement, text: string): boolean => {
-  const contentRoot = getComposerContentRoot(root);
-  const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
-  if (!contentRoot || !selection) {
-    return false;
-  }
-
-  let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-  const rangeInsideComposer =
-    range &&
-    (range.commonAncestorContainer === contentRoot ||
-      contentRoot.contains(range.commonAncestorContainer));
-  if (!rangeInsideComposer) {
-    range = createCollapsedRangeAtComposerEnd(root);
-    if (!range) {
-      return false;
-    }
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-
-  if (!range) {
-    return false;
-  }
-
-  range.deleteContents();
-
-  if (text.length === 0) {
-    const collapsedRange = root.ownerDocument.createRange();
-    collapsedRange.setStart(range.startContainer, range.startOffset);
-    collapsedRange.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(collapsedRange);
-    root.focus();
-    return true;
-  }
-
-  const textNode = root.ownerDocument.createTextNode(text);
-  range.insertNode(textNode);
-
-  const collapsedRange = root.ownerDocument.createRange();
-  collapsedRange.setStart(textNode, text.length);
-  collapsedRange.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(collapsedRange);
-  root.focus();
-  return true;
 };
 
 const selectComposerContents = (root: HTMLElement): boolean => {
@@ -957,6 +891,15 @@ export const useAgentChatComposerEditor = ({
     (event: ReactClipboardEvent<HTMLDivElement>) => {
       event.preventDefault();
 
+      const clipboardTypes = Array.from(event.clipboardData.types ?? []);
+      const hasPlainText = clipboardTypes.includes("text/plain");
+      if (!hasPlainText) {
+        pendingInputStateRef.current = null;
+        return;
+      }
+
+      const plainText = event.clipboardData.getData("text/plain");
+
       const sourceDraft = latestDraftRef.current;
       const activeSelection = readActiveTextSelection(event.currentTarget, event.target);
       const selectionTarget = resolveSelectionTargetFromActiveSelection(
@@ -968,16 +911,11 @@ export const useAgentChatComposerEditor = ({
         ? {
             ...selectionTarget,
             inputType: "insertFromPaste",
-            data: event.clipboardData.getData("text/plain"),
+            data: plainText,
           }
         : null;
 
-      if (
-        !replaceComposerSelectionWithText(
-          event.currentTarget,
-          event.clipboardData.getData("text/plain"),
-        )
-      ) {
+      if (!replaceComposerSelectionWithText(event.currentTarget, plainText)) {
         return;
       }
 

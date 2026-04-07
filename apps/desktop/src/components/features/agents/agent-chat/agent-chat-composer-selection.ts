@@ -122,3 +122,72 @@ export const insertTextAtCaretWithinElement = (
 
   return getCaretOffsetWithinElement(element);
 };
+
+export const getComposerContentRoot = (root: HTMLElement): HTMLElement | null => {
+  if (root.hasAttribute("data-composer-content-root")) {
+    return root;
+  }
+
+  return root.querySelector<HTMLElement>("[data-composer-content-root]");
+};
+
+const createCollapsedRangeAtComposerEnd = (root: HTMLElement): Range | null => {
+  const contentRoot = getComposerContentRoot(root);
+  if (!contentRoot) {
+    return null;
+  }
+
+  const range = root.ownerDocument.createRange();
+  range.selectNodeContents(contentRoot);
+  range.collapse(false);
+  return range;
+};
+
+export const replaceComposerSelectionWithText = (root: HTMLDivElement, text: string): boolean => {
+  const contentRoot = getComposerContentRoot(root);
+  const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!contentRoot || !selection) {
+    return false;
+  }
+
+  let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+  const rangeInsideComposer =
+    range &&
+    (range.commonAncestorContainer === contentRoot ||
+      contentRoot.contains(range.commonAncestorContainer));
+  if (!rangeInsideComposer) {
+    range = createCollapsedRangeAtComposerEnd(root);
+    if (!range) {
+      return false;
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  if (!range) {
+    return false;
+  }
+
+  range.deleteContents();
+
+  if (text.length === 0) {
+    const collapsedRange = root.ownerDocument.createRange();
+    collapsedRange.setStart(range.startContainer, range.startOffset);
+    collapsedRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(collapsedRange);
+    root.focus();
+    return true;
+  }
+
+  const textNode = root.ownerDocument.createTextNode(text);
+  range.insertNode(textNode);
+
+  const collapsedRange = root.ownerDocument.createRange();
+  collapsedRange.setStart(textNode, text.length);
+  collapsedRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(collapsedRange);
+  root.focus();
+  return true;
+};
