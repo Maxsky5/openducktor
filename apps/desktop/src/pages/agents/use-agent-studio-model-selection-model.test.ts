@@ -274,6 +274,58 @@ describe("use-agent-studio-model-selection-model", () => {
     });
   });
 
+  test("merges newer live token totals with older assistant-message metadata", () => {
+    const lookup = toModelDescriptorByKey(CATALOG);
+    const messages: AgentChatMessage[] = [
+      createAssistantMessage({
+        totalTokens: 24,
+        contextWindow: 40_000,
+        outputLimit: 1_000,
+      }),
+    ];
+
+    expect(
+      extractLatestContextUsage({
+        session: createSessionMessageOwner(messages),
+        liveContextUsage: {
+          totalTokens: 31,
+        },
+        modelDescriptorByKey: lookup,
+      }),
+    ).toEqual({
+      totalTokens: 31,
+      contextWindow: 40_000,
+      outputLimit: 1_000,
+    });
+  });
+
+  test("prefers selected-model fallback metadata before older assistant-message history", () => {
+    const lookup = toModelDescriptorByKey(CATALOG);
+    const messages: AgentChatMessage[] = [
+      createAssistantMessage({
+        totalTokens: 24,
+        contextWindow: 40_000,
+        outputLimit: 1_000,
+      }),
+    ];
+
+    expect(
+      extractLatestContextUsage({
+        session: createSessionMessageOwner(messages),
+        liveContextUsage: {
+          totalTokens: 31,
+        },
+        modelDescriptorByKey: lookup,
+        fallbackContextWindow: 100_000,
+        fallbackOutputLimit: 4_096,
+      }),
+    ).toEqual({
+      totalTokens: 31,
+      contextWindow: 100_000,
+      outputLimit: 4_096,
+    });
+  });
+
   test("falls back to an older assistant message when the latest tokenized one has no usable context window", () => {
     const lookup = toModelDescriptorByKey(CATALOG);
     const messages: AgentChatMessage[] = [

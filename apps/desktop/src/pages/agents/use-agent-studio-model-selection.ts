@@ -586,13 +586,8 @@ export function useAgentStudioModelSelection({
     return map;
   }, [selectionCatalog]);
 
-  const activeSessionForContextUsage =
-    activeSessionLiveContextUsage && activeSessionLiveContextUsage.totalTokens > 0
-      ? null
-      : activeSession;
-  const activeSessionIdForContextUsage = activeSessionForContextUsage?.sessionId ?? null;
-  const activeSessionMessagesForContextUsage =
-    activeSessionForContextUsage?.sessionId === activeSessionId ? activeSessionMessages : null;
+  const activeSessionIdForContextUsage = activeSession?.sessionId ?? null;
+  const activeSessionMessagesForContextUsage = activeSessionMessages;
   const activeSessionMessageOwnerForContextUsage = useMemo(
     () =>
       activeSessionIdForContextUsage && activeSessionMessagesForContextUsage
@@ -612,6 +607,8 @@ export function useAgentStudioModelSelection({
       typeof selectedModelEntry?.contextWindow === "number"
         ? selectedModelEntry.contextWindow
         : null;
+    const fallbackOutputLimit =
+      typeof selectedModelEntry?.outputLimit === "number" ? selectedModelEntry.outputLimit : null;
     const metadataKey = [
       activeSessionIdForContextUsage ?? "",
       selectedModelSelection?.providerId ?? "",
@@ -655,6 +652,7 @@ export function useAgentStudioModelSelection({
         liveContextUsage: activeSessionLiveContextUsage,
         modelDescriptorByKey: activeSessionModelDescriptorByKey,
         ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+        ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
       });
       if (nextUsage === null) {
         activeSessionContextUsageCacheRef.current = null;
@@ -689,6 +687,7 @@ export function useAgentStudioModelSelection({
           session: activeSessionMessageOwnerForContextUsage,
           modelDescriptorByKey: activeSessionModelDescriptorByKey,
           ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+          ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
           startIndex: firstChangedMessageIndex,
         });
 
@@ -706,6 +705,7 @@ export function useAgentStudioModelSelection({
             session: activeSessionMessageOwnerForContextUsage,
             modelDescriptorByKey: activeSessionModelDescriptorByKey,
             ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+            ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
             endIndex: firstChangedMessageIndex - 1,
           });
         }
@@ -714,6 +714,7 @@ export function useAgentStudioModelSelection({
           session: activeSessionMessageOwnerForContextUsage,
           modelDescriptorByKey: activeSessionModelDescriptorByKey,
           ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
+          ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
         });
       }
     }

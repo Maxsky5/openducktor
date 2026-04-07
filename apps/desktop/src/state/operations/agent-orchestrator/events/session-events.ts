@@ -78,7 +78,14 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
 export const attachAgentSessionListener = (
   context: AttachAgentSessionListenerParams,
 ): (() => void) => {
-  const handlerContext = createSessionEventHandlerContext(context);
+  const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
+    current: {} as Record<string, string>,
+  };
+  const eventContext = {
+    ...context,
+    contextUsageMessageIdBySessionRef,
+  };
+  const handlerContext = createSessionEventHandlerContext(eventContext);
   const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
   const batcher = createSessionEventBatcher();
   let queuedEvents: SessionEvent[] = [];
@@ -111,7 +118,7 @@ export const attachAgentSessionListener = (
     let shouldPersistBufferedSession = false;
     let hasBufferedSessionUpdate = false;
     const batchedHandlerContext = createSessionEventHandlerContext({
-      ...context,
+      ...eventContext,
       sessionsRef: batchedSessionsRef,
       updateSession: (sessionId, updater, options) => {
         if (sessionId !== context.sessionId) {

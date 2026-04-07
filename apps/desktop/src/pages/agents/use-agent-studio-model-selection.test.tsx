@@ -830,6 +830,96 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("merges incomplete idle live usage with assistant message metadata", async () => {
+    const activeSession = createActiveSession({
+      status: "idle",
+      selectedModel: null,
+      modelCatalog: null,
+      contextUsage: {
+        totalTokens: 31,
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 24,
+          contextWindow: 40_000,
+          outputLimit: 1_000,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        loadCatalog: async () => {
+          throw new Error("catalog unavailable");
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 31,
+        contextWindow: 40_000,
+        outputLimit: 1_000,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("prefers selected model fallback metadata over older assistant message history", async () => {
+    const primaryModel = CATALOG.models[0];
+    const secondaryModel = CATALOG.models[1];
+    if (!primaryModel || !secondaryModel) {
+      throw new Error("Expected catalog fixture models");
+    }
+    const catalogWithSelectionFallback: AgentModelCatalog = {
+      ...CATALOG,
+      models: [
+        primaryModel,
+        {
+          ...secondaryModel,
+          contextWindow: 100_000,
+          outputLimit: 4_096,
+        },
+      ],
+    };
+    const activeSession = createActiveSession({
+      status: "idle",
+      modelCatalog: catalogWithSelectionFallback,
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+      },
+      contextUsage: {
+        totalTokens: 31,
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 24,
+          contextWindow: 40_000,
+          outputLimit: 1_000,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(createBaseProps({ activeSession }));
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 31,
+        contextWindow: 100_000,
+        outputLimit: 4_096,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("falls back to the selected model context window when message + descriptor metadata are missing", async () => {
     const primaryModel = CATALOG.models[0];
     const secondaryModel = CATALOG.models[1];
