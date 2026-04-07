@@ -573,6 +573,46 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
+  test("keeps missing builder context as a fail-fast approval-loading error", async () => {
+    taskApprovalContextGetMock.mockImplementationOnce(async () => {
+      throw new Error(
+        "Human approval requires a builder worktree for task TASK-1. Start Builder first.",
+      );
+    });
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+
+    await waitForTaskApprovalModalClosed();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to open approval flow",
+      expect.objectContaining({
+        description:
+          "Human approval requires a builder worktree for task TASK-1. Start Builder first.",
+      }),
+    );
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
   test("completes the task from missing-builder-worktree recovery and closes the modal", async () => {
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
@@ -1562,7 +1602,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(expectApprovalModal().mode).toBe("pull_request");
-    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
+    expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe("Generation crashed");
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Approval failed",
       expect.objectContaining({ description: "Generation crashed" }),

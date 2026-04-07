@@ -287,9 +287,10 @@ export function useTaskApprovalFlow({
         });
         reset();
       } catch (error) {
-        dispatch({ type: "return_to_editable", errorMessage: null });
+        const description = errorMessage(error);
+        dispatch({ type: "return_to_editable", errorMessage: description });
         toast.error("Approval failed", {
-          description: errorMessage(error),
+          description,
         });
       }
     })();
