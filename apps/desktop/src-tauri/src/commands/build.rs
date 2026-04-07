@@ -318,6 +318,7 @@ pub async fn runs_list(
     repo_path: Option<String>,
 ) -> Result<Vec<RunSummary>, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("runs_list", move || service.runs_list(repo_path.as_deref())).await;
+    let result =
+        run_service_blocking("runs_list", move || service.runs_list(repo_path.as_deref())).await;
     as_error(result)
 }

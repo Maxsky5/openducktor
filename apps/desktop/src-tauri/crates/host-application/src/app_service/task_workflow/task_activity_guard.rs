@@ -1,10 +1,9 @@
 use super::cleanup_plans::{normalize_path_for_comparison, normalize_path_key};
 use crate::app_service::{
-    OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
     dedupe_opencode_session_status_probe_targets, has_live_opencode_session_status,
-    service_core::AppService,
+    service_core::AppService, OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunState, RuntimeRole, RuntimeRoute};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;

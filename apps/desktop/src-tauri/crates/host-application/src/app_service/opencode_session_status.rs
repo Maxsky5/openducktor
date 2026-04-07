@@ -3,7 +3,7 @@ use super::service_core::{
     CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatusFlight,
     OpencodeSessionStatusFlightState, OpencodeSessionStatusProbeLimiter,
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use host_domain::RuntimeRoute;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -13,7 +13,7 @@ use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use url::{Url, form_urlencoded};
+use url::{form_urlencoded, Url};
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -567,10 +567,10 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeOutcome,
+        has_live_opencode_session_status, load_opencode_session_statuses, AppService,
+        CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeOutcome,
         OpencodeSessionStatus, OpencodeSessionStatusFlightGuard, OpencodeSessionStatusMap,
-        OpencodeSessionStatusProbeTarget, has_live_opencode_session_status,
-        load_opencode_session_statuses,
+        OpencodeSessionStatusProbeTarget,
     };
     use crate::app_service::test_support::build_service_with_state;
     use anyhow::Result;
@@ -943,16 +943,12 @@ mod tests {
             .join()
             .expect("status server thread should finish");
 
-        assert!(
-            first_error
-                .to_string()
-                .contains("Failed parsing OpenCode session status response")
-        );
-        assert!(
-            second_error
-                .to_string()
-                .contains("Failed parsing OpenCode session status response")
-        );
+        assert!(first_error
+            .to_string()
+            .contains("Failed parsing OpenCode session status response"));
+        assert!(second_error
+            .to_string()
+            .contains("Failed parsing OpenCode session status response"));
         assert_eq!(connections.load(Ordering::SeqCst), 1);
         Ok(())
     }
@@ -975,18 +971,16 @@ mod tests {
         let error = outcome
             .to_result()
             .expect_err("dropped leader should finish waiters with an error");
-        assert!(
-            error
-                .to_string()
-                .contains("OpenCode session status probe aborted unexpectedly")
-        );
+        assert!(error
+            .to_string()
+            .contains("OpenCode session status probe aborted unexpectedly"));
 
         Ok(())
     }
 
     #[test]
-    fn complete_opencode_session_status_flight_recovers_poisoned_state_and_removes_entry()
-    -> Result<()> {
+    fn complete_opencode_session_status_flight_recovers_poisoned_state_and_removes_entry(
+    ) -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
             &AgentRuntimeKind::Opencode.route_for_port(1235),
@@ -1014,11 +1008,9 @@ mod tests {
                 &CachedOpencodeSessionStatusProbeOutcome::Statuses(OpencodeSessionStatusMap::new()),
             )
             .expect_err("poisoned completion should surface an error");
-        assert!(
-            error
-                .to_string()
-                .contains("OpenCode session status coordination state lock poisoned")
-        );
+        assert!(error
+            .to_string()
+            .contains("OpenCode session status coordination state lock poisoned"));
 
         let flights = service
             .opencode_session_status_flights

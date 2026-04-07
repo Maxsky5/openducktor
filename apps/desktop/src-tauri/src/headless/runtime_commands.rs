@@ -1,6 +1,6 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
-    deserialize_args, handle_repo_task_operation, run_headless_blocking, serialize_value,
+    deserialize_args, handle_repo_task_operation_blocking, run_headless_blocking, serialize_value,
     service_error, CommandResult, HeadlessState, RepoTaskArgs,
 };
 use super::events::{make_dev_server_emitter, make_emitter};
@@ -133,13 +133,13 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
         Box::pin(handle_repo_runtime_health_status(state, args))
     })?;
     registry.register("agent_sessions_list", |state, args| {
-        Box::pin(async move { handle_agent_sessions_list(state, args) })
+        Box::pin(handle_agent_sessions_list(state, args))
     })?;
     registry.register("agent_sessions_list_bulk", |state, args| {
-        Box::pin(async move { handle_agent_sessions_list_bulk(state, args) })
+        Box::pin(handle_agent_sessions_list_bulk(state, args))
     })?;
     registry.register("agent_session_upsert", |state, args| {
-        Box::pin(async move { handle_agent_session_upsert(state, args) })
+        Box::pin(handle_agent_session_upsert(state, args))
     })?;
     Ok(())
 }
@@ -376,36 +376,42 @@ async fn handle_repo_runtime_health_status(state: &HeadlessState, args: Value) -
     )
 }
 
-fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.agent_sessions_list(&repo_path, &task_id)
-    })
+async fn handle_agent_sessions_list(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "agent_sessions_list",
+        |service, repo_path, task_id| service.agent_sessions_list(&repo_path, &task_id),
+    )
+    .await
 }
 
-fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_agent_sessions_list_bulk(state: &HeadlessState, args: Value) -> CommandResult {
     let AgentSessionsListBulkArgs {
         repo_path,
         task_ids,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .agent_sessions_list_bulk(&repo_path, &task_ids)
-            .map_err(service_error)?,
+        run_headless_blocking("agent_sessions_list_bulk", move || {
+            service.agent_sessions_list_bulk(&repo_path, &task_ids)
+        })
+        .await?,
     )
 }
 
-fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandResult {
     let AgentSessionUpsertArgs {
         repo_path,
         task_id,
         session,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     Ok(json!({
-        "ok": state
-            .service
-            .agent_session_upsert(&repo_path, &task_id, session)
-            .map_err(service_error)?
+        "ok": run_headless_blocking("agent_session_upsert", move || {
+            service.agent_session_upsert(&repo_path, &task_id, session)
+        })
+        .await?
     }))
 }
 
@@ -413,6 +419,97 @@ fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandRes
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn agent_sessions_list_args_accept_task_identifier() {
+        let parsed = deserialize_args::<RepoTaskArgs>(json!({
+            "repoPath": "/repo",
+            "taskId": "task-1"
+        }))
+        .expect("payload should deserialize");
+
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.task_id, "task-1");
+    }
+
+    #[test]
+    fn agent_sessions_list_args_reject_missing_task_id() {
+        let error = deserialize_args::<RepoTaskArgs>(json!({
+            "repoPath": "/repo"
+        }))
+        .expect_err("task id should be required at headless transport boundary");
+
+        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("taskId"));
+    }
+
+    #[test]
+    fn agent_sessions_list_bulk_args_accept_task_ids() {
+        let parsed = deserialize_args::<AgentSessionsListBulkArgs>(json!({
+            "repoPath": "/repo",
+            "taskIds": ["task-1", "task-2"]
+        }))
+        .expect("payload should deserialize");
+
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.task_ids, vec!["task-1", "task-2"]);
+    }
+
+    #[test]
+    fn agent_sessions_list_bulk_args_reject_missing_task_ids() {
+        let error = deserialize_args::<AgentSessionsListBulkArgs>(json!({
+            "repoPath": "/repo"
+        }))
+        .expect_err("task ids should be required at headless transport boundary");
+
+        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("taskIds"));
+    }
+
+    #[test]
+    fn agent_session_upsert_args_accept_session_document() {
+        let parsed = deserialize_args::<AgentSessionUpsertArgs>(json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+            "session": {
+                "sessionId": "session-1",
+                "externalSessionId": "external-session-1",
+                "role": "build",
+                "scenario": "build_default",
+                "startedAt": "2026-02-20T12:00:00Z",
+                "runtimeKind": "opencode",
+                "workingDirectory": "/repo/worktree/task-1"
+            }
+        }))
+        .expect("payload should deserialize");
+
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.task_id, "task-1");
+        assert_eq!(parsed.session.session_id, "session-1");
+        assert_eq!(parsed.session.working_directory, "/repo/worktree/task-1");
+    }
+
+    #[test]
+    fn agent_session_upsert_args_reject_missing_session() {
+        let error = deserialize_args::<AgentSessionUpsertArgs>(json!({
+            "repoPath": "/repo",
+            "taskId": "task-1"
+        }))
+        .expect_err("session should be required at headless transport boundary");
+
+        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("session"));
+    }
+
+    #[test]
+    fn agent_session_upsert_response_keeps_ok_envelope() {
+        let response = serde_json::from_value::<serde_json::Map<String, Value>>(json!({
+            "ok": true
+        }))
+        .expect("response should deserialize");
+
+        assert_eq!(response.get("ok"), Some(&json!(true)));
+    }
 
     #[test]
     fn runtime_list_args_reject_invalid_runtime_kind() {

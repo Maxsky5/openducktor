@@ -44,14 +44,10 @@ impl CommandRegistry {
 
 pub(super) fn build_registry() -> anyhow::Result<CommandRegistry> {
     let mut registry = CommandRegistry::default();
-    workspace_commands::register_commands(&mut registry)
-        .map_err(|error| anyhow!(error))?;
-    git_commands::register_commands(&mut registry)
-        .map_err(|error| anyhow!(error))?;
-    task_commands::register_commands(&mut registry)
-        .map_err(|error| anyhow!(error))?;
-    runtime_commands::register_commands(&mut registry)
-        .map_err(|error| anyhow!(error))?;
+    workspace_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
+    git_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
+    task_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
+    runtime_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     Ok(registry)
 }
 
@@ -115,9 +111,8 @@ mod tests {
         let root = unique_temp_path("registry");
         fs::create_dir_all(&root).expect("test root should exist");
         let config_store = AppConfigStore::from_path(root.join("config.json"));
-        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
-            "openducktor",
-        ));
+        let task_store: Arc<dyn TaskStore> =
+            Arc::new(BeadsTaskStore::with_metadata_namespace("openducktor"));
         let service = Arc::new(AppService::new(task_store, config_store));
 
         TestStateFixture {
@@ -162,7 +157,10 @@ mod tests {
             .register("test_command", |_, _| Box::pin(async { Ok(Value::Null) }))
             .expect_err("duplicate registration should fail");
 
-        assert_eq!(error, "duplicate browser backend command registration: test_command");
+        assert_eq!(
+            error,
+            "duplicate browser backend command registration: test_command"
+        );
         assert!(registry.contains("test_command"));
     }
 
@@ -170,10 +168,14 @@ mod tests {
     async fn duplicate_registration_keeps_original_handler() {
         let mut registry = CommandRegistry::default();
         registry
-            .register("test_command", |_, _| Box::pin(async { Ok(json!({ "value": "first" })) }))
+            .register("test_command", |_, _| {
+                Box::pin(async { Ok(json!({ "value": "first" })) })
+            })
             .expect("first registration should succeed");
         registry
-            .register("test_command", |_, _| Box::pin(async { Ok(json!({ "value": "second" })) }))
+            .register("test_command", |_, _| {
+                Box::pin(async { Ok(json!({ "value": "second" })) })
+            })
             .expect_err("duplicate registration should fail");
 
         let fixture = test_state_fixture(registry);

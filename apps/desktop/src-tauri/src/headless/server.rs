@@ -2,9 +2,7 @@ use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
 use crate::commands::workspace::is_staged_local_attachment_path;
-use crate::{
-    startup_phase_service_bootstrap, startup_phase_shutdown_hooks, startup_phase_tracing,
-};
+use crate::{startup_phase_service_bootstrap, startup_phase_shutdown_hooks, startup_phase_tracing};
 use anyhow::Context;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, Query, State};
@@ -34,16 +32,18 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
     startup_phase_shutdown_hooks(service.clone());
-    let registry = Arc::new(
-        build_registry().context("failed to build browser backend command registry")?,
-    );
+    let registry =
+        Arc::new(build_registry().context("failed to build browser backend command registry")?);
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
-        .route("/local-attachment-preview", get(local_attachment_preview_handler))
+        .route(
+            "/local-attachment-preview",
+            get(local_attachment_preview_handler),
+        )
         .route("/invoke/{command}", post(invoke_handler))
         .layer(browser_backend_cors_layer()?)
         .with_state(HeadlessState {
@@ -124,11 +124,13 @@ async fn local_attachment_preview_handler(
     Query(query): Query<LocalAttachmentPreviewQuery>,
 ) -> Result<Response, HeadlessCommandError> {
     let path = PathBuf::from(&query.path);
-    let metadata = tokio::fs::metadata(&path).await.map_err(|error| HeadlessCommandError {
-        message: format!("Failed to stat local attachment preview: {error}"),
-        status: StatusCode::NOT_FOUND,
-        failure_kind: None,
-    })?;
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|error| HeadlessCommandError {
+            message: format!("Failed to stat local attachment preview: {error}"),
+            status: StatusCode::NOT_FOUND,
+            failure_kind: None,
+        })?;
     if !metadata.is_file() {
         return Err(HeadlessCommandError {
             message: "Local attachment preview path must reference a file".to_string(),
@@ -143,20 +145,23 @@ async fn local_attachment_preview_handler(
     })?;
     if !allowed {
         return Err(HeadlessCommandError {
-            message:
-                "Local attachment preview is only available for staged attachment files."
-                    .to_string(),
+            message: "Local attachment preview is only available for staged attachment files."
+                .to_string(),
             status: StatusCode::FORBIDDEN,
             failure_kind: None,
         });
     }
 
-    let file = tokio::fs::File::open(&path).await.map_err(|error| HeadlessCommandError {
-        message: format!("Failed to read local attachment preview: {error}"),
-        status: StatusCode::INTERNAL_SERVER_ERROR,
-        failure_kind: None,
-    })?;
-    let mime = mime_guess::from_path(&path).first_or_octet_stream().to_string();
+    let file = tokio::fs::File::open(&path)
+        .await
+        .map_err(|error| HeadlessCommandError {
+            message: format!("Failed to read local attachment preview: {error}"),
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            failure_kind: None,
+        })?;
+    let mime = mime_guess::from_path(&path)
+        .first_or_octet_stream()
+        .to_string();
     let stream = ReaderStream::new(file);
 
     Response::builder()
@@ -257,9 +262,8 @@ mod tests {
         let root = unique_temp_path("server");
         fs::create_dir_all(&root).expect("test root should exist");
         let config_store = AppConfigStore::from_path(root.join("config.json"));
-        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
-            "openducktor",
-        ));
+        let task_store: Arc<dyn TaskStore> =
+            Arc::new(BeadsTaskStore::with_metadata_namespace("openducktor"));
         let service = Arc::new(AppService::new(task_store, config_store));
         let registry = Arc::new(build_registry().expect("registry should build"));
 
@@ -345,7 +349,9 @@ mod tests {
         .expect_err("missing preview path should fail");
 
         assert_eq!(error.status, StatusCode::NOT_FOUND);
-        assert!(error.message.contains("Failed to stat local attachment preview"));
+        assert!(error
+            .message
+            .contains("Failed to stat local attachment preview"));
     }
 
     #[tokio::test]
