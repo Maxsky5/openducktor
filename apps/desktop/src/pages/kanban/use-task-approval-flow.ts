@@ -10,7 +10,12 @@ import {
   loadTaskApprovalContextFromQuery,
   taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
-import type { TaskApprovalModalModel } from "./kanban-page-model-types";
+import type {
+  TaskApprovalApprovalModalModel,
+  TaskApprovalCompletionModalModel,
+  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalModalModel,
+} from "./kanban-page-model-types";
 import {
   completeDirectMergeApproval,
   submitDirectMergeApproval,
@@ -34,8 +39,8 @@ type UseTaskApprovalFlowArgs = {
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
-  humanApproveTask?: (taskId: string) => Promise<void>;
-  openResetImplementation?: (taskId: string) => boolean;
+  humanApproveTask: (taskId: string) => Promise<void>;
+  openResetImplementation: (taskId: string) => boolean;
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
 };
 
@@ -58,14 +63,8 @@ export function useTaskApprovalFlow({
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
-  humanApproveTask = async (): Promise<void> => {
-    throw new Error("humanApproveTask handler is required for missing-builder-worktree recovery.");
-  },
-  openResetImplementation = (): boolean => {
-    throw new Error(
-      "openResetImplementation handler is required for missing-builder-worktree recovery.",
-    );
-  },
+  humanApproveTask,
+  openResetImplementation,
   onResolveGitConflict = async (): Promise<boolean> => {
     throw new Error(
       "onResolveGitConflict handler is required to use the Ask Builder conflict-resolution path.",
@@ -452,12 +451,39 @@ export function useTaskApprovalFlow({
 
   const approvalContext = state.approvalContext;
   const githubProvider = approvalContext?.providers.find((entry) => entry.providerId === "github");
+  const baseModal = {
+    open: true,
+    taskId: state.taskId,
+    isSubmitting: state.phase === "submitting",
+    errorMessage: state.errorMessage,
+    onOpenChange: (open: boolean) => {
+      if (!open) {
+        reset();
+      }
+    },
+  };
 
-  return {
-    taskApprovalModal: {
-      open: true,
-      stage: state.stage,
-      taskId: state.taskId,
+  let taskApprovalModal: TaskApprovalModalModel;
+  if (state.stage === "missing_builder_worktree") {
+    taskApprovalModal = {
+      ...baseModal,
+      stage: "missing_builder_worktree",
+      onCompleteMissingBuilderWorktree: confirm,
+      onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
+    } satisfies TaskApprovalMissingBuilderWorktreeModalModel;
+  } else if (state.stage === "complete_direct_merge") {
+    taskApprovalModal = {
+      ...baseModal,
+      stage: "complete_direct_merge",
+      targetBranch: approvalContext?.targetBranch ?? null,
+      publishTarget: approvalContext?.publishTarget ?? null,
+      onSkipDirectMergeCompletion: reset,
+      onCompleteDirectMerge: completeDirectMerge,
+    } satisfies TaskApprovalCompletionModalModel;
+  } else {
+    taskApprovalModal = {
+      ...baseModal,
+      stage: "approval",
       isLoading: state.phase === "loading",
       mode: state.mode,
       mergeMethod: state.mergeMethod,
@@ -469,18 +495,10 @@ export function useTaskApprovalFlow({
       pullRequestUrl: approvalContext?.pullRequest?.url ?? null,
       title: state.title,
       body: state.body,
-      targetBranch: approvalContext?.targetBranch ?? null,
-      publishTarget: approvalContext?.publishTarget ?? null,
       squashCommitMessage: state.squashCommitMessage,
       squashCommitMessageTouched: state.squashCommitMessageTouched,
       hasSuggestedSquashCommitMessage: approvalContext?.suggestedSquashCommitMessage != null,
-      isSubmitting: state.phase === "submitting",
-      errorMessage: state.errorMessage,
-      onOpenChange: (open) => {
-        if (!open) {
-          reset();
-        }
-      },
+      targetBranch: approvalContext?.targetBranch ?? null,
       onModeChange: (mode) => dispatch({ type: "set_mode", mode }),
       onMergeMethodChange: (mergeMethod) => dispatch({ type: "set_merge_method", mergeMethod }),
       onPullRequestDraftModeChange: (pullRequestDraftMode) =>
@@ -490,11 +508,11 @@ export function useTaskApprovalFlow({
       onSquashCommitMessageChange: (squashCommitMessage) =>
         dispatch({ type: "set_squash_commit_message", squashCommitMessage }),
       onConfirm: confirm,
-      onCompleteMissingBuilderWorktree: confirm,
-      onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
-      onSkipDirectMergeCompletion: reset,
-      onCompleteDirectMerge: completeDirectMerge,
-    },
+    } satisfies TaskApprovalApprovalModalModel;
+  }
+
+  return {
+    taskApprovalModal,
     taskGitConflictDialog,
     openTaskApproval,
   };

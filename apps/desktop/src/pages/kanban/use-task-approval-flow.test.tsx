@@ -12,6 +12,11 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
+import type {
+  TaskApprovalApprovalModalModel,
+  TaskApprovalCompletionModalModel,
+  TaskApprovalMissingBuilderWorktreeModalModel,
+} from "./kanban-page-model-types";
 import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
 enableReactActEnvironment();
@@ -178,7 +183,9 @@ const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
 const waitForTaskApprovalModalLoaded = async (): Promise<void> => {
   await waitFor(() => {
     expect(latestHarnessValue?.taskApprovalModal).toBeTruthy();
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
+    if (latestHarnessValue?.taskApprovalModal?.stage === "approval") {
+      expect(latestHarnessValue.taskApprovalModal.isLoading).toBe(false);
+    }
   });
 };
 
@@ -240,6 +247,45 @@ const createConflictDirectMergeResult = (
     },
   }) as unknown as Awaited<ReturnType<typeof defaultTaskDirectMerge>>;
 
+const createUseTaskApprovalFlowArgs = (
+  overrides: Partial<Parameters<typeof useTaskApprovalFlow>[0]>,
+): Parameters<typeof useTaskApprovalFlow>[0] => ({
+  activeRepo: "/repo",
+  tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+  requestPullRequestGeneration: async () => undefined,
+  refreshTasks: async () => {},
+  humanApproveTask: humanApproveTaskMock,
+  openResetImplementation: openResetImplementationMock,
+  ...overrides,
+});
+
+const expectApprovalModal = (): TaskApprovalApprovalModalModel => {
+  const modal = latestHarnessValue?.taskApprovalModal;
+  expect(modal?.stage).toBe("approval");
+  if (!modal || modal.stage !== "approval") {
+    throw new Error("Expected approval modal");
+  }
+  return modal;
+};
+
+const expectCompletionModal = (): TaskApprovalCompletionModalModel => {
+  const modal = latestHarnessValue?.taskApprovalModal;
+  expect(modal?.stage).toBe("complete_direct_merge");
+  if (!modal || modal.stage !== "complete_direct_merge") {
+    throw new Error("Expected direct-merge completion modal");
+  }
+  return modal;
+};
+
+const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktreeModalModel => {
+  const modal = latestHarnessValue?.taskApprovalModal;
+  expect(modal?.stage).toBe("missing_builder_worktree");
+  if (!modal || modal.stage !== "missing_builder_worktree") {
+    throw new Error("Expected missing-builder-worktree modal");
+  }
+  return modal;
+};
+
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
     await applyHostMocks();
@@ -285,18 +331,20 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [
-          createTaskCardFixture({
-            id: "TASK-1",
-            title: "Ship approval flow",
-            description: "Task description",
-          }),
-        ],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [
+            createTaskCardFixture({
+              id: "TASK-1",
+              title: "Ship approval flow",
+              description: "Task description",
+            }),
+          ],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -308,8 +356,8 @@ describe("useTaskApprovalFlow", () => {
 
     expect(taskApprovalContextGetMock).toHaveBeenCalledWith("/repo", "TASK-1");
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("merge_commit");
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mergeMethod).toBe("merge_commit");
 
     pendingApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
@@ -325,11 +373,11 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("squash");
-    expect(latestHarnessValue?.taskApprovalModal?.squashCommitMessage).toBe("feat: builder change");
-    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(2);
+    expect(expectApprovalModal().isLoading).toBe(false);
+    expect(expectApprovalModal().mergeMethod).toBe("squash");
+    expect(expectApprovalModal().squashCommitMessage).toBe("feat: builder change");
+    expect(expectApprovalModal().hasUncommittedChanges).toBe(true);
+    expect(expectApprovalModal().uncommittedFileCount).toBe(2);
 
     await act(async () => {
       await harness.unmount();
@@ -343,18 +391,20 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [
-          createTaskCardFixture({
-            id: "TASK-1",
-            title: "Ship approval flow",
-            description: "Task description",
-          }),
-        ],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [
+            createTaskCardFixture({
+              id: "TASK-1",
+              title: "Ship approval flow",
+              description: "Task description",
+            }),
+          ],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -365,8 +415,8 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mode).toBe("direct_merge");
 
     pendingApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
@@ -387,9 +437,9 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
-    expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(true);
+    expect(expectApprovalModal().isLoading).toBe(false);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestAvailable).toBe(true);
 
     await act(async () => {
       await harness.unmount();
@@ -403,18 +453,20 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [
-          createTaskCardFixture({
-            id: "TASK-1",
-            title: "Ship approval flow",
-            description: "Task description",
-          }),
-        ],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [
+            createTaskCardFixture({
+              id: "TASK-1",
+              title: "Ship approval flow",
+              description: "Task description",
+            }),
+          ],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -425,8 +477,8 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mode).toBe("direct_merge");
 
     pendingApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
@@ -439,9 +491,9 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
-    expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().isLoading).toBe(false);
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
 
     await act(async () => {
       await harness.unmount();
@@ -463,12 +515,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -492,12 +546,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -510,7 +566,6 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_builder_worktree");
-    expect(latestHarnessValue?.taskApprovalModal?.pullRequestAvailable).toBe(false);
     expect(toastErrorMock).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -524,13 +579,15 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-        humanApproveTask: humanApproveTaskMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+          humanApproveTask: humanApproveTaskMock,
+        }),
+      );
       return null;
     };
 
@@ -543,7 +600,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onCompleteMissingBuilderWorktree();
+      expectMissingBuilderWorktreeModal().onCompleteMissingBuilderWorktree();
       await Promise.resolve();
     });
 
@@ -564,13 +621,15 @@ describe("useTaskApprovalFlow", () => {
     });
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-        humanApproveTask: humanApproveTaskMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+          humanApproveTask: humanApproveTaskMock,
+        }),
+      );
       return null;
     };
 
@@ -583,7 +642,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onCompleteMissingBuilderWorktree();
+      expectMissingBuilderWorktreeModal().onCompleteMissingBuilderWorktree();
       await Promise.resolve();
     });
 
@@ -609,13 +668,15 @@ describe("useTaskApprovalFlow", () => {
     openResetImplementationMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-        openResetImplementation: openResetImplementationMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+          openResetImplementation: openResetImplementationMock,
+        }),
+      );
       return null;
     };
 
@@ -628,7 +689,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onResetMissingBuilderWorktree();
+      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
       await Promise.resolve();
     });
 
@@ -636,7 +697,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onResetMissingBuilderWorktree();
+      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
       await Promise.resolve();
     });
 
@@ -654,12 +715,14 @@ describe("useTaskApprovalFlow", () => {
     });
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -696,12 +759,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -712,7 +777,7 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(true);
+    expect(expectApprovalModal().hasUncommittedChanges).toBe(true);
 
     await act(async () => {
       latestHarnessValue?.taskApprovalModal?.onOpenChange(false);
@@ -725,8 +790,8 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(taskApprovalContextGetMock).toHaveBeenCalledTimes(2);
-    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(0);
+    expect(expectApprovalModal().hasUncommittedChanges).toBe(false);
+    expect(expectApprovalModal().uncommittedFileCount).toBe(0);
 
     await act(async () => {
       await harness.unmount();
@@ -748,15 +813,17 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [
-          createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
-          createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
-        ],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [
+            createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
+            createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
+          ],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -773,8 +840,8 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
-    expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("rebase");
-    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(false);
+    expect(expectApprovalModal().mergeMethod).toBe("rebase");
+    expect(expectApprovalModal().hasUncommittedChanges).toBe(false);
 
     firstContext.resolve(
       createReadyTaskApprovalContextResult({
@@ -790,9 +857,9 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
-    expect(latestHarnessValue?.taskApprovalModal?.mergeMethod).toBe("rebase");
-    expect(latestHarnessValue?.taskApprovalModal?.hasUncommittedChanges).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.uncommittedFileCount).toBe(0);
+    expect(expectApprovalModal().mergeMethod).toBe("rebase");
+    expect(expectApprovalModal().hasUncommittedChanges).toBe(false);
+    expect(expectApprovalModal().uncommittedFileCount).toBe(0);
 
     await act(async () => {
       await harness.unmount();
@@ -824,12 +891,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -842,13 +911,13 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onMergeMethodChange("squash");
-      latestHarnessValue?.taskApprovalModal?.onSquashCommitMessageChange("feat: merged task");
+      expectApprovalModal().onMergeMethodChange("squash");
+      expectApprovalModal().onSquashCommitMessageChange("feat: merged task");
       await Promise.resolve();
     });
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -857,7 +926,7 @@ describe("useTaskApprovalFlow", () => {
     });
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onCompleteDirectMerge();
+      expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
 
@@ -885,12 +954,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: refreshTasksMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: refreshTasksMock,
+        }),
+      );
       return null;
     };
 
@@ -903,7 +974,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -929,12 +1000,14 @@ describe("useTaskApprovalFlow", () => {
     taskDirectMergeMock.mockResolvedValueOnce(createConflictDirectMergeResult());
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -947,7 +1020,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -982,12 +1055,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -1000,7 +1075,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -1015,7 +1090,7 @@ describe("useTaskApprovalFlow", () => {
       "direct_merge_merge_commit",
       "/repo/.worktrees/task-1",
     );
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+    expect(expectApprovalModal().mode).toBe("direct_merge");
     expect(latestHarnessValue?.taskGitConflictDialog).toBeNull();
 
     await act(async () => {
@@ -1036,13 +1111,15 @@ describe("useTaskApprovalFlow", () => {
     const onResolveGitConflictMock = mock(async () => false);
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-        onResolveGitConflict: onResolveGitConflictMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+          onResolveGitConflict: onResolveGitConflictMock,
+        }),
+      );
       return null;
     };
 
@@ -1055,7 +1132,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -1092,13 +1169,15 @@ describe("useTaskApprovalFlow", () => {
     });
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-        onResolveGitConflict: onResolveGitConflictMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+          onResolveGitConflict: onResolveGitConflictMock,
+        }),
+      );
       return null;
     };
 
@@ -1111,7 +1190,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -1149,18 +1228,20 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [
-          createTaskCardFixture({
-            id: "TASK-1",
-            title: "Ship approval flow",
-            description: "Task description",
-          }),
-        ],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: refreshTasksMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [
+            createTaskCardFixture({
+              id: "TASK-1",
+              title: "Ship approval flow",
+              description: "Task description",
+            }),
+          ],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: refreshTasksMock,
+        }),
+      );
       return null;
     };
 
@@ -1173,7 +1254,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -1216,12 +1297,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: requestPullRequestGenerationMock,
-        refreshTasks: refreshTasksMock,
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: requestPullRequestGenerationMock,
+          refreshTasks: refreshTasksMock,
+        }),
+      );
       return null;
     };
 
@@ -1234,13 +1317,13 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
-      latestHarnessValue?.taskApprovalModal?.onPullRequestDraftModeChange("generate_ai");
+      expectApprovalModal().onModeChange("pull_request");
+      expectApprovalModal().onPullRequestDraftModeChange("generate_ai");
       await Promise.resolve();
     });
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -1282,12 +1365,14 @@ describe("useTaskApprovalFlow", () => {
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: requestPullRequestGenerationMock,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: requestPullRequestGenerationMock,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -1300,20 +1385,20 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
-      latestHarnessValue?.taskApprovalModal?.onPullRequestDraftModeChange("generate_ai");
+      expectApprovalModal().onModeChange("pull_request");
+      expectApprovalModal().onPullRequestDraftModeChange("generate_ai");
       await Promise.resolve();
     });
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
     expect(requestPullRequestGenerationMock).toHaveBeenCalledWith("TASK-1");
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
+    expect(expectApprovalModal().mode).toBe("pull_request");
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
     expect(toastErrorMock).not.toHaveBeenCalled();
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
@@ -1349,15 +1434,17 @@ describe("useTaskApprovalFlow", () => {
     }) as unknown as never);
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [
-          createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
-          createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
-        ],
-        requestPullRequestGeneration: requestPullRequestGenerationMock,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [
+            createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
+            createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
+          ],
+          requestPullRequestGeneration: requestPullRequestGenerationMock,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -1370,13 +1457,13 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
-      latestHarnessValue?.taskApprovalModal?.onPullRequestDraftModeChange("generate_ai");
+      expectApprovalModal().onModeChange("pull_request");
+      expectApprovalModal().onPullRequestDraftModeChange("generate_ai");
       await Promise.resolve();
     });
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
@@ -1389,7 +1476,7 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+    expect(expectApprovalModal().isLoading).toBe(true);
 
     requestPullRequestGenerationDeferred.resolve(undefined);
 
@@ -1399,7 +1486,7 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
-    expect(latestHarnessValue?.taskApprovalModal?.isLoading).toBe(true);
+    expect(expectApprovalModal().isLoading).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
 
     secondApprovalContext.resolve(
@@ -1416,7 +1503,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     expect(latestHarnessValue?.taskApprovalModal?.taskId).toBe("TASK-2");
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("direct_merge");
+    expect(expectApprovalModal().mode).toBe("direct_merge");
 
     await act(async () => {
       await harness.unmount();
@@ -1441,12 +1528,14 @@ describe("useTaskApprovalFlow", () => {
     });
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: requestPullRequestGenerationMock,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: requestPullRequestGenerationMock,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -1459,20 +1548,20 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onModeChange("pull_request");
-      latestHarnessValue?.taskApprovalModal?.onPullRequestDraftModeChange("generate_ai");
+      expectApprovalModal().onModeChange("pull_request");
+      expectApprovalModal().onPullRequestDraftModeChange("generate_ai");
       await Promise.resolve();
     });
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onConfirm();
+      expectApprovalModal().onConfirm();
       await Promise.resolve();
     });
 
     expect(requestPullRequestGenerationMock).toHaveBeenCalledTimes(1);
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
-    expect(latestHarnessValue?.taskApprovalModal?.mode).toBe("pull_request");
+    expect(expectApprovalModal().mode).toBe("pull_request");
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBeNull();
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Approval failed",
@@ -1499,12 +1588,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -1519,7 +1610,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onCompleteDirectMerge();
+      expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
 
@@ -1560,12 +1651,14 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const Harness = (): ReactElement | null => {
-      latestHarnessValue = useTaskApprovalFlow({
-        activeRepo: "/repo",
-        tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
-        requestPullRequestGeneration: async () => undefined,
-        refreshTasks: async () => {},
-      });
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeRepo: "/repo",
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          refreshTasks: async () => {},
+        }),
+      );
       return null;
     };
 
@@ -1580,7 +1673,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
 
     await act(async () => {
-      latestHarnessValue?.taskApprovalModal?.onCompleteDirectMerge();
+      expectCompletionModal().onCompleteDirectMerge();
       await Promise.resolve();
     });
 
