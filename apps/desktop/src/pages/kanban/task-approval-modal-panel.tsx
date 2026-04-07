@@ -241,6 +241,56 @@ export function TaskApprovalModalPanel({
   );
 }
 
+function getDirectMergeCompletionContextError(
+  model: TaskApprovalCompletionModalModel,
+): string | null {
+  return model.targetBranch === null
+    ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
+    : null;
+}
+
+function getApprovalSubmitValidation(model: TaskApprovalApprovalModalModel): {
+  hasManualPullRequestValidationError: boolean;
+  hasSquashCommitMessageSubmitError: boolean;
+  showSquashCommitMessageValidationError: boolean;
+  confirmDisabled: boolean;
+  confirmLabel: string;
+} {
+  const hasManualPullRequestValidationError =
+    model.mode === "pull_request" &&
+    model.pullRequestAvailable &&
+    model.pullRequestDraftMode === "manual" &&
+    (model.title.trim().length === 0 || model.body.trim().length === 0);
+  const hasSquashCommitMessageSubmitError =
+    model.mode === "direct_merge" &&
+    model.mergeMethod === "squash" &&
+    model.squashCommitMessage.trim().length === 0;
+  const showSquashCommitMessageValidationError =
+    hasSquashCommitMessageSubmitError &&
+    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
+
+  let confirmLabel = "Merge Locally";
+  if (model.mode === "pull_request" && model.pullRequestDraftMode === "manual") {
+    confirmLabel = "Create Pull Request";
+  } else if (model.mode === "pull_request") {
+    confirmLabel = "Start PR Generation";
+  }
+
+  return {
+    hasManualPullRequestValidationError,
+    hasSquashCommitMessageSubmitError,
+    showSquashCommitMessageValidationError,
+    confirmDisabled:
+      model.isLoading ||
+      model.isSubmitting ||
+      model.hasUncommittedChanges ||
+      (model.mode === "pull_request" && !model.pullRequestAvailable) ||
+      hasManualPullRequestValidationError ||
+      hasSquashCommitMessageSubmitError,
+    confirmLabel,
+  };
+}
+
 function TaskApprovalApprovalStage({
   model,
   sectionLabelClass,
@@ -248,6 +298,7 @@ function TaskApprovalApprovalStage({
   model: TaskApprovalApprovalModalModel;
   sectionLabelClass: string;
 }): ReactElement {
+  const { showSquashCommitMessageValidationError } = getApprovalSubmitValidation(model);
   const actionOptions = APPROVAL_ACTION_OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
@@ -257,13 +308,6 @@ function TaskApprovalApprovalStage({
     model.uncommittedFileCount === 1
       ? "The builder worktree has 1 uncommitted file. Commit or discard it before approving this task."
       : `The builder worktree has ${model.uncommittedFileCount} uncommitted files. Commit or discard them before approving this task.`;
-  const hasSquashCommitMessageSubmitError =
-    model.mode === "direct_merge" &&
-    model.mergeMethod === "squash" &&
-    model.squashCommitMessage.trim().length === 0;
-  const showSquashCommitMessageValidationError =
-    hasSquashCommitMessageSubmitError &&
-    (model.hasSuggestedSquashCommitMessage || model.squashCommitMessageTouched);
 
   if (model.isLoading) {
     return (
@@ -506,10 +550,7 @@ function TaskApprovalCompletionStage({
   sectionLabelClass: string;
 }): ReactElement {
   const hasPublishTarget = model.publishTarget !== null;
-  const completionContextError =
-    model.targetBranch === null
-      ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
-      : null;
+  const completionContextError = getDirectMergeCompletionContextError(model);
   const completionErrorMessage = completionContextError ?? model.errorMessage;
   const localBranchName = model.targetBranch?.branch ?? "";
   const publishTargetLabel = model.publishTarget ? canonicalTargetBranch(model.publishTarget) : "";
@@ -605,10 +646,7 @@ function TaskApprovalModalFooter({ model }: { model: TaskApprovalModalModel }): 
   );
 
   if (model.stage === "complete_direct_merge") {
-    const completionContextError =
-      model.targetBranch === null
-        ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
-        : null;
+    const completionContextError = getDirectMergeCompletionContextError(model);
     const completionActionDisabled = model.isSubmitting || completionContextError !== null;
     const finishLaterDisabled = model.isSubmitting;
     const publishTargetBranchName = model.publishTarget?.branch ?? "";
@@ -683,28 +721,7 @@ function TaskApprovalModalFooter({ model }: { model: TaskApprovalModalModel }): 
     );
   }
 
-  const hasManualPullRequestValidationError =
-    model.mode === "pull_request" &&
-    model.pullRequestAvailable &&
-    model.pullRequestDraftMode === "manual" &&
-    (model.title.trim().length === 0 || model.body.trim().length === 0);
-  const hasSquashCommitMessageSubmitError =
-    model.mode === "direct_merge" &&
-    model.mergeMethod === "squash" &&
-    model.squashCommitMessage.trim().length === 0;
-  const confirmDisabled =
-    model.isLoading ||
-    model.isSubmitting ||
-    model.hasUncommittedChanges ||
-    (model.mode === "pull_request" && !model.pullRequestAvailable) ||
-    hasManualPullRequestValidationError ||
-    hasSquashCommitMessageSubmitError;
-  const confirmLabel =
-    model.mode === "pull_request"
-      ? model.pullRequestDraftMode === "manual"
-        ? "Create Pull Request"
-        : "Start PR Generation"
-      : "Merge Locally";
+  const { confirmDisabled, confirmLabel } = getApprovalSubmitValidation(model);
 
   return (
     <DialogFooter className={footerClassName}>
