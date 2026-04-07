@@ -162,7 +162,13 @@ const deriveWorkflowToneForRole = (params: {
   completion: AgentWorkflowStepState["completion"];
   liveSession: AgentWorkflowStepLiveSession;
 }): AgentWorkflowStepState["tone"] => {
-  if (params.role === "build" && params.taskAttentionState === "blocked_needs_input") {
+  const allowBlockedTaskWarning =
+    params.role === "build" &&
+    params.taskAttentionState === "blocked_needs_input" &&
+    params.liveSession !== "running" &&
+    params.liveSession !== "error";
+
+  if (allowBlockedTaskWarning) {
     return "waiting_input";
   }
 
