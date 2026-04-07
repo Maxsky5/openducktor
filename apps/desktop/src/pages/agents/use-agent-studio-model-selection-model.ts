@@ -140,27 +140,23 @@ const extractFallbackContextUsageEntry = ({
   session,
   modelDescriptorByKey,
   fallbackContextWindow,
+  fallbackOutputLimit,
 }: {
   session: SessionMessageOwner | null | undefined;
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow: number | undefined;
+  fallbackOutputLimit: number | undefined;
 }): AgentStudioContextUsageEntry => {
   if (!session) {
     return null;
   }
 
-  return extractLatestContextUsageEntry(
-    fallbackContextWindow === undefined
-      ? {
-          session,
-          modelDescriptorByKey,
-        }
-      : {
-          session,
-          modelDescriptorByKey,
-          fallbackContextWindow,
-        },
-  );
+  return extractLatestContextUsageEntry({
+    session,
+    modelDescriptorByKey,
+    ...(fallbackContextWindow !== undefined ? { fallbackContextWindow } : {}),
+    ...(fallbackOutputLimit !== undefined ? { fallbackOutputLimit } : {}),
+  });
 };
 
 const resolveLiveContextUsageParts = ({
@@ -168,17 +164,19 @@ const resolveLiveContextUsageParts = ({
   modelDescriptor,
   fallbackUsage,
   fallbackContextWindow,
+  fallbackOutputLimit,
 }: {
   liveContextUsage: AgentSessionContextUsage;
   modelDescriptor: CatalogModelDescriptor | undefined;
   fallbackUsage: AgentStudioContextUsage;
   fallbackContextWindow: number | undefined;
+  fallbackOutputLimit: number | undefined;
 }): ResolvedContextUsageParts | null => {
   const contextWindow = pickPositiveNumber(
     liveContextUsage.contextWindow,
     modelDescriptor?.contextWindow,
-    fallbackUsage?.contextWindow,
     fallbackContextWindow,
+    fallbackUsage?.contextWindow,
   );
   if (contextWindow === undefined) {
     return null;
@@ -187,6 +185,7 @@ const resolveLiveContextUsageParts = ({
   const outputLimit = pickPositiveNumber(
     liveContextUsage.outputLimit,
     modelDescriptor?.outputLimit,
+    fallbackOutputLimit,
     fallbackUsage?.outputLimit,
   );
 
@@ -205,28 +204,55 @@ export const extractLatestContextUsage = ({
   liveContextUsage,
   modelDescriptorByKey,
   fallbackContextWindow,
+  fallbackOutputLimit,
 }: {
   session: SessionMessageOwner | null | undefined;
   liveContextUsage?: AgentSessionContextUsage | null;
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
+  fallbackOutputLimit?: number;
 }): AgentStudioContextUsage => {
-  const fallbackUsageEntry = extractFallbackContextUsageEntry({
-    session,
-    modelDescriptorByKey,
-    fallbackContextWindow,
-  });
+  let fallbackUsageEntry: AgentStudioContextUsageEntry | undefined;
+  const getFallbackUsageEntry = (): AgentStudioContextUsageEntry => {
+    if (fallbackUsageEntry !== undefined) {
+      return fallbackUsageEntry;
+    }
+
+    fallbackUsageEntry = extractFallbackContextUsageEntry({
+      session,
+      modelDescriptorByKey,
+      fallbackContextWindow,
+      fallbackOutputLimit,
+    });
+    return fallbackUsageEntry;
+  };
 
   if (liveContextUsage && liveContextUsage.totalTokens > 0) {
     const modelDescriptor = resolveContextUsageDescriptor({
       liveContextUsage,
       modelDescriptorByKey,
     });
+    let fallbackUsage: AgentStudioContextUsage = null;
+    const needsHistoryFallback =
+      pickPositiveNumber(
+        liveContextUsage.contextWindow,
+        modelDescriptor?.contextWindow,
+        fallbackContextWindow,
+      ) === undefined ||
+      pickPositiveNumber(
+        liveContextUsage.outputLimit,
+        modelDescriptor?.outputLimit,
+        fallbackOutputLimit,
+      ) === undefined;
+    if (needsHistoryFallback) {
+      fallbackUsage = getFallbackUsageEntry()?.usage ?? null;
+    }
     const resolvedParts = resolveLiveContextUsageParts({
       liveContextUsage,
       modelDescriptor,
-      fallbackUsage: fallbackUsageEntry?.usage ?? null,
+      fallbackUsage,
       fallbackContextWindow,
+      fallbackOutputLimit,
     });
     if (resolvedParts) {
       const usage: NonNullable<AgentStudioContextUsage> = {
@@ -240,19 +266,21 @@ export const extractLatestContextUsage = ({
     }
   }
 
-  return fallbackUsageEntry?.usage ?? null;
+  return getFallbackUsageEntry()?.usage ?? null;
 };
 
 export const extractLatestContextUsageEntry = ({
   session,
   modelDescriptorByKey,
   fallbackContextWindow,
+  fallbackOutputLimit,
   startIndex = 0,
   endIndex,
 }: {
   session: SessionMessageOwner | null | undefined;
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
+  fallbackOutputLimit?: number;
   startIndex?: number;
   endIndex?: number;
 }): AgentStudioContextUsageEntry => {
@@ -288,7 +316,8 @@ export const extractLatestContextUsageEntry = ({
     if (typeof contextWindow !== "number" || contextWindow <= 0) {
       continue;
     }
-    const outputLimit = message.meta.outputLimit ?? modelDescriptor?.outputLimit;
+    const outputLimit =
+      message.meta.outputLimit ?? modelDescriptor?.outputLimit ?? fallbackOutputLimit;
 
     return {
       usage: {
