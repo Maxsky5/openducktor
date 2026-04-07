@@ -2,7 +2,13 @@ import type { AgentToolName, QaReportVerdict } from "@openducktor/contracts";
 import type { TaskPersistencePort } from "./beads-persistence";
 import type { TimeProvider } from "./beads-runtime";
 import type { MarkdownEntry, QaEntry, RawIssue } from "./contracts";
-import { parseTaskDocuments, type TaskDocumentsSnapshot } from "./metadata-docs";
+import {
+  type ReadTaskDocumentsInput,
+  type ReadTaskDocumentsResult,
+  readTaskDocuments,
+  summarizeTaskDocuments,
+  type TaskDocumentsSummary,
+} from "./metadata-docs";
 import { parseMarkdownEntries, parseQaEntries } from "./task-mapping";
 
 type MarkdownDocumentKey = "spec" | "implementationPlan";
@@ -60,7 +66,8 @@ export type PersistedTaskDocumentResult = {
 };
 
 export type TaskDocumentPort = {
-  parseDocs(issue: RawIssue): TaskDocumentsSnapshot;
+  summarize(issue: RawIssue): TaskDocumentsSummary;
+  readDocuments(issue: RawIssue, input: ReadTaskDocumentsInput): ReadTaskDocumentsResult;
   persistSpec(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult>;
   persistImplementationPlan(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult>;
   appendQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void>;
@@ -85,8 +92,12 @@ export class TaskDocumentStore implements TaskDocumentPort {
     this.now = now;
   }
 
-  parseDocs(issue: RawIssue): TaskDocumentsSnapshot {
-    return parseTaskDocuments(issue, this.persistence.metadataNamespace);
+  summarize(issue: RawIssue): TaskDocumentsSummary {
+    return summarizeTaskDocuments(issue, this.persistence.metadataNamespace);
+  }
+
+  readDocuments(issue: RawIssue, input: ReadTaskDocumentsInput): ReadTaskDocumentsResult {
+    return readTaskDocuments(issue, this.persistence.metadataNamespace, input);
   }
 
   async persistSpec(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult> {

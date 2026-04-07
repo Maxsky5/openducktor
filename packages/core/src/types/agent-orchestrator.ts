@@ -348,16 +348,17 @@ export type AgentSessionStatus =
 export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 
 export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
-  spec: ["odt_read_task", "odt_set_spec"],
-  planner: ["odt_read_task", "odt_set_plan"],
+  spec: ["odt_read_task", "odt_read_task_documents", "odt_set_spec"],
+  planner: ["odt_read_task", "odt_read_task_documents", "odt_set_plan"],
   build: [
     "odt_read_task",
+    "odt_read_task_documents",
     "odt_build_blocked",
     "odt_build_resumed",
     "odt_build_completed",
     "odt_set_pull_request",
   ],
-  qa: ["odt_read_task", "odt_qa_approved", "odt_qa_rejected"],
+  qa: ["odt_read_task", "odt_read_task_documents", "odt_qa_approved", "odt_qa_rejected"],
 };
 
 export type AgentEvent =

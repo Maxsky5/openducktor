@@ -24,7 +24,7 @@ Current scope note:
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore`, config/worktree/process integrations | UI workflow decisions |
-| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | public MCP task tools (`create_task`, `search_tasks`, `odt_read_task`) plus `odt_*` workflow execution and validation against Beads metadata/status | Frontend rendering/state |
+| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | public MCP task tools (`create_task`, `search_tasks`, `odt_read_task`, `odt_read_task_documents`) plus `odt_*` workflow execution and validation against Beads metadata/status | Frontend rendering/state |
 
 ## Platform-specific native lifecycle seams
 
@@ -121,7 +121,7 @@ Concrete adapters today:
 ## Cross-Layer Change Checklist
 1. If data shape changes, update `packages/contracts` first.
 2. If `odt_*` tool shape or names change, update MCP schemas, core tool normalization/policy, adapter behavior, and UI assumptions together.
-3. If public MCP tool shapes (`create_task`, `search_tasks`, `odt_read_task`) change, update package docs and public MCP schemas together.
+3. If public MCP tool shapes (`create_task`, `search_tasks`, `odt_read_task`, `odt_read_task_documents`) change, update package docs and public MCP schemas together.
 4. If workflow transitions/actions change, update Rust `workflow_rules`, then docs and frontend rendering expectations.
 5. Keep Tauri commands as transport/mapping layer; place policy in `AppService`/domain layers.
 6. Preserve Beads as lifecycle source of truth; do not move lifecycle authority into UI-local state.

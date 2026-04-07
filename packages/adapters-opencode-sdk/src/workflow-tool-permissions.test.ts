@@ -38,7 +38,17 @@ describe("workflow-tool-permissions", () => {
       action: "allow",
     });
     expect(rules).toContainEqual({
+      permission: "openducktor_odt_read_task_documents",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(rules).toContainEqual({
       permission: "functions.openducktor_odt_read_task",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(rules).toContainEqual({
+      permission: "functions.openducktor_odt_read_task_documents",
       pattern: "*",
       action: "allow",
     });

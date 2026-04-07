@@ -758,7 +758,7 @@ fn find_openducktor_workspace_root_uses_workspace_markers_instead_of_fixed_depth
 }
 
 #[test]
-fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
+fn resolve_mcp_command_prefers_workspace_entrypoint_and_preserves_fallbacks() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("mcp-command-fallbacks");
     let cli_bin = root.join("cli-bin");
@@ -771,31 +771,6 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
     write_executable_script(&bun_bin.join("bun"), "#!/bin/sh\nexit 0\n")?;
 
     let _mcp_env_guard = remove_env_var("OPENDUCKTOR_MCP_COMMAND_JSON");
-
-    {
-        let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
-        let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
-        let _path_guard = set_env_var("PATH", path.as_str());
-        let command = resolve_mcp_command()?;
-        assert_eq!(
-            command,
-            vec![cli_bin
-                .join("openducktor-mcp")
-                .to_string_lossy()
-                .to_string()]
-        );
-    }
-
-    {
-        let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
-        let path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
-        let _path_guard = set_env_var("PATH", path.as_str());
-        let _bun_override_guard = set_env_var("OPENDUCKTOR_BUN_PATH", "/tmp/odt-missing-bun");
-        let error = resolve_mcp_command().expect_err("missing mcp + bun should fail");
-        assert!(error
-            .to_string()
-            .contains("Configured command override OPENDUCKTOR_BUN_PATH points to a missing file"));
-    }
 
     let workspace_direct = root.join("workspace-direct");
     let direct_entrypoint = workspace_direct
@@ -811,7 +786,38 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
     fs::write(&direct_entrypoint, "console.log('mcp');\n")?;
 
     {
-        let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
+        let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
+        let path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _bun_override_guard = set_env_var("OPENDUCKTOR_BUN_PATH", "/tmp/odt-missing-bun");
+        let error = resolve_mcp_command().expect_err("missing mcp + bun should fail");
+        assert!(error
+            .to_string()
+            .contains("Configured command override OPENDUCKTOR_BUN_PATH points to a missing file"));
+    }
+
+    {
+        let _workspace_guard =
+            set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", "/tmp/odt-missing-workspace");
+        let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _bun_override_guard = remove_env_var("OPENDUCKTOR_BUN_PATH");
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
+        );
+    }
+
+    {
+        let path = format!(
+            "{}:{}:/usr/bin:/bin",
+            cli_bin.to_string_lossy(),
+            bun_bin.to_string_lossy()
+        );
         let _path_guard = set_env_var("PATH", path.as_str());
         let _workspace_guard = set_env_var(
             "OPENDUCKTOR_WORKSPACE_ROOT",
@@ -827,8 +833,44 @@ fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
         );
     }
 
+    {
+        let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _workspace_guard =
+            set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", "/tmp/odt-missing-workspace");
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
+        );
+    }
+
     let workspace_filter = root.join("workspace-filter");
     fs::create_dir_all(&workspace_filter)?;
+    {
+        let path = format!(
+            "{}:{}:/usr/bin:/bin",
+            cli_bin.to_string_lossy(),
+            bun_bin.to_string_lossy()
+        );
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _workspace_guard = set_env_var(
+            "OPENDUCKTOR_WORKSPACE_ROOT",
+            workspace_filter.to_string_lossy().as_ref(),
+        );
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
+        );
+    }
+
     {
         let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
         let _path_guard = set_env_var("PATH", path.as_str());

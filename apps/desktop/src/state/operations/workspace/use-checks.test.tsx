@@ -219,6 +219,10 @@ beforeAll(async () => {
       (message: string, options?: { description?: string; id?: string; duration?: number }) =>
         toastMessage(message, options),
       {
+        success: (
+          message: string,
+          options?: { description?: string; id?: string; duration?: number },
+        ) => toastMessage(message, options),
         error: (
           message: string,
           options?: { description?: string; id?: string; duration?: number },

@@ -1,4 +1,9 @@
-import { issueTypeSchema, taskPrioritySchema, taskStatusSchema } from "@openducktor/contracts";
+import {
+  issueTypeSchema,
+  qaWorkflowVerdictSchema,
+  taskPrioritySchema,
+  taskStatusSchema,
+} from "@openducktor/contracts";
 import { z } from "zod";
 
 export const publicTaskSchema = z
@@ -21,35 +26,57 @@ export const publicTaskSchema = z
   .strict();
 export type PublicTask = z.infer<typeof publicTaskSchema>;
 
-export const taskDocumentsSnapshotSchema = z
+export const taskDocumentPresenceSchema = z
   .object({
-    spec: z
-      .object({
-        markdown: z.string(),
-        updatedAt: z.string().nullable(),
-      })
-      .strict(),
-    implementationPlan: z
-      .object({
-        markdown: z.string(),
-        updatedAt: z.string().nullable(),
-      })
-      .strict(),
-    latestQaReport: z
-      .object({
-        markdown: z.string(),
-        updatedAt: z.string().nullable(),
-        verdict: z.enum(["approved", "rejected"]).nullable(),
-      })
-      .strict(),
+    hasSpec: z.boolean(),
+    hasPlan: z.boolean(),
+    hasQaReport: z.boolean(),
   })
   .strict();
-export type TaskDocumentsSnapshotOutput = z.infer<typeof taskDocumentsSnapshotSchema>;
+export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
 
-export const taskSnapshotSchema = z
-  .object({
-    task: publicTaskSchema,
-    documents: taskDocumentsSnapshotSchema,
+export const publicTaskSummaryTaskSchema = publicTaskSchema
+  .extend({
+    qaVerdict: qaWorkflowVerdictSchema,
+    documents: taskDocumentPresenceSchema,
   })
   .strict();
-export type TaskSnapshot = z.infer<typeof taskSnapshotSchema>;
+export type PublicTaskSummaryTask = z.infer<typeof publicTaskSummaryTaskSchema>;
+
+export const taskSummarySchema = z
+  .object({
+    task: publicTaskSummaryTaskSchema,
+  })
+  .strict();
+export type TaskSummary = z.infer<typeof taskSummarySchema>;
+
+const markdownTaskDocumentSchema = z
+  .object({
+    markdown: z.string(),
+    updatedAt: z.string().nullable(),
+  })
+  .strict();
+
+const latestQaReportSchema = z
+  .object({
+    markdown: z.string(),
+    updatedAt: z.string().nullable(),
+    verdict: qaWorkflowVerdictSchema,
+  })
+  .strict();
+
+export const taskRequestedDocumentsSchema = z
+  .object({
+    spec: markdownTaskDocumentSchema.optional(),
+    implementationPlan: markdownTaskDocumentSchema.optional(),
+    latestQaReport: latestQaReportSchema.optional(),
+  })
+  .strict();
+export type TaskRequestedDocuments = z.infer<typeof taskRequestedDocumentsSchema>;
+
+export const taskDocumentsReadSchema = z
+  .object({
+    documents: taskRequestedDocumentsSchema,
+  })
+  .strict();
+export type TaskDocumentsRead = z.infer<typeof taskDocumentsReadSchema>;

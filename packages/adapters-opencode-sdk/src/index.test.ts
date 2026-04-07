@@ -15,27 +15,33 @@ const defaultRuntimeConnection = {
 
 const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
   "odt_read_task",
+  "odt_read_task_documents",
   "odt_set_spec",
   "odt_set_plan",
   "odt_build_blocked",
   "odt_build_resumed",
   "odt_build_completed",
+  "odt_set_pull_request",
   "odt_qa_approved",
   "odt_qa_rejected",
   "openducktor_odt_read_task",
+  "openducktor_odt_read_task_documents",
   "openducktor_odt_set_spec",
   "openducktor_odt_set_plan",
   "openducktor_odt_build_blocked",
   "openducktor_odt_build_resumed",
   "openducktor_odt_build_completed",
+  "openducktor_odt_set_pull_request",
   "openducktor_odt_qa_approved",
   "openducktor_odt_qa_rejected",
   "functions.openducktor_odt_read_task",
+  "functions.openducktor_odt_read_task_documents",
   "functions.openducktor_odt_set_spec",
   "functions.openducktor_odt_set_plan",
   "functions.openducktor_odt_build_blocked",
   "functions.openducktor_odt_build_resumed",
   "functions.openducktor_odt_build_completed",
+  "functions.openducktor_odt_set_pull_request",
   "functions.openducktor_odt_qa_approved",
   "functions.openducktor_odt_qa_rejected",
 ] as const;
@@ -642,6 +648,11 @@ describe("OpencodeSdkAdapter", () => {
       action: "allow",
     });
     expect(permissionRules).toContainEqual({
+      permission: "openducktor_odt_read_task_documents",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(permissionRules).toContainEqual({
       permission: "openducktor_odt_set_plan",
       pattern: "*",
       action: "allow",
@@ -697,11 +708,13 @@ describe("OpencodeSdkAdapter", () => {
         ast_grep_replace: false,
         lsp_rename: false,
         openducktor_odt_read_task: true,
+        openducktor_odt_read_task_documents: true,
         openducktor_odt_set_spec: true,
         openducktor_odt_set_plan: false,
         openducktor_odt_build_blocked: false,
         openducktor_odt_build_resumed: false,
         openducktor_odt_build_completed: false,
+        openducktor_odt_set_pull_request: false,
         openducktor_odt_qa_approved: false,
         openducktor_odt_qa_rejected: false,
       },
@@ -1127,7 +1140,11 @@ describe("OpencodeSdkAdapter", () => {
   test("sendUserMessage falls back to the session model for model-scoped tool discovery", async () => {
     const mock = makeMockClient({
       toolIdsResponse: ["bash", "read", "glob"],
-      modelToolsResponse: [{ id: "openducktor_odt_read_task" }, { id: "openducktor_odt_set_spec" }],
+      modelToolsResponse: [
+        { id: "openducktor_odt_read_task" },
+        { id: "openducktor_odt_read_task_documents" },
+        { id: "openducktor_odt_set_spec" },
+      ],
     });
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -1161,6 +1178,7 @@ describe("OpencodeSdkAdapter", () => {
         ast_grep_replace: false,
         lsp_rename: false,
         openducktor_odt_read_task: true,
+        openducktor_odt_read_task_documents: true,
         openducktor_odt_set_spec: true,
       },
     });

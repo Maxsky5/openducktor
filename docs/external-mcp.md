@@ -39,6 +39,7 @@ Public external tools:
 - `create_task`
 - `search_tasks`
 - `odt_read_task`
+- `odt_read_task_documents`
 
 Internal workflow tools remain on the same MCP server:
 
@@ -54,29 +55,34 @@ Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task
 
 ## Shared Response Model
 
-`create_task`, `search_tasks`, and `odt_read_task` reuse the same public task snapshot shape:
+`create_task`, `search_tasks`, and `odt_read_task` reuse the same lightweight public task summary shape:
 
 ```json
 {
   "task": {
     "id": "repo-123",
     "title": "Implement MCP docs",
-    "description": "",
-    "status": "open",
+    "description": "Document the external MCP surface.",
+    "status": "ai_review",
     "priority": 2,
     "issueType": "task",
     "aiReviewEnabled": true,
-    "labels": ["docs"],
+    "labels": ["docs", "mcp"],
     "createdAt": "<ISO 8601 timestamp>",
-    "updatedAt": "<ISO 8601 timestamp>"
-  },
-  "documents": {
-    "spec": { "markdown": "", "updatedAt": null },
-    "implementationPlan": { "markdown": "", "updatedAt": null },
-    "latestQaReport": { "markdown": "", "updatedAt": null, "verdict": null }
+    "updatedAt": "<ISO 8601 timestamp>",
+    "qaVerdict": "approved",
+    "documents": {
+      "hasSpec": true,
+      "hasPlan": true,
+      "hasQaReport": true
+    }
   }
 }
 ```
+
+This is a discovery-only summary. Call `odt_read_task` first, then call `odt_read_task_documents` only for the document bodies you actually need.
+
+`qaVerdict` is `"approved"`, `"rejected"`, or `"not_reviewed"`. `not_reviewed` means the task has no persisted QA report yet.
 
 Public MCP task snapshots intentionally do not expose:
 
@@ -105,7 +111,42 @@ Constraints:
 
 Output:
 
-- `{ task, documents }`
+- `{ task }`
+
+## `odt_read_task`
+
+Reads one persisted task summary.
+
+Input:
+
+- `taskId` required
+
+Output:
+
+```json
+{
+  "task": {
+    "id": "repo-123",
+    "title": "Implement MCP docs",
+    "description": "Document the external MCP surface.",
+    "status": "ai_review",
+    "priority": 2,
+    "issueType": "task",
+    "aiReviewEnabled": true,
+    "labels": ["docs", "mcp"],
+    "createdAt": "<ISO 8601 timestamp>",
+    "updatedAt": "<ISO 8601 timestamp>",
+    "qaVerdict": "approved",
+    "documents": {
+      "hasSpec": true,
+      "hasPlan": true,
+      "hasQaReport": true
+    }
+  }
+}
+```
+
+Call `odt_read_task` first to discover task state, `qaVerdict`, and document availability. Use `odt_read_task_documents` only when you need the actual persisted markdown bodies.
 
 ## `search_tasks`
 
@@ -138,9 +179,62 @@ Output:
 
 ```json
 {
-  "results": [{ "task": {}, "documents": {} }],
+  "results": [
+    {
+      "task": {
+        "id": "repo-123",
+        "title": "Implement MCP docs",
+        "description": "Document the external MCP surface.",
+        "status": "ai_review",
+        "priority": 2,
+        "issueType": "task",
+        "aiReviewEnabled": true,
+        "labels": ["docs", "mcp"],
+        "createdAt": "<ISO 8601 timestamp>",
+        "updatedAt": "<ISO 8601 timestamp>",
+        "qaVerdict": "approved",
+        "documents": {
+          "hasSpec": true,
+          "hasPlan": true,
+          "hasQaReport": true
+        }
+      }
+    }
+  ],
   "limit": 50,
   "totalCount": 1,
   "hasMore": false
+}
+```
+
+## `odt_read_task_documents`
+
+Reads only the requested persisted document bodies.
+
+Input:
+
+- `taskId` required
+- `includeSpec` optional boolean
+- `includePlan` optional boolean
+- `includeQaReport` optional boolean
+
+Constraints:
+
+- Unknown input fields are rejected.
+- At least one include flag must be `true`.
+
+Output:
+
+```json
+{
+  "documents": {
+    "spec": { "markdown": "# Spec", "updatedAt": "<ISO 8601 timestamp>" },
+    "implementationPlan": { "markdown": "## Plan", "updatedAt": "<ISO 8601 timestamp>" },
+    "latestQaReport": {
+      "markdown": "## QA",
+      "updatedAt": "<ISO 8601 timestamp>",
+      "verdict": "approved"
+    }
+  }
 }
 ```

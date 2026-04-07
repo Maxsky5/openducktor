@@ -52,6 +52,7 @@ describe("workflow-tool-selection", () => {
       client: makeClient({
         toolIds: [
           "openducktor_odt_read_task",
+          "openducktor_odt_read_task_documents",
           "openducktor_odt_set_spec",
           "openducktor_odt_set_plan",
         ],
@@ -62,9 +63,11 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection.openducktor_odt_read_task).toBe(true);
+    expect(selection.openducktor_odt_read_task_documents).toBe(true);
     expect(selection.openducktor_odt_set_spec).toBe(true);
     expect(selection.openducktor_odt_set_plan).toBe(false);
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
   });
@@ -74,6 +77,7 @@ describe("workflow-tool-selection", () => {
       client: makeClient({
         toolIds: [
           "functions.openducktor_odt_read_task",
+          "functions.openducktor_odt_read_task_documents",
           "functions.openducktor_odt_set_spec",
           "functions.openducktor_odt_set_plan",
         ],
@@ -84,9 +88,11 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection["functions.openducktor_odt_read_task"]).toBe(true);
+    expect(selection["functions.openducktor_odt_read_task_documents"]).toBe(true);
     expect(selection["functions.openducktor_odt_set_spec"]).toBe(true);
     expect(selection["functions.openducktor_odt_set_plan"]).toBe(false);
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
   });
@@ -94,7 +100,7 @@ describe("workflow-tool-selection", () => {
   test("accepts exact canonical runtime tool ids", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
-        toolIds: ["odt_read_task", "odt_set_spec", "odt_set_plan"],
+        toolIds: ["odt_read_task", "odt_read_task_documents", "odt_set_spec", "odt_set_plan"],
       }),
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -102,6 +108,7 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
   });
@@ -112,6 +119,7 @@ describe("workflow-tool-selection", () => {
         toolIds: ["bash", "read", "glob"],
         modelTools: [
           { id: "openducktor_odt_read_task" },
+          { id: "openducktor_odt_read_task_documents" },
           { id: "openducktor_odt_set_spec" },
           { id: "openducktor_odt_set_plan" },
         ],
@@ -126,9 +134,11 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection.openducktor_odt_read_task).toBe(true);
+    expect(selection.openducktor_odt_read_task_documents).toBe(true);
     expect(selection.openducktor_odt_set_spec).toBe(true);
     expect(selection.openducktor_odt_set_plan).toBe(false);
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
   });
@@ -198,7 +208,7 @@ describe("workflow-tool-selection", () => {
   test("keeps canonical trusted role tools when runtime discovery misses ODT ids", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
-        toolIds: ["odt_read_task", "odt_set_plan"],
+        toolIds: ["odt_read_task", "odt_read_task_documents", "odt_set_plan"],
       }),
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -206,6 +216,7 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
   });
@@ -215,6 +226,7 @@ describe("workflow-tool-selection", () => {
       client: makeClient({
         toolIds: [
           "odt_read_task",
+          "odt_read_task_documents",
           "odt_set_spec",
           "openducktor_odt_set_spec_extra",
           "customprefix_odt_set_plan",
@@ -227,6 +239,7 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.openducktor_odt_set_spec_extra).toBe(false);
     expect(selection.customprefix_odt_set_plan).toBeUndefined();
@@ -241,6 +254,7 @@ describe("workflow-tool-selection", () => {
       client: makeClient({
         toolIds: [
           "openducktor_odt_read_task",
+          "openducktor_odt_read_task_documents",
           "openducktor_create_task",
           "functions.openducktor_search_tasks",
         ],
@@ -251,6 +265,7 @@ describe("workflow-tool-selection", () => {
     });
 
     expect(selection.openducktor_odt_read_task).toBe(true);
+    expect(selection.openducktor_odt_read_task_documents).toBe(true);
     expect(selection.openducktor_create_task).toBe(false);
     expect(selection["functions.openducktor_search_tasks"]).toBe(false);
   });
@@ -258,7 +273,7 @@ describe("workflow-tool-selection", () => {
   test("denies canonical public tool ids when discovery exposes them without a server prefix", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
-        toolIds: ["create_task", "search_tasks", "odt_read_task"],
+        toolIds: ["create_task", "search_tasks", "odt_read_task", "odt_read_task_documents"],
       }),
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -268,5 +283,6 @@ describe("workflow-tool-selection", () => {
     expect(selection.create_task).toBe(false);
     expect(selection.search_tasks).toBe(false);
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_read_task_documents).toBe(true);
   });
 });

@@ -59,45 +59,79 @@ pub(crate) fn default_mcp_workspace_root() -> Result<String> {
     Ok(root.to_string_lossy().to_string())
 }
 
+fn has_explicit_workspace_root_override() -> bool {
+    matches!(
+        std::env::var("OPENDUCKTOR_WORKSPACE_ROOT"),
+        Ok(value) if !value.trim().is_empty()
+    )
+}
+
+fn resolve_sidecar_mcp_command() -> Result<Option<Vec<String>>> {
+    Ok(resolve_command_path("openducktor-mcp")?.map(|mcp_binary| vec![mcp_binary]))
+}
+
 pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
     if let Ok(raw) = std::env::var("OPENDUCKTOR_MCP_COMMAND_JSON") {
         return parse_mcp_command_json(raw.as_str());
     }
 
-    if let Some(mcp_binary) = resolve_command_path("openducktor-mcp")? {
-        return Ok(vec![mcp_binary]);
-    }
-
     let Some(bun_binary) = resolve_command_path("bun")? else {
+        if let Some(mcp_command) = resolve_sidecar_mcp_command()? {
+            return Ok(mcp_command);
+        }
+
         return Err(anyhow!(
-            "Missing MCP runner. Package the openducktor-mcp sidecar or install bun for the workspace fallback."
+            "Missing MCP runner. Install bun for workspace MCP execution or package the openducktor-mcp sidecar."
         ));
     };
 
-    let workspace_root = default_mcp_workspace_root()?;
-    let direct_entrypoint = Path::new(&workspace_root)
-        .join("packages")
-        .join("openducktor-mcp")
-        .join("src")
-        .join("index.ts");
+    let workspace_root = match default_mcp_workspace_root() {
+        Ok(root) => Some(root),
+        Err(error) => {
+            if has_explicit_workspace_root_override() {
+                return Err(error);
+            }
+            None
+        }
+    };
 
-    if direct_entrypoint.exists() {
+    if let Some(workspace_root) = workspace_root {
+        let direct_entrypoint = Path::new(&workspace_root)
+            .join("packages")
+            .join("openducktor-mcp")
+            .join("src")
+            .join("index.ts");
+
+        if direct_entrypoint.exists() {
+            return Ok(vec![
+                bun_binary.clone(),
+                direct_entrypoint.to_string_lossy().to_string(),
+            ]);
+        }
+
+        if let Some(mcp_command) = resolve_sidecar_mcp_command()? {
+            return Ok(mcp_command);
+        }
+
         return Ok(vec![
-            bun_binary.clone(),
-            direct_entrypoint.to_string_lossy().to_string(),
+            bun_binary,
+            "run".to_string(),
+            "--silent".to_string(),
+            "--cwd".to_string(),
+            workspace_root,
+            "--filter".to_string(),
+            "@openducktor/mcp".to_string(),
+            "start".to_string(),
         ]);
     }
 
-    Ok(vec![
-        bun_binary,
-        "run".to_string(),
-        "--silent".to_string(),
-        "--cwd".to_string(),
-        workspace_root,
-        "--filter".to_string(),
-        "@openducktor/mcp".to_string(),
-        "start".to_string(),
-    ])
+    if let Some(mcp_command) = resolve_sidecar_mcp_command()? {
+        return Ok(mcp_command);
+    }
+
+    Err(anyhow!(
+        "Missing MCP runner. Unable to resolve an OpenDucktor workspace root for bun-based MCP execution and no openducktor-mcp sidecar was found."
+    ))
 }
 
 pub(crate) fn build_opencode_config_content(

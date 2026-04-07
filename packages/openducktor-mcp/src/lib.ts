@@ -10,9 +10,13 @@ export { OdtTaskStore, type OdtTaskStoreDeps } from "./odt-task-store";
 export { normalizePlanSubtasks } from "./plan-subtasks";
 export {
   publicTaskSchema,
-  type TaskSnapshot,
-  taskDocumentsSnapshotSchema,
-  taskSnapshotSchema,
+  type TaskDocumentsRead,
+  type TaskRequestedDocuments,
+  type TaskSummary,
+  taskDocumentPresenceSchema,
+  taskDocumentsReadSchema,
+  taskRequestedDocumentsSchema,
+  taskSummarySchema,
 } from "./public-schemas";
 export { type OdtStoreContext, resolveStoreContext } from "./store-context";
 export {
@@ -23,6 +27,7 @@ export {
   ODT_TOOL_SCHEMAS,
   type QaApprovedInput,
   type QaRejectedInput,
+  type ReadTaskDocumentsInput,
   type ReadTaskInput,
   type SearchTasksInput,
   type SetPlanInput,

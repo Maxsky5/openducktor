@@ -7,7 +7,6 @@ import type {
 import type { CanonicalPullRequestResolverPort } from "./canonical-pull-request-resolver";
 import type { JsonObject, PublicTask, RawIssue, TaskStatus } from "./contracts";
 import type { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
-import type { TaskDocumentsSnapshot } from "./metadata-docs";
 import { normalizePlanSubtasks } from "./plan-subtasks";
 import type { TaskDocumentPort } from "./task-document-store";
 import { issueToPublicTask } from "./task-mapping";
@@ -19,6 +18,7 @@ import type {
   CreateTaskInput,
   QaApprovedInput,
   QaRejectedInput,
+  ReadTaskDocumentsInput,
   ReadTaskInput,
   SearchTasksInput,
   SetPlanInput,
@@ -40,12 +40,31 @@ type PersistedDocumentResult = {
 };
 
 export type TaskSnapshotResult = {
-  task: PublicTask;
-  documents: TaskDocumentsSnapshot;
+  task: PublicTask & {
+    qaVerdict: "approved" | "rejected" | "not_reviewed";
+    documents: {
+      hasSpec: boolean;
+      hasPlan: boolean;
+      hasQaReport: boolean;
+    };
+  };
+};
+
+export type ReadTaskDocumentsResult = {
+  documents: {
+    spec?: { markdown: string; updatedAt: string | null };
+    implementationPlan?: { markdown: string; updatedAt: string | null };
+    latestQaReport?: {
+      markdown: string;
+      updatedAt: string | null;
+      verdict: "approved" | "rejected" | "not_reviewed";
+    };
+  };
 };
 
 export type OdtTaskStoreUseCases = {
   readTask: OdtTaskStoreUseCase<ReadTaskInput, ReadTaskResult>;
+  readTaskDocuments: OdtTaskStoreUseCase<ReadTaskDocumentsInput, ReadTaskDocumentsResult>;
   createTask: OdtTaskStoreUseCase<CreateTaskInput, CreateTaskResult>;
   searchTasks: OdtTaskStoreUseCase<SearchTasksInput, SearchTasksResult>;
   setSpec: OdtTaskStoreUseCase<SetSpecInput, SetSpecResult>;
@@ -128,18 +147,25 @@ const ACTIVE_TASK_STATUSES = new Set<TaskStatus>([
 const toTaskSnapshotResult = (
   issue: RawIssue,
   metadataNamespace: string,
-  documentStore: Pick<TaskDocumentPort, "parseDocs">,
-): TaskSnapshotResult => ({
-  task: issueToPublicTask(issue, metadataNamespace),
-  documents: documentStore.parseDocs(issue),
-});
+  documentStore: Pick<TaskDocumentPort, "summarize">,
+): TaskSnapshotResult => {
+  const summary = documentStore.summarize(issue);
+
+  return {
+    task: {
+      ...issueToPublicTask(issue, metadataNamespace),
+      qaVerdict: summary.qaVerdict,
+      documents: summary.documents,
+    },
+  };
+};
 
 type ReadTaskUseCaseDeps = {
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
     "ensureInitialized" | "readTaskSnapshot" | "metadataNamespace"
   >;
-  documentStore: Pick<TaskDocumentPort, "parseDocs">;
+  documentStore: Pick<TaskDocumentPort, "summarize">;
 };
 
 export class ReadTaskUseCase implements OdtTaskStoreUseCase<ReadTaskInput, ReadTaskResult> {
@@ -158,9 +184,32 @@ export class ReadTaskUseCase implements OdtTaskStoreUseCase<ReadTaskInput, ReadT
   }
 }
 
+type ReadTaskDocumentsUseCaseDeps = {
+  workflow: Pick<OdtTaskWorkflowRuntimePort, "ensureInitialized" | "readTaskSnapshot">;
+  documentStore: Pick<TaskDocumentPort, "readDocuments">;
+};
+
+export class ReadTaskDocumentsUseCase
+  implements OdtTaskStoreUseCase<ReadTaskDocumentsInput, ReadTaskDocumentsResult>
+{
+  private readonly workflow: ReadTaskDocumentsUseCaseDeps["workflow"];
+  private readonly documentStore: ReadTaskDocumentsUseCaseDeps["documentStore"];
+
+  constructor(deps: ReadTaskDocumentsUseCaseDeps) {
+    this.workflow = deps.workflow;
+    this.documentStore = deps.documentStore;
+  }
+
+  async execute(input: ReadTaskDocumentsInput): Promise<ReadTaskDocumentsResult> {
+    await this.workflow.ensureInitialized();
+    const { issue } = await this.workflow.readTaskSnapshot(input.taskId);
+    return this.documentStore.readDocuments(issue, input);
+  }
+}
+
 type CreateTaskUseCaseDeps = {
   persistence: Pick<TaskPersistencePort, "createTask" | "ensureInitialized" | "metadataNamespace">;
-  documentStore: Pick<TaskDocumentPort, "parseDocs">;
+  documentStore: Pick<TaskDocumentPort, "summarize">;
   invalidateTaskIndex(): void;
 };
 
@@ -199,7 +248,7 @@ type SearchTasksUseCaseDeps = {
     TaskPersistencePort,
     "ensureInitialized" | "listRawIssues" | "metadataNamespace"
   >;
-  documentStore: Pick<TaskDocumentPort, "parseDocs">;
+  documentStore: Pick<TaskDocumentPort, "summarize">;
 };
 
 export class SearchTasksUseCase
@@ -229,10 +278,16 @@ export class SearchTasksUseCase
     }));
     const activeIssues = parsedTasks.filter(({ task }) => ACTIVE_TASK_STATUSES.has(task.status));
     const totalCount = activeIssues.length;
-    const results = activeIssues.slice(0, input.limit).map(({ issue, task }) => ({
-      task,
-      documents: this.documentStore.parseDocs(issue),
-    }));
+    const results = activeIssues.slice(0, input.limit).map(({ issue, task }) => {
+      const summary = this.documentStore.summarize(issue);
+      return {
+        task: {
+          ...task,
+          qaVerdict: summary.qaVerdict,
+          documents: summary.documents,
+        },
+      };
+    });
 
     return {
       results,
@@ -420,7 +475,7 @@ type BuildCompletedUseCaseDeps = {
     | "resolveTaskContext"
     | "transitionTask"
   >;
-  documentStore: Pick<TaskDocumentPort, "parseDocs">;
+  documentStore: Pick<TaskDocumentPort, "summarize">;
 };
 
 export class BuildCompletedUseCase
@@ -440,12 +495,10 @@ export class BuildCompletedUseCase
     const context = await this.workflow.resolveTaskContext(input.taskId);
     const refreshedContext = await this.workflow.refreshTaskContext(context.task.id, context);
     const { issue, task } = await this.workflow.readTaskSnapshot(refreshedContext.task.id);
-    const documents = this.documentStore.parseDocs(issue);
+    const documents = this.documentStore.summarize(issue);
 
     const nextStatus =
-      task.aiReviewEnabled && documents.latestQaReport.verdict !== "approved"
-        ? "ai_review"
-        : "human_review";
+      task.aiReviewEnabled && documents.qaVerdict !== "approved" ? "ai_review" : "human_review";
     const updatedTask = await this.workflow.transitionTask(task.id, nextStatus, refreshedContext);
     return {
       task: issueToPublicTask(updatedTask.issue, this.workflow.metadataNamespace),
@@ -602,6 +655,10 @@ export const createOdtTaskStoreUseCases = (
   deps: CreateOdtTaskStoreUseCasesDeps,
 ): OdtTaskStoreUseCases => ({
   readTask: new ReadTaskUseCase({
+    workflow: deps.workflow,
+    documentStore: deps.documentStore,
+  }),
+  readTaskDocuments: new ReadTaskDocumentsUseCase({
     workflow: deps.workflow,
     documentStore: deps.documentStore,
   }),

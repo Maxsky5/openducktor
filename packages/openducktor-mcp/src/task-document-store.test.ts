@@ -46,7 +46,7 @@ const createPersistenceHarness = (initialIssue: RawIssue): PersistenceHarness =>
 };
 
 describe("TaskDocumentStore", () => {
-  test("parseDocs returns latest spec, plan, and QA report snapshot", () => {
+  test("summarize returns latest QA verdict and document presence booleans", () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -96,26 +96,73 @@ describe("TaskDocumentStore", () => {
     });
 
     const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
-    const snapshot = documents.parseDocs(harness.getIssue());
+    const summary = documents.summarize(harness.getIssue());
 
-    expect(snapshot).toEqual({
-      spec: {
-        markdown: "# latest spec",
-        updatedAt: "2026-02-21T00:00:00.000Z",
-      },
-      implementationPlan: {
-        markdown: "# plan",
-        updatedAt: "2026-02-22T00:00:00.000Z",
-      },
-      latestQaReport: {
-        markdown: "LGTM",
-        updatedAt: "2026-02-23T00:00:00.000Z",
-        verdict: "approved",
+    expect(summary).toEqual({
+      qaVerdict: "approved",
+      documents: {
+        hasSpec: true,
+        hasPlan: true,
+        hasQaReport: true,
       },
     });
   });
 
-  test("parseDocs returns empty snapshot when namespace documents are missing", () => {
+  test("readDocuments returns only the requested sections", () => {
+    const harness = createPersistenceHarness({
+      id: "task-1",
+      title: "Task 1",
+      status: "open",
+      issue_type: "feature",
+      metadata: {
+        openducktor: {
+          documents: {
+            spec: [
+              {
+                markdown: "# latest spec",
+                updatedAt: "2026-02-21T00:00:00.000Z",
+                updatedBy: "spec-agent",
+                sourceTool: "odt_set_spec",
+                revision: 2,
+              },
+            ],
+            qaReports: [
+              {
+                markdown: "LGTM",
+                verdict: "approved",
+                updatedAt: "2026-02-23T00:00:00.000Z",
+                updatedBy: "qa-agent",
+                sourceTool: "odt_qa_approved",
+                revision: 1,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
+    const result = documents.readDocuments(harness.getIssue(), {
+      includeSpec: true,
+      includeQaReport: true,
+    });
+
+    expect(result).toEqual({
+      documents: {
+        spec: {
+          markdown: "# latest spec",
+          updatedAt: "2026-02-21T00:00:00.000Z",
+        },
+        latestQaReport: {
+          markdown: "LGTM",
+          updatedAt: "2026-02-23T00:00:00.000Z",
+          verdict: "approved",
+        },
+      },
+    });
+  });
+
+  test("summarize returns false booleans and not_reviewed verdict when namespace documents are missing", () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -125,21 +172,114 @@ describe("TaskDocumentStore", () => {
     });
 
     const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
-    const snapshot = documents.parseDocs(harness.getIssue());
+    const summary = documents.summarize(harness.getIssue());
 
-    expect(snapshot).toEqual({
-      spec: {
-        markdown: "",
-        updatedAt: null,
+    expect(summary).toEqual({
+      qaVerdict: "not_reviewed",
+      documents: {
+        hasSpec: false,
+        hasPlan: false,
+        hasQaReport: false,
       },
-      implementationPlan: {
-        markdown: "",
-        updatedAt: null,
+    });
+  });
+
+  test("whitespace-only latest document entries are treated as missing content", () => {
+    const harness = createPersistenceHarness({
+      id: "task-1",
+      title: "Task 1",
+      status: "open",
+      issue_type: "feature",
+      metadata: {
+        openducktor: {
+          documents: {
+            spec: [
+              {
+                markdown: "# older spec",
+                updatedAt: "2026-02-20T00:00:00.000Z",
+                updatedBy: "spec-agent",
+                sourceTool: "odt_set_spec",
+                revision: 1,
+              },
+              {
+                markdown: "   \n\t  ",
+                updatedAt: "2026-02-21T00:00:00.000Z",
+                updatedBy: "spec-agent",
+                sourceTool: "odt_set_spec",
+                revision: 2,
+              },
+            ],
+            implementationPlan: [
+              {
+                markdown: "# older plan",
+                updatedAt: "2026-02-22T00:00:00.000Z",
+                updatedBy: "planner-agent",
+                sourceTool: "odt_set_plan",
+                revision: 1,
+              },
+              {
+                markdown: "\n   ",
+                updatedAt: "2026-02-23T00:00:00.000Z",
+                updatedBy: "planner-agent",
+                sourceTool: "odt_set_plan",
+                revision: 2,
+              },
+            ],
+            qaReports: [
+              {
+                markdown: "LGTM",
+                verdict: "approved",
+                updatedAt: "2026-02-24T00:00:00.000Z",
+                updatedBy: "qa-agent",
+                sourceTool: "odt_qa_approved",
+                revision: 1,
+              },
+              {
+                markdown: " \n ",
+                verdict: "rejected",
+                updatedAt: "2026-02-25T00:00:00.000Z",
+                updatedBy: "qa-agent",
+                sourceTool: "odt_qa_rejected",
+                revision: 2,
+              },
+            ],
+          },
+        },
       },
-      latestQaReport: {
-        markdown: "",
-        updatedAt: null,
-        verdict: null,
+    });
+
+    const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
+
+    expect(documents.summarize(harness.getIssue())).toEqual({
+      qaVerdict: "not_reviewed",
+      documents: {
+        hasSpec: false,
+        hasPlan: false,
+        hasQaReport: false,
+      },
+    });
+
+    expect(
+      documents.readDocuments(harness.getIssue(), {
+        includeSpec: true,
+        includePlan: true,
+        includeQaReport: true,
+      }),
+    ).toEqual({
+      documents: {
+        spec: {
+          markdown: "",
+          updatedAt: null,
+        },
+        implementationPlan: {
+          markdown: "",
+          updatedAt: null,
+        },
+        latestQaReport: {
+          markdown: "",
+          updatedAt: null,
+          verdict: "not_reviewed",
+        },
       },
     });
   });

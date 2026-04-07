@@ -23,6 +23,7 @@ export const agentKickoffScenarioValues = [
 ] as const;
 export const agentToolNameValues = [
   "odt_read_task",
+  "odt_read_task_documents",
   "odt_set_spec",
   "odt_set_plan",
   "odt_build_blocked",
