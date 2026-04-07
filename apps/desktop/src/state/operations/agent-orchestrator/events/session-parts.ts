@@ -402,6 +402,11 @@ const handleStepPart = (
     },
     { persist: false },
   );
+
+  if (context.turn.contextUsageMessageIdBySessionRef) {
+    context.turn.contextUsageMessageIdBySessionRef.current[context.store.sessionId] =
+      part.messageId;
+  }
 };
 
 export const handleAssistantPart = (

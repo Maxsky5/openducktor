@@ -38,6 +38,7 @@ export type AttachAgentSessionListenerParams = {
   >;
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
+  contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionId: string) => void;
@@ -63,6 +64,7 @@ export type SessionTurnContext = Pick<
   | "sessionId"
   | "turnStartedAtBySessionRef"
   | "turnModelBySessionRef"
+  | "contextUsageMessageIdBySessionRef"
   | "resolveTurnDurationMs"
   | "clearTurnDuration"
 >;
@@ -121,6 +123,9 @@ export const createSessionEventHandlerContext = (
       ...(context.turnModelBySessionRef
         ? { turnModelBySessionRef: context.turnModelBySessionRef }
         : {}),
+      ...(context.contextUsageMessageIdBySessionRef
+        ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
+        : {}),
       resolveTurnDurationMs: context.resolveTurnDurationMs,
       clearTurnDuration: context.clearTurnDuration,
     },
@@ -150,6 +155,9 @@ export const createSessionEventHandlerContext = (
       turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
       ...(context.turnModelBySessionRef
         ? { turnModelBySessionRef: context.turnModelBySessionRef }
+        : {}),
+      ...(context.contextUsageMessageIdBySessionRef
+        ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
         : {}),
       resolveTurnDurationMs: context.resolveTurnDurationMs,
       clearTurnDuration: context.clearTurnDuration,

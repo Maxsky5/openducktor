@@ -10,11 +10,7 @@ import {
   toSessionContextUsage,
 } from "../support/assistant-meta";
 import { READ_ONLY_ROLES } from "../support/core";
-import {
-  appendSessionMessage,
-  findSessionMessageById,
-  upsertSessionMessage,
-} from "../support/messages";
+import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -29,12 +25,22 @@ import {
   settleDraftToIdle,
 } from "./session-helpers";
 
-const clearTurnModelSnapshot = (
-  context: Pick<SessionLifecycleEventContext, "turn" | "store">,
-): void => {
+const clearTurnTracking = (context: Pick<SessionLifecycleEventContext, "turn" | "store">): void => {
   if (context.turn.turnModelBySessionRef) {
     delete context.turn.turnModelBySessionRef.current[context.store.sessionId];
   }
+  if (context.turn.contextUsageMessageIdBySessionRef) {
+    delete context.turn.contextUsageMessageIdBySessionRef.current[context.store.sessionId];
+  }
+};
+
+const nextContextUsageWasEstablishedForMessage = (
+  context: Pick<SessionLifecycleEventContext, "turn" | "store">,
+  messageId: string,
+): boolean => {
+  return (
+    context.turn.contextUsageMessageIdBySessionRef?.current[context.store.sessionId] === messageId
+  );
 };
 
 type PermissionRequiredEvent = Extract<SessionEvent, { type: "permission_required" }>;
@@ -143,22 +149,16 @@ const autoRejectMutatingPermission = (
 
 const resolveFinalAssistantSnapshot = ({
   current,
-  settledMessages,
   durationMs,
   event,
+  shouldPreserveContextUsage,
 }: {
   current: AgentSessionState;
-  settledMessages: AgentSessionState["messages"];
   durationMs: number | undefined;
   event: AssistantMessageEvent;
+  shouldPreserveContextUsage: boolean;
 }) => {
   const nextContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
-  const currentAssistantMessage = findSessionMessageById(
-    { sessionId: current.sessionId, messages: settledMessages },
-    event.messageId,
-  );
-  const shouldPreserveContextUsage =
-    nextContextUsage === null && currentAssistantMessage?.role === "assistant";
   const resolvedContextUsage = shouldPreserveContextUsage
     ? (current.contextUsage ?? null)
     : nextContextUsage;
@@ -219,11 +219,14 @@ export const handleAssistantMessage = (
       event.timestamp,
       settledMessages,
     );
+    const shouldPreserveContextUsage =
+      nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
+      current.contextUsage !== null;
     const nextSnapshot = resolveFinalAssistantSnapshot({
       current,
-      settledMessages,
       durationMs,
       event,
+      shouldPreserveContextUsage,
     });
     return {
       ...current,
@@ -242,7 +245,7 @@ export const handleAssistantMessage = (
     };
   });
   context.turn.clearTurnDuration(context.store.sessionId);
-  clearTurnModelSnapshot(context);
+  clearTurnTracking(context);
 };
 
 export const handleUserMessage = (
@@ -317,7 +320,7 @@ export const handleSessionStatus = (
 
   if (settleDraftToIdle(context, event.timestamp)) {
     context.turn.clearTurnDuration(context.store.sessionId);
-    clearTurnModelSnapshot(context);
+    clearTurnTracking(context);
   }
 };
 
@@ -511,7 +514,7 @@ export const handleSessionError = (
     { persist: true },
   );
   context.turn.clearTurnDuration(context.store.sessionId);
-  clearTurnModelSnapshot(context);
+  clearTurnTracking(context);
 };
 
 export const handleSessionIdle = (
@@ -522,7 +525,7 @@ export const handleSessionIdle = (
   clearDraftBuffers(context);
   if (settleDraftToIdle(context, event.timestamp)) {
     context.turn.clearTurnDuration(context.store.sessionId);
-    clearTurnModelSnapshot(context);
+    clearTurnTracking(context);
   }
 };
 
@@ -565,5 +568,5 @@ export const handleSessionFinished = (
     { persist: true },
   );
   context.turn.clearTurnDuration(context.store.sessionId);
-  clearTurnModelSnapshot(context);
+  clearTurnTracking(context);
 };
