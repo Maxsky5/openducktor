@@ -41,7 +41,7 @@ type PersistedDocumentResult = {
 
 export type TaskSnapshotResult = {
   task: PublicTask & {
-    qaVerdict: "approved" | "rejected" | null;
+    qaVerdict: "approved" | "rejected" | "not_reviewed";
     documents: {
       hasSpec: boolean;
       hasPlan: boolean;
@@ -57,7 +57,7 @@ export type ReadTaskDocumentsResult = {
     latestQaReport?: {
       markdown: string;
       updatedAt: string | null;
-      verdict: "approved" | "rejected" | null;
+      verdict: "approved" | "rejected" | "not_reviewed";
     };
   };
 };

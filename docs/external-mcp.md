@@ -62,25 +62,27 @@ Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task
   "task": {
     "id": "repo-123",
     "title": "Implement MCP docs",
-    "description": "",
-    "status": "open",
+    "description": "Document the external MCP surface.",
+    "status": "ai_review",
     "priority": 2,
     "issueType": "task",
     "aiReviewEnabled": true,
-    "labels": ["docs"],
+    "labels": ["docs", "mcp"],
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
-    "qaVerdict": null,
+    "qaVerdict": "approved",
     "documents": {
-      "hasSpec": false,
-      "hasPlan": false,
-      "hasQaReport": false
+      "hasSpec": true,
+      "hasPlan": true,
+      "hasQaReport": true
     }
   }
 }
 ```
 
 This is a discovery-only summary. Call `odt_read_task` first, then call `odt_read_task_documents` only for the document bodies you actually need.
+
+`qaVerdict` is `"approved"`, `"rejected"`, or `"not_reviewed"`. `not_reviewed` means the task has no persisted QA report yet.
 
 Public MCP task snapshots intentionally do not expose:
 
@@ -109,7 +111,7 @@ Constraints:
 
 Output:
 
-- `{ task }` where `task` includes `qaVerdict` and `documents`
+- `{ task }`
 
 ## `search_tasks`
 
@@ -142,7 +144,28 @@ Output:
 
 ```json
 {
-  "results": [{ "task": { "qaVerdict": null, "documents": {} } }],
+  "results": [
+    {
+      "task": {
+        "id": "repo-123",
+        "title": "Implement MCP docs",
+        "description": "Document the external MCP surface.",
+        "status": "ai_review",
+        "priority": 2,
+        "issueType": "task",
+        "aiReviewEnabled": true,
+        "labels": ["docs", "mcp"],
+        "createdAt": "<ISO 8601 timestamp>",
+        "updatedAt": "<ISO 8601 timestamp>",
+        "qaVerdict": "approved",
+        "documents": {
+          "hasSpec": true,
+          "hasPlan": true,
+          "hasQaReport": true
+        }
+      }
+    }
+  ],
   "limit": 50,
   "totalCount": 1,
   "hasMore": false

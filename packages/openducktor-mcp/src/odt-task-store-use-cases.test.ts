@@ -81,7 +81,7 @@ describe("odt task workflow use cases", () => {
         summarize: (rawIssue) => {
           calls.push(`docs:${rawIssue.id}`);
           return {
-            qaVerdict: null,
+            qaVerdict: "not_reviewed",
             documents: {
               hasSpec: true,
               hasPlan: true,
@@ -95,7 +95,7 @@ describe("odt task workflow use cases", () => {
     await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
       task: {
         ...makePublicTask({ status: "spec_ready" }),
-        qaVerdict: null,
+        qaVerdict: "not_reviewed",
         documents: {
           hasSpec: true,
           hasPlan: true,
@@ -167,7 +167,7 @@ describe("odt task workflow use cases", () => {
       },
       documentStore: {
         summarize: () => ({
-          qaVerdict: null,
+          qaVerdict: "not_reviewed",
           documents: {
             hasSpec: false,
             hasPlan: false,
@@ -182,7 +182,7 @@ describe("odt task workflow use cases", () => {
     ).resolves.toEqual({
       task: {
         ...makePublicTask({ issueType: "bug", priority: 2 }),
-        qaVerdict: null,
+        qaVerdict: "not_reviewed",
         documents: {
           hasSpec: false,
           hasPlan: false,
@@ -212,7 +212,7 @@ describe("odt task workflow use cases", () => {
       },
       documentStore: {
         summarize: () => ({
-          qaVerdict: null,
+          qaVerdict: "not_reviewed",
           documents: {
             hasSpec: false,
             hasPlan: false,
@@ -227,7 +227,7 @@ describe("odt task workflow use cases", () => {
         {
           task: {
             ...makePublicTask({ id: "task-1", title: "Task 1" }),
-            qaVerdict: null,
+            qaVerdict: "not_reviewed",
             documents: {
               hasSpec: false,
               hasPlan: false,
@@ -259,7 +259,7 @@ describe("odt task workflow use cases", () => {
       },
       documentStore: {
         summarize: () => ({
-          qaVerdict: null,
+          qaVerdict: "not_reviewed",
           documents: {
             hasSpec: false,
             hasPlan: false,
@@ -473,7 +473,7 @@ describe("odt task workflow use cases", () => {
         summarize: (rawIssue) => {
           calls.push(`docs:${rawIssue.id}:not_reviewed`);
           return {
-            qaVerdict: null,
+            qaVerdict: "not_reviewed",
             documents: {
               hasSpec: false,
               hasPlan: false,

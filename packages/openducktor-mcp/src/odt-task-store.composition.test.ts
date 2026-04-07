@@ -63,7 +63,7 @@ describe("OdtTaskStore composition", () => {
 
     const documentStore: TaskDocumentPort = {
       summarize: () => ({
-        qaVerdict: null,
+        qaVerdict: "not_reviewed",
         documents: {
           hasSpec: true,
           hasPlan: true,
@@ -98,6 +98,7 @@ describe("OdtTaskStore composition", () => {
     expect(result.task.aiReviewEnabled).toBe(false);
     expect(result.task.description).toBe("Read the task description from Beads.");
     expect(result.task.priority).toBe(2);
+    expect(result.task.qaVerdict).toBe("not_reviewed");
     expect(result.task.documents).toEqual({ hasSpec: true, hasPlan: true, hasQaReport: false });
   });
 
@@ -139,7 +140,7 @@ describe("OdtTaskStore composition", () => {
 
     const documentStore: TaskDocumentPort = {
       summarize: () => ({
-        qaVerdict: null,
+        qaVerdict: "not_reviewed",
         documents: {
           hasSpec: false,
           hasPlan: false,
@@ -212,7 +213,7 @@ describe("OdtTaskStore composition", () => {
 
     const documentStore: TaskDocumentPort = {
       summarize: () => ({
-        qaVerdict: null,
+        qaVerdict: "not_reviewed",
         documents: {
           hasSpec: false,
           hasPlan: false,

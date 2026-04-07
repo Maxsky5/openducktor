@@ -1,4 +1,4 @@
-import type { QaReportVerdict } from "@openducktor/contracts";
+import type { QaReportVerdict, QaWorkflowVerdict } from "@openducktor/contracts";
 import type { JsonObject, RawIssue } from "./contracts";
 import {
   ensureObject,
@@ -20,7 +20,7 @@ export type TaskDocumentPresence = {
 };
 
 export type TaskDocumentsSummary = {
-  qaVerdict: QaReportVerdict | null;
+  qaVerdict: QaWorkflowVerdict;
   documents: TaskDocumentPresence;
 };
 
@@ -30,7 +30,7 @@ export type TaskDocumentSection = {
 };
 
 export type LatestQaReportSection = TaskDocumentSection & {
-  verdict: QaReportVerdict | null;
+  verdict: QaWorkflowVerdict;
 };
 
 export type ReadTaskDocumentsInput = {
@@ -82,7 +82,7 @@ export function summarizeTaskDocuments(
   const { specLatest, planLatest, qaLatest } = getLatestTaskDocuments(issue, metadataNamespace);
 
   return {
-    qaVerdict: qaLatest?.verdict ?? null,
+    qaVerdict: qaLatest?.verdict ?? "not_reviewed",
     documents: {
       hasSpec: hasMarkdownContent(specLatest?.markdown),
       hasPlan: hasMarkdownContent(planLatest?.markdown),
@@ -121,7 +121,7 @@ export function readTaskDocuments(
             latestQaReport: {
               markdown: qaLatest?.markdown ?? "",
               updatedAt: qaLatest?.updatedAt ?? null,
-              verdict: qaLatest?.verdict ?? null,
+              verdict: qaLatest?.verdict ?? "not_reviewed",
             },
           }
         : {}),

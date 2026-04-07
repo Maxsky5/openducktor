@@ -299,7 +299,7 @@ describe("OdtTaskStore workflow mutation paths", () => {
       issueType: "feature",
       labels: [],
       priority: 2,
-      qaVerdict: null,
+      qaVerdict: "not_reviewed",
       status: "in_progress",
       title: "Alpha workflow",
       updatedAt: FIXED_NOW,

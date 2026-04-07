@@ -162,7 +162,7 @@ describe("TaskDocumentStore", () => {
     });
   });
 
-  test("summarize returns false booleans and null verdict when namespace documents are missing", () => {
+  test("summarize returns false booleans and not_reviewed verdict when namespace documents are missing", () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -175,7 +175,7 @@ describe("TaskDocumentStore", () => {
     const summary = documents.summarize(harness.getIssue());
 
     expect(summary).toEqual({
-      qaVerdict: null,
+      qaVerdict: "not_reviewed",
       documents: {
         hasSpec: false,
         hasPlan: false,

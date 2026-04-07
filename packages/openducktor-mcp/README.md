@@ -75,7 +75,7 @@ Optional filters:
     "labels": ["docs"],
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
-    "qaVerdict": null,
+    "qaVerdict": "not_reviewed",
     "documents": {
       "hasSpec": false,
       "hasPlan": false,
@@ -85,7 +85,7 @@ Optional filters:
 }
 ```
 
-Use `odt_read_task` first to discover the task summary object, including task state, `qaVerdict`, and which documents exist.
+Use `odt_read_task` first to discover the task summary object, including task state, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
 
 Use `odt_read_task_documents` only when you need document bodies:
 

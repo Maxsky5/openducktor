@@ -1,6 +1,7 @@
 import {
   issueTypeSchema,
   qaReportVerdictSchema,
+  qaWorkflowVerdictSchema,
   taskPrioritySchema,
   taskStatusSchema,
 } from "@openducktor/contracts";
@@ -37,7 +38,7 @@ export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
 
 export const publicTaskSummaryTaskSchema = publicTaskSchema
   .extend({
-    qaVerdict: qaReportVerdictSchema.nullable(),
+    qaVerdict: qaWorkflowVerdictSchema,
     documents: taskDocumentPresenceSchema,
   })
   .strict();
@@ -61,7 +62,7 @@ const latestQaReportSchema = z
   .object({
     markdown: z.string(),
     updatedAt: z.string().nullable(),
-    verdict: qaReportVerdictSchema.nullable(),
+    verdict: qaWorkflowVerdictSchema,
   })
   .strict();
 
