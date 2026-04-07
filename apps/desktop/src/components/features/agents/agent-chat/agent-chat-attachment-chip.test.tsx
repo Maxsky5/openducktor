@@ -82,7 +82,7 @@ describe("AgentChatAttachmentChip", () => {
     });
   });
 
-  test("does not poison preview opening when the inline thumbnail errors during rerender", async () => {
+  test("surfaces inline thumbnail failures as explicit preview errors", async () => {
     hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
       path: `/tmp/openducktor-local-attachments/${path}`,
     }));
@@ -104,11 +104,13 @@ describe("AgentChatAttachmentChip", () => {
     const thumbnailImage = await screen.findByAltText("preview-inline.png");
     fireEvent.error(thumbnailImage);
 
-    expect(
-      screen.queryByText(
-        'Attachment preview is unavailable because "preview-inline.png" could not be read from its original local path.',
-      ),
-    ).toBeNull();
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Attachment preview is unavailable because "preview-inline.png" could not be read from its original local path.',
+        ),
+      ).toBeDefined();
+    });
 
     const previewButton = screen
       .getAllByRole("button")
@@ -118,7 +120,9 @@ describe("AgentChatAttachmentChip", () => {
     }
     fireEvent.click(previewButton);
 
-    await screen.findByText("Image preview");
+    await waitFor(() => {
+      expect(screen.queryByText("Image preview")).toBeNull();
+    });
   });
 
   test("renders transcript image previews from the resolved desktop asset url", async () => {
