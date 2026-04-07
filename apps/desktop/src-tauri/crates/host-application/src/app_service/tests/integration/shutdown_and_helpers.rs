@@ -797,6 +797,22 @@ fn resolve_mcp_command_prefers_workspace_entrypoint_and_preserves_fallbacks() ->
     }
 
     {
+        let _workspace_guard =
+            set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", "/tmp/odt-missing-workspace");
+        let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _bun_override_guard = remove_env_var("OPENDUCKTOR_BUN_PATH");
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![cli_bin
+                .join("openducktor-mcp")
+                .to_string_lossy()
+                .to_string()]
+        );
+    }
+
+    {
         let path = format!(
             "{}:{}:/usr/bin:/bin",
             cli_bin.to_string_lossy(),
