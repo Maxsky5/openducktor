@@ -394,6 +394,11 @@ const handleStepPart = (
             };
       }
 
+      if (context.turn.contextUsageMessageIdBySessionRef) {
+        context.turn.contextUsageMessageIdBySessionRef.current[context.store.sessionId] =
+          part.messageId;
+      }
+
       return {
         ...prepared,
         status: "running",
@@ -402,11 +407,6 @@ const handleStepPart = (
     },
     { persist: false },
   );
-
-  if (context.turn.contextUsageMessageIdBySessionRef) {
-    context.turn.contextUsageMessageIdBySessionRef.current[context.store.sessionId] =
-      part.messageId;
-  }
 };
 
 export const handleAssistantPart = (
