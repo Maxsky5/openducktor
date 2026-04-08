@@ -6,8 +6,8 @@ pub(crate) use transitions::{
     default_qa_required_for_issue_type, derive_agent_workflows, is_open_state,
 };
 pub(crate) use validators::{
-    derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
-    normalize_title_key, validate_parent_relationships_for_create,
+    can_reset_implementation_from_status, derive_available_actions, normalize_required_markdown,
+    normalize_subtask_plan_inputs, normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
     validate_transition_without_related_tasks,
 };
