@@ -14,9 +14,10 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::time::{sleep, Duration};
+use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
 
@@ -37,6 +38,8 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         Arc::new(build_registry().context("failed to build browser backend command registry")?);
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let shutdown_signal = Arc::new(Notify::new());
+    let shutdown_started = Arc::new(AtomicBool::new(false));
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/shutdown", post(shutdown_handler))
@@ -53,6 +56,8 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             events,
             dev_server_events,
             registry,
+            shutdown_signal: shutdown_signal.clone(),
+            shutdown_started: shutdown_started.clone(),
         });
 
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
@@ -69,6 +74,9 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     );
 
     axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown_signal.notified().await;
+        })
         .await
         .context("browser backend server terminated unexpectedly")
 }
@@ -78,11 +86,35 @@ async fn health_handler() -> impl IntoResponse {
 }
 
 async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoResponse {
+    if state.shutdown_started.swap(true, Ordering::SeqCst) {
+        return (StatusCode::ACCEPTED, Json(json!({ "ok": true })));
+    }
+
     let service = state.service.clone();
+    let shutdown_signal = state.shutdown_signal.clone();
     tokio::spawn(async move {
-        sleep(Duration::from_millis(50)).await;
-        let _ = service.shutdown();
-        std::process::exit(0);
+        let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
+            Ok(Ok(())) => 0,
+            Ok(Err(error)) => {
+                tracing::error!(
+                    target: "openducktor.browser-backend",
+                    error = %error,
+                    "Browser backend shutdown failed"
+                );
+                1
+            }
+            Err(error) => {
+                tracing::error!(
+                    target: "openducktor.browser-backend",
+                    error = %error,
+                    "Browser backend shutdown task failed"
+                );
+                1
+            }
+        };
+        shutdown_signal.notify_waiters();
+        tokio::task::yield_now().await;
+        std::process::exit(exit_code);
     });
 
     (StatusCode::ACCEPTED, Json(json!({ "ok": true })))
@@ -286,6 +318,8 @@ mod tests {
                 events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 registry,
+                shutdown_signal: Arc::new(Notify::new()),
+                shutdown_started: Arc::new(AtomicBool::new(false)),
             },
             root,
         }

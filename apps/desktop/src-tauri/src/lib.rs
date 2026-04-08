@@ -423,12 +423,16 @@ fn startup_phase_exit_shutdown_handler(
     let shutdown_started = Arc::new(AtomicBool::new(false));
 
     move |handle, event| {
-        if let TauriRunEvent::ExitRequested { api, .. } = event {
-            if shutdown_started.swap(true, Ordering::SeqCst) {
+        if let TauriRunEvent::ExitRequested { api, code, .. } = event {
+            if code.is_some() {
                 return;
             }
 
             api.prevent_exit();
+
+            if shutdown_started.swap(true, Ordering::SeqCst) {
+                return;
+            }
 
             for window in handle.webview_windows().into_values() {
                 let _ = window.hide();
