@@ -15,6 +15,7 @@ rayon = "1"
 libc = "0.2"
 fs2 = "0.4"
 sysinfo = "0.33"
+url = "2"
 host-domain = { path = "../host-domain" }
 
 [dev-dependencies]

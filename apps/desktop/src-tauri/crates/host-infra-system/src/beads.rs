@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 #[cfg(not(unix))]
 use sysinfo::Signal;
 use sysinfo::{Pid, ProcessesToUpdate, System};
+use url::Url;
 
 use crate::{
     config::resolve_openducktor_base_dir, parse_user_path, resolve_command_path,
@@ -303,7 +304,12 @@ pub fn restore_shared_dolt_database_from_backup(
             })?;
         }
 
-        let backup_url = format!("file://{}", backup_dir.display());
+        let backup_url = Url::from_file_path(backup_dir).map_err(|()| {
+            anyhow!(
+                "Failed converting backup path {} into file URL",
+                backup_dir.display()
+            )
+        })?;
         crate::run_command(
             "dolt",
             &["backup", "restore", backup_url.as_str(), database_name],
