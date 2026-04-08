@@ -148,6 +148,16 @@ fn is_qa_rejected_rework(task: &TaskCard) -> bool {
         && task.document_summary.qa_report.verdict == QaWorkflowVerdict::Rejected
 }
 
+pub(crate) fn can_reset_implementation_from_status(status: &TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
+    )
+}
+
 pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) -> Vec<TaskAction> {
     let mut actions = vec![TaskAction::ViewDetails];
 
@@ -178,10 +188,7 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
         actions.push(TaskAction::OpenBuilder);
     }
 
-    if matches!(
-        task.status,
-        TaskStatus::InProgress | TaskStatus::AiReview | TaskStatus::HumanReview
-    ) {
+    if can_reset_implementation_from_status(&task.status) {
         actions.push(TaskAction::ResetImplementation);
     }
 

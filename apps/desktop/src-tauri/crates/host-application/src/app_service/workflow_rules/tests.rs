@@ -15,6 +15,7 @@ struct WorkflowContractFixture {
     transitions: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     set_spec_allowed_statuses: Vec<String>,
     set_plan_allowed_statuses: BTreeMap<String, Vec<String>>,
+    reset_implementation_allowed_statuses: Vec<String>,
     epic_subtask_replacement_allowed_statuses: Vec<String>,
 }
 
@@ -85,16 +86,39 @@ fn module_derive_available_actions_exposes_review_actions_during_review_states()
 }
 
 #[test]
-fn module_derive_available_actions_exposes_reset_for_in_progress_only_and_not_blocked() {
-    let in_progress = make_task("task-1", "task", TaskStatus::InProgress);
-    let blocked = make_task("task-2", "task", TaskStatus::Blocked);
+fn module_derive_available_actions_exposes_reset_for_implementation_stage_statuses() {
+    for status in [
+        TaskStatus::InProgress,
+        TaskStatus::Blocked,
+        TaskStatus::AiReview,
+        TaskStatus::HumanReview,
+    ] {
+        let task = make_task("task-1", "task", status);
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
 
-    let in_progress_actions =
-        derive_available_actions(&in_progress, std::slice::from_ref(&in_progress));
-    let blocked_actions = derive_available_actions(&blocked, std::slice::from_ref(&blocked));
+        assert!(
+            actions.contains(&TaskAction::ResetImplementation),
+            "expected reset implementation for status {}",
+            task.status.as_cli_value()
+        );
+    }
 
-    assert!(in_progress_actions.contains(&TaskAction::ResetImplementation));
-    assert!(!blocked_actions.contains(&TaskAction::ResetImplementation));
+    for status in [
+        TaskStatus::Open,
+        TaskStatus::SpecReady,
+        TaskStatus::ReadyForDev,
+        TaskStatus::Deferred,
+        TaskStatus::Closed,
+    ] {
+        let task = make_task("task-2", "task", status);
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+        assert!(
+            !actions.contains(&TaskAction::ResetImplementation),
+            "unexpected reset implementation for status {}",
+            task.status.as_cli_value()
+        );
+    }
 }
 
 #[test]
@@ -315,6 +339,30 @@ fn workflow_contract_set_plan_statuses_match_fixture() {
             assert_eq!(
                 actual_allowed, expected_allowed,
                 "set_plan mismatch for issue_type={issue_type} status={status}"
+            );
+        }
+    }
+}
+
+#[test]
+fn workflow_contract_reset_implementation_statuses_match_fixture() {
+    let fixture = load_workflow_contract_fixture();
+    let expected = fixture
+        .reset_implementation_allowed_statuses
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+
+    for issue_type in ["epic", "feature", "task", "bug"] {
+        for status in &fixture.statuses {
+            let parsed_status = parse_status(status);
+            let task = make_task("fixture-task", issue_type, parsed_status);
+            let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+            let actual_allowed = actions.contains(&TaskAction::ResetImplementation);
+            let expected_allowed = expected.contains(&status.as_str());
+            assert_eq!(
+                actual_allowed, expected_allowed,
+                "reset_implementation mismatch for issue_type={issue_type} status={status}"
             );
         }
     }

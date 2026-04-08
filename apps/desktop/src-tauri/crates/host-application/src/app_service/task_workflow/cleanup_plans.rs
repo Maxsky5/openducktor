@@ -1,4 +1,5 @@
 use crate::app_service::service_core::AppService;
+use crate::app_service::workflow_rules::can_reset_implementation_from_status;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, GitWorktreeSummary, TaskCard, TaskStatus, DEFAULT_BRANCH_PREFIX,
@@ -192,15 +193,12 @@ pub(super) fn derive_reset_implementation_status(task: &TaskCard) -> TaskStatus 
 }
 
 pub(super) fn ensure_task_reset_status_allowed(task: &TaskCard) -> Result<()> {
-    if matches!(
-        task.status,
-        TaskStatus::InProgress | TaskStatus::AiReview | TaskStatus::HumanReview
-    ) {
+    if can_reset_implementation_from_status(&task.status) {
         return Ok(());
     }
 
     Err(anyhow!(
-        "Implementation reset is only allowed from in_progress, ai_review, or human_review (current: {}).",
+        "Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: {}).",
         task.status.as_cli_value()
     ))
 }
