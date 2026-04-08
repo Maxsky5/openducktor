@@ -66,6 +66,8 @@ Key boundary:
 8. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
 9. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
 
+For the exact Beads attachment and shared Dolt startup/shutdown command sequence, see `docs/beads-shared-dolt-lifecycle.md`.
+
 Critical session invariants:
 - Read-only roles (`spec`, `planner`, `qa`) must auto-reject mutating permission prompts; on auto-reply failure, permission remains actionable and a system error is emitted.
 - Stale workspace protection must roll back newly started/resumed sessions with best-effort `stopSession` cleanup.
@@ -129,6 +131,7 @@ Concrete adapters today:
 
 ## Related Docs
 - `docs/agent-orchestrator-module-map.md`
+- `docs/beads-shared-dolt-lifecycle.md`
 - `docs/runtime-integration-guide.md`
 - `docs/task-workflow-status-model.md`
 - `docs/task-workflow-actions.md`

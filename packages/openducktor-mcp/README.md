@@ -4,6 +4,8 @@ OpenDucktor MCP server for local repository task workflows.
 
 When OpenDucktor launches this MCP from the desktop app it injects the Beads attachment dir and shared Dolt connection details automatically. For standalone use, you must provide the same contract yourself.
 
+For the full Beads attachment and shared Dolt lifecycle, including why these parameters exist, see `../../docs/beads-shared-dolt-lifecycle.md`.
+
 ## Usage
 
 ```json

@@ -6,6 +6,8 @@ This document describes the public OpenDucktor MCP package that can be used outs
 
 Desktop-managed MCP launches receive the Beads attachment path and shared Dolt connection details from the host automatically. Standalone external use must provide those values explicitly.
 
+For the full Beads attachment and shared Dolt lifecycle, including why these parameters exist and how the host currently owns server startup, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
+
 Package name:
 
 - `@openducktor/mcp`
@@ -64,6 +66,12 @@ Internal workflow tools remain on the same MCP server:
 - `odt_qa_rejected`
 
 Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task` or `search_tasks` in their tool selection.
+
+Maintainer note:
+
+- the TypeScript MCP sidecar still contains its own Beads client today
+- that lifecycle currently duplicates some host-side Beads logic
+- the duplication is temporary, but if you change Beads or shared-Dolt behavior you must review both this package and the Rust host in the same change
 
 ## Shared Response Model
 
