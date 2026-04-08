@@ -59,6 +59,12 @@ fn runtime_summary_fixture(
 
 #[test]
 fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
+    let _env_lock = lock_env();
+    let config_root = unique_temp_path("shutdown-runtime-cleanup-config");
+    let _config_guard = set_env_var(
+        "OPENDUCKTOR_CONFIG_DIR",
+        config_root.to_string_lossy().as_ref(),
+    );
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
@@ -145,11 +151,18 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
         .lock()
         .expect("runtime lock poisoned")
         .is_empty());
+    let _ = fs::remove_dir_all(config_root);
     Ok(())
 }
 
 #[test]
 fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
+    let _env_lock = lock_env();
+    let config_root = unique_temp_path("shutdown-pending-opencode-config");
+    let _config_guard = set_env_var(
+        "OPENDUCKTOR_CONFIG_DIR",
+        config_root.to_string_lossy().as_ref(),
+    );
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
@@ -197,6 +210,7 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
         .is_empty());
 
     let _ = fs::remove_dir_all(root);
+    let _ = fs::remove_dir_all(config_root);
     Ok(())
 }
 
@@ -308,6 +322,12 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
 #[cfg(unix)]
 #[test]
 fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
+    let _env_lock = lock_env();
+    let config_root = unique_temp_path("shutdown-dev-server-config");
+    let _config_guard = set_env_var(
+        "OPENDUCKTOR_CONFIG_DIR",
+        config_root.to_string_lossy().as_ref(),
+    );
     let repo_path = unique_temp_path("shutdown-dev-server-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
@@ -376,6 +396,7 @@ fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
     drop(groups);
 
     let _ = fs::remove_dir_all(repo_path);
+    let _ = fs::remove_dir_all(config_root);
     Ok(())
 }
 
