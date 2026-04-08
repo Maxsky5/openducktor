@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   type BeadsAttachmentDirResolver,
   CUSTOM_STATUS_VALUES,
@@ -117,6 +117,16 @@ export class BeadsRuntimeClient {
     return dirname(beadsAttachmentDir);
   }
 
+  private ensureBeadsWorkingDirectory(beadsAttachmentDir: string): string {
+    const workingDirectory = this.beadsWorkingDirectory(beadsAttachmentDir);
+    mkdirSync(workingDirectory, { recursive: true });
+    return workingDirectory;
+  }
+
+  private sharedDoltDataRoot(beadsAttachmentDir: string): string {
+    return join(dirname(this.beadsWorkingDirectory(beadsAttachmentDir)), "shared-server", "dolt");
+  }
+
   private statusRequiresCustomConfiguration(status: string): boolean {
     return (
       status === "spec_ready" ||
@@ -154,33 +164,72 @@ export class BeadsRuntimeClient {
     return (
       metadata?.backend === "dolt" &&
       metadata?.dolt_mode === "server" &&
-      (metadata?.dolt_server_host === undefined || metadata.dolt_server_host === this.doltHost) &&
-      (metadata?.dolt_server_port === undefined ||
-        metadata.dolt_server_port === Number(this.doltPort)) &&
-      (metadata?.dolt_server_user === undefined || metadata.dolt_server_user === "root") &&
+      metadata?.dolt_server_host === this.doltHost &&
+      metadata?.dolt_server_port === Number(this.doltPort) &&
+      metadata?.dolt_server_user === "root" &&
       metadata?.dolt_database === expectedDatabaseName
     );
   }
 
-  private static reasonRequiresBootstrap(reason: string): boolean {
+  private static reasonRequiresSharedDatabaseSeed(reason: string): boolean {
     const normalized = reason.toLowerCase();
     return (
       normalized.includes("not found on dolt server") ||
       normalized.includes("server not reachable") ||
+      normalized.includes("dolt server unreachable") ||
       normalized.includes("error 1049")
     );
   }
 
-  private shouldForceRestoreBackup(beadsAttachmentDir: string, error: unknown): boolean {
-    if (!existsSync(`${beadsAttachmentDir}/backup`)) {
-      return false;
+  private sharedDatabaseBackupPath(beadsAttachmentDir: string): string {
+    return `${beadsAttachmentDir}/backup`;
+  }
+
+  private async materializeSharedDatabaseFromAttachment(beadsAttachmentDir: string): Promise<void> {
+    const backupPath = this.sharedDatabaseBackupPath(beadsAttachmentDir);
+    if (!existsSync(backupPath)) {
+      throw new Error(
+        `Shared Dolt database is missing for ${beadsAttachmentDir} and no attachment backup exists at ${backupPath}`,
+      );
     }
 
-    const message = error instanceof Error ? error.message : String(error);
-    const normalized = message.toLowerCase();
-    return (
-      normalized.includes("already exists") && normalized.includes("use '--force' to overwrite")
+    const sharedDoltRoot = this.sharedDoltDataRoot(beadsAttachmentDir);
+    mkdirSync(sharedDoltRoot, { recursive: true });
+    await this.runCommand(
+      "dolt",
+      ["backup", "restore", `file://${backupPath}`, this.databaseName],
+      sharedDoltRoot,
+      {},
     );
+  }
+
+  private extractJsonPayload(output: string): string {
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return trimmed;
+    }
+
+    const objectIndex = trimmed.indexOf("{");
+    const arrayIndex = trimmed.indexOf("[");
+    const candidates = [objectIndex, arrayIndex].filter((index) => index >= 0);
+    if (candidates.length === 0) {
+      return trimmed;
+    }
+
+    return trimmed.slice(Math.min(...candidates));
+  }
+
+  private async runCommand(
+    command: string,
+    args: string[],
+    cwd: string,
+    env: Record<string, string>,
+  ): Promise<void> {
+    const result = await this.runProcess(command, args, cwd, env);
+    if (!result.ok) {
+      const details = result.stderr || result.stdout || `${command} command failed`;
+      throw new Error(`${command} ${args.join(" ")} failed: ${details}`);
+    }
   }
 
   private async inspectAttachment(beadsAttachmentDir: string): Promise<AttachmentStatus> {
@@ -193,13 +242,14 @@ export class BeadsRuntimeClient {
     }
 
     const whereOutput = await this.runBd(["where"], { json: true, allowFailure: true });
-    if (whereOutput.trim().length === 0) {
+    const jsonPayload = this.extractJsonPayload(whereOutput);
+    if (jsonPayload.length === 0) {
       return { ready: false, reason: "bd where returned empty payload" };
     }
 
     let payload: BeadsWherePayload;
     try {
-      payload = JSON.parse(whereOutput) as BeadsWherePayload;
+      payload = JSON.parse(jsonPayload) as BeadsWherePayload;
     } catch {
       throw new Error("Failed to parse bd JSON output for args: where");
     }
@@ -238,7 +288,7 @@ export class BeadsRuntimeClient {
     const result = await this.runProcess(
       "bd",
       finalArgs,
-      this.beadsWorkingDirectory(beadsAttachmentDir),
+      this.ensureBeadsWorkingDirectory(beadsAttachmentDir),
       this.beadsEnv(beadsAttachmentDir),
     );
 
@@ -256,7 +306,7 @@ export class BeadsRuntimeClient {
   async runBdJson(args: string[]): Promise<unknown> {
     const output = await this.runBd(args, { json: true });
     try {
-      return JSON.parse(output);
+      return JSON.parse(this.extractJsonPayload(output));
     } catch {
       throw new Error(`Failed to parse bd JSON output for args: ${args.join(" ")}`);
     }
@@ -278,16 +328,8 @@ export class BeadsRuntimeClient {
         ? await this.inspectAttachment(beadsAttachmentDir)
         : { ready: false, reason: "bd init failed" };
       if (!status.ready) {
-        if (BeadsRuntimeClient.reasonRequiresBootstrap(status.reason)) {
-          try {
-            await this.runBd(["bootstrap", "--yes"]);
-          } catch (error) {
-            if (this.shouldForceRestoreBackup(beadsAttachmentDir, error)) {
-              await this.runBd(["backup", "restore", "--force"]);
-            } else {
-              throw error;
-            }
-          }
+        if (BeadsRuntimeClient.reasonRequiresSharedDatabaseSeed(status.reason)) {
+          await this.materializeSharedDatabaseFromAttachment(beadsAttachmentDir);
         } else {
           const slug = sanitizeSlug(basename(this.repoPath));
           await this.runBd([
@@ -301,6 +343,7 @@ export class BeadsRuntimeClient {
             "root",
             "--quiet",
             "--skip-hooks",
+            "--skip-agents",
             "--prefix",
             slug,
             "--database",

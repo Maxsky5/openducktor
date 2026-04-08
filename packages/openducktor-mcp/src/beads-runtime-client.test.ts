@@ -17,26 +17,26 @@ const tempRoots: string[] = [];
 const makeTempBeadsDir = (): string => {
   const root = mkdtempSync(join(tmpdir(), "odt-beads-runtime-client-"));
   tempRoots.push(root);
-  return join(root, ".beads");
+  return join(root, "beads", "repo-123", ".beads");
 };
+
+const sharedDoltRootFor = (beadsDir: string): string =>
+  join(dirname(dirname(beadsDir)), "shared-server", "dolt");
 
 const writeAttachmentMetadata = (
   beadsDir: string,
   databaseName: string,
   port = 3310,
-  includeConnectionFields = true,
 ): void => {
   mkdirSync(beadsDir, { recursive: true });
   const payload: Record<string, unknown> = {
     backend: "dolt",
     dolt_mode: "server",
+    dolt_server_host: "127.0.0.1",
+    dolt_server_port: port,
+    dolt_server_user: "root",
     dolt_database: databaseName,
   };
-  if (includeConnectionFields) {
-    payload.dolt_server_host = "127.0.0.1";
-    payload.dolt_server_port = port;
-    payload.dolt_server_user = "root";
-  }
   writeFileSync(join(beadsDir, "metadata.json"), JSON.stringify(payload));
 };
 
@@ -87,6 +87,7 @@ describe("BeadsRuntimeClient", () => {
         "root",
         "--quiet",
         "--skip-hooks",
+        "--skip-agents",
         "--prefix",
         "fairnest",
         "--database",
@@ -105,7 +106,7 @@ describe("BeadsRuntimeClient", () => {
 
   test("ensureInitialized reuses an attachment only when verification passes", async () => {
     const beadsDir = makeTempBeadsDir();
-    writeAttachmentMetadata(beadsDir, "odt_fairnest_deadbeefcafe", 3310, false);
+    writeAttachmentMetadata(beadsDir, "odt_fairnest_deadbeefcafe", 3310);
     const calls: ProcessCall[] = [];
     const client = new BeadsRuntimeClient(
       "/repo/fairnest",
@@ -131,9 +132,9 @@ describe("BeadsRuntimeClient", () => {
     expect(calls.map((call) => call.args)).toEqual([["where", "--json"]]);
   });
 
-  test("ensureInitialized bootstraps existing attachments when the shared database is missing", async () => {
+  test("ensureInitialized restores missing shared databases from the attachment backup", async () => {
     const beadsDir = makeTempBeadsDir();
-    writeAttachmentMetadata(beadsDir, "odt_fairnest_deadbeefcafe", 3310, false);
+    writeAttachmentMetadata(beadsDir, "odt_fairnest_deadbeefcafe", 3310);
     mkdirSync(join(beadsDir, "backup"), { recursive: true });
     const calls: ProcessCall[] = [];
     const client = new BeadsRuntimeClient(
@@ -152,10 +153,12 @@ describe("BeadsRuntimeClient", () => {
               return {
                 ok: false,
                 stdout: "",
-                stderr: JSON.stringify({
-                  error:
-                    'failed to open database: database "odt_fairnest_deadbeefcafe" not found on Dolt server at 127.0.0.1:3310',
-                }),
+                stderr:
+                  "Warning: delayed Dolt wake-up\n" +
+                  JSON.stringify({
+                    error:
+                      'failed to open database: database "odt_fairnest_deadbeefcafe" not found on Dolt server at 127.0.0.1:3310',
+                  }),
               };
             }
             return { ok: true, stdout: JSON.stringify({ path: beadsDir }), stderr: "" };
@@ -169,15 +172,17 @@ describe("BeadsRuntimeClient", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["where", "--json"],
-      ["bootstrap", "--yes"],
+      ["backup", "restore", `file://${join(beadsDir, "backup")}`, "odt_fairnest_deadbeefcafe"],
       ["where", "--json"],
     ]);
+    expect(calls[1]?.command).toBe("dolt");
+    expect(calls[1]?.cwd).toBe(sharedDoltRootFor(beadsDir));
+    expect(calls[1]?.env).toEqual({});
   });
 
-  test("ensureInitialized force-restores backups when bootstrap asks for overwrite", async () => {
+  test("ensureInitialized errors when the shared database is missing and no backup exists", async () => {
     const beadsDir = makeTempBeadsDir();
-    writeAttachmentMetadata(beadsDir, "odt_fairnest_deadbeefcafe", 3310, false);
-    mkdirSync(join(beadsDir, "backup"), { recursive: true });
+    writeAttachmentMetadata(beadsDir, "odt_fairnest_deadbeefcafe", 3310);
     const calls: ProcessCall[] = [];
     const client = new BeadsRuntimeClient(
       "/repo/fairnest",
@@ -191,24 +196,13 @@ describe("BeadsRuntimeClient", () => {
         runProcess: async (command, args, cwd, env) => {
           calls.push({ command, args: [...args], cwd, env });
           if (args[0] === "where") {
-            if (calls.filter((call) => call.args[0] === "where").length === 1) {
-              return {
-                ok: false,
-                stdout: "",
-                stderr: JSON.stringify({
-                  error:
-                    'failed to open database: database "odt_fairnest_deadbeefcafe" not found on Dolt server at 127.0.0.1:3310',
-                }),
-              };
-            }
-            return { ok: true, stdout: JSON.stringify({ path: beadsDir }), stderr: "" };
-          }
-          if (args[0] === "bootstrap") {
             return {
               ok: false,
               stdout: "",
-              stderr:
-                "Bootstrap failed: restore from backup: Error 1105: database already exists, use '--force' to overwrite",
+              stderr: JSON.stringify({
+                error:
+                  'failed to open database: database "odt_fairnest_deadbeefcafe" not found on Dolt server at 127.0.0.1:3310',
+              }),
             };
           }
           return { ok: true, stdout: "", stderr: "" };
@@ -216,14 +210,10 @@ describe("BeadsRuntimeClient", () => {
       },
     );
 
-    await client.ensureInitialized();
-
-    expect(calls.map((call) => call.args)).toEqual([
-      ["where", "--json"],
-      ["bootstrap", "--yes"],
-      ["backup", "restore", "--force"],
-      ["where", "--json"],
-    ]);
+    await expect(client.ensureInitialized()).rejects.toThrow(
+      `Shared Dolt database is missing for ${beadsDir} and no attachment backup exists at ${join(beadsDir, "backup")}`,
+    );
+    expect(calls.map((call) => call.args)).toEqual([["where", "--json"]]);
   });
 
   test("ensureInitialized repairs mismatched attachment metadata", async () => {
@@ -266,6 +256,7 @@ describe("BeadsRuntimeClient", () => {
         "root",
         "--quiet",
         "--skip-hooks",
+        "--skip-agents",
         "--prefix",
         "fairnest",
         "--database",

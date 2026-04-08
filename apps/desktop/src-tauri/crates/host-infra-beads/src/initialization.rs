@@ -199,32 +199,26 @@ impl BeadsTaskStore {
                 metadata.dolt_mode
             ));
         }
-        if let Some(host) = metadata.dolt_server_host.as_deref() {
-            if host != expected_host.as_str() {
-                return Err(anyhow!(
-                    "Beads attachment host is {:?}, expected {}",
-                    metadata.dolt_server_host,
-                    expected_host
-                ));
-            }
+        if metadata.dolt_server_host.as_deref() != Some(expected_host.as_str()) {
+            return Err(anyhow!(
+                "Beads attachment host is {:?}, expected {}",
+                metadata.dolt_server_host,
+                expected_host
+            ));
         }
-        if let Some(port) = metadata.dolt_server_port {
-            if port != expected_port {
-                return Err(anyhow!(
-                    "Beads attachment port is {:?}, expected {}",
-                    metadata.dolt_server_port,
-                    expected_port
-                ));
-            }
+        if metadata.dolt_server_port != Some(expected_port) {
+            return Err(anyhow!(
+                "Beads attachment port is {:?}, expected {}",
+                metadata.dolt_server_port,
+                expected_port
+            ));
         }
-        if let Some(user) = metadata.dolt_server_user.as_deref() {
-            if user != expected_user.as_str() {
-                return Err(anyhow!(
-                    "Beads attachment user is {:?}, expected {}",
-                    metadata.dolt_server_user,
-                    expected_user
-                ));
-            }
+        if metadata.dolt_server_user.as_deref() != Some(expected_user.as_str()) {
+            return Err(anyhow!(
+                "Beads attachment user is {:?}, expected {}",
+                metadata.dolt_server_user,
+                expected_user
+            ));
         }
         if metadata.dolt_database.as_deref() != Some(expected_database.as_str()) {
             return Err(anyhow!(

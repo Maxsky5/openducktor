@@ -11,8 +11,9 @@ use host_domain::{
     UpdateTaskPatch,
 };
 use host_infra_system::{
-    compute_beads_database_name, compute_repo_slug, resolve_repo_beads_attachment_dir,
-    resolve_repo_beads_attachment_root, resolve_shared_dolt_root,
+    compute_beads_database_name, compute_repo_slug, read_shared_dolt_server_state,
+    resolve_repo_beads_attachment_dir, resolve_repo_beads_attachment_root,
+    resolve_shared_dolt_root,
 };
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -312,35 +313,24 @@ fn assert_dolt_backup_restore_args(call: &RecordedCall, repo_path: &Path, beads_
 fn write_attachment_metadata(beads_dir: &Path, repo_path: &Path, port: u16) {
     fs::create_dir_all(beads_dir).expect("beads dir should be writable");
     let database_name = compute_beads_database_name(repo_path).expect("expected database name");
+    let effective_port = read_shared_dolt_server_state()
+        .ok()
+        .flatten()
+        .map(|state| state.port)
+        .unwrap_or(port);
     fs::write(
         beads_dir.join("metadata.json"),
         json!({
             "backend": "dolt",
             "dolt_mode": "server",
             "dolt_server_host": "127.0.0.1",
-            "dolt_server_port": port,
+            "dolt_server_port": effective_port,
             "dolt_server_user": "root",
             "dolt_database": database_name,
         })
         .to_string(),
     )
     .expect("metadata.json should be writable");
-}
-
-fn write_legacy_attachment_metadata(beads_dir: &Path, repo_path: &Path) {
-    fs::create_dir_all(beads_dir).expect("beads dir should be writable");
-    let database_name = compute_beads_database_name(repo_path).expect("expected database name");
-    fs::write(
-        beads_dir.join("metadata.json"),
-        json!({
-            "backend": "dolt",
-            "dolt_mode": "server",
-            "dolt_database": database_name,
-            "project_id": "legacy-project-id",
-        })
-        .to_string(),
-    )
-    .expect("legacy metadata.json should be writable");
 }
 
 fn make_session(session_id: &str, started_at: &str) -> AgentSessionDocument {
@@ -773,29 +763,6 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
 }
 
 #[test]
-fn verify_repo_initialized_accepts_legacy_attachment_metadata() -> Result<()> {
-    let repo = RepoFixture::new("legacy-metadata");
-    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
-    write_legacy_attachment_metadata(&beads_dir, repo.path());
-    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
-        true,
-        json!({
-            "path": beads_dir,
-            "prefix": "openducktor"
-        })
-        .to_string(),
-        String::new(),
-    )))]);
-    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
-
-    let (is_ready, reason) = store.verify_repo_initialized(repo.path(), &beads_dir)?;
-
-    assert!(is_ready);
-    assert!(reason.is_empty());
-    Ok(())
-}
-
-#[test]
 fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Result<()> {
     let repo = RepoFixture::new("init-path");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
@@ -908,14 +875,14 @@ fn ensure_repo_initialized_repairs_unready_store_footprint() -> Result<()> {
 fn ensure_repo_initialized_bootstraps_when_database_is_missing() -> Result<()> {
     let repo = RepoFixture::new("init-bootstrap-missing-db");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
-    write_legacy_attachment_metadata(&beads_dir, repo.path());
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
     fs::create_dir_all(beads_dir.join("backup"))?;
     let runner = MockCommandRunner::with_steps(vec![
         MockStep::AllowFailureWithEnv(Ok((
             false,
             String::new(),
             format!(
-                "Warning: attachment metadata uses legacy layout\n{}",
+                "Warning: delayed Dolt wake-up\n{}",
                 json!({
                     "error": "failed to open database: database \"odt_fairnest_deadbeef\" not found on Dolt server at 127.0.0.1:3307"
                 })
@@ -955,7 +922,7 @@ fn ensure_repo_initialized_bootstraps_when_database_is_missing() -> Result<()> {
 fn ensure_repo_initialized_errors_when_database_missing_without_backup() {
     let repo = RepoFixture::new("init-missing-db-no-backup");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path()).expect("expected beads dir");
-    write_legacy_attachment_metadata(&beads_dir, repo.path());
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
     let runner = MockCommandRunner::with_steps(vec![
         MockStep::AllowFailureWithEnv(Ok((
             false,
