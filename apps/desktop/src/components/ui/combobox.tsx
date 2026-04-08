@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactElement, type ReactNode, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 export type ComboboxOption = {
   value: string;
   label: string;
+  searchText?: string;
   searchKeywords?: string[];
   description?: string;
   accentColor?: string;
@@ -43,6 +44,7 @@ type ComboboxProps = {
   wrapLabels?: boolean;
   wrapTriggerLabel?: boolean;
   wrapOptionLabels?: boolean;
+  matchAllSearchTerms?: boolean;
 };
 
 type RenderGroup = {
@@ -110,6 +112,35 @@ const comboboxOptionDescriptionVariants = cva("text-xs text-muted-foreground", {
   },
 });
 
+const normalizeSearchTerms = (query: string): string[] => {
+  return query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+};
+
+const getOptionFilterKeywords = (option: ComboboxOption): string[] => {
+  return [option.label, option.searchText, ...(option.searchKeywords ?? [])].filter(
+    (keyword): keyword is string => Boolean(keyword),
+  );
+};
+
+const getOptionSearchText = (option: ComboboxOption): string => {
+  return (
+    option.searchText ?? [option.label, ...(option.searchKeywords ?? [])].join(" ")
+  ).toLowerCase();
+};
+
+const matchesAllTerms = (option: ComboboxOption, searchTerms: string[]): boolean => {
+  if (searchTerms.length === 0) {
+    return true;
+  }
+
+  const searchText = getOptionSearchText(option);
+  return searchTerms.every((term) => searchText.includes(term));
+};
+
 function ComboboxOptionLabel({
   option,
   shouldWrap,
@@ -139,7 +170,7 @@ function ComboboxOptionItem({
   return (
     <CommandItem
       value={option.value}
-      keywords={[option.label, ...(option.searchKeywords ?? [])]}
+      keywords={getOptionFilterKeywords(option)}
       onSelect={() => {
         onValueChange(option.value);
         onSelectComplete();
@@ -184,12 +215,19 @@ export function Combobox({
   wrapLabels = false,
   wrapTriggerLabel,
   wrapOptionLabels,
+  matchAllSearchTerms = false,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const commandListRef = useRef<HTMLDivElement | null>(null);
 
   const shouldWrapTriggerLabel = wrapLabels || wrapTriggerLabel === true;
   const shouldWrapOptionLabels = wrapLabels || wrapOptionLabels === true;
+  const searchTerms = useMemo(() => normalizeSearchTerms(searchQuery), [searchQuery]);
+  const portalContainer =
+    open && typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
+      : null;
 
   const resolvedOptions = useMemo(() => {
     if (!groups || groups.length === 0) {
@@ -211,6 +249,25 @@ export function Combobox({
   );
 
   const groupsToRender = useMemo<RenderGroup[]>(() => {
+    if (matchAllSearchTerms) {
+      if (resolvedGroups) {
+        return resolvedGroups
+          .map((group, groupIndex) => ({
+            key: `${group.label}:${groupIndex}`,
+            label: group.label,
+            options: group.options.filter((option) => matchesAllTerms(option, searchTerms)),
+          }))
+          .filter((group) => group.options.length > 0);
+      }
+
+      return [
+        {
+          key: "__ungrouped__",
+          options: resolvedOptions.filter((option) => matchesAllTerms(option, searchTerms)),
+        },
+      ];
+    }
+
     if (resolvedGroups) {
       return resolvedGroups.map((group, groupIndex) => ({
         key: `${group.label}:${groupIndex}`,
@@ -219,20 +276,27 @@ export function Combobox({
       }));
     }
 
-    return [{ key: "__ungrouped__", options }];
-  }, [resolvedGroups, options]);
+    return [{ key: "__ungrouped__", options: resolvedOptions }];
+  }, [matchAllSearchTerms, resolvedGroups, resolvedOptions, searchTerms]);
 
-  useEffect(() => {
-    const nextPortalContainer =
-      open && typeof document !== "undefined" && document.activeElement instanceof HTMLElement
-        ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
-        : null;
+  const handleOpenChange = (nextOpen: boolean): void => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setSearchQuery("");
+    }
+  };
 
-    setPortalContainer(nextPortalContainer);
-  }, [open]);
+  const handleSearchQueryChange = (nextQuery: string): void => {
+    const list = commandListRef.current;
+    if (open && list && list.scrollTop !== 0) {
+      list.scrollTop = 0;
+    }
+
+    setSearchQuery(nextQuery);
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -258,9 +322,13 @@ export function Combobox({
         portalContainer={portalContainer}
         className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
       >
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
+        <Command shouldFilter={!matchAllSearchTerms}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onValueChange={handleSearchQueryChange}
+          />
+          <CommandList ref={commandListRef}>
             <CommandEmpty>{emptyText}</CommandEmpty>
             {groupsToRender.map((group) => (
               <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>
@@ -271,7 +339,7 @@ export function Combobox({
                     value={value}
                     shouldWrapOptionLabels={shouldWrapOptionLabels}
                     onValueChange={onValueChange}
-                    onSelectComplete={() => setOpen(false)}
+                    onSelectComplete={() => handleOpenChange(false)}
                   />
                 ))}
               </CommandGroup>

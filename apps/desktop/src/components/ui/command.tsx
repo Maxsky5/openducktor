@@ -1,6 +1,6 @@
 import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
-import type * as React from "react";
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
@@ -32,15 +32,21 @@ function CommandInput({
   );
 }
 
-function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
+const CommandList = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
+>(({ className, ...props }, ref) => {
   return (
     <CommandPrimitive.List
+      ref={ref}
       data-slot="command-list"
       className={cn("max-h-64 overflow-y-auto overflow-x-hidden overscroll-contain", className)}
       {...props}
     />
   );
-}
+});
+
+CommandList.displayName = CommandPrimitive.List.displayName;
 
 function CommandEmpty(props: React.ComponentProps<typeof CommandPrimitive.Empty>) {
   return (

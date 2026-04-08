@@ -1,6 +1,5 @@
 import { Settings2 } from "lucide-react";
-import type { ReactElement } from "react";
-import { useReducer } from "react";
+import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,68 +25,23 @@ type SettingsModalProps = {
   triggerSize?: "default" | "sm" | "lg" | "icon";
 };
 
-type SettingsModalState = {
-  open: boolean;
-  section: SettingsSectionId;
-  repositorySection: RepositorySectionId;
-  globalPromptRoleTab: PromptRoleTabId;
-  repoPromptRoleTab: PromptRoleTabId;
-};
-
-type SettingsModalAction =
-  | { type: "set_open"; open: boolean }
-  | { type: "set_section"; section: SettingsSectionId }
-  | { type: "set_repository_section"; repositorySection: RepositorySectionId }
-  | { type: "set_global_prompt_role_tab"; globalPromptRoleTab: PromptRoleTabId }
-  | { type: "set_repo_prompt_role_tab"; repoPromptRoleTab: PromptRoleTabId };
-
-const INITIAL_SETTINGS_MODAL_STATE: SettingsModalState = {
-  open: false,
-  section: "repositories",
-  repositorySection: "configuration",
-  globalPromptRoleTab: "shared",
-  repoPromptRoleTab: "shared",
-};
-
-const settingsModalReducer = (
-  state: SettingsModalState,
-  action: SettingsModalAction,
-): SettingsModalState => {
-  switch (action.type) {
-    case "set_open":
-      return {
-        ...state,
-        open: action.open,
-      };
-    case "set_section":
-      return {
-        ...state,
-        section: action.section,
-      };
-    case "set_repository_section":
-      return {
-        ...state,
-        repositorySection: action.repositorySection,
-      };
-    case "set_global_prompt_role_tab":
-      return {
-        ...state,
-        globalPromptRoleTab: action.globalPromptRoleTab,
-      };
-    case "set_repo_prompt_role_tab":
-      return {
-        ...state,
-        repoPromptRoleTab: action.repoPromptRoleTab,
-      };
-  }
-};
+const INITIAL_SECTION: SettingsSectionId = "repositories";
+const INITIAL_REPOSITORY_SECTION: RepositorySectionId = "configuration";
+const INITIAL_PROMPT_ROLE_TAB: PromptRoleTabId = "shared";
 
 export function SettingsModal({
   triggerClassName,
   triggerSize = "sm",
 }: SettingsModalProps): ReactElement {
-  const [state, dispatch] = useReducer(settingsModalReducer, INITIAL_SETTINGS_MODAL_STATE);
-  const { globalPromptRoleTab, open, repoPromptRoleTab, repositorySection, section } = state;
+  const [open, setOpen] = useState(false);
+  const [section, setSection] = useState<SettingsSectionId>(INITIAL_SECTION);
+  const [repositorySection, setRepositorySection] = useState<RepositorySectionId>(
+    INITIAL_REPOSITORY_SECTION,
+  );
+  const [globalPromptRoleTab, setGlobalPromptRoleTab] =
+    useState<PromptRoleTabId>(INITIAL_PROMPT_ROLE_TAB);
+  const [repoPromptRoleTab, setRepoPromptRoleTab] =
+    useState<PromptRoleTabId>(INITIAL_PROMPT_ROLE_TAB);
   const controller = useSettingsModalController({
     open,
     shouldLoadCatalog: open && section === "repositories" && repositorySection === "agents",
@@ -98,7 +52,7 @@ export function SettingsModal({
     controller.markRepoScriptSaveAttempt();
     void controller.submit().then((saved) => {
       if (saved) {
-        dispatch({ type: "set_open", open: false });
+        setOpen(false);
       }
     });
   };
@@ -110,7 +64,7 @@ export function SettingsModal({
         if (!nextOpen && controller.isSaving) {
           return;
         }
-        dispatch({ type: "set_open", open: nextOpen });
+        setOpen(nextOpen);
       }}
     >
       <DialogTrigger asChild>
@@ -134,7 +88,7 @@ export function SettingsModal({
               section={section}
               disabled={isInteractionDisabled}
               errorCountById={controller.settingsSectionErrorCountById}
-              onChange={(nextSection) => dispatch({ type: "set_section", section: nextSection })}
+              onChange={setSection}
             />
             <div className="min-h-0 overflow-y-auto">
               <SettingsModalContent
@@ -144,24 +98,9 @@ export function SettingsModal({
                 repoPromptRoleTab={repoPromptRoleTab}
                 isInteractionDisabled={isInteractionDisabled}
                 controller={controller}
-                onRepositorySectionChange={(nextRepositorySection) =>
-                  dispatch({
-                    type: "set_repository_section",
-                    repositorySection: nextRepositorySection,
-                  })
-                }
-                onGlobalPromptRoleTabChange={(nextGlobalPromptRoleTab) =>
-                  dispatch({
-                    type: "set_global_prompt_role_tab",
-                    globalPromptRoleTab: nextGlobalPromptRoleTab,
-                  })
-                }
-                onRepoPromptRoleTabChange={(nextRepoPromptRoleTab) =>
-                  dispatch({
-                    type: "set_repo_prompt_role_tab",
-                    repoPromptRoleTab: nextRepoPromptRoleTab,
-                  })
-                }
+                onRepositorySectionChange={setRepositorySection}
+                onGlobalPromptRoleTabChange={setGlobalPromptRoleTab}
+                onRepoPromptRoleTabChange={setRepoPromptRoleTab}
               />
             </div>
           </div>
@@ -180,7 +119,7 @@ export function SettingsModal({
           promptValidationState={controller.promptValidationState}
           repoScriptValidationErrorCount={controller.repoScriptValidationErrorCount}
           hasSnapshotDraft={Boolean(controller.snapshotDraft)}
-          onCancel={() => dispatch({ type: "set_open", open: false })}
+          onCancel={() => setOpen(false)}
           onSave={handleSave}
         />
       </DialogContent>

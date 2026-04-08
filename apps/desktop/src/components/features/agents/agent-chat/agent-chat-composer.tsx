@@ -147,6 +147,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             }
             options={modelOptions}
             groups={modelGroups}
+            matchAllSearchTerms
             className="w-[26rem] max-w-[min(90vw,34rem)] p-0"
             placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
             searchPlaceholder="Search model..."
