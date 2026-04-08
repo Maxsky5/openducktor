@@ -326,7 +326,7 @@ export class BeadsRuntimeClient {
       const beadsAttachmentDir = await this.ensureBeadsAttachmentDir();
       const status = this.beadsStoreFootprintExists(beadsAttachmentDir)
         ? await this.inspectAttachment(beadsAttachmentDir)
-        : { ready: false, reason: "bd init failed" };
+        : { ready: false, reason: "Beads attachment is missing" };
       if (!status.ready) {
         if (BeadsRuntimeClient.reasonRequiresSharedDatabaseSeed(status.reason)) {
           await this.materializeSharedDatabaseFromAttachment(beadsAttachmentDir);

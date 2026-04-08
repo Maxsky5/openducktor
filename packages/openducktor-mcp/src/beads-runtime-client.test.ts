@@ -23,11 +23,7 @@ const makeTempBeadsDir = (): string => {
 const sharedDoltRootFor = (beadsDir: string): string =>
   join(dirname(dirname(beadsDir)), "shared-server", "dolt");
 
-const writeAttachmentMetadata = (
-  beadsDir: string,
-  databaseName: string,
-  port = 3310,
-): void => {
+const writeAttachmentMetadata = (beadsDir: string, databaseName: string, port = 3310): void => {
   mkdirSync(beadsDir, { recursive: true });
   const payload: Record<string, unknown> = {
     backend: "dolt",

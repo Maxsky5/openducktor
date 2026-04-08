@@ -240,18 +240,72 @@ describe("openducktor-mcp lib", () => {
     }
   });
 
-  test("resolveStoreContext rejects missing shared-server contract values", async () => {
+  test("resolveStoreContext rejects missing attachment dir", async () => {
     const snapshot = takeEnvSnapshot();
     try {
       process.env.ODT_REPO_PATH = "undefined";
       process.env.ODT_METADATA_NAMESPACE = "null";
       process.env.ODT_BEADS_ATTACHMENT_DIR = "  ";
-      delete process.env.ODT_DOLT_HOST;
-      delete process.env.ODT_DOLT_PORT;
-      delete process.env.ODT_DATABASE_NAME;
+      process.env.ODT_DOLT_HOST = "127.0.0.1";
+      process.env.ODT_DOLT_PORT = "3310";
+      process.env.ODT_DATABASE_NAME = "odt_env_repo";
 
       await expect(resolveStoreContext({})).rejects.toThrow(
         "Missing Beads attachment directory for OpenDucktor MCP",
+      );
+    } finally {
+      restoreEnvSnapshot(snapshot);
+    }
+  });
+
+  test("resolveStoreContext rejects missing dolt host", async () => {
+    const snapshot = takeEnvSnapshot();
+    try {
+      process.env.ODT_REPO_PATH = "/tmp/env-repo";
+      process.env.ODT_METADATA_NAMESPACE = "env-ns";
+      process.env.ODT_BEADS_ATTACHMENT_DIR = "/tmp/env-beads";
+      delete process.env.ODT_DOLT_HOST;
+      process.env.ODT_DOLT_PORT = "3310";
+      process.env.ODT_DATABASE_NAME = "odt_env_repo";
+
+      await expect(resolveStoreContext({})).rejects.toThrow(
+        "Missing Dolt host for OpenDucktor MCP. Provide ODT_DOLT_HOST.",
+      );
+    } finally {
+      restoreEnvSnapshot(snapshot);
+    }
+  });
+
+  test("resolveStoreContext rejects missing dolt port", async () => {
+    const snapshot = takeEnvSnapshot();
+    try {
+      process.env.ODT_REPO_PATH = "/tmp/env-repo";
+      process.env.ODT_METADATA_NAMESPACE = "env-ns";
+      process.env.ODT_BEADS_ATTACHMENT_DIR = "/tmp/env-beads";
+      process.env.ODT_DOLT_HOST = "127.0.0.1";
+      delete process.env.ODT_DOLT_PORT;
+      process.env.ODT_DATABASE_NAME = "odt_env_repo";
+
+      await expect(resolveStoreContext({})).rejects.toThrow(
+        "Missing Dolt port for OpenDucktor MCP. Provide ODT_DOLT_PORT.",
+      );
+    } finally {
+      restoreEnvSnapshot(snapshot);
+    }
+  });
+
+  test("resolveStoreContext rejects missing database name", async () => {
+    const snapshot = takeEnvSnapshot();
+    try {
+      process.env.ODT_REPO_PATH = "/tmp/env-repo";
+      process.env.ODT_METADATA_NAMESPACE = "env-ns";
+      process.env.ODT_BEADS_ATTACHMENT_DIR = "/tmp/env-beads";
+      process.env.ODT_DOLT_HOST = "127.0.0.1";
+      process.env.ODT_DOLT_PORT = "3310";
+      delete process.env.ODT_DATABASE_NAME;
+
+      await expect(resolveStoreContext({})).rejects.toThrow(
+        "Missing Dolt database name for OpenDucktor MCP. Provide ODT_DATABASE_NAME.",
       );
     } finally {
       restoreEnvSnapshot(snapshot);

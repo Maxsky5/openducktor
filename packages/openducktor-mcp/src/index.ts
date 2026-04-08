@@ -76,7 +76,7 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
       continue;
     }
 
-    if (current === "--beads-dir" || current === "--beads-attachment-dir") {
+    if (current === "--beads-attachment-dir") {
       next.beadsAttachmentDir = value;
       index += 1;
       continue;
