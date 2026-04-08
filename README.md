@@ -151,11 +151,11 @@ Local config is stored at:
 
 - `$OPENDUCKTOR_CONFIG_DIR/config.json` (or `~/.openducktor/config.json`)
 
-Beads storage is managed centrally per repository in:
+OpenDucktor manages Beads and Dolt storage under:
 
 - `$OPENDUCKTOR_CONFIG_DIR/beads/` (or `~/.openducktor/beads/`)
 
-The app initializes and uses a central Beads directory for each repository. Existing repo-local `.beads` folders are not the V1 source of truth.
+Internally, OpenDucktor uses one shared Dolt server per config root and stores live Dolt databases under `$OPENDUCKTOR_CONFIG_DIR/beads/shared-server/dolt/`, with repo-specific Beads attachment state kept under the same managed root. Existing repo-local `.beads` folders are not the V1 source of truth.
 
 ## Contributing
 

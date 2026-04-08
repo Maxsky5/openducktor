@@ -2,6 +2,8 @@
 
 OpenDucktor MCP server for local repository task workflows.
 
+When OpenDucktor launches this MCP from the desktop app it injects the Beads attachment dir and shared Dolt connection details automatically. For standalone use, you must provide the same contract yourself.
+
 ## Usage
 
 ```json
@@ -9,7 +11,14 @@ OpenDucktor MCP server for local repository task workflows.
   "mcpServers": {
     "openducktor": {
       "command": "bunx",
-      "args": ["@openducktor/mcp", "--repo", "/absolute/path/to/repo"]
+      "args": [
+        "@openducktor/mcp",
+        "--repo", "/absolute/path/to/repo",
+        "--beads-attachment-dir", "/absolute/path/to/openducktor/beads/<repo-id>/.beads",
+        "--dolt-host", "127.0.0.1",
+        "--dolt-port", "3310",
+        "--database-name", "odt_repo_deadbeefcafe"
+      ]
     }
   }
 }
@@ -17,7 +26,10 @@ OpenDucktor MCP server for local repository task workflows.
 
 Optional arguments:
 
-- `--beads-dir <path>`
+- `--beads-attachment-dir <path>`
+- `--dolt-host <host>`
+- `--dolt-port <port>`
+- `--database-name <name>`
 - `--metadata-namespace <name>`
 
 ## Public Tools
