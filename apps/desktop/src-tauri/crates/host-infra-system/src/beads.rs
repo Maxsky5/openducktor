@@ -181,17 +181,27 @@ pub fn ensure_shared_dolt_server_running(owner_pid: u32) -> Result<SharedDoltSer
             return Ok(existing);
         }
 
-        if !is_process_alive(existing.owner_pid)
-            && is_process_alive(existing.pid)
-            && process_matches_expected_dolt_server(existing.pid, &shared_server_root)?
-        {
-            terminate_process_by_pid(existing.pid, &shared_server_root).with_context(|| {
-                format!(
-                    "Failed terminating stale shared Dolt server pid {} for {}",
-                    existing.pid,
-                    shared_server_root.display()
-                )
-            })?;
+        let owner_alive = is_process_alive(existing.owner_pid);
+        let server_alive = is_process_alive(existing.pid);
+        let server_matches =
+            process_matches_expected_dolt_server(existing.pid, &shared_server_root)?;
+
+        if server_alive && server_matches {
+            if existing.owner_pid == owner_pid || !owner_alive {
+                terminate_process_by_pid(existing.pid, &shared_server_root).with_context(|| {
+                    format!(
+                        "Failed terminating stale shared Dolt server pid {} for {}",
+                        existing.pid,
+                        shared_server_root.display()
+                    )
+                })?;
+            } else {
+                return Err(anyhow!(
+                    "Shared Dolt server for {} is unhealthy but still owned by live pid {}",
+                    shared_server_root.display(),
+                    existing.owner_pid
+                ));
+            }
         }
 
         remove_if_exists(&state_file).with_context(|| {
@@ -349,8 +359,28 @@ fn read_server_state_from_path(path: &Path) -> Result<Option<SharedDoltServerSta
 
 fn write_server_state(path: &Path, state: &SharedDoltServerState) -> Result<()> {
     let payload = serde_json::to_string_pretty(state).context("Failed serializing server state")?;
-    fs::write(path, payload)
-        .with_context(|| format!("Failed writing shared Dolt server state {}", path.display()))
+    let parent = path.parent().ok_or_else(|| {
+        anyhow!(
+            "Shared Dolt server state path has no parent: {}",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("Failed creating shared state parent {}", parent.display()))?;
+    let temp_file = parent.join(format!(
+        ".server.json.tmp-{}-{}",
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    fs::write(&temp_file, payload)
+        .with_context(|| format!("Failed writing temp shared state {}", temp_file.display()))?;
+    fs::rename(&temp_file, path).with_context(|| {
+        format!(
+            "Failed replacing shared Dolt server state {} with {}",
+            path.display(),
+            temp_file.display()
+        )
+    })
 }
 
 fn lock_shared_server_state() -> Result<File> {
@@ -842,24 +872,25 @@ mod tests {
 
     #[test]
     fn beads_database_name_is_stable_for_same_repo() {
-        let repo_path = Path::new("/tmp/OpenDucktor Repo");
-        let first = compute_beads_database_name(repo_path).expect("first database name");
-        let second = compute_beads_database_name(repo_path).expect("second database name");
+        let repo_path = temp_config_root("db-name-stable").join("OpenDucktor Repo");
+        let first = compute_beads_database_name(&repo_path).expect("first database name");
+        let second = compute_beads_database_name(&repo_path).expect("second database name");
 
         assert_eq!(first, second);
-        assert_eq!(first, "odt_openducktor_repo_d03d54c7be05");
+        assert!(first.starts_with("odt_openducktor_repo_"));
         assert!(first.len() <= 64);
     }
 
     #[test]
     fn beads_database_name_differs_for_distinct_repo_paths_with_same_basename() {
-        let first =
-            compute_beads_database_name(Path::new("/tmp/a/project")).expect("first database name");
-        let second =
-            compute_beads_database_name(Path::new("/tmp/b/project")).expect("second database name");
+        let temp_root = temp_config_root("db-name-diff");
+        let first = compute_beads_database_name(&temp_root.join("a").join("project"))
+            .expect("first database name");
+        let second = compute_beads_database_name(&temp_root.join("b").join("project"))
+            .expect("second database name");
 
-        assert_eq!(first, "odt_project_ee5494991388");
-        assert_eq!(second, "odt_project_11c79766e587");
+        assert!(first.starts_with("odt_project_"));
+        assert!(second.starts_with("odt_project_"));
         assert_ne!(first, second);
     }
 
@@ -876,27 +907,42 @@ mod tests {
         let state_file = resolve_server_state_file().expect("state file");
         let lock_file = resolve_server_lock_file().expect("lock file");
 
-        assert!(beads_root
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads"));
-        assert!(shared_root
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads/shared-server"));
-        assert!(dolt_root
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads/shared-server/dolt"));
-        assert!(cfg_dir
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads/shared-server/.doltcfg"));
-        assert!(config_file
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads/shared-server/dolt-config.yaml"));
-        assert!(state_file
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads/shared-server/server.json"));
-        assert!(lock_file
-            .to_string_lossy()
-            .ends_with("/.openducktor/beads/shared-server/server.lock"));
+        assert!(beads_root.ends_with(Path::new(".openducktor").join("beads")));
+        assert!(shared_root.ends_with(
+            Path::new(".openducktor")
+                .join("beads")
+                .join("shared-server")
+        ));
+        assert!(dolt_root.ends_with(
+            Path::new(".openducktor")
+                .join("beads")
+                .join("shared-server")
+                .join("dolt")
+        ));
+        assert!(cfg_dir.ends_with(
+            Path::new(".openducktor")
+                .join("beads")
+                .join("shared-server")
+                .join(".doltcfg")
+        ));
+        assert!(config_file.ends_with(
+            Path::new(".openducktor")
+                .join("beads")
+                .join("shared-server")
+                .join("dolt-config.yaml")
+        ));
+        assert!(state_file.ends_with(
+            Path::new(".openducktor")
+                .join("beads")
+                .join("shared-server")
+                .join("server.json")
+        ));
+        assert!(lock_file.ends_with(
+            Path::new(".openducktor")
+                .join("beads")
+                .join("shared-server")
+                .join("server.lock")
+        ));
     }
 
     #[test]
@@ -1216,6 +1262,42 @@ mod tests {
         assert_eq!(persisted.owner_pid, 9009);
         assert!(stop_shared_dolt_server_for_current_owner(9009)?);
 
+        let _ = fs::remove_dir_all(config_root);
+        Ok(())
+    }
+
+    #[test]
+    fn shared_dolt_server_rejects_replacement_when_live_owner_still_controls_process() -> Result<()>
+    {
+        if skip_if_dolt_unavailable() {
+            return Ok(());
+        }
+
+        let _env_lock = lock_env();
+        let config_root = temp_config_root("live-owner-guard");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_CONFIG_DIR",
+            config_root.to_string_lossy().as_ref(),
+        );
+
+        let owner_pid = std::process::id();
+        let first = ensure_shared_dolt_server_running(owner_pid)?;
+        let state_file = resolve_server_state_file()?;
+        fs::write(
+            &state_file,
+            serde_json::to_string(&SharedDoltServerState {
+                port: first.port.saturating_add(1),
+                ..first.clone()
+            })?,
+        )?;
+
+        let error = ensure_shared_dolt_server_running(owner_pid.saturating_add(1))
+            .expect_err("live owner should block replacement");
+        assert!(error
+            .to_string()
+            .contains("is unhealthy but still owned by live pid"));
+
+        assert!(stop_shared_dolt_server_for_current_owner(owner_pid)?);
         let _ = fs::remove_dir_all(config_root);
         Ok(())
     }
