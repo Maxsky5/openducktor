@@ -253,6 +253,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                     value={selectedModel}
                     options={modelOptions}
                     groups={modelGroups}
+                    searchMode="allTerms"
                     placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
                     disabled={modelDisabled}
                     className="w-full"

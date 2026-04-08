@@ -287,6 +287,7 @@ export function RepositoryAgentsSection({
                     value={modelKey}
                     options={modelOptions}
                     groups={modelGroups}
+                    searchMode="allTerms"
                     placeholder={isRoleCatalogLoading ? "Loading models..." : "Select model"}
                     disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
                     className={modelDropdownClassName}

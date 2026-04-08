@@ -27,14 +27,14 @@ export function TaskSelector({
     const entries = tasks.map((task) => ({
       value: task.id,
       label: `${task.id} · ${task.title}`,
-      searchKeywords: [task.title.toLowerCase(), task.issueType, ...task.labels],
+      searchText: task.title,
     }));
 
     if (!includeEmptyOption) {
       return entries;
     }
 
-    return [{ value: EMPTY_VALUE, label: emptyLabel, searchKeywords: ["none"] }, ...entries];
+    return [{ value: EMPTY_VALUE, label: emptyLabel, searchText: emptyLabel }, ...entries];
   }, [emptyLabel, includeEmptyOption, tasks]);
 
   return (
@@ -42,6 +42,7 @@ export function TaskSelector({
       value={value || EMPTY_VALUE}
       options={options}
       searchPlaceholder={searchPlaceholder}
+      searchMode="allTerms"
       disabled={disabled}
       onValueChange={(nextValue) => onValueChange(nextValue === EMPTY_VALUE ? "" : nextValue)}
     />

@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 export type ComboboxOption = {
   value: string;
   label: string;
+  searchText?: string;
   searchKeywords?: string[];
   description?: string;
   accentColor?: string;
@@ -43,6 +44,7 @@ type ComboboxProps = {
   wrapLabels?: boolean;
   wrapTriggerLabel?: boolean;
   wrapOptionLabels?: boolean;
+  searchMode?: "default" | "allTerms";
 };
 
 type RenderGroup = {
@@ -109,6 +111,29 @@ const comboboxOptionDescriptionVariants = cva("text-xs text-muted-foreground", {
     },
   },
 });
+
+const normalizeSearchTerms = (query: string): string[] => {
+  return query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+};
+
+const getOptionSearchText = (option: ComboboxOption): string => {
+  return (
+    option.searchText ?? [option.label, ...(option.searchKeywords ?? [])].join(" ")
+  ).toLowerCase();
+};
+
+const matchesAllTerms = (option: ComboboxOption, searchTerms: string[]): boolean => {
+  if (searchTerms.length === 0) {
+    return true;
+  }
+
+  const searchText = getOptionSearchText(option);
+  return searchTerms.every((term) => searchText.includes(term));
+};
 
 function ComboboxOptionLabel({
   option,
@@ -184,12 +209,16 @@ export function Combobox({
   wrapLabels = false,
   wrapTriggerLabel,
   wrapOptionLabels,
+  searchMode = "default",
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const commandListRef = useRef<HTMLDivElement | null>(null);
 
   const shouldWrapTriggerLabel = wrapLabels || wrapTriggerLabel === true;
   const shouldWrapOptionLabels = wrapLabels || wrapOptionLabels === true;
+  const searchTerms = useMemo(() => normalizeSearchTerms(searchQuery), [searchQuery]);
 
   const resolvedOptions = useMemo(() => {
     if (!groups || groups.length === 0) {
@@ -211,6 +240,25 @@ export function Combobox({
   );
 
   const groupsToRender = useMemo<RenderGroup[]>(() => {
+    if (searchMode === "allTerms") {
+      if (resolvedGroups) {
+        return resolvedGroups
+          .map((group, groupIndex) => ({
+            key: `${group.label}:${groupIndex}`,
+            label: group.label,
+            options: group.options.filter((option) => matchesAllTerms(option, searchTerms)),
+          }))
+          .filter((group) => group.options.length > 0);
+      }
+
+      return [
+        {
+          key: "__ungrouped__",
+          options: resolvedOptions.filter((option) => matchesAllTerms(option, searchTerms)),
+        },
+      ];
+    }
+
     if (resolvedGroups) {
       return resolvedGroups.map((group, groupIndex) => ({
         key: `${group.label}:${groupIndex}`,
@@ -219,8 +267,8 @@ export function Combobox({
       }));
     }
 
-    return [{ key: "__ungrouped__", options }];
-  }, [resolvedGroups, options]);
+    return [{ key: "__ungrouped__", options: resolvedOptions }];
+  }, [resolvedGroups, resolvedOptions, searchMode, searchTerms]);
 
   useEffect(() => {
     const nextPortalContainer =
@@ -230,6 +278,31 @@ export function Combobox({
 
     setPortalContainer(nextPortalContainer);
   }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    setSearchQuery("");
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const list = commandListRef.current;
+    if (!list) {
+      return;
+    }
+
+    if (list.scrollTop === 0 && searchQuery.length === 0) {
+      return;
+    }
+
+    list.scrollTop = 0;
+  }, [open, searchQuery]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -258,9 +331,13 @@ export function Combobox({
         portalContainer={portalContainer}
         className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
       >
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
+        <Command shouldFilter={searchMode !== "allTerms"}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+          />
+          <CommandList ref={commandListRef}>
             <CommandEmpty>{emptyText}</CommandEmpty>
             {groupsToRender.map((group) => (
               <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>
