@@ -80,8 +80,10 @@ mod tests {
     use serde_json::Value;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use tokio::sync::Notify;
 
     struct TestStateFixture {
         state: HeadlessState,
@@ -121,6 +123,8 @@ mod tests {
                 events: HeadlessEventBus::new(1),
                 dev_server_events: HeadlessEventBus::new(1),
                 registry: Arc::new(registry),
+                shutdown_signal: Arc::new(Notify::new()),
+                shutdown_started: Arc::new(AtomicBool::new(false)),
             },
             root,
         }

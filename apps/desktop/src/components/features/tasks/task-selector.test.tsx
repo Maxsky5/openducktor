@@ -45,19 +45,19 @@ describe("TaskSelector", () => {
       fireEvent.input(input, { target: { value: "TASK-123" } });
     });
 
-    expect(screen.queryByText(/TASK-123/)).toBeNull();
+    expect(screen.getByText("No option found.")).toBeTruthy();
 
     await act(async () => {
       fireEvent.input(input, { target: { value: "bug" } });
     });
 
-    expect(screen.queryByText(/TASK-123/)).toBeNull();
+    expect(screen.getByText("No option found.")).toBeTruthy();
 
     await act(async () => {
       fireEvent.input(input, { target: { value: "frontend" } });
     });
 
-    expect(screen.queryByText(/TASK-123/)).toBeNull();
+    expect(screen.getByText("No option found.")).toBeTruthy();
 
     await act(async () => {
       fireEvent.input(input, { target: { value: "GPT-5.4 dropdown" } });

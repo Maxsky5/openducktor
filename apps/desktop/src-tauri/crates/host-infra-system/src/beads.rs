@@ -633,7 +633,7 @@ fn terminate_process_by_pid(pid: u32, expected_shared_server_root: &Path) -> Res
             }
             wait_for_process_exit(pid, Duration::from_secs(2));
         }
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(unix))]
