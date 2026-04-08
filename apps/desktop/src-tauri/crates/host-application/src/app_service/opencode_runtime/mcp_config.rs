@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{parse_user_path, resolve_central_beads_dir, resolve_command_path};
+use host_infra_system::{
+    compute_beads_database_name, ensure_shared_dolt_server_running, parse_user_path,
+    resolve_command_path, resolve_repo_beads_attachment_dir,
+};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
@@ -139,7 +142,9 @@ pub(crate) fn build_opencode_config_content(
     metadata_namespace: &str,
 ) -> Result<String> {
     let mcp_command = resolve_mcp_command()?;
-    let beads_dir = resolve_central_beads_dir(repo_path_for_mcp)?;
+    let beads_attachment_dir = resolve_repo_beads_attachment_dir(repo_path_for_mcp)?;
+    let database_name = compute_beads_database_name(repo_path_for_mcp)?;
+    let server = ensure_shared_dolt_server_running(std::process::id())?;
     let config = json!({
         "logLevel": "INFO",
         "mcp": {
@@ -149,7 +154,10 @@ pub(crate) fn build_opencode_config_content(
                 "command": mcp_command,
                 "environment": {
                     "ODT_REPO_PATH": repo_path_for_mcp.to_string_lossy().to_string(),
-                    "ODT_BEADS_DIR": beads_dir.to_string_lossy().to_string(),
+                    "ODT_BEADS_ATTACHMENT_DIR": beads_attachment_dir.to_string_lossy().to_string(),
+                    "ODT_DOLT_HOST": server.host,
+                    "ODT_DOLT_PORT": server.port.to_string(),
+                    "ODT_DATABASE_NAME": database_name,
                     "ODT_METADATA_NAMESPACE": metadata_namespace,
                 }
             }

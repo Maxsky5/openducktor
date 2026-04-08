@@ -1503,6 +1503,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dirs",
+ "fs2",
  "host-domain",
  "host-test-support",
  "libc",

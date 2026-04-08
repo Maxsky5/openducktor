@@ -11,7 +11,8 @@ use host_domain::{
     UpdateTaskPatch,
 };
 use host_infra_system::{
-    compute_beads_database_name, compute_repo_slug, resolve_central_beads_dir,
+    compute_beads_database_name, compute_repo_slug, resolve_repo_beads_attachment_dir,
+    resolve_repo_beads_attachment_root, resolve_shared_dolt_root,
 };
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -37,6 +38,7 @@ struct RecordedCall {
     kind: CallKind,
     program: String,
     args: Vec<String>,
+    cwd: Option<String>,
     env: Vec<(String, String)>,
 }
 
@@ -98,6 +100,7 @@ impl MockCommandRunner {
                 kind,
                 program: program.to_string(),
                 args: args.iter().map(|entry| (*entry).to_string()).collect(),
+                cwd: _cwd.map(|path| path.display().to_string()),
                 env: env
                     .iter()
                     .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
@@ -106,7 +109,19 @@ impl MockCommandRunner {
     }
 }
 
+fn assert_attachment_root_cwd(call: &RecordedCall, repo_path: &Path) {
+    let expected = resolve_repo_beads_attachment_root(repo_path)
+        .expect("expected attachment root")
+        .display()
+        .to_string();
+    assert_eq!(call.cwd.as_deref(), Some(expected.as_str()));
+}
+
 impl CommandRunner for MockCommandRunner {
+    fn uses_real_processes(&self) -> bool {
+        false
+    }
+
     fn run_with_env(
         &self,
         program: &str,
@@ -165,7 +180,7 @@ impl RepoFixture {
 
 impl Drop for RepoFixture {
     fn drop(&mut self) {
-        if let Ok(beads_dir) = resolve_central_beads_dir(&self.path) {
+        if let Ok(beads_dir) = resolve_repo_beads_attachment_dir(&self.path) {
             if let Some(parent) = beads_dir.parent() {
                 let _ = fs::remove_dir_all(parent);
             }
@@ -225,24 +240,107 @@ fn assert_beads_env(call: &RecordedCall) {
         !beads_dir_entry.1.trim().is_empty(),
         "BEADS_DIR must be set"
     );
+    assert!(call
+        .env
+        .iter()
+        .any(|(key, value)| key == "BEADS_DOLT_SERVER_MODE" && value == "1"));
+    assert!(call
+        .env
+        .iter()
+        .any(|(key, value)| key == "BEADS_DOLT_SERVER_HOST" && value == "127.0.0.1"));
+    assert!(call
+        .env
+        .iter()
+        .any(|(key, value)| key == "BEADS_DOLT_SERVER_PORT" && !value.trim().is_empty()));
+    assert!(call
+        .env
+        .iter()
+        .any(|(key, value)| key == "BEADS_DOLT_SERVER_USER" && value == "root"));
 }
 
 fn assert_init_args(call: &RecordedCall, repo_path: &Path, beads_dir: &Path) {
     let expected_slug = compute_repo_slug(repo_path);
-    let expected_database =
-        compute_beads_database_name(repo_path, beads_dir).expect("expected database name");
+    let expected_database = compute_beads_database_name(repo_path).expect("expected database name");
+    let port = call
+        .env
+        .iter()
+        .find(|(key, _)| key == "BEADS_DOLT_SERVER_PORT")
+        .map(|(_, value)| value.clone())
+        .expect("expected BEADS_DOLT_SERVER_PORT");
     assert_eq!(
         call.args,
         vec![
             "init".to_string(),
+            "--server".to_string(),
+            "--server-host".to_string(),
+            "127.0.0.1".to_string(),
+            "--server-port".to_string(),
+            port,
+            "--server-user".to_string(),
+            "root".to_string(),
             "--quiet".to_string(),
             "--skip-hooks".to_string(),
+            "--skip-agents".to_string(),
             "--prefix".to_string(),
             expected_slug,
             "--database".to_string(),
             expected_database,
         ]
     );
+    assert!(beads_dir.ends_with(".beads"));
+}
+
+fn assert_dolt_backup_restore_args(call: &RecordedCall, repo_path: &Path, beads_dir: &Path) {
+    let database_name = compute_beads_database_name(repo_path).expect("expected database name");
+    assert_eq!(
+        call.args,
+        vec![
+            "backup".to_string(),
+            "restore".to_string(),
+            format!("file://{}/backup", beads_dir.display()),
+            database_name,
+        ]
+    );
+    let expected_cwd = resolve_shared_dolt_root()
+        .expect("expected shared dolt root")
+        .display()
+        .to_string();
+    assert_eq!(call.cwd.as_deref(), Some(expected_cwd.as_str()));
+    assert!(call.env.is_empty());
+}
+
+fn write_attachment_metadata(beads_dir: &Path, repo_path: &Path, port: u16) {
+    fs::create_dir_all(beads_dir).expect("beads dir should be writable");
+    let database_name = compute_beads_database_name(repo_path).expect("expected database name");
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": port,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )
+    .expect("metadata.json should be writable");
+}
+
+fn write_legacy_attachment_metadata(beads_dir: &Path, repo_path: &Path) {
+    fs::create_dir_all(beads_dir).expect("beads dir should be writable");
+    let database_name = compute_beads_database_name(repo_path).expect("expected database name");
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_database": database_name,
+            "project_id": "legacy-project-id",
+        })
+        .to_string(),
+    )
+    .expect("legacy metadata.json should be writable");
 }
 
 fn make_session(session_id: &str, started_at: &str) -> AgentSessionDocument {
@@ -349,13 +447,14 @@ fn run_bd_json_parse_errors_do_not_include_raw_output() {
 fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()> {
     let repo = RepoFixture::new("where-parse-redaction");
     let sensitive = "secret-path";
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
     let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
         true,
         format!("invalid-json-{sensitive}"),
         String::new(),
     )))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
-    let beads_dir = resolve_central_beads_dir(repo.path())?;
 
     let error = store
         .verify_repo_initialized(repo.path(), &beads_dir)
@@ -369,6 +468,8 @@ fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()
 #[test]
 fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
     let repo = RepoFixture::new("where-json-error");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
     let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
         false,
         json!({
@@ -378,7 +479,6 @@ fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
         String::new(),
     )))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
-    let beads_dir = resolve_central_beads_dir(repo.path())?;
 
     let (is_ready, reason) = store.verify_repo_initialized(repo.path(), &beads_dir)?;
     assert!(!is_ready);
@@ -641,28 +741,24 @@ fn metadata_parsing_benchmark_scaffold() {
 #[test]
 fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     let repo = RepoFixture::new("init-ready");
-    let beads_dir = resolve_central_beads_dir(repo.path())?;
-    fs::create_dir_all(&beads_dir).expect("beads dir should be writable");
-    fs::write(beads_dir.join("beads.db"), "ready").expect("beads.db should be writable");
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((
-            true,
-            json!({
-                "path": beads_dir,
-                "prefix": "openducktor"
-            })
-            .to_string(),
-            String::new(),
-        ))),
-        MockStep::WithEnv(Ok("Dolt server started".to_string())),
-    ]);
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
+        true,
+        json!({
+            "path": beads_dir,
+            "prefix": "openducktor"
+        })
+        .to_string(),
+        String::new(),
+    )))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 2);
+    assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[0].args,
@@ -672,49 +768,64 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
             .collect::<Vec<_>>()
     );
     assert_beads_env(&calls[0]);
-    assert_eq!(calls[1].kind, CallKind::WithEnv);
-    assert_eq!(
-        calls[1].args,
-        vec!["dolt", "start"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-    );
-    assert_beads_env(&calls[1]);
+    assert_attachment_root_cwd(&calls[0], repo.path());
+    Ok(())
+}
+
+#[test]
+fn verify_repo_initialized_accepts_legacy_attachment_metadata() -> Result<()> {
+    let repo = RepoFixture::new("legacy-metadata");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    write_legacy_attachment_metadata(&beads_dir, repo.path());
+    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
+        true,
+        json!({
+            "path": beads_dir,
+            "prefix": "openducktor"
+        })
+        .to_string(),
+        String::new(),
+    )))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let (is_ready, reason) = store.verify_repo_initialized(repo.path(), &beads_dir)?;
+
+    assert!(is_ready);
+    assert!(reason.is_empty());
     Ok(())
 }
 
 #[test]
 fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Result<()> {
     let repo = RepoFixture::new("init-path");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let runner = MockCommandRunner::with_steps(vec![
         MockStep::AllowFailureWithEnv(Ok((true, String::new(), String::new()))),
         MockStep::AllowFailureWithEnv(Ok((
             true,
             json!({
-                "path": "/tmp/central/.beads",
+                "path": beads_dir,
                 "prefix": "openducktor"
             })
             .to_string(),
             String::new(),
         ))),
-        MockStep::WithEnv(Ok("Dolt server started".to_string())),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
 
-    let beads_dir = resolve_central_beads_dir(repo.path())?;
-    fs::create_dir_all(beads_dir.join("dolt")).expect("dolt directory should be writable");
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
 
     store.ensure_repo_initialized(repo.path())?;
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 2);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_init_args(&calls[0], repo.path(), &beads_dir);
     assert_beads_env(&calls[0]);
+    assert_attachment_root_cwd(&calls[0], repo.path());
     assert_eq!(calls[1].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[1].args,
@@ -724,23 +835,15 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
             .collect::<Vec<_>>()
     );
     assert_beads_env(&calls[1]);
-    assert_eq!(calls[2].kind, CallKind::WithEnv);
-    assert_eq!(
-        calls[2].args,
-        vec!["dolt", "start"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-    );
-    assert_beads_env(&calls[2]);
+    assert_attachment_root_cwd(&calls[1], repo.path());
     Ok(())
 }
 
 #[test]
 fn ensure_repo_initialized_repairs_unready_store_footprint() -> Result<()> {
     let repo = RepoFixture::new("init-repair-footprint");
-    let beads_dir = resolve_central_beads_dir(repo.path())?;
-    fs::create_dir_all(&beads_dir).expect("beads dir should be writable");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
     fs::write(beads_dir.join("beads.db"), "stale").expect("beads.db should be writable");
     let runner = MockCommandRunner::with_steps(vec![
         MockStep::AllowFailureWithEnv(Ok((
@@ -761,14 +864,13 @@ fn ensure_repo_initialized_repairs_unready_store_footprint() -> Result<()> {
             .to_string(),
             String::new(),
         ))),
-        MockStep::WithEnv(Ok("Dolt server started".to_string())),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 4);
+    assert_eq!(calls.len(), 3);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[0].args,
@@ -793,19 +895,83 @@ fn ensure_repo_initialized_repairs_unready_store_footprint() -> Result<()> {
             .map(str::to_string)
             .collect::<Vec<_>>()
     );
-    assert_eq!(calls[3].kind, CallKind::WithEnv);
-    assert_eq!(
-        calls[3].args,
-        vec!["dolt", "start"]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-    );
     assert_beads_env(&calls[0]);
     assert_beads_env(&calls[1]);
     assert_beads_env(&calls[2]);
-    assert_beads_env(&calls[3]);
+    assert_attachment_root_cwd(&calls[0], repo.path());
+    assert_attachment_root_cwd(&calls[1], repo.path());
+    assert_attachment_root_cwd(&calls[2], repo.path());
     Ok(())
+}
+
+#[test]
+fn ensure_repo_initialized_bootstraps_when_database_is_missing() -> Result<()> {
+    let repo = RepoFixture::new("init-bootstrap-missing-db");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    write_legacy_attachment_metadata(&beads_dir, repo.path());
+    fs::create_dir_all(beads_dir.join("backup"))?;
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((
+            false,
+            String::new(),
+            format!(
+                "Warning: attachment metadata uses legacy layout\n{}",
+                json!({
+                    "error": "failed to open database: database \"odt_fairnest_deadbeef\" not found on Dolt server at 127.0.0.1:3307"
+                })
+            ),
+        ))),
+        MockStep::WithEnv(Ok("shared database restored".to_string())),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    store.ensure_repo_initialized(repo.path())?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(calls[1].kind, CallKind::WithEnv);
+    assert_eq!(calls[2].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(calls[0].args, vec!["where", "--json"]);
+    assert_dolt_backup_restore_args(&calls[1], repo.path(), &beads_dir);
+    assert_eq!(calls[2].args, vec!["where", "--json"]);
+    assert_beads_env(&calls[0]);
+    assert_beads_env(&calls[2]);
+    assert_attachment_root_cwd(&calls[0], repo.path());
+    assert_attachment_root_cwd(&calls[2], repo.path());
+    Ok(())
+}
+
+#[test]
+fn ensure_repo_initialized_errors_when_database_missing_without_backup() {
+    let repo = RepoFixture::new("init-missing-db-no-backup");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path()).expect("expected beads dir");
+    write_legacy_attachment_metadata(&beads_dir, repo.path());
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((
+            false,
+            String::new(),
+            json!({
+                "error": "failed to open database: database \"odt_fairnest_deadbeef\" not found on Dolt server at 127.0.0.1:3307"
+            })
+            .to_string(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .ensure_repo_initialized(repo.path())
+        .expect_err("missing shared database without backup should fail");
+    assert!(error.to_string().contains("no attachment backup exists"));
 }
 
 #[test]
@@ -826,40 +992,16 @@ fn ensure_repo_initialized_returns_error_when_init_fails() {
 }
 
 #[test]
-fn ensure_repo_initialized_returns_error_when_dolt_start_fails() {
-    let repo = RepoFixture::new("dolt-start-fails");
-    let beads_dir = resolve_central_beads_dir(repo.path()).expect("expected beads dir");
-    fs::create_dir_all(&beads_dir).expect("beads dir should be writable");
-    fs::write(beads_dir.join("beads.db"), "ready").expect("beads.db should be writable");
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((
-            true,
-            json!({
-                "path": beads_dir,
-                "prefix": "openducktor"
-            })
-            .to_string(),
-            String::new(),
-        ))),
-        MockStep::WithEnv(Err("port already in use".to_string())),
-    ]);
-    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
-
-    let error = store
-        .ensure_repo_initialized(repo.path())
-        .expect_err("dolt start should fail");
-    assert!(error.to_string().contains("Failed to start Dolt server"));
-}
-
-#[test]
 fn ensure_repo_initialized_errors_when_verification_is_still_not_ready() {
     let repo = RepoFixture::new("init-malformed");
-    let beads_dir = resolve_central_beads_dir(repo.path()).expect("expected beads dir");
-    fs::create_dir_all(&beads_dir).expect("beads dir should be writable");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path()).expect("expected beads dir");
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
     fs::write(beads_dir.join("beads.db"), "stale").expect("beads.db should be writable");
     let runner = MockCommandRunner::with_steps(vec![
         MockStep::AllowFailureWithEnv(Ok((false, String::new(), "bd where failed".to_string()))),
         MockStep::WithEnv(Ok("doctor fixed".to_string())),
+        MockStep::AllowFailureWithEnv(Ok((true, "{}".to_string(), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((true, String::new(), String::new()))),
         MockStep::AllowFailureWithEnv(Ok((true, "{}".to_string(), String::new()))),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
@@ -869,7 +1011,7 @@ fn ensure_repo_initialized_errors_when_verification_is_still_not_ready() {
         .expect_err("init should fail when store remains unready");
     assert!(error
         .to_string()
-        .contains("Failed to repair existing Beads store"));
+        .contains("Beads init completed but store is not ready"));
 }
 
 #[test]

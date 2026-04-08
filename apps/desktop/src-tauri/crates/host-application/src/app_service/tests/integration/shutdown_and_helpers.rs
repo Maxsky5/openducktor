@@ -991,5 +991,8 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
     let env = &parsed["mcp"]["openducktor"]["environment"];
     assert_eq!(env["ODT_REPO_PATH"].as_str(), Some("/tmp/openducktor-repo"));
     assert_eq!(env["ODT_METADATA_NAMESPACE"].as_str(), Some("odt-ns"));
-    assert!(env["ODT_BEADS_DIR"].as_str().is_some());
+    assert!(env["ODT_BEADS_ATTACHMENT_DIR"].as_str().is_some());
+    assert_eq!(env["ODT_DOLT_HOST"].as_str(), Some("127.0.0.1"));
+    assert!(env["ODT_DOLT_PORT"].as_str().is_some());
+    assert!(env["ODT_DATABASE_NAME"].as_str().is_some());
 }

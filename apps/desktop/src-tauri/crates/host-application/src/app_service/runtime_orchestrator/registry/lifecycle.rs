@@ -4,6 +4,7 @@ use super::super::super::{
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, RuntimeInstanceSummary};
+use host_infra_system::stop_shared_dolt_server_for_current_owner;
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::MutexGuard;
@@ -202,6 +203,12 @@ impl AppService {
                 }
             }
             Err(_) => cleanup_errors.push("Agent runtime state lock poisoned".to_string()),
+        }
+
+        if let Err(error) = stop_shared_dolt_server_for_current_owner(self.instance_pid) {
+            cleanup_errors.push(format!(
+                "Failed shutting down shared Dolt server: {error:#}"
+            ));
         }
 
         if cleanup_errors.is_empty() {

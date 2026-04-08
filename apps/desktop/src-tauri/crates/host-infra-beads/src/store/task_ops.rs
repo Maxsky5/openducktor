@@ -3,6 +3,14 @@ use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
 impl BeadsTaskStore {
+    fn reason_requires_shared_database_seed(reason: &str) -> bool {
+        let normalized = reason.to_ascii_lowercase();
+        normalized.contains("not found on dolt server")
+            || normalized.contains("server not reachable")
+            || normalized.contains("dolt server unreachable")
+            || normalized.contains("error 1049")
+    }
+
     fn append_raw_issue_list(
         &self,
         value: serde_json::Value,
@@ -49,7 +57,7 @@ impl BeadsTaskStore {
     }
 
     fn beads_store_footprint_exists(beads_dir: &Path) -> bool {
-        beads_dir.join("dolt").exists() || beads_dir.join("beads.db").exists()
+        beads_dir.join("metadata.json").exists() || beads_dir.join("beads.db").exists()
     }
 
     fn task_status_requires_custom_configuration(status: &TaskStatus) -> bool {
@@ -62,17 +70,55 @@ impl BeadsTaskStore {
         )
     }
 
-    fn ensure_existing_store_is_ready(&self, repo_path: &Path, beads_dir: &Path) -> Result<()> {
-        self.repair_repo_store(repo_path)?;
+    fn ensure_existing_store_is_ready(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        reason: &str,
+    ) -> Result<()> {
+        if Self::reason_requires_shared_database_seed(reason) {
+            self.materialize_shared_database_from_attachment(repo_path, beads_dir)?;
+        } else {
+            self.repair_repo_store(repo_path)?;
+        }
+
         let (is_ready_after_repair, reason_after_repair) =
             self.verify_repo_initialized(repo_path, beads_dir)?;
         if !is_ready_after_repair {
+            self.ensure_new_store_is_ready(repo_path, beads_dir, &reason_after_repair)?;
+        }
+        Ok(())
+    }
+
+    fn materialize_shared_database_from_attachment(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+    ) -> Result<()> {
+        let backup_dir = beads_dir.join("backup");
+        if !backup_dir.is_dir() {
             return Err(anyhow!(
-                "Failed to repair existing Beads store at {}: {}",
+                "Shared Dolt database is missing for {} and no attachment backup exists at {}",
                 beads_dir.display(),
-                reason_after_repair
+                backup_dir.display()
             ));
         }
+
+        let database_name = compute_beads_database_name(repo_path)?;
+        let shared_dolt_root = resolve_shared_dolt_root()?;
+        let backup_url = format!("file://{}", backup_dir.display());
+        self.command_runner.run_with_env(
+            "dolt",
+            &[
+                "backup",
+                "restore",
+                backup_url.as_str(),
+                database_name.as_str(),
+            ],
+            Some(&shared_dolt_root),
+            &[],
+        )?;
+
         Ok(())
     }
 
@@ -83,21 +129,38 @@ impl BeadsTaskStore {
         init_failure_reason: &str,
     ) -> Result<()> {
         let slug = compute_repo_slug(repo_path);
-        let database_name = compute_beads_database_name(repo_path, beads_dir)?;
-        let beads_dir_env = beads_dir.to_string_lossy().to_string();
+        let database_name = compute_beads_database_name(repo_path)?;
+        let env = self.build_bd_env(repo_path, true)?;
+        let env_refs = env
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect::<Vec<_>>();
+        let server_port = env
+            .iter()
+            .find_map(|(key, value)| (key == "BEADS_DOLT_SERVER_PORT").then_some(value.as_str()))
+            .ok_or_else(|| anyhow!("Missing BEADS_DOLT_SERVER_PORT while initializing repo"))?;
+        let working_dir = self.ensure_beads_working_dir(repo_path)?;
         let (ok, _stdout, stderr) = self.command_runner.run_allow_failure_with_env(
             "bd",
             &[
                 "init",
+                "--server",
+                "--server-host",
+                "127.0.0.1",
+                "--server-port",
+                server_port,
+                "--server-user",
+                "root",
                 "--quiet",
                 "--skip-hooks",
+                "--skip-agents",
                 "--prefix",
                 slug.as_str(),
                 "--database",
                 database_name.as_str(),
             ],
-            Some(repo_path),
-            &[("BEADS_DIR", beads_dir_env.as_str())],
+            Some(&working_dir),
+            &env_refs,
         )?;
 
         if !ok {
@@ -133,11 +196,14 @@ impl BeadsTaskStore {
             .lock()
             .map_err(|_| anyhow!("Beads repo lock poisoned"))?;
 
-        let beads_dir = resolve_central_beads_dir(repo_path)?;
+        let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
         let store_exists = Self::beads_store_footprint_exists(&beads_dir);
         if self.is_repo_cached_initialized(&repo_key)? && store_exists {
+            self.ensure_dolt_server_running(repo_path)?;
             return Ok(());
         }
+
+        self.ensure_dolt_server_running(repo_path)?;
 
         let (is_ready, reason) = if store_exists {
             self.verify_repo_initialized(repo_path, &beads_dir)?
@@ -147,13 +213,12 @@ impl BeadsTaskStore {
 
         if !is_ready {
             if store_exists {
-                self.ensure_existing_store_is_ready(repo_path, &beads_dir)?;
+                self.ensure_existing_store_is_ready(repo_path, &beads_dir, &reason)?;
             } else {
                 self.ensure_new_store_is_ready(repo_path, &beads_dir, &reason)?;
             }
         }
 
-        self.ensure_dolt_server_running(repo_path)?;
         self.mark_repo_initialized(&repo_key)?;
         Ok(())
     }
