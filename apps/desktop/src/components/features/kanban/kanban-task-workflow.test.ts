@@ -89,6 +89,19 @@ describe("resolveTaskCardActions", () => {
     expect(result.secondaryActions).toContain("reset_implementation");
   });
 
+  test("keeps reset implementation available for blocked tasks", () => {
+    const task = createTaskCardFixture({
+      status: "blocked",
+      issueType: "task",
+      availableActions: ["open_builder", "reset_implementation"],
+    });
+
+    const result = resolveTaskCardActions(task);
+
+    expect(result.primaryAction).toBe("open_builder");
+    expect(result.secondaryActions).toEqual(["reset_implementation"]);
+  });
+
   test("uses qa_start as primary during ai review when available", () => {
     const task = createTaskCardFixture({
       status: "ai_review",

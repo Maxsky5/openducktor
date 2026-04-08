@@ -180,7 +180,10 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
 
     if matches!(
         task.status,
-        TaskStatus::InProgress | TaskStatus::AiReview | TaskStatus::HumanReview
+        TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
     ) {
         actions.push(TaskAction::ResetImplementation);
     }

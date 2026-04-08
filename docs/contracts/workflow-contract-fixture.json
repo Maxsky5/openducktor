@@ -88,5 +88,6 @@
     "task": ["open", "spec_ready", "ready_for_dev"],
     "bug": ["open", "spec_ready", "ready_for_dev"]
   },
+  "resetImplementationAllowedStatuses": ["in_progress", "blocked", "ai_review", "human_review"],
   "epicSubtaskReplacementAllowedStatuses": ["open", "spec_ready", "ready_for_dev"]
 }

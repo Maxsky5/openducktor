@@ -194,13 +194,16 @@ pub(super) fn derive_reset_implementation_status(task: &TaskCard) -> TaskStatus 
 pub(super) fn ensure_task_reset_status_allowed(task: &TaskCard) -> Result<()> {
     if matches!(
         task.status,
-        TaskStatus::InProgress | TaskStatus::AiReview | TaskStatus::HumanReview
+        TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
     ) {
         return Ok(());
     }
 
     Err(anyhow!(
-        "Implementation reset is only allowed from in_progress, ai_review, or human_review (current: {}).",
+        "Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: {}).",
         task.status.as_cli_value()
     ))
 }

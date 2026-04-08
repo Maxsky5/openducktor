@@ -19,6 +19,7 @@ The backend is the single source of truth for which actions are currently allowe
 - `set_plan`
 - `build_start`
 - `open_builder`
+- `reset_implementation`
 - `qa_start`
 - `open_qa`
 - `defer_issue`
@@ -49,6 +50,18 @@ The backend is the single source of truth for which actions are currently allowe
 ### `open_builder`
 - Purpose: open existing builder context/run UX.
 - Transition: none.
+
+### `reset_implementation`
+- Purpose: discard the current implementation attempt and clean up task-owned build/QA state.
+- Transition: `in_progress`, `blocked`, `ai_review`, or `human_review` -> derived rollback target.
+- Rollback target:
+  - `ready_for_dev` when an implementation plan document is retained.
+  - `spec_ready` when only a spec document is retained.
+  - `open` when neither document is retained.
+- Guardrails:
+  - reject while live build or QA activity still exists for the task.
+  - fail if task-owned branch cleanup is unsafe, including checked-out branches.
+  - preserve retained spec and plan documents.
 
 ### `qa_start`
 - Purpose: request or start a QA review loop for the current task state.
@@ -90,6 +103,7 @@ Current card/detail primary+menu rendering uses workflow actions:
 - `set_plan`
 - `build_start`
 - `open_builder`
+- `reset_implementation`
 - `qa_start`
 - `open_qa`
 - `defer_issue`

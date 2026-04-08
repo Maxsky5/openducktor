@@ -407,6 +407,15 @@ fn human_review_tasks_expose_qa_start_and_request_changes() {
 }
 
 #[test]
+fn blocked_tasks_expose_builder_and_reset_implementation_actions() {
+    let task = make_task("task-1", "task", TaskStatus::Blocked);
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+    assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(actions.contains(&TaskAction::ResetImplementation));
+    assert!(!actions.contains(&TaskAction::BuildStart));
+}
+
+#[test]
 fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev() -> Result<()>
 {
     let repo_path = unique_temp_path("reset-implementation-repo");
@@ -419,7 +428,7 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
     fs::create_dir_all(&build_worktree)?;
     fs::create_dir_all(&qa_worktree)?;
 
-    let mut task = make_task("task-1", "task", TaskStatus::AiReview);
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
     task.document_summary.spec.has = true;
     task.document_summary.plan.has = true;
     task.document_summary.qa_report.has = true;
@@ -657,13 +666,19 @@ fn task_reset_implementation_uses_document_presence_for_rollback_target() -> Res
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
 
+    let mut ready_for_dev = make_task("task-ready", "task", TaskStatus::Blocked);
+    ready_for_dev.document_summary.spec.has = true;
+    ready_for_dev.document_summary.plan.has = true;
+
     let mut spec_ready = make_task("task-spec", "task", TaskStatus::InProgress);
     spec_ready.document_summary.spec.has = true;
 
-    let open = make_task("task-open", "task", TaskStatus::HumanReview);
+    let mut open = make_task("task-open", "task", TaskStatus::HumanReview);
+    spec_ready.status = TaskStatus::Blocked;
+    open.status = TaskStatus::Blocked;
 
     let (service, _task_state, _git_state) = build_service_with_git_state(
-        vec![spec_ready, open],
+        vec![ready_for_dev, spec_ready, open],
         Vec::new(),
         host_domain::GitCurrentBranch {
             name: Some("main".to_string()),
@@ -678,11 +693,14 @@ fn task_reset_implementation_uses_document_presence_for_rollback_target() -> Res
     };
     service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
 
+    let ready_for_dev_result =
+        service.task_reset_implementation(&repo_path.to_string_lossy(), "task-ready")?;
     let spec_ready_result =
         service.task_reset_implementation(&repo_path.to_string_lossy(), "task-spec")?;
     let open_result =
         service.task_reset_implementation(&repo_path.to_string_lossy(), "task-open")?;
 
+    assert_eq!(ready_for_dev_result.status, TaskStatus::ReadyForDev);
     assert_eq!(spec_ready_result.status, TaskStatus::SpecReady);
     assert_eq!(open_result.status, TaskStatus::Open);
     Ok(())
@@ -1244,7 +1262,7 @@ fn task_reset_implementation_rejects_live_build_session_status() -> Result<()> {
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
 
-    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let task = make_task("task-1", "task", TaskStatus::Blocked);
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![task],
         Vec::new(),
