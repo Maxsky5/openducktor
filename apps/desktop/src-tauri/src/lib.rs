@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::{Arc, OnceLock};
 #[cfg(test)]
 use std::time::SystemTime;
-use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent as TauriRunEvent};
 
 mod commands;
 mod headless;
@@ -420,12 +420,26 @@ fn startup_phase_build_tauri_app(
 fn startup_phase_exit_shutdown_handler(
     app_service: Arc<AppService>,
 ) -> impl FnMut(&AppHandle<TauriRuntime>, TauriRunEvent) {
-    move |_handle, event| {
-        if matches!(
-            event,
-            TauriRunEvent::ExitRequested { .. } | TauriRunEvent::Exit
-        ) {
-            let _ = app_service.shutdown();
+    let shutdown_started = Arc::new(AtomicBool::new(false));
+
+    move |handle, event| {
+        if let TauriRunEvent::ExitRequested { api, .. } = event {
+            if shutdown_started.swap(true, Ordering::SeqCst) {
+                return;
+            }
+
+            api.prevent_exit();
+
+            for window in handle.webview_windows().into_values() {
+                let _ = window.hide();
+            }
+
+            let shutdown_service = app_service.clone();
+            let exit_handle = handle.clone();
+            std::thread::spawn(move || {
+                let _ = shutdown_service.shutdown();
+                exit_handle.exit(0);
+            });
         }
     }
 }

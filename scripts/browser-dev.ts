@@ -12,31 +12,80 @@ const backendEnv: Record<string, string> = {
 const backendProcess = Bun.spawn({
   cmd: ["cargo", "run", "--bin", "browser_backend"],
   cwd: `${repoRoot}/apps/desktop/src-tauri`,
+  detached: true,
   env: backendEnv,
   stdout: "inherit",
   stderr: "inherit",
+});
+let backendExited = false;
+void backendProcess.exited.then(() => {
+  backendExited = true;
 });
 
 let frontendProcess: Bun.Subprocess | null = null;
 let stoppingChildren = false;
 
-const stopChildren = () => {
+const requestBackendShutdown = async (): Promise<void> => {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3_000);
+    await fetch(`${backendUrl}/shutdown`, {
+      method: "POST",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+  } catch {}
+};
+
+const terminateProcessGroup = async (child: Bun.Subprocess | null): Promise<void> => {
+  if (!child) {
+    return;
+  }
+
+  const pid = child.pid;
+  if (typeof pid === "number" && pid > 0) {
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch {}
+  }
+
+  child.kill();
+  await Promise.race([child.exited, Bun.sleep(3_000)]);
+
+  if (typeof pid === "number" && pid > 0) {
+    try {
+      process.kill(-pid, 0);
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {}
+    } catch {}
+  }
+
+  child.kill(9);
+  await Promise.race([child.exited, Bun.sleep(1_000)]);
+};
+
+const stopChildren = async () => {
   if (stoppingChildren) {
     return;
   }
   stoppingChildren = true;
-  backendProcess.kill();
-  frontendProcess?.kill();
+
+  await Promise.allSettled([requestBackendShutdown(), terminateProcessGroup(frontendProcess)]);
+
+  await Promise.race([backendProcess.exited, Bun.sleep(4_000)]);
+
+  if (!backendExited) {
+    await terminateProcessGroup(backendProcess);
+  }
 };
 
 process.on("SIGINT", () => {
-  stopChildren();
-  process.exit(130);
+  void stopChildren().finally(() => process.exit(130));
 });
 
 process.on("SIGTERM", () => {
-  stopChildren();
-  process.exit(143);
+  void stopChildren().finally(() => process.exit(143));
 });
 
 const waitForBackend = async (): Promise<void> => {
@@ -66,6 +115,7 @@ try {
   frontendProcess = Bun.spawn({
     cmd: ["bun", "run", "--filter", "@openducktor/desktop", "dev:browser"],
     cwd: repoRoot,
+    detached: true,
     env: {
       ...process.env,
       VITE_ODT_BROWSER_BACKEND_URL: backendUrl,
@@ -85,7 +135,7 @@ try {
     })),
   ]);
 
-  stopChildren();
+  await stopChildren();
 
   if (firstExit.processName === "backend") {
     await frontendProcess.exited;
@@ -95,7 +145,7 @@ try {
 
   process.exit(firstExit.exitCode);
 } catch (error) {
-  stopChildren();
+  await stopChildren();
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }

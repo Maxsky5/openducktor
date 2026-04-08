@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::time::{sleep, Duration};
 use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
 
@@ -38,6 +39,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let app = Router::new()
         .route("/health", get(health_handler))
+        .route("/shutdown", post(shutdown_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
         .route(
@@ -73,6 +75,17 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
 
 async fn health_handler() -> impl IntoResponse {
     Json(json!({ "ok": true }))
+}
+
+async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoResponse {
+    let service = state.service.clone();
+    tokio::spawn(async move {
+        sleep(Duration::from_millis(50)).await;
+        let _ = service.shutdown();
+        std::process::exit(0);
+    });
+
+    (StatusCode::ACCEPTED, Json(json!({ "ok": true })))
 }
 
 async fn events_handler(
