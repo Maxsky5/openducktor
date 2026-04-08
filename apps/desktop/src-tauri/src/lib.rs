@@ -424,13 +424,16 @@ fn startup_phase_exit_shutdown_handler(
 
     move |handle, event| {
         if let TauriRunEvent::ExitRequested { api, code, .. } = event {
-            if code.is_some() {
+            let action = classify_exit_request(code.is_some(), shutdown_started.load(Ordering::SeqCst));
+            if action == ExitRequestAction::AllowProgrammaticExit {
                 return;
             }
 
             api.prevent_exit();
 
-            if shutdown_started.swap(true, Ordering::SeqCst) {
+            if action == ExitRequestAction::IgnoreRepeatedUserExit
+                || shutdown_started.swap(true, Ordering::SeqCst)
+            {
                 return;
             }
 
@@ -441,11 +444,42 @@ fn startup_phase_exit_shutdown_handler(
             let shutdown_service = app_service.clone();
             let exit_handle = handle.clone();
             std::thread::spawn(move || {
-                let _ = shutdown_service.shutdown();
-                exit_handle.exit(0);
+                let exit_code = match shutdown_service.shutdown() {
+                    Ok(()) => shutdown_exit_code(true),
+                    Err(error) => {
+                        tracing::error!(
+                            target: "openducktor.desktop-shutdown",
+                            error = %error,
+                            "Desktop shutdown failed"
+                        );
+                        shutdown_exit_code(false)
+                    }
+                };
+                exit_handle.exit(exit_code);
             });
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitRequestAction {
+    AllowProgrammaticExit,
+    StartUserShutdown,
+    IgnoreRepeatedUserExit,
+}
+
+fn classify_exit_request(code_present: bool, shutdown_already_started: bool) -> ExitRequestAction {
+    if code_present {
+        ExitRequestAction::AllowProgrammaticExit
+    } else if shutdown_already_started {
+        ExitRequestAction::IgnoreRepeatedUserExit
+    } else {
+        ExitRequestAction::StartUserShutdown
+    }
+}
+
+fn shutdown_exit_code(success: bool) -> i32 {
+    if success { 0 } else { 1 }
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -494,6 +528,28 @@ mod tests {
         validate_startup_config(&config_store, &runtime_store)?;
         let _ = fs::remove_dir_all(root);
         Ok(())
+    }
+
+    #[test]
+    fn classify_exit_request_distinguishes_programmatic_and_user_paths() {
+        assert_eq!(
+            classify_exit_request(true, false),
+            ExitRequestAction::AllowProgrammaticExit
+        );
+        assert_eq!(
+            classify_exit_request(false, false),
+            ExitRequestAction::StartUserShutdown
+        );
+        assert_eq!(
+            classify_exit_request(false, true),
+            ExitRequestAction::IgnoreRepeatedUserExit
+        );
+    }
+
+    #[test]
+    fn shutdown_exit_code_maps_success_and_failure() {
+        assert_eq!(shutdown_exit_code(true), 0);
+        assert_eq!(shutdown_exit_code(false), 1);
     }
 
     #[test]

@@ -30,6 +30,24 @@ const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
 const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShutdownRequestAction {
+    Start,
+    AlreadyStarted,
+}
+
+fn classify_shutdown_request(already_started: bool) -> ShutdownRequestAction {
+    if already_started {
+        ShutdownRequestAction::AlreadyStarted
+    } else {
+        ShutdownRequestAction::Start
+    }
+}
+
+fn shutdown_exit_code(success: bool) -> i32 {
+    if success { 0 } else { 1 }
+}
+
 pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
@@ -86,7 +104,9 @@ async fn health_handler() -> impl IntoResponse {
 }
 
 async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoResponse {
-    if state.shutdown_started.swap(true, Ordering::SeqCst) {
+    if classify_shutdown_request(state.shutdown_started.swap(true, Ordering::SeqCst))
+        == ShutdownRequestAction::AlreadyStarted
+    {
         return (StatusCode::ACCEPTED, Json(json!({ "ok": true })));
     }
 
@@ -94,14 +114,14 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
     let shutdown_signal = state.shutdown_signal.clone();
     tokio::spawn(async move {
         let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
-            Ok(Ok(())) => 0,
+            Ok(Ok(())) => shutdown_exit_code(true),
             Ok(Err(error)) => {
                 tracing::error!(
                     target: "openducktor.browser-backend",
                     error = %error,
                     "Browser backend shutdown failed"
                 );
-                1
+                shutdown_exit_code(false)
             }
             Err(error) => {
                 tracing::error!(
@@ -109,7 +129,7 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
                     error = %error,
                     "Browser backend shutdown task failed"
                 );
-                1
+                shutdown_exit_code(false)
             }
         };
         shutdown_signal.notify_waiters();
@@ -283,6 +303,41 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn classify_shutdown_request_starts_only_once() {
+        assert_eq!(classify_shutdown_request(false), ShutdownRequestAction::Start);
+        assert_eq!(
+            classify_shutdown_request(true),
+            ShutdownRequestAction::AlreadyStarted
+        );
+    }
+
+    #[test]
+    fn shutdown_exit_code_maps_success_and_failure() {
+        assert_eq!(shutdown_exit_code(true), 0);
+        assert_eq!(shutdown_exit_code(false), 1);
+    }
+
+    #[tokio::test]
+    async fn shutdown_handler_returns_accepted_when_shutdown_already_started() {
+        let fixture = test_state_fixture();
+        fixture
+            .state
+            .shutdown_started
+            .store(true, Ordering::SeqCst);
+
+        let response = shutdown_handler(State(fixture.state.clone())).await.into_response();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::ACCEPTED);
+        assert_eq!(payload, json!({ "ok": true }));
+    }
 
     struct TestStateFixture {
         state: HeadlessState,
