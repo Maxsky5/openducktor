@@ -13,6 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+#[cfg(not(unix))]
+use sysinfo::Signal;
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 use crate::{
     config::resolve_openducktor_base_dir, parse_user_path, resolve_command_path,
@@ -178,8 +181,11 @@ pub fn ensure_shared_dolt_server_running(owner_pid: u32) -> Result<SharedDoltSer
             return Ok(existing);
         }
 
-        if !is_process_alive(existing.owner_pid) && is_process_alive(existing.pid) {
-            terminate_process_by_pid(existing.pid).with_context(|| {
+        if !is_process_alive(existing.owner_pid)
+            && is_process_alive(existing.pid)
+            && process_matches_expected_dolt_server(existing.pid, &shared_server_root)?
+        {
+            terminate_process_by_pid(existing.pid, &shared_server_root).with_context(|| {
                 format!(
                     "Failed terminating stale shared Dolt server pid {} for {}",
                     existing.pid,
@@ -237,10 +243,76 @@ pub fn stop_shared_dolt_server_for_current_owner(owner_pid: u32) -> Result<bool>
         return Ok(false);
     }
 
-    terminate_process_by_pid(state.pid)?;
+    terminate_process_by_pid(state.pid, &state.shared_server_root)?;
     remove_if_exists(&state_file)
         .with_context(|| format!("Failed removing shared Dolt state {}", state_file.display()))?;
     Ok(true)
+}
+
+pub fn restore_shared_dolt_database_from_backup(
+    owner_pid: u32,
+    database_name: &str,
+    backup_dir: &Path,
+) -> Result<()> {
+    let shared_server_root = resolve_shared_server_root()?;
+    let shared_dolt_root = resolve_shared_dolt_root()?;
+    fs::create_dir_all(&shared_dolt_root).with_context(|| {
+        format!(
+            "Failed creating Dolt data root {}",
+            shared_dolt_root.display()
+        )
+    })?;
+
+    let restart_server = {
+        let _lock = lock_shared_server_state()?;
+        let state_file = resolve_server_state_file()?;
+        let mut restart_server = false;
+        if let Some(existing) = read_server_state_from_path(&state_file)? {
+            let process_alive = is_process_alive(existing.pid);
+            let process_matches =
+                process_matches_expected_dolt_server(existing.pid, &shared_server_root)?;
+            if process_alive && process_matches {
+                if existing.owner_pid != owner_pid {
+                    return Err(anyhow!(
+                        "Shared Dolt server for {} is running under owner pid {} and cannot be stopped for restore by pid {}",
+                        shared_server_root.display(),
+                        existing.owner_pid,
+                        owner_pid
+                    ));
+                }
+
+                terminate_process_by_pid(existing.pid, &existing.shared_server_root)?;
+                restart_server = true;
+            }
+
+            remove_if_exists(&state_file).with_context(|| {
+                format!(
+                    "Failed removing shared Dolt state {} before restore",
+                    state_file.display()
+                )
+            })?;
+        }
+
+        let backup_url = format!("file://{}", backup_dir.display());
+        crate::run_command(
+            "dolt",
+            &["backup", "restore", backup_url.as_str(), database_name],
+            Some(&shared_dolt_root),
+        )
+        .with_context(|| {
+            format!(
+                "Failed restoring shared Dolt database {database_name} from {}",
+                backup_dir.display()
+            )
+        })?;
+        restart_server
+    };
+
+    if restart_server {
+        ensure_shared_dolt_server_running(owner_pid)?;
+    }
+
+    Ok(())
 }
 
 pub fn resolve_default_worktree_base_dir(repo_path: &Path) -> Result<PathBuf> {
@@ -295,6 +367,7 @@ fn lock_shared_server_state() -> Result<File> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(&lock_file)
         .with_context(|| {
             format!(
@@ -320,7 +393,9 @@ fn is_server_state_healthy(
     {
         return Ok(false);
     }
-    if !is_process_alive(state.pid) {
+    if !is_process_alive(state.pid)
+        || !process_matches_expected_dolt_server(state.pid, expected_shared_server_root)?
+    {
         return Ok(false);
     }
     if !tcp_probe(state.port) {
@@ -365,17 +440,37 @@ fn write_dolt_config_file(port: u16) -> Result<()> {
         "log_level: info\nbehavior:\n  autocommit: true\nlistener:\n  host: {host}\n  port: {port}\ndata_dir: {data_dir}\ncfg_dir: {cfg_dir}\nprivilege_file: {privilege_file}\nbranch_control_file: {branch_control_file}\n",
         host = SHARED_DOLT_SERVER_HOST,
         port = port,
-        data_dir = dolt_root.display(),
-        cfg_dir = cfg_dir.display(),
-        privilege_file = privilege_file.display(),
-        branch_control_file = branch_control_file.display(),
+        data_dir = yaml_quote_path(&dolt_root),
+        cfg_dir = yaml_quote_path(&cfg_dir),
+        privilege_file = yaml_quote_path(&privilege_file),
+        branch_control_file = yaml_quote_path(&branch_control_file),
     );
 
-    let mut file = File::create(&config_file)
-        .with_context(|| format!("Failed creating Dolt config {}", config_file.display()))?;
-    file.write_all(config.as_bytes())
-        .with_context(|| format!("Failed writing Dolt config {}", config_file.display()))?;
+    let temp_file = config_file.with_extension(format!("yaml.tmp-{}", std::process::id()));
+    let mut file = File::create(&temp_file).with_context(|| {
+        format!(
+            "Failed creating Dolt config temp file {}",
+            temp_file.display()
+        )
+    })?;
+    file.write_all(config.as_bytes()).with_context(|| {
+        format!(
+            "Failed writing Dolt config temp file {}",
+            temp_file.display()
+        )
+    })?;
+    fs::rename(&temp_file, &config_file).with_context(|| {
+        format!(
+            "Failed replacing Dolt config {} from {}",
+            config_file.display(),
+            temp_file.display()
+        )
+    })?;
     Ok(())
+}
+
+fn yaml_quote_path(path: &Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\'', "''"))
 }
 
 fn spawn_shared_dolt_server(
@@ -509,13 +604,21 @@ fn remove_if_exists(path: &Path) -> Result<()> {
     }
 }
 
-fn terminate_process_by_pid(pid: u32) -> Result<()> {
+fn terminate_process_by_pid(pid: u32, expected_shared_server_root: &Path) -> Result<()> {
+    if !is_process_alive(pid) {
+        return Ok(());
+    }
+    if !process_matches_expected_dolt_server(pid, expected_shared_server_root)? {
+        return Err(anyhow!(
+            "Refusing to terminate pid {} because it no longer matches the expected shared Dolt server under {}",
+            pid,
+            expected_shared_server_root.display()
+        ));
+    }
+
     #[cfg(unix)]
     {
         let raw_pid = pid as i32;
-        if !is_process_alive(pid) {
-            return Ok(());
-        }
         let terminate_status = unsafe { libc::kill(raw_pid, libc::SIGTERM) };
         if terminate_status != 0 {
             return Err(std::io::Error::last_os_error())
@@ -535,7 +638,18 @@ fn terminate_process_by_pid(pid: u32) -> Result<()> {
 
     #[cfg(not(unix))]
     {
-        let _ = pid;
+        let mut system = System::new_all();
+        system.refresh_processes(ProcessesToUpdate::All, true);
+        let Some(process) = system.process(Pid::from_u32(pid)) else {
+            return Ok(());
+        };
+
+        if !process.kill_with(Signal::Term).unwrap_or(false) {
+            if !process.kill() {
+                return Err(anyhow!("Failed terminating Dolt pid {pid}"));
+            }
+        }
+        wait_for_process_exit(pid, Duration::from_secs(3));
         Ok(())
     }
 }
@@ -552,21 +666,49 @@ fn wait_for_process_exit(pid: u32, timeout: Duration) -> bool {
 }
 
 fn is_process_alive(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        let status = unsafe { libc::kill(pid as i32, 0) };
-        if status == 0 {
-            return true;
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    system.process(Pid::from_u32(pid)).is_some()
+}
+
+fn process_matches_expected_dolt_server(
+    pid: u32,
+    expected_shared_server_root: &Path,
+) -> Result<bool> {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let Some(process) = system.process(Pid::from_u32(pid)) else {
+        return Ok(false);
+    };
+
+    let process_name = process.name().to_string_lossy().to_ascii_lowercase();
+    if !process_name.contains("dolt") {
+        return Ok(false);
+    }
+
+    let command_line = process
+        .cmd()
+        .iter()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    if !command_line.iter().any(|arg| arg == "sql-server") {
+        return Ok(false);
+    }
+
+    if let Some(cwd) = process.cwd() {
+        if paths_match(cwd, expected_shared_server_root)? {
+            return Ok(true);
         }
-
-        return std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
     }
 
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        false
+    let expected_config = expected_shared_server_root.join("dolt-config.yaml");
+    for args in command_line.windows(2) {
+        if args[0] == "--config" && paths_match(Path::new(&args[1]), &expected_config)? {
+            return Ok(true);
+        }
     }
+
+    Ok(false)
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {
@@ -642,14 +784,14 @@ mod tests {
     use super::{
         compute_beads_database_name, compute_repo_id, compute_repo_slug,
         deterministic_shared_dolt_port_candidate, ensure_shared_dolt_server_running,
-        is_process_alive, read_shared_dolt_server_state, resolve_beads_root,
-        resolve_default_worktree_base_dir, resolve_dolt_config_dir, resolve_dolt_config_file,
-        resolve_effective_worktree_base_dir, resolve_repo_beads_attachment_dir,
-        resolve_repo_beads_attachment_root, resolve_repo_beads_paths,
-        resolve_repo_live_database_dir, resolve_server_lock_file, resolve_server_state_file,
-        resolve_shared_dolt_root, resolve_shared_server_root,
-        stop_shared_dolt_server_for_current_owner, wrap_port_candidate, SharedDoltServerState,
-        SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
+        is_process_alive, process_matches_expected_dolt_server, read_shared_dolt_server_state,
+        resolve_beads_root, resolve_default_worktree_base_dir, resolve_dolt_config_dir,
+        resolve_dolt_config_file, resolve_effective_worktree_base_dir,
+        resolve_repo_beads_attachment_dir, resolve_repo_beads_attachment_root,
+        resolve_repo_beads_paths, resolve_repo_live_database_dir, resolve_server_lock_file,
+        resolve_server_state_file, resolve_shared_dolt_root, resolve_shared_server_root,
+        stop_shared_dolt_server_for_current_owner, wrap_port_candidate, write_dolt_config_file,
+        SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
     };
     use anyhow::Result;
     use host_test_support::{lock_env, EnvVarGuard};
@@ -833,6 +975,40 @@ mod tests {
             wrap_port_candidate(port, u32::from(SHARED_DOLT_PORT_RANGE_LEN)),
             port
         );
+    }
+
+    #[test]
+    fn process_liveness_detects_current_process() {
+        assert!(is_process_alive(std::process::id()));
+    }
+
+    #[test]
+    fn current_process_is_not_mistaken_for_shared_dolt_server() {
+        let temp_root = temp_config_root("process-identity");
+        let matches = process_matches_expected_dolt_server(std::process::id(), &temp_root)
+            .expect("process identity check should succeed");
+        assert!(!matches);
+    }
+
+    #[test]
+    fn shared_dolt_config_quotes_paths_with_spaces() {
+        let _env_lock = lock_env();
+        let config_root = temp_config_root("config with spaces");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_CONFIG_DIR",
+            config_root.to_string_lossy().as_ref(),
+        );
+
+        write_dolt_config_file(39280).expect("config file should be written");
+        let config_file = resolve_dolt_config_file().expect("config file path should resolve");
+        let contents = fs::read_to_string(config_file).expect("config file should be readable");
+
+        assert!(contents.contains("data_dir: '"));
+        assert!(contents.contains("cfg_dir: '"));
+        assert!(contents.contains("privilege_file: '"));
+        assert!(contents.contains("branch_control_file: '"));
+
+        let _ = fs::remove_dir_all(config_root);
     }
 
     #[test]

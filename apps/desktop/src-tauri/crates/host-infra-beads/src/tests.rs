@@ -777,6 +777,15 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
             .to_string(),
             String::new(),
         ))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
@@ -788,7 +797,7 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 2);
+    assert_eq!(calls.len(), 3);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_init_args(&calls[0], repo.path(), &beads_dir);
     assert_beads_env(&calls[0]);
@@ -803,6 +812,16 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
     );
     assert_beads_env(&calls[1]);
     assert_attachment_root_cwd(&calls[1], repo.path());
+    assert_eq!(calls[2].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(
+        calls[2].args,
+        vec!["where", "--json"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    );
+    assert_beads_env(&calls[2]);
+    assert_attachment_root_cwd(&calls[2], repo.path());
     Ok(())
 }
 

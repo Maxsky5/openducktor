@@ -27,11 +27,7 @@ impl BeadsTaskStore {
         Ok(working_dir)
     }
 
-    pub(crate) fn build_bd_env(
-        &self,
-        repo_path: &Path,
-        require_server: bool,
-    ) -> Result<Vec<(String, String)>> {
+    pub(crate) fn build_bd_env(&self, repo_path: &Path) -> Result<Vec<(String, String)>> {
         let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
         let mut env = vec![(
             "BEADS_DIR".to_string(),
@@ -67,13 +63,12 @@ impl BeadsTaskStore {
                     SHARED_DOLT_SERVER_USER.to_string(),
                 ));
             }
-            None if require_server => {
+            None => {
                 return Err(anyhow!(
                     "Shared Dolt server state is missing for {}; reinitialize the repo store",
                     repo_path.display()
                 ));
             }
-            None => {}
         }
 
         Ok(env)
@@ -81,9 +76,7 @@ impl BeadsTaskStore {
 
     pub(crate) fn run_bd(&self, repo_path: &Path, args: &[&str]) -> Result<String> {
         let final_args = args.to_vec();
-        let repo_key = Self::repo_key(repo_path);
-        let require_server = self.is_repo_cached_initialized(&repo_key)?;
-        let env = self.build_bd_env(repo_path, require_server)?;
+        let env = self.build_bd_env(repo_path)?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -105,9 +98,7 @@ impl BeadsTaskStore {
             final_args.extend(args);
             final_args.push("--json");
         }
-        let repo_key = Self::repo_key(repo_path);
-        let require_server = self.is_repo_cached_initialized(&repo_key)?;
-        let env = self.build_bd_env(repo_path, require_server)?;
+        let env = self.build_bd_env(repo_path)?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))

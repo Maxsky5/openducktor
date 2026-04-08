@@ -66,7 +66,7 @@ impl BeadsTaskStore {
         repo_path: &Path,
         beads_dir: &Path,
     ) -> Result<(bool, String)> {
-        let env = self.build_bd_env(repo_path, true)?;
+        let env = self.build_bd_env(repo_path)?;
         if let Err(error) = self.verify_repo_attachment_contract(repo_path, beads_dir, &env) {
             return Ok((false, error.to_string()));
         }
@@ -142,7 +142,10 @@ impl BeadsTaskStore {
             return "";
         }
 
-        if let Some(index) = trimmed_stderr.find('{') {
+        let object_index = trimmed_stderr.find('{');
+        let array_index = trimmed_stderr.find('[');
+        let start_index = [object_index, array_index].into_iter().flatten().min();
+        if let Some(index) = start_index {
             return &trimmed_stderr[index..];
         }
 

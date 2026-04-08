@@ -12,8 +12,9 @@ pub use beads::{
     resolve_effective_worktree_base_dir, resolve_repo_beads_attachment_dir,
     resolve_repo_beads_attachment_root, resolve_repo_beads_paths, resolve_repo_live_database_dir,
     resolve_server_lock_file, resolve_server_state_file, resolve_shared_dolt_root,
-    resolve_shared_server_root, stop_shared_dolt_server_for_current_owner, RepoBeadsPaths,
-    SharedDoltServerState, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
+    resolve_shared_server_root, restore_shared_dolt_database_from_backup,
+    stop_shared_dolt_server_for_current_owner, RepoBeadsPaths, SharedDoltServerState,
+    SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 pub use config::{
     hook_set_fingerprint, normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint,
