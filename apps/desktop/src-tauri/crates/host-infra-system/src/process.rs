@@ -871,7 +871,7 @@ mod tests {
         let login_bin = root.join("login-bin");
         fs::create_dir_all(&login_bin).expect("login path should exist");
         let shell = root.join("fake-shell");
-        let program = "node";
+        let program = "odt-login-shell-cli";
         let script = login_bin.join(program);
         write_executable(&script, "#!/bin/sh\nprintf 'login-shell-ok'");
         write_fake_login_shell(&shell, &login_bin);
