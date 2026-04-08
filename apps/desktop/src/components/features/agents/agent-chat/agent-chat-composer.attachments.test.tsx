@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { AgentChatComposer } from "./agent-chat-composer";
@@ -57,6 +57,7 @@ const buildModel = () => ({
   composerEditorRef: createRef<HTMLDivElement>(),
   onComposerEditorInput: SHARED_CALLBACKS.onComposerEditorInput,
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
 describe("AgentChatComposer attachments", () => {
@@ -147,6 +148,38 @@ describe("AgentChatComposer attachments", () => {
 
     await waitFor(() => {
       expect(screen.queryByTitle("brief.pdf")).toBeNull();
+    });
+  });
+
+  test("requests a bottom resync when attachment layout changes", async () => {
+    const syncBottomAfterComposerLayout = { current: mock(() => {}) };
+    const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          syncBottomAfterComposerLayoutRef: syncBottomAfterComposerLayout,
+        }}
+      />,
+    );
+
+    const attachmentInput = container.querySelector('input[type="file"]');
+    if (!(attachmentInput instanceof HTMLInputElement)) {
+      throw new Error("Expected hidden attachment input");
+    }
+
+    fireEvent.change(attachmentInput, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(syncBottomAfterComposerLayout.current).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove brief.pdf" }));
+
+    await waitFor(() => {
+      expect(syncBottomAfterComposerLayout.current).toHaveBeenCalledTimes(2);
     });
   });
 });

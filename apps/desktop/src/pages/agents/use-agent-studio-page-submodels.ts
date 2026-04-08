@@ -282,6 +282,7 @@ type UseAgentStudioComposerModelArgs = {
   composerEditorRef: RefObject<HTMLDivElement | null>;
   resizeComposerEditor: () => void;
   scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
+  syncBottomAfterComposerLayoutRef: AgentChatModel["composer"]["syncBottomAfterComposerLayoutRef"];
 };
 
 export const useAgentStudioComposerModel = ({
@@ -322,6 +323,7 @@ export const useAgentStudioComposerModel = ({
   composerEditorRef,
   resizeComposerEditor,
   scrollToBottomOnSendRef,
+  syncBottomAfterComposerLayoutRef,
 }: UseAgentStudioComposerModelArgs): ReturnType<typeof buildAgentChatComposerModel> => {
   const isModelSelectionPending = Boolean(
     activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
@@ -388,6 +390,7 @@ export const useAgentStudioComposerModel = ({
         composerEditorRef,
         onComposerEditorInput: resizeComposerEditor,
         scrollToBottomOnSendRef,
+        syncBottomAfterComposerLayoutRef,
       }),
     [
       activeSessionAgentColors,
@@ -416,6 +419,7 @@ export const useAgentStudioComposerModel = ({
       onSelectVariant,
       resizeComposerEditor,
       scrollToBottomOnSendRef,
+      syncBottomAfterComposerLayoutRef,
       selectedModelSelection,
       selectedModelDescriptor,
       selectedRoleAvailable,

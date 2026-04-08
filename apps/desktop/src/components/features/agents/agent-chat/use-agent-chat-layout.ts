@@ -1,6 +1,5 @@
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 export const COMPOSER_EDITOR_MIN_HEIGHT_PX = 44;
 export const COMPOSER_EDITOR_MAX_HEIGHT_PX = 220;
@@ -144,12 +143,6 @@ export const useAgentChatLayout = ({
       return;
     }
 
-    const container = messagesContainerRef.current;
-    const wasNearBottom =
-      container !== null
-        ? container.scrollHeight - container.scrollTop - container.clientHeight <=
-          CHAT_SCROLL_EDGE_THRESHOLD_PX
-        : false;
     const { didHeightChange } = resizeComposerEditorElement(
       editor,
       undefined,
@@ -160,7 +153,7 @@ export const useAgentChatLayout = ({
       ((editor.textContent ?? "").length === 0
         ? COMPOSER_EDITOR_MIN_HEIGHT_PX
         : composerEditorHeightRef.current);
-    if (wasNearBottom && didHeightChange) {
+    if (didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
     }
   }, [syncBottomAfterComposerLayoutRef]);
@@ -188,12 +181,6 @@ export const useAgentChatLayout = ({
       return;
     }
 
-    const container = messagesContainerRef.current;
-    const wasNearBottom =
-      container !== null
-        ? container.scrollHeight - container.scrollTop - container.clientHeight <=
-          CHAT_SCROLL_EDGE_THRESHOLD_PX
-        : false;
     const { didHeightChange } = resizeComposerTextareaElement(
       textarea,
       undefined,
@@ -204,7 +191,7 @@ export const useAgentChatLayout = ({
       (textarea.value.length === 0
         ? COMPOSER_TEXTAREA_MIN_HEIGHT_PX
         : composerTextareaHeightRef.current);
-    if (wasNearBottom && didHeightChange) {
+    if (didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
     }
   }, [syncBottomAfterComposerLayoutRef]);

@@ -738,6 +738,91 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("syncBottomAfterComposerLayoutRef keeps the transcript pinned while following", async () => {
+    const rows = createTurnRows(8);
+    const extraContentHeightPx = { current: 0 };
+    const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+        syncBottomAfterComposerLayoutRef,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+    if (!syncBottomAfterComposerLayoutRef.current) {
+      throw new Error("Expected sync callback");
+    }
+
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    extraContentHeightPx.current = 200;
+    await act(async () => {
+      syncBottomAfterComposerLayoutRef.current?.();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("syncBottomAfterComposerLayoutRef does not override manual scroll position", async () => {
+    const rows = createTurnRows(8);
+    const extraContentHeightPx = { current: 0 };
+    const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: true,
+        syncBottomAfterComposerLayoutRef,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+    if (!syncBottomAfterComposerLayoutRef.current) {
+      throw new Error("Expected sync callback");
+    }
+
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    extraContentHeightPx.current = 200;
+    await act(async () => {
+      syncBottomAfterComposerLayoutRef.current?.();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(container.scrollTop).toBe(120);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("exports the expected turn window constants", () => {
     expect(CHAT_TURN_WINDOW_INIT).toBe(10);
     expect(CHAT_TURN_WINDOW_BATCH).toBe(8);
