@@ -353,16 +353,18 @@ fn workflow_contract_reset_implementation_statuses_match_fixture() {
         .map(String::as_str)
         .collect::<Vec<_>>();
 
-    for status in &fixture.statuses {
-        let parsed_status = parse_status(status);
-        let task = make_task("fixture-task", "task", parsed_status);
-        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
-        let actual_allowed = actions.contains(&TaskAction::ResetImplementation);
-        let expected_allowed = expected.contains(&status.as_str());
-        assert_eq!(
-            actual_allowed, expected_allowed,
-            "reset_implementation mismatch for status={status}"
-        );
+    for issue_type in ["epic", "feature", "task", "bug"] {
+        for status in &fixture.statuses {
+            let parsed_status = parse_status(status);
+            let task = make_task("fixture-task", issue_type, parsed_status);
+            let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+            let actual_allowed = actions.contains(&TaskAction::ResetImplementation);
+            let expected_allowed = expected.contains(&status.as_str());
+            assert_eq!(
+                actual_allowed, expected_allowed,
+                "reset_implementation mismatch for issue_type={issue_type} status={status}"
+            );
+        }
     }
 }
 

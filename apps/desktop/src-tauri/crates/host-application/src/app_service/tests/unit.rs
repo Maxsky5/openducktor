@@ -416,8 +416,24 @@ fn blocked_tasks_expose_builder_and_reset_implementation_actions() {
 }
 
 #[test]
-fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev() -> Result<()>
-{
+fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev_from_ai_review(
+) -> Result<()> {
+    assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev(
+        TaskStatus::AiReview,
+    )
+}
+
+#[test]
+fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev_from_blocked(
+) -> Result<()> {
+    assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev(
+        TaskStatus::Blocked,
+    )
+}
+
+fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev(
+    status: TaskStatus,
+) -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
@@ -428,7 +444,7 @@ fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_
     fs::create_dir_all(&build_worktree)?;
     fs::create_dir_all(&qa_worktree)?;
 
-    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    let mut task = make_task("task-1", "task", status);
     task.document_summary.spec.has = true;
     task.document_summary.plan.has = true;
     task.document_summary.qa_report.has = true;
@@ -670,12 +686,10 @@ fn task_reset_implementation_uses_document_presence_for_rollback_target() -> Res
     ready_for_dev.document_summary.spec.has = true;
     ready_for_dev.document_summary.plan.has = true;
 
-    let mut spec_ready = make_task("task-spec", "task", TaskStatus::InProgress);
+    let mut spec_ready = make_task("task-spec", "task", TaskStatus::Blocked);
     spec_ready.document_summary.spec.has = true;
 
-    let mut open = make_task("task-open", "task", TaskStatus::HumanReview);
-    spec_ready.status = TaskStatus::Blocked;
-    open.status = TaskStatus::Blocked;
+    let open = make_task("task-open", "task", TaskStatus::Blocked);
 
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![ready_for_dev, spec_ready, open],
@@ -1257,12 +1271,23 @@ fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
 }
 
 #[test]
-fn task_reset_implementation_rejects_live_build_session_status() -> Result<()> {
+fn task_reset_implementation_rejects_live_build_session_status_for_in_progress() -> Result<()> {
+    assert_task_reset_implementation_rejects_live_build_session_status(TaskStatus::InProgress)
+}
+
+#[test]
+fn task_reset_implementation_rejects_live_build_session_status_for_blocked() -> Result<()> {
+    assert_task_reset_implementation_rejects_live_build_session_status(TaskStatus::Blocked)
+}
+
+fn assert_task_reset_implementation_rejects_live_build_session_status(
+    status: TaskStatus,
+) -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-live-runtime-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
 
-    let task = make_task("task-1", "task", TaskStatus::Blocked);
+    let task = make_task("task-1", "task", status);
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![task],
         Vec::new(),
