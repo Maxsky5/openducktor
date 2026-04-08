@@ -269,16 +269,33 @@ pub(crate) fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService
     Ok(service)
 }
 
-fn install_shutdown_signal_handler(service: Arc<AppService>) {
-    let shutdown_requested = Arc::new(AtomicBool::new(false));
+fn install_shutdown_signal_handler(
+    service: Arc<AppService>,
+    shutdown_requested: Arc<AtomicBool>,
+    shutdown_signal: Option<Arc<tokio::sync::Notify>>,
+) {
     let shutdown_service = service.clone();
     let shutdown_requested_signal = shutdown_requested.clone();
+    let shutdown_signal_for_handler = shutdown_signal.clone();
     if let Err(error) = ctrlc::set_handler(move || {
         if shutdown_requested_signal.swap(true, Ordering::SeqCst) {
             return;
         }
-        let _ = shutdown_service.shutdown();
-        std::process::exit(0);
+        if let Some(shutdown_signal) = &shutdown_signal_for_handler {
+            shutdown_signal.notify_waiters();
+        }
+        let exit_code = match shutdown_service.shutdown() {
+            Ok(()) => shutdown_exit_code(true),
+            Err(error) => {
+                tracing::error!(
+                    target: "openducktor.startup",
+                    error = %error,
+                    "Signal-triggered shutdown failed"
+                );
+                shutdown_exit_code(false)
+            }
+        };
+        std::process::exit(exit_code);
     }) {
         tracing::warn!(
             target: "openducktor.startup",
@@ -289,7 +306,15 @@ fn install_shutdown_signal_handler(service: Arc<AppService>) {
 }
 
 pub(crate) fn startup_phase_shutdown_hooks(service: Arc<AppService>) {
-    install_shutdown_signal_handler(service);
+    startup_phase_shutdown_hooks_with_gate(service, Arc::new(AtomicBool::new(false)), None);
+}
+
+pub(crate) fn startup_phase_shutdown_hooks_with_gate(
+    service: Arc<AppService>,
+    shutdown_requested: Arc<AtomicBool>,
+    shutdown_signal: Option<Arc<tokio::sync::Notify>>,
+) {
+    install_shutdown_signal_handler(service, shutdown_requested, shutdown_signal);
 }
 
 fn startup_phase_command_registration<R: tauri::Runtime>(
@@ -444,13 +469,22 @@ fn startup_phase_exit_shutdown_handler(
             let shutdown_service = app_service.clone();
             let exit_handle = handle.clone();
             std::thread::spawn(move || {
-                let exit_code = match shutdown_service.shutdown() {
-                    Ok(()) => shutdown_exit_code(true),
-                    Err(error) => {
+                let exit_code = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                    move || shutdown_service.shutdown(),
+                )) {
+                    Ok(Ok(())) => shutdown_exit_code(true),
+                    Ok(Err(error)) => {
                         tracing::error!(
                             target: "openducktor.desktop-shutdown",
                             error = %error,
                             "Desktop shutdown failed"
+                        );
+                        shutdown_exit_code(false)
+                    }
+                    Err(_) => {
+                        tracing::error!(
+                            target: "openducktor.desktop-shutdown",
+                            "Desktop shutdown panicked"
                         );
                         shutdown_exit_code(false)
                     }

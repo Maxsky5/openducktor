@@ -2,7 +2,9 @@ use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
 use crate::commands::workspace::is_staged_local_attachment_path;
-use crate::{startup_phase_service_bootstrap, startup_phase_shutdown_hooks, startup_phase_tracing};
+use crate::{
+    startup_phase_service_bootstrap, startup_phase_shutdown_hooks_with_gate, startup_phase_tracing,
+};
 use anyhow::Context;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, Query, State};
@@ -48,16 +50,33 @@ fn shutdown_exit_code(success: bool) -> i32 {
     if success { 0 } else { 1 }
 }
 
+fn reject_when_shutting_down(state: &HeadlessState) -> Result<(), HeadlessCommandError> {
+    if state.shutdown_started.load(Ordering::SeqCst) {
+        Err(HeadlessCommandError {
+            message: "Browser backend is shutting down and is no longer accepting new work."
+                .to_string(),
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            failure_kind: None,
+        })
+    } else {
+        Ok(())
+    }
+}
+
 pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
-    startup_phase_shutdown_hooks(service.clone());
     let registry =
         Arc::new(build_registry().context("failed to build browser backend command registry")?);
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let shutdown_signal = Arc::new(Notify::new());
     let shutdown_started = Arc::new(AtomicBool::new(false));
+    startup_phase_shutdown_hooks_with_gate(
+        service.clone(),
+        shutdown_started.clone(),
+        Some(shutdown_signal.clone()),
+    );
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/shutdown", post(shutdown_handler))
@@ -113,6 +132,7 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
     let service = state.service.clone();
     let shutdown_signal = state.shutdown_signal.clone();
     tokio::spawn(async move {
+        shutdown_signal.notify_waiters();
         let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
             Ok(Ok(())) => shutdown_exit_code(true),
             Ok(Err(error)) => {
@@ -132,7 +152,6 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
                 shutdown_exit_code(false)
             }
         };
-        shutdown_signal.notify_waiters();
         tokio::task::yield_now().await;
         std::process::exit(exit_code);
     });
@@ -144,6 +163,7 @@ async fn events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
         state.events,
@@ -156,6 +176,7 @@ async fn dev_server_events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
         state.dev_server_events,
@@ -169,6 +190,10 @@ async fn invoke_handler(
     State(state): State<HeadlessState>,
     args: Result<Json<Value>, JsonRejection>,
 ) -> impl IntoResponse {
+    if let Err(error) = reject_when_shutting_down(&state) {
+        return error.into_response();
+    }
+
     let args = match args {
         Ok(Json(args)) => args,
         Err(error) => return json_rejection_error(error).into_response(),
@@ -337,6 +362,37 @@ mod tests {
 
         assert_eq!(status, StatusCode::ACCEPTED);
         assert_eq!(payload, json!({ "ok": true }));
+    }
+
+    #[tokio::test]
+    async fn invoke_handler_rejects_new_work_when_shutdown_started() {
+        let fixture = test_state_fixture();
+        fixture
+            .state
+            .shutdown_started
+            .store(true, Ordering::SeqCst);
+
+        let response = invoke_handler(
+            Path("workspace_list".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            payload,
+            json!({
+                "error": "Browser backend is shutting down and is no longer accepting new work."
+            })
+        );
     }
 
     struct TestStateFixture {
