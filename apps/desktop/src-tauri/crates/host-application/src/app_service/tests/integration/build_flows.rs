@@ -96,7 +96,6 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _dolt_guard = install_fake_dolt(&root)?;
     let _opencode_guard = set_env_var(
         "OPENDUCKTOR_OPENCODE_BINARY",
         fake_opencode.to_string_lossy().as_ref(),
@@ -214,7 +213,6 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
     init_git_repo(&repo)?;
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
-    let _dolt_guard = install_fake_dolt(&root)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let _opencode_guard = set_env_var(
         "OPENDUCKTOR_OPENCODE_BINARY",
