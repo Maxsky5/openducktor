@@ -120,6 +120,12 @@ const normalizeSearchTerms = (query: string): string[] => {
     .filter((term) => term.length > 0);
 };
 
+const getOptionFilterKeywords = (option: ComboboxOption): string[] => {
+  return [option.label, option.searchText, ...(option.searchKeywords ?? [])].filter(
+    (keyword): keyword is string => Boolean(keyword),
+  );
+};
+
 const getOptionSearchText = (option: ComboboxOption): string => {
   return (
     option.searchText ?? [option.label, ...(option.searchKeywords ?? [])].join(" ")
@@ -164,7 +170,7 @@ function ComboboxOptionItem({
   return (
     <CommandItem
       value={option.value}
-      keywords={[option.label, ...(option.searchKeywords ?? [])]}
+      keywords={getOptionFilterKeywords(option)}
       onSelect={() => {
         onValueChange(option.value);
         onSelectComplete();

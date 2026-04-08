@@ -6,7 +6,7 @@ import { Combobox, type ComboboxGroup } from "./combobox";
 
 enableReactActEnvironment();
 
-const groupedOptions: ComboboxGroup[] = [
+const createGroupedOptions = (): ComboboxGroup[] => [
   {
     label: "OpenAI",
     options: [
@@ -36,6 +36,8 @@ const groupedOptions: ComboboxGroup[] = [
 
 describe("Combobox", () => {
   test("uses all-terms substring matching, trims whitespace, and drops empty groups", async () => {
+    const groupedOptions = createGroupedOptions();
+
     render(
       <Combobox
         value=""
@@ -71,6 +73,8 @@ describe("Combobox", () => {
   });
 
   test("shows the empty state when all-terms filtering finds no matches", async () => {
+    const groupedOptions = createGroupedOptions();
+
     render(
       <Combobox
         value=""
@@ -94,6 +98,34 @@ describe("Combobox", () => {
 
     expect(screen.getByText("Nothing found.")).toBeTruthy();
     expect(screen.queryByText("GPT-5.4")).toBeNull();
+  });
+
+  test("uses searchText in the default cmdk filtering mode", async () => {
+    render(
+      <Combobox
+        value=""
+        options={[
+          {
+            value: "task-123",
+            label: "TASK-123",
+            searchText: "Polish GPT-5.4 dropdown search",
+          },
+        ]}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    await act(async () => {
+      fireEvent.input(screen.getByPlaceholderText("Search..."), {
+        target: { value: "GPT-5.4 dropdown" },
+      });
+    });
+
+    expect(screen.getByText("TASK-123")).toBeTruthy();
   });
 
   test("resets the result list scroll to the top when the query changes", async () => {

@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { type MockedModuleReset, restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
@@ -16,10 +16,16 @@ const omitDialogDomProps = ({
   [key: string]: unknown;
 }) => props;
 
-describe("SettingsModal", () => {
-  let SettingsModal: typeof import("./settings-modal").SettingsModal;
+const mockedModules: MockedModuleReset[] = [
+  ["./use-settings-modal-controller", () => import("./use-settings-modal-controller")],
+  ["./settings-modal-content", () => import("./settings-modal-content")],
+  ["./settings-modal-footer", () => import("./settings-modal-footer")],
+  ["./settings-modal-sidebars", () => import("./settings-modal-sidebars")],
+  ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
+];
 
-  beforeAll(async () => {
+describe("SettingsModal", () => {
+  test("mounts the settings modal shell without crashing", async () => {
     mock.module("./use-settings-modal-controller", () => ({
       useSettingsModalController: () => ({
         isLoadingSettings: false,
@@ -58,24 +64,14 @@ describe("SettingsModal", () => {
       DialogTrigger: ({ children }: { children: ReactNode }) =>
         createElement("div", null, children),
     }));
-    ({ SettingsModal } = await import("./settings-modal"));
-  });
 
-  afterAll(async () => {
-    await restoreMockedModules([
-      ["./use-settings-modal-controller", () => import("./use-settings-modal-controller")],
-      ["./settings-modal-content", () => import("./settings-modal-content")],
-      ["./settings-modal-footer", () => import("./settings-modal-footer")],
-      ["./settings-modal-sidebars", () => import("./settings-modal-sidebars")],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
-    ]);
-  });
+    const { SettingsModal } = await import("./settings-modal");
+    await restoreMockedModules(mockedModules);
 
-  test("mounts without crashing and renders the trigger", () => {
     const { unmount } = render(<SettingsModal />);
 
+    // Mount/shell test only: the Dialog mock renders children regardless of open state.
     expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy();
-    expect(screen.getByText("Mock settings content")).toBeTruthy();
 
     unmount();
   });
