@@ -76,8 +76,26 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
       continue;
     }
 
-    if (current === "--beads-dir") {
-      next.beadsDir = value;
+    if (current === "--beads-dir" || current === "--beads-attachment-dir") {
+      next.beadsAttachmentDir = value;
+      index += 1;
+      continue;
+    }
+
+    if (current === "--dolt-host") {
+      next.doltHost = value;
+      index += 1;
+      continue;
+    }
+
+    if (current === "--dolt-port") {
+      next.doltPort = value;
+      index += 1;
+      continue;
+    }
+
+    if (current === "--database-name" || current === "--database") {
+      next.databaseName = value;
       index += 1;
       continue;
     }

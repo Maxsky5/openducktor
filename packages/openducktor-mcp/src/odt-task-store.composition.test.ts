@@ -85,7 +85,10 @@ describe("OdtTaskStore composition", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "wrong_namespace",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         persistence,
@@ -162,7 +165,10 @@ describe("OdtTaskStore composition", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         persistence,
@@ -235,7 +241,10 @@ describe("OdtTaskStore composition", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         persistence,

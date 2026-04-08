@@ -80,7 +80,7 @@ export type ProcessRunner = (
   cwd: string,
   env: Record<string, string>,
 ) => Promise<ProcessResult>;
-export type BeadsDirResolver = (repoPath: string) => Promise<string>;
+export type BeadsAttachmentDirResolver = (repoPath: string) => Promise<string>;
 export type TimeProvider = () => string;
 
 export const commandEnvOverrideName = (command: string): string => {
@@ -233,21 +233,33 @@ const sanitizeDatabaseIdentifier = (input: string): string => {
   return sanitized.length > 0 ? sanitized : "repo";
 };
 
-export const computeBeadsDatabaseName = async (
-  repoPath: string,
-  beadsDir: string,
-): Promise<string> => {
-  const slug = sanitizeDatabaseIdentifier(sanitizeSlug(basename(repoPath)));
+export const computeBeadsDatabaseName = async (repoPath: string): Promise<string> => {
   const canonicalRepoPath = await resolveCanonicalPath(repoPath);
-  const canonicalBeadsDir = await resolveCanonicalPath(resolve(canonicalRepoPath, beadsDir));
-  const hashSuffix = createHash("sha256").update(canonicalBeadsDir).digest("hex").slice(0, 12);
+  const slug = sanitizeDatabaseIdentifier(sanitizeSlug(basename(canonicalRepoPath)));
+  const hashSuffix = createHash("sha256").update(canonicalRepoPath).digest("hex").slice(0, 12);
   const maxSlugLength = 64 - "odt__".length - hashSuffix.length;
   const truncatedSlug = slug.slice(0, maxSlugLength);
   return `odt_${truncatedSlug}_${hashSuffix}`;
 };
 
-export const resolveCentralBeadsDir = async (repoPath: string): Promise<string> => {
+export const resolveConfigRoot = (): string => {
+  const configuredRoot = normalizeOptionalPathInput(process.env.OPENDUCKTOR_CONFIG_DIR);
+  return configuredRoot ?? resolve(homedir(), ".openducktor");
+};
+
+export const resolveBeadsRoot = (): string => resolve(resolveConfigRoot(), "beads");
+
+export const resolveRepoBeadsAttachmentDir = async (repoPath: string): Promise<string> => {
   const repoId = await computeRepoId(repoPath);
-  const root = resolve(homedir(), ".openducktor", "beads", repoId);
+  const root = resolve(resolveBeadsRoot(), repoId);
   return resolve(root, ".beads");
+};
+
+export const resolveRepoLiveDatabaseDir = async (repoPath: string): Promise<string> => {
+  return resolve(
+    resolveBeadsRoot(),
+    "shared-server",
+    "dolt",
+    await computeBeadsDatabaseName(repoPath),
+  );
 };

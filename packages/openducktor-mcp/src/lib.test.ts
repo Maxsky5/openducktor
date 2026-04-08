@@ -7,7 +7,7 @@ import {
   normalizePlanSubtasks,
   ODT_TOOL_SCHEMAS,
   OdtTaskStore,
-  resolveCentralBeadsDir,
+  resolveRepoBeadsAttachmentDir,
   resolveStoreContext,
 } from "./lib";
 
@@ -26,12 +26,23 @@ type ProcessResult = {
 
 const FIXED_TIMESTAMP = "2026-02-28T11:30:00.000Z";
 
-const ENV_KEYS = ["ODT_REPO_PATH", "ODT_METADATA_NAMESPACE", "ODT_BEADS_DIR", "BEADS_DIR"] as const;
+const ENV_KEYS = [
+  "ODT_REPO_PATH",
+  "ODT_METADATA_NAMESPACE",
+  "ODT_BEADS_ATTACHMENT_DIR",
+  "ODT_DOLT_HOST",
+  "ODT_DOLT_PORT",
+  "ODT_DATABASE_NAME",
+  "BEADS_DIR",
+] as const;
 
 const takeEnvSnapshot = (): Record<(typeof ENV_KEYS)[number], string | undefined> => ({
   ODT_REPO_PATH: process.env.ODT_REPO_PATH,
   ODT_METADATA_NAMESPACE: process.env.ODT_METADATA_NAMESPACE,
-  ODT_BEADS_DIR: process.env.ODT_BEADS_DIR,
+  ODT_BEADS_ATTACHMENT_DIR: process.env.ODT_BEADS_ATTACHMENT_DIR,
+  ODT_DOLT_HOST: process.env.ODT_DOLT_HOST,
+  ODT_DOLT_PORT: process.env.ODT_DOLT_PORT,
+  ODT_DATABASE_NAME: process.env.ODT_DATABASE_NAME,
   BEADS_DIR: process.env.BEADS_DIR,
 });
 
@@ -93,41 +104,64 @@ const buildProcessRunner = (
   calls: ProcessCall[];
 } => {
   const calls: ProcessCall[] = [];
+  const metadataByPath = new Map<string, Record<string, unknown>>();
+  const runProcess = async (
+    command: string,
+    args: string[],
+    cwd: string,
+    env: Record<string, string>,
+  ) => {
+    calls.push({
+      command,
+      args: [...args],
+      cwd,
+      env: { ...env },
+    });
+    if (args[0] === "init") {
+      metadataByPath.set(env.BEADS_DIR, {
+        backend: "dolt",
+        dolt_mode: "server",
+        dolt_server_host: env.BEADS_DOLT_SERVER_HOST,
+        dolt_server_port: Number(env.BEADS_DOLT_SERVER_PORT),
+        dolt_server_user: env.BEADS_DOLT_SERVER_USER,
+        dolt_database: args[args.length - 1],
+      });
+      return { ok: true, stdout: "", stderr: "" };
+    }
+    if (args[0] === "config" && args[1] === "set" && args[2] === "status.custom") {
+      return { ok: true, stdout: "{}", stderr: "" };
+    }
+    if (args[0] === "where") {
+      const metadata = metadataByPath.get(env.BEADS_DIR);
+      return metadata
+        ? { ok: true, stdout: JSON.stringify({ path: env.BEADS_DIR }), stderr: "" }
+        : { ok: false, stdout: "", stderr: "attachment missing" };
+    }
+    const result = impl(args);
+    const stdout = result.stdout ?? "";
+    if (typeof result.stdout === "string" && result.stdout.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(result.stdout);
+        assertCompleteIssuePayloads(parsed, args);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Invalid JSON fixture for bd ${args.join(" ")}: ${message}`);
+      }
+    }
+    return {
+      ok: result.ok,
+      stdout,
+      stderr: result.stderr ?? "",
+    };
+  };
+  (
+    runProcess as typeof runProcess & {
+      readAttachmentMetadata?: (path: string) => Promise<Record<string, unknown> | null>;
+    }
+  ).readAttachmentMetadata = async (path) => metadataByPath.get(path) ?? null;
 
   return {
-    runProcess: async (command, args, cwd, env) => {
-      calls.push({
-        command,
-        args: [...args],
-        cwd,
-        env: { ...env },
-      });
-      if (args[0] === "init") {
-        return { ok: true, stdout: "", stderr: "" };
-      }
-      if (args[0] === "dolt" && args[1] === "start") {
-        return { ok: true, stdout: "started", stderr: "" };
-      }
-      if (args[0] === "config" && args[1] === "set" && args[2] === "status.custom") {
-        return { ok: true, stdout: "{}", stderr: "" };
-      }
-      const result = impl(args);
-      const stdout = result.stdout ?? "";
-      if (typeof result.stdout === "string" && result.stdout.trim().length > 0) {
-        try {
-          const parsed = JSON.parse(result.stdout);
-          assertCompleteIssuePayloads(parsed, args);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          throw new Error(`Invalid JSON fixture for bd ${args.join(" ")}: ${message}`);
-        }
-      }
-      return {
-        ok: result.ok,
-        stdout,
-        stderr: result.stderr ?? "",
-      };
-    },
+    runProcess,
     calls,
   };
 };
@@ -136,7 +170,10 @@ afterEach(() => {
   restoreEnvSnapshot({
     ODT_REPO_PATH: undefined,
     ODT_METADATA_NAMESPACE: undefined,
-    ODT_BEADS_DIR: undefined,
+    ODT_BEADS_ATTACHMENT_DIR: undefined,
+    ODT_DOLT_HOST: undefined,
+    ODT_DOLT_PORT: undefined,
+    ODT_DATABASE_NAME: undefined,
     BEADS_DIR: undefined,
   });
 });
@@ -178,35 +215,44 @@ describe("openducktor-mcp lib", () => {
     try {
       process.env.ODT_REPO_PATH = "/tmp/env-repo";
       process.env.ODT_METADATA_NAMESPACE = "env-ns";
-      process.env.ODT_BEADS_DIR = "/tmp/env-beads";
-      process.env.BEADS_DIR = "/tmp/fallback-beads";
+      process.env.ODT_BEADS_ATTACHMENT_DIR = "/tmp/env-beads";
+      process.env.ODT_DOLT_HOST = "127.0.0.1";
+      process.env.ODT_DOLT_PORT = "3310";
+      process.env.ODT_DATABASE_NAME = "odt_env_repo";
 
       const resolved = await resolveStoreContext({
         repoPath: "/tmp/context-repo",
         metadataNamespace: "context-ns",
-        beadsDir: "/tmp/context-beads",
+        beadsAttachmentDir: "/tmp/context-beads",
+        doltHost: "127.0.0.2",
+        doltPort: "3311",
+        databaseName: "odt_context_repo",
       });
 
       expect(resolved.repoPath).toBe("/tmp/context-repo");
       expect(resolved.metadataNamespace).toBe("context-ns");
-      expect(resolved.beadsDir).toBe("/tmp/context-beads");
+      expect(resolved.beadsAttachmentDir).toBe("/tmp/context-beads");
+      expect(resolved.doltHost).toBe("127.0.0.2");
+      expect(resolved.doltPort).toBe("3311");
+      expect(resolved.databaseName).toBe("odt_context_repo");
     } finally {
       restoreEnvSnapshot(snapshot);
     }
   });
 
-  test("resolveStoreContext treats empty/sentinel env values as missing", async () => {
+  test("resolveStoreContext rejects missing shared-server contract values", async () => {
     const snapshot = takeEnvSnapshot();
     try {
       process.env.ODT_REPO_PATH = "undefined";
       process.env.ODT_METADATA_NAMESPACE = "null";
-      process.env.ODT_BEADS_DIR = "  ";
-      process.env.BEADS_DIR = "/tmp/fallback-beads";
+      process.env.ODT_BEADS_ATTACHMENT_DIR = "  ";
+      delete process.env.ODT_DOLT_HOST;
+      delete process.env.ODT_DOLT_PORT;
+      delete process.env.ODT_DATABASE_NAME;
 
-      const resolved = await resolveStoreContext({});
-      expect(resolved.repoPath.length).toBeGreaterThan(0);
-      expect(resolved.metadataNamespace).toBe("openducktor");
-      expect(resolved.beadsDir).toBe("/tmp/fallback-beads");
+      await expect(resolveStoreContext({})).rejects.toThrow(
+        "Missing Beads attachment directory for OpenDucktor MCP",
+      );
     } finally {
       restoreEnvSnapshot(snapshot);
     }
@@ -217,7 +263,7 @@ describe("openducktor-mcp lib", () => {
     expect(id).toMatch(/^openducktor-repo-[a-f0-9]{8}$/);
   });
 
-  test("resolveCentralBeadsDir does not create directory side effects", async () => {
+  test("resolveRepoBeadsAttachmentDir does not create directory side effects", async () => {
     const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const repoPath = `/tmp/odt-beads-no-side-effect-${nonce}/repo`;
     const repoId = await computeRepoId(repoPath);
@@ -225,7 +271,7 @@ describe("openducktor-mcp lib", () => {
 
     expect(existsSync(repoRoot)).toBe(false);
 
-    const resolved = await resolveCentralBeadsDir(repoPath);
+    const resolved = await resolveRepoBeadsAttachmentDir(repoPath);
     expect(resolved).toBe(resolve(repoRoot, ".beads"));
     expect(existsSync(repoRoot)).toBe(false);
   });
@@ -420,7 +466,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         runProcess,
@@ -507,7 +556,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         runProcess,
@@ -563,7 +615,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -614,7 +669,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -626,14 +684,15 @@ describe("openducktor-mcp lib", () => {
     ]);
 
     expect(calls.filter((entry) => entry.args[0] === "init")).toHaveLength(1);
-    expect(
-      calls.filter((entry) => entry.args[0] === "dolt" && entry.args[1] === "start"),
-    ).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[0] === "list")).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[0] === "show")).toHaveLength(3);
     for (const call of calls) {
       expect(call.command).toBe("bd");
       expect(call.env.BEADS_DIR).toBe("/beads");
+      expect(call.env.BEADS_DOLT_SERVER_MODE).toBe("1");
+      expect(call.env.BEADS_DOLT_SERVER_HOST).toBe("127.0.0.1");
+      expect(call.env.BEADS_DOLT_SERVER_PORT).toBe("3310");
+      expect(call.env.BEADS_DOLT_SERVER_USER).toBe("root");
     }
   });
 
@@ -709,7 +768,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -793,7 +855,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -859,7 +924,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -908,7 +976,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -971,7 +1042,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1045,7 +1119,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         runProcess,
@@ -1140,7 +1217,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1216,7 +1296,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1295,7 +1378,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1371,7 +1457,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1444,7 +1533,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1534,7 +1626,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1628,7 +1723,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1725,7 +1823,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1804,7 +1905,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1881,7 +1985,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );
@@ -1960,7 +2067,10 @@ describe("openducktor-mcp lib", () => {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       { runProcess },
     );

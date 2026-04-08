@@ -2,13 +2,19 @@ import { normalizeOptionalInput, resolveCanonicalPath } from "./beads-runtime";
 
 export type OdtStoreOptions = {
   repoPath: string;
-  beadsDir?: string;
+  beadsAttachmentDir?: string;
+  doltHost?: string;
+  doltPort?: string;
+  databaseName?: string;
   metadataNamespace: string;
 };
 
 export type OdtStoreContext = {
   repoPath?: string;
-  beadsDir?: string;
+  beadsAttachmentDir?: string;
+  doltHost?: string;
+  doltPort?: string;
+  databaseName?: string;
   metadataNamespace?: string;
 };
 
@@ -27,14 +33,38 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     normalizeOptionalInput(process.env.ODT_METADATA_NAMESPACE) ??
     "openducktor";
 
-  const beadsDir =
-    normalizeOptionalInput(context.beadsDir) ??
-    normalizeOptionalInput(process.env.ODT_BEADS_DIR) ??
-    normalizeOptionalInput(process.env.BEADS_DIR);
+  const beadsAttachmentDir =
+    normalizeOptionalInput(context.beadsAttachmentDir) ??
+    normalizeOptionalInput(process.env.ODT_BEADS_ATTACHMENT_DIR);
+  const doltHost =
+    normalizeOptionalInput(context.doltHost) ?? normalizeOptionalInput(process.env.ODT_DOLT_HOST);
+  const doltPort =
+    normalizeOptionalInput(context.doltPort) ?? normalizeOptionalInput(process.env.ODT_DOLT_PORT);
+  const databaseName =
+    normalizeOptionalInput(context.databaseName) ??
+    normalizeOptionalInput(process.env.ODT_DATABASE_NAME);
+
+  if (!beadsAttachmentDir) {
+    throw new Error(
+      "Missing Beads attachment directory for OpenDucktor MCP. Provide ODT_BEADS_ATTACHMENT_DIR.",
+    );
+  }
+  if (!doltHost) {
+    throw new Error("Missing Dolt host for OpenDucktor MCP. Provide ODT_DOLT_HOST.");
+  }
+  if (!doltPort) {
+    throw new Error("Missing Dolt port for OpenDucktor MCP. Provide ODT_DOLT_PORT.");
+  }
+  if (!databaseName) {
+    throw new Error("Missing Dolt database name for OpenDucktor MCP. Provide ODT_DATABASE_NAME.");
+  }
 
   return {
     repoPath: normalizedRepoPath,
     metadataNamespace,
-    ...(beadsDir ? { beadsDir } : {}),
+    beadsAttachmentDir,
+    doltHost,
+    doltPort,
+    databaseName,
   };
 };

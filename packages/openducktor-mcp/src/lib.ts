@@ -1,4 +1,4 @@
-export { computeRepoId, resolveCentralBeadsDir } from "./beads-runtime";
+export { computeRepoId, resolveRepoBeadsAttachmentDir } from "./beads-runtime";
 export type {
   IssueType,
   PlanSubtaskInput,
