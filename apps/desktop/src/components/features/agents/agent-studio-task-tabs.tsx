@@ -201,7 +201,7 @@ export function AgentStudioTaskTabs({
             </DialogDescription>
           </DialogHeader>
 
-          <DialogBody className="pt-4">
+          <DialogBody className="py-4">
             {!isCreateDialogReady || isLoadingAvailableTabTasks ? (
               <div className="relative">
                 <TaskSelector
@@ -231,7 +231,7 @@ export function AgentStudioTaskTabs({
             )}
           </DialogBody>
 
-          <DialogFooter className="mt-0 border-t border-border pt-5">
+          <DialogFooter className="mt-0 flex-row justify-between border-t border-border pt-5">
             <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>
