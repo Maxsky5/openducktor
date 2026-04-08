@@ -41,7 +41,7 @@ describe("Combobox", () => {
         value=""
         options={groupedOptions.flatMap((group) => group.options)}
         groups={groupedOptions}
-        searchMode="allTerms"
+        matchAllSearchTerms
         onValueChange={() => {}}
       />,
     );
@@ -76,7 +76,7 @@ describe("Combobox", () => {
         value=""
         options={groupedOptions.flatMap((group) => group.options)}
         groups={groupedOptions}
-        searchMode="allTerms"
+        matchAllSearchTerms
         emptyText="Nothing found."
         onValueChange={() => {}}
       />,
@@ -104,7 +104,7 @@ describe("Combobox", () => {
     }));
 
     const { container } = render(
-      <Combobox value="" options={manyOptions} searchMode="allTerms" onValueChange={() => {}} />,
+      <Combobox value="" options={manyOptions} matchAllSearchTerms onValueChange={() => {}} />,
     );
 
     await act(async () => {

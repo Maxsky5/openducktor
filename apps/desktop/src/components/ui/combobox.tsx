@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, type ReactNode, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -44,7 +44,7 @@ type ComboboxProps = {
   wrapLabels?: boolean;
   wrapTriggerLabel?: boolean;
   wrapOptionLabels?: boolean;
-  searchMode?: "default" | "allTerms";
+  matchAllSearchTerms?: boolean;
 };
 
 type RenderGroup = {
@@ -209,16 +209,19 @@ export function Combobox({
   wrapLabels = false,
   wrapTriggerLabel,
   wrapOptionLabels,
-  searchMode = "default",
+  matchAllSearchTerms = false,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const commandListRef = useRef<HTMLDivElement | null>(null);
 
   const shouldWrapTriggerLabel = wrapLabels || wrapTriggerLabel === true;
   const shouldWrapOptionLabels = wrapLabels || wrapOptionLabels === true;
   const searchTerms = useMemo(() => normalizeSearchTerms(searchQuery), [searchQuery]);
+  const portalContainer =
+    open && typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
+      : null;
 
   const resolvedOptions = useMemo(() => {
     if (!groups || groups.length === 0) {
@@ -240,7 +243,7 @@ export function Combobox({
   );
 
   const groupsToRender = useMemo<RenderGroup[]>(() => {
-    if (searchMode === "allTerms") {
+    if (matchAllSearchTerms) {
       if (resolvedGroups) {
         return resolvedGroups
           .map((group, groupIndex) => ({
@@ -268,44 +271,26 @@ export function Combobox({
     }
 
     return [{ key: "__ungrouped__", options: resolvedOptions }];
-  }, [resolvedGroups, resolvedOptions, searchMode, searchTerms]);
+  }, [matchAllSearchTerms, resolvedGroups, resolvedOptions, searchTerms]);
 
-  useEffect(() => {
-    const nextPortalContainer =
-      open && typeof document !== "undefined" && document.activeElement instanceof HTMLElement
-        ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
-        : null;
-
-    setPortalContainer(nextPortalContainer);
-  }, [open]);
-
-  useEffect(() => {
-    if (open) {
-      return;
+  const handleOpenChange = (nextOpen: boolean): void => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setSearchQuery("");
     }
+  };
 
-    setSearchQuery("");
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
+  const handleSearchQueryChange = (nextQuery: string): void => {
     const list = commandListRef.current;
-    if (!list) {
-      return;
+    if (open && list && list.scrollTop !== 0) {
+      list.scrollTop = 0;
     }
 
-    if (list.scrollTop === 0 && searchQuery.length === 0) {
-      return;
-    }
-
-    list.scrollTop = 0;
-  }, [open, searchQuery]);
+    setSearchQuery(nextQuery);
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -331,11 +316,11 @@ export function Combobox({
         portalContainer={portalContainer}
         className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
       >
-        <Command shouldFilter={searchMode !== "allTerms"}>
+        <Command shouldFilter={!matchAllSearchTerms}>
           <CommandInput
             placeholder={searchPlaceholder}
             value={searchQuery}
-            onValueChange={setSearchQuery}
+            onValueChange={handleSearchQueryChange}
           />
           <CommandList ref={commandListRef}>
             <CommandEmpty>{emptyText}</CommandEmpty>
@@ -348,7 +333,7 @@ export function Combobox({
                     value={value}
                     shouldWrapOptionLabels={shouldWrapOptionLabels}
                     onValueChange={onValueChange}
-                    onSelectComplete={() => setOpen(false)}
+                    onSelectComplete={() => handleOpenChange(false)}
                   />
                 ))}
               </CommandGroup>

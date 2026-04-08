@@ -42,7 +42,7 @@ export function TaskSelector({
       value={value || EMPTY_VALUE}
       options={options}
       searchPlaceholder={searchPlaceholder}
-      searchMode="allTerms"
+      matchAllSearchTerms
       disabled={disabled}
       onValueChange={(nextValue) => onValueChange(nextValue === EMPTY_VALUE ? "" : nextValue)}
     />
