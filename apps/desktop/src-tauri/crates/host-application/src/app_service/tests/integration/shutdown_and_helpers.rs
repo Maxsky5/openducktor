@@ -21,10 +21,10 @@ use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, create_failing_opencode,
     create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_sleep_process, spawn_sleep_process_group, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    install_fake_dolt, lock_env, make_emitter, make_session, make_task, prepend_path,
+    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, spawn_sleep_process_group,
+    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
+    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -964,6 +964,9 @@ fn parse_mcp_command_json_trims_entries() {
 
 #[test]
 fn build_opencode_config_content_embeds_mcp_command_and_env() {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-opencode-config-content");
+    let _dolt_guard = install_fake_dolt(&root).expect("fake dolt should install");
     let previous = std::env::var("OPENDUCKTOR_MCP_COMMAND_JSON").ok();
     std::env::set_var(
         "OPENDUCKTOR_MCP_COMMAND_JSON",
@@ -977,6 +980,7 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
         Some(value) => std::env::set_var("OPENDUCKTOR_MCP_COMMAND_JSON", value),
         None => std::env::remove_var("OPENDUCKTOR_MCP_COMMAND_JSON"),
     }
+    let _ = fs::remove_dir_all(root);
 
     let parsed: Value = serde_json::from_str(&config).expect("valid json");
     assert_eq!(parsed["logLevel"].as_str(), Some("INFO"));
