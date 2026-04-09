@@ -107,7 +107,7 @@ afterAll(async () => {
 });
 
 describe("useAgentStudioDevServerPanel", () => {
-  test("does not subscribe to dev-server events while every script is stopped", async () => {
+  test("subscribes to dev-server events while enabled so startup events are not missed", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
@@ -142,7 +142,7 @@ describe("useAgentStudioDevServerPanel", () => {
       await waitFor(() => {
         expect(getLatest().mode).toBe("stopped");
       });
-      expect(devServerEventListener).toBeNull();
+      expect(devServerEventListener).not.toBeNull();
     } finally {
       view.unmount();
     }
@@ -331,6 +331,114 @@ describe("useAgentStudioDevServerPanel", () => {
         );
       });
       expect(getLatest().scripts[0]?.status).toBe("running");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("applies startup events before the start mutation resolves", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const startDeferred = createDeferred<DevServerGroupState>();
+    devServerGetState = async () => buildState();
+    devServerStart = async () => startDeferred.promise;
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("stopped");
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      act(() => {
+        getLatest().onStart();
+      });
+
+      act(() => {
+        devServerEventListener?.({
+          type: "snapshot",
+          state: buildState({
+            scripts: [buildScript()],
+          }),
+        });
+      });
+
+      act(() => {
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:30:00.000Z",
+          script: buildScript({
+            status: "starting",
+            bufferedTerminalChunks: [
+              {
+                scriptId: "frontend",
+                sequence: 0,
+                data: "Starting `bun run dev`\r\n",
+                timestamp: "2026-03-19T15:30:00.000Z",
+              },
+            ],
+          }),
+        });
+      });
+
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("active");
+      });
+      expect(getLatest().scripts[0]?.status).toBe("starting");
+      expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+        "Starting `bun run dev`\r\n",
+      );
+
+      startDeferred.resolve(
+        buildState({
+          scripts: [
+            buildScript({
+              status: "running",
+              pid: 4242,
+              startedAt: "2026-03-19T15:30:00.000Z",
+              bufferedTerminalChunks: [
+                {
+                  scriptId: "frontend",
+                  sequence: 0,
+                  data: "Starting `bun run dev`\r\n",
+                  timestamp: "2026-03-19T15:30:00.000Z",
+                },
+              ],
+            }),
+          ],
+        }),
+      );
     } finally {
       view.unmount();
     }

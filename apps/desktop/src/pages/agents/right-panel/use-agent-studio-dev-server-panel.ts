@@ -247,9 +247,17 @@ export function useAgentStudioDevServerPanel({
   );
 
   const requestTerminalRehydrate = useCallback((): void => {
+    if (!repoPath || !taskId) {
+      return;
+    }
+
     forceHydrateFromQueryRef.current = true;
-    void stateQuery.refetch();
-  }, [stateQuery]);
+    void queryClient.refetchQueries({
+      queryKey: devServerQueryKeys.state(repoPath, taskId),
+      exact: true,
+      type: "active",
+    });
+  }, [queryClient, repoPath, taskId]);
 
   const beginMutationReplaySync = useCallback((state: DevServerGroupState | null): void => {
     const baselineByScriptId = new Map<string, number | null>();
@@ -530,12 +538,6 @@ export function useAgentStudioDevServerPanel({
   const currentLiveState = queryEnabled ? liveState : null;
   const effectiveState =
     currentLiveState ?? (shouldUseQueryData ? (stateQuery.data ?? null) : null);
-  const shouldSubscribeToEvents =
-    queryEnabled &&
-    (startMutation.isPending ||
-      stopMutation.isPending ||
-      restartMutation.isPending ||
-      (effectiveState?.scripts.some((script) => script.status !== "stopped") ?? false));
   const isAwaitingFreshState =
     queryEnabled &&
     effectiveState == null &&
@@ -559,7 +561,7 @@ export function useAgentStudioDevServerPanel({
   }, [effectiveSelectedScriptId, syncSelectedScriptTerminalBuffer]);
 
   useEffect(() => {
-    if (!shouldSubscribeToEvents || repoPath === null || taskId === null) {
+    if (!queryEnabled || repoPath === null || taskId === null) {
       return;
     }
 
@@ -621,7 +623,7 @@ export function useAgentStudioDevServerPanel({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [repoPath, requestTerminalRehydrate, shouldSubscribeToEvents, syncStateFromEvent, taskId]);
+  }, [queryEnabled, repoPath, requestTerminalRehydrate, syncStateFromEvent, taskId]);
 
   useEffect(() => {
     if (!taskMemoryKey) {
