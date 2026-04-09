@@ -686,7 +686,7 @@ describe("OdtTaskStore workflow mutation paths", () => {
     expect(harness.getStatusUpdateCalls()[0]?.args).toContain("human_review");
   });
 
-  test("qaRejected appends qa report entries and increments revision", async () => {
+  test("qaRejected stores latest qa report and increments revision", async () => {
     const harness = new OdtStoreHarness({
       issues: [
         makeIssue({
@@ -732,14 +732,6 @@ describe("OdtTaskStore workflow mutation paths", () => {
     const documents = getNamespaceDocuments(harness.getIssue("task-1"));
     const qaReports = Array.isArray(documents.qaReports) ? documents.qaReports : [];
     expect(qaReports).toEqual([
-      {
-        markdown: "Initial QA report",
-        verdict: "approved",
-        updatedAt: "2026-02-20T00:00:00.000Z",
-        updatedBy: "qa-agent",
-        sourceTool: "odt_qa_approved",
-        revision: 1,
-      },
       {
         markdown: "## Needs fixes",
         verdict: "rejected",

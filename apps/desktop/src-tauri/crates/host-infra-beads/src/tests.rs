@@ -603,7 +603,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "verdict": "approved",
             "updatedAt": "2026-02-17T13:10:00Z",
             "updatedBy": "qa-agent",
-            "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
             "revision": 2
         },
         {
@@ -682,7 +682,7 @@ fn metadata_parsing_benchmark_scaffold() {
                     "verdict": if index % 2 == 0 { "approved" } else { "rejected" },
                     "updatedAt": "2026-02-17T13:10:00Z",
                     "updatedBy": "qa-agent",
-                    "sourceTool": if index % 2 == 0 { "qa_approved" } else { "qa_rejected" },
+                    "sourceTool": if index % 2 == 0 { "odt_qa_approved" } else { "odt_qa_rejected" },
                     "revision": index + 1
                 })
             })
@@ -1029,7 +1029,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
                                 "verdict": "approved",
                                 "updatedAt": "2026-02-20T10:00:00Z",
                                 "updatedBy": "qa-agent",
-                                "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
                                 "revision": 1
                             }
                         ]
@@ -1112,7 +1112,7 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T09:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
                             "revision": 1
                         },
                         {
@@ -1120,7 +1120,7 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+            "sourceTool": "odt_qa_rejected",
                             "revision": 2
                         }
                     ]
@@ -1980,7 +1980,7 @@ fn get_and_set_plan_use_implementation_plan_metadata() -> Result<()> {
 }
 
 #[test]
-fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
+fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
     let repo = RepoFixture::new("qa-docs");
     let empty = issue_value("task-1", "open", "task", None, json!([]), None);
     let with_reports = issue_value(
@@ -1998,7 +1998,7 @@ fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+                            "sourceTool": "odt_qa_approved",
                             "revision": 1
                         }
                     ]
@@ -2031,14 +2031,48 @@ fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
     let reports = metadata_root["openducktor"]["documents"]["qaReports"]
         .as_array()
         .expect("qaReports should be an array");
-    assert_eq!(reports.len(), 2);
-    let newest = reports.last().expect("newest report missing");
+    assert_eq!(reports.len(), 1);
+    let newest = reports.first().expect("latest report missing");
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
-        Value::String("qa_rejected".to_string())
+        Value::String("odt_qa_rejected".to_string())
     );
     Ok(())
+}
+
+#[test]
+fn append_qa_report_rejects_malformed_existing_metadata() {
+    let repo = RepoFixture::new("qa-docs-invalid");
+    let malformed = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "qaReports": {
+                        "unexpected": true
+                    }
+                }
+            }
+        })),
+    );
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([malformed]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let error = store
+        .append_qa_report(repo.path(), "task-1", "Needs fixes", QaVerdict::Rejected)
+        .expect_err("malformed qaReports metadata should fail");
+    assert!(error
+        .to_string()
+        .contains("Invalid existing qaReports metadata: expected an array"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
 }
 
 #[test]
@@ -2059,7 +2093,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+                            "sourceTool": "odt_qa_rejected",
                             "revision": 1
                         }
                     ]
@@ -2078,19 +2112,11 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                 "documents": {
                     "qaReports": [
                         {
-                            "markdown": "Initial QA",
-                            "verdict": "rejected",
-                            "updatedAt": "2026-02-20T10:00:00Z",
-                            "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
-                            "revision": 1
-                        },
-                        {
                             "markdown": "Looks good",
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+                            "sourceTool": "odt_qa_approved",
                             "revision": 2
                         }
                     ]
@@ -2132,14 +2158,14 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
     let reports = metadata_root["openducktor"]["documents"]["qaReports"]
         .as_array()
         .expect("qaReports should be an array");
-    assert_eq!(reports.len(), 2);
-    let newest = reports.last().expect("newest report missing");
+    assert_eq!(reports.len(), 1);
+    let newest = reports.first().expect("latest report missing");
     assert_eq!(newest["markdown"], Value::String("Looks good".to_string()));
     assert_eq!(newest["verdict"], Value::String("approved".to_string()));
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
-        Value::String("qa_approved".to_string())
+        Value::String("odt_qa_approved".to_string())
     );
     Ok(())
 }
@@ -2162,7 +2188,7 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+                            "sourceTool": "odt_qa_rejected",
                             "revision": 1
                         },
                         {
@@ -2170,7 +2196,7 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T11:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+                            "sourceTool": "odt_qa_approved",
                             "revision": 2
                         }
                     ]
@@ -2410,7 +2436,7 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
                             "revision": 1
                         }
                     ]

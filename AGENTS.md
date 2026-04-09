@@ -167,7 +167,7 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
   - built-in: `open`, `in_progress`, `blocked`, `deferred`, `closed`
   - custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
 - UI label mapping: `open` → Backlog, `closed` → Done, `deferred` → hidden from Kanban.
-- Agent-authored docs are metadata under `openducktor` namespace: `documents.spec`, `documents.implementationPlan` (latest-only), `documents.qaReports` (append-only).
+- Agent-authored docs are metadata under `openducktor` namespace: `documents.spec`, `documents.implementationPlan`, `documents.qaReports` (latest-only).
 - Task actions defined in `packages/contracts/src/task-schemas.ts` (`taskActionSchema`).
 - Detailed workflow docs: `docs/task-workflow-*.md`
 

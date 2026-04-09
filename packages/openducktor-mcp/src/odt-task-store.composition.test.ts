@@ -78,7 +78,7 @@ describe("OdtTaskStore composition", () => {
       }),
       persistSpec: async () => ({ issue, updatedAt: "", revision: 1 }),
       persistImplementationPlan: async () => ({ issue, updatedAt: "", revision: 1 }),
-      appendQaReport: async () => {},
+      persistQaReport: async () => {},
     };
 
     const store = new OdtTaskStore(
@@ -158,7 +158,7 @@ describe("OdtTaskStore composition", () => {
       }),
       persistSpec: async () => ({ issue, updatedAt: "", revision: 1 }),
       persistImplementationPlan: async () => ({ issue, updatedAt: "", revision: 1 }),
-      appendQaReport: async () => {},
+      persistQaReport: async () => {},
     };
 
     const store = new OdtTaskStore(
@@ -234,7 +234,7 @@ describe("OdtTaskStore composition", () => {
       }),
       persistSpec: async () => ({ issue, updatedAt: "", revision: 1 }),
       persistImplementationPlan: async () => ({ issue, updatedAt: "", revision: 1 }),
-      appendQaReport: async () => {},
+      persistQaReport: async () => {},
     };
 
     const store = new OdtTaskStore(
