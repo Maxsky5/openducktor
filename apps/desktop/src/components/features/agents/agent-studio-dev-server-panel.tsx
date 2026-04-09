@@ -97,7 +97,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const [rendererError, setRendererError] = useState<string | null>(null);
   const selectedScript = model.selectedScript;
   const isActionPending = model.isStartPending || model.isStopPending || model.isRestartPending;
-  const hasExpandedActions = model.mode === "active";
+  const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
   const selectedScriptTerminalBuffer = model.selectedScriptTerminalBuffer;

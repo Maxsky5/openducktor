@@ -153,6 +153,27 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain('data-testid="agent-studio-dev-server-terminal"');
   });
 
+  test("renders the expanded panel immediately when start is pending", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "stopped",
+          isExpanded: true,
+          isStartPending: true,
+          scripts: [runningScript],
+          selectedScriptId: runningScript.scriptId,
+          selectedScript: runningScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(runningScript),
+        }),
+      }),
+    );
+
+    expect(html).toContain("Stop");
+    expect(html).toContain("Restart");
+    expect(html).toContain("Frontend");
+    expect(html).not.toContain("Start dev servers");
+  });
+
   test("renders only the selected script terminal content frame", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {
