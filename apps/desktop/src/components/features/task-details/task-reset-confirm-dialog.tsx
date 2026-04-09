@@ -53,7 +53,7 @@ export function TaskResetConfirmDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="pt-4">
+        <DialogBody className="py-4">
           <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
             <p className="font-medium">
               This action moves the task back to Backlog and keeps the task record itself.
@@ -73,12 +73,12 @@ export function TaskResetConfirmDialog({
                 uncommitted changes in those worktrees will be lost.
               </p>
             )}
-            {impactError ? <p className="text-destructive-muted">{impactError}</p> : null}
-            {resetError ? <p className="text-destructive-muted">{resetError}</p> : null}
           </div>
+          {impactError ? <p className="text-destructive-muted mt-2">{impactError}</p> : null}
+          {resetError ? <p className="text-destructive-muted mt-2">{resetError}</p> : null}
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex flex-row justify-end gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"
