@@ -1524,6 +1524,63 @@ echo "bd-fake"
     write_executable_script(path, script)
 }
 
+pub(crate) fn create_fake_dolt(path: &Path) -> Result<()> {
+    let script = r#"#!/bin/sh
+if [ "$1" = "sql-server" ]; then
+  CONFIG=""
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --config)
+        CONFIG="$2"
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  PORT=$(python3 - "$CONFIG" <<'PY'
+import re, sys
+config = sys.argv[1]
+text = open(config, 'r', encoding='utf-8').read()
+match = re.search(r'^\s*port:\s*(\d+)\s*$', text, re.MULTILINE)
+print(match.group(1) if match else '3307')
+PY
+)
+  exec python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1
+fi
+
+if [ "$1" = "backup" ] && [ "$2" = "restore" ]; then
+  mkdir -p "$PWD/$4"
+  exit 0
+fi
+
+if [ "$1" = "--host" ] || [ "$1" = "sql" ] || [ "$1" = "--no-tls" ]; then
+  exit 0
+fi
+
+if [ "$1" = "--version" ]; then
+  echo "dolt-fake 0.0.1"
+  exit 0
+fi
+
+echo "unsupported dolt invocation" >&2
+exit 1
+"#;
+    write_executable_script(path, script)
+}
+
+pub(crate) fn install_fake_dolt(root: &Path) -> Result<EnvVarGuard> {
+    let fake_dolt = root.join("dolt");
+    create_fake_dolt(&fake_dolt)?;
+    Ok(set_env_var(
+        "OPENDUCKTOR_DOLT_PATH",
+        fake_dolt.to_string_lossy().as_ref(),
+    ))
+}
+
 pub(crate) fn set_env_var(key: &str, value: &str) -> EnvVarGuard {
     EnvVarGuard::set(key, value)
 }

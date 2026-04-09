@@ -8,12 +8,14 @@ import {
   computeBeadsDatabaseName,
   resolveBundledCommandPath,
   resolveCommandExecutable,
+  resolveRepoBeadsAttachmentDir,
   sanitizeSlug,
 } from "./beads-runtime";
 
 const originalExecPath = process.execPath;
 const originalHome = process.env.HOME;
 const originalUserProfile = process.env.USERPROFILE;
+const originalConfigRoot = process.env.OPENDUCKTOR_CONFIG_DIR;
 const tempDirs: string[] = [];
 
 const setExecPath = (value: string): void => {
@@ -35,6 +37,11 @@ afterEach(() => {
     process.env.USERPROFILE = originalUserProfile;
   } else {
     delete process.env.USERPROFILE;
+  }
+  if (typeof originalConfigRoot === "string") {
+    process.env.OPENDUCKTOR_CONFIG_DIR = originalConfigRoot;
+  } else {
+    delete process.env.OPENDUCKTOR_CONFIG_DIR;
   }
   delete process.env[commandEnvOverrideName("bd")];
   for (const dir of tempDirs.splice(0)) {
@@ -143,34 +150,30 @@ describe("beads runtime command resolution", () => {
     expect(sanitizeSlug("___My Repo___")).toBe("my-repo");
   });
 
-  test("computeBeadsDatabaseName is stable and scoped to the beads directory", async () => {
-    const first = await computeBeadsDatabaseName(
-      "/repo/fairnest",
-      "/tmp/.openducktor/beads/fairnest/.beads",
-    );
-    const firstAgain = await computeBeadsDatabaseName(
-      "/repo/fairnest",
-      "/tmp/.openducktor/beads/fairnest/.beads",
-    );
-    const second = await computeBeadsDatabaseName(
-      "/repo/fairnest",
-      "/tmp/.openducktor-local/beads/fairnest/.beads",
-    );
+  test("computeBeadsDatabaseName is stable for the same repo path", async () => {
+    const first = await computeBeadsDatabaseName("/tmp/OpenDucktor Repo");
+    const firstAgain = await computeBeadsDatabaseName("/tmp/OpenDucktor Repo");
+    const second = await computeBeadsDatabaseName("/tmp/b/project");
 
     expect(firstAgain).toBe(first);
-    expect(first).toMatch(/^odt_fairnest_[a-f0-9]{12}$/);
-    expect(second).toMatch(/^odt_fairnest_[a-f0-9]{12}$/);
+    expect(first).toBe("odt_openducktor_repo_d03d54c7be05");
+    expect(second).toBe("odt_project_11c79766e587");
     expect(first).not.toBe(second);
     expect(first.length).toBeLessThanOrEqual(64);
   });
 
-  test("computeBeadsDatabaseName resolves relative store paths from the repo path", async () => {
-    const relative = await computeBeadsDatabaseName("/repo/fairnest", "relative/.beads");
-    const absolute = await computeBeadsDatabaseName(
-      "/repo/fairnest",
-      "/repo/fairnest/relative/.beads",
-    );
+  test("computeBeadsDatabaseName differs for same-basename repos in different paths", async () => {
+    const first = await computeBeadsDatabaseName("/tmp/a/project");
+    const second = await computeBeadsDatabaseName("/tmp/b/project");
 
-    expect(relative).toBe(absolute);
+    expect(first).toBe("odt_project_ee5494991388");
+    expect(second).toBe("odt_project_11c79766e587");
+  });
+
+  test("resolveRepoBeadsAttachmentDir uses the shared config root layout", async () => {
+    process.env.OPENDUCKTOR_CONFIG_DIR = "/tmp/odt-config-root";
+    const attachmentDir = await resolveRepoBeadsAttachmentDir("/tmp/openducktor-test/repo");
+
+    expect(attachmentDir).toMatch(/^\/tmp\/odt-config-root\/beads\/repo-[a-f0-9]{8}\/\.beads$/);
   });
 });

@@ -33,7 +33,8 @@ import {
 
 export type OdtTaskStoreDeps = {
   runProcess?: BeadsRuntimeClientDeps["runProcess"];
-  resolveBeadsDir?: BeadsRuntimeClientDeps["resolveBeadsDir"];
+  resolveBeadsAttachmentDir?: BeadsRuntimeClientDeps["resolveBeadsAttachmentDir"];
+  readAttachmentMetadata?: BeadsRuntimeClientDeps["readAttachmentMetadata"];
   now?: TimeProvider;
   persistence?: TaskPersistencePort;
   documentStore?: TaskDocumentPort;
@@ -97,10 +98,24 @@ export class OdtTaskStore {
     options: OdtStoreOptions,
     deps: OdtTaskStoreDeps,
   ): BeadsPersistence {
-    const beadsClient = new BeadsRuntimeClient(this.repoPath, options.beadsDir ?? null, {
-      ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
-      ...(deps.resolveBeadsDir ? { resolveBeadsDir: deps.resolveBeadsDir } : {}),
-    });
+    const beadsClient = new BeadsRuntimeClient(
+      this.repoPath,
+      {
+        beadsAttachmentDir: options.beadsAttachmentDir ?? null,
+        doltHost: options.doltHost,
+        doltPort: options.doltPort,
+        databaseName: options.databaseName,
+      },
+      {
+        ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
+        ...(deps.resolveBeadsAttachmentDir
+          ? { resolveBeadsAttachmentDir: deps.resolveBeadsAttachmentDir }
+          : {}),
+        ...(deps.readAttachmentMetadata
+          ? { readAttachmentMetadata: deps.readAttachmentMetadata }
+          : {}),
+      },
+    );
     return new BeadsPersistence(beadsClient, options.metadataNamespace);
   }
 

@@ -75,6 +75,7 @@ const makeIssue = (input: {
 
 class OdtStoreHarness {
   private readonly issues: Map<string, TestIssue>;
+  private readonly attachmentMetadata = new Map<string, Record<string, unknown>>();
   private readonly listSnapshots: TestIssue[][] | null;
   private listCalls = 0;
   private createCounter = 0;
@@ -94,10 +95,15 @@ class OdtStoreHarness {
       {
         repoPath: "/repo",
         metadataNamespace: "openducktor",
-        beadsDir: "/beads",
+        beadsAttachmentDir: "/beads",
+        doltHost: "127.0.0.1",
+        doltPort: "3310",
+        databaseName: "odt_repo_testdb",
       },
       {
         runProcess: (command, args, cwd, env) => this.runProcess(command, args, cwd, env),
+        readAttachmentMetadata: (beadsAttachmentDir) =>
+          Promise.resolve(this.attachmentMetadata.get(beadsAttachmentDir) ?? null),
         now: this.now,
       },
     );
@@ -151,13 +157,23 @@ class OdtStoreHarness {
 
     switch (subcommand) {
       case "init":
+        this.attachmentMetadata.set(env.BEADS_DIR, {
+          backend: "dolt",
+          dolt_mode: "server",
+          dolt_server_host: env.BEADS_DOLT_SERVER_HOST,
+          dolt_server_port: Number(env.BEADS_DOLT_SERVER_PORT),
+          dolt_server_user: env.BEADS_DOLT_SERVER_USER,
+          dolt_database: args[args.length - 1],
+        });
         result = { ok: true, stdout: "" };
         break;
       case "config":
         result = { ok: true, stdout: "{}" };
         break;
-      case "dolt":
-        result = { ok: true, stdout: "started" };
+      case "where":
+        result = this.attachmentMetadata.has(env.BEADS_DIR)
+          ? { ok: true, stdout: JSON.stringify({ path: env.BEADS_DIR }) }
+          : { ok: false, stderr: "attachment missing" };
         break;
       case "list":
         this.listCalls += 1;

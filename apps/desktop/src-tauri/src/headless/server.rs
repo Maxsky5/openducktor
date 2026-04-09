@@ -2,7 +2,9 @@ use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
 use crate::commands::workspace::is_staged_local_attachment_path;
-use crate::{startup_phase_service_bootstrap, startup_phase_shutdown_hooks, startup_phase_tracing};
+use crate::{
+    startup_phase_service_bootstrap, startup_phase_shutdown_hooks_with_gate, startup_phase_tracing,
+};
 use anyhow::Context;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, Query, State};
@@ -14,8 +16,10 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
 
@@ -28,16 +32,54 @@ const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
 const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShutdownRequestAction {
+    Start,
+    AlreadyStarted,
+}
+
+fn classify_shutdown_request(already_started: bool) -> ShutdownRequestAction {
+    if already_started {
+        ShutdownRequestAction::AlreadyStarted
+    } else {
+        ShutdownRequestAction::Start
+    }
+}
+
+fn shutdown_exit_code(success: bool) -> i32 {
+    if success { 0 } else { 1 }
+}
+
+fn reject_when_shutting_down(state: &HeadlessState) -> Result<(), HeadlessCommandError> {
+    if state.shutdown_started.load(Ordering::SeqCst) {
+        Err(HeadlessCommandError {
+            message: "Browser backend is shutting down and is no longer accepting new work."
+                .to_string(),
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            failure_kind: None,
+        })
+    } else {
+        Ok(())
+    }
+}
+
 pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
-    startup_phase_shutdown_hooks(service.clone());
     let registry =
         Arc::new(build_registry().context("failed to build browser backend command registry")?);
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let shutdown_signal = Arc::new(Notify::new());
+    let shutdown_started = Arc::new(AtomicBool::new(false));
+    startup_phase_shutdown_hooks_with_gate(
+        service.clone(),
+        shutdown_started.clone(),
+        Some(shutdown_signal.clone()),
+    );
     let app = Router::new()
         .route("/health", get(health_handler))
+        .route("/shutdown", post(shutdown_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
         .route(
@@ -51,6 +93,8 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             events,
             dev_server_events,
             registry,
+            shutdown_signal: shutdown_signal.clone(),
+            shutdown_started: shutdown_started.clone(),
         });
 
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
@@ -67,6 +111,9 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     );
 
     axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown_signal.notified().await;
+        })
         .await
         .context("browser backend server terminated unexpectedly")
 }
@@ -75,10 +122,48 @@ async fn health_handler() -> impl IntoResponse {
     Json(json!({ "ok": true }))
 }
 
+async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoResponse {
+    if classify_shutdown_request(state.shutdown_started.swap(true, Ordering::SeqCst))
+        == ShutdownRequestAction::AlreadyStarted
+    {
+        return (StatusCode::ACCEPTED, Json(json!({ "ok": true })));
+    }
+
+    let service = state.service.clone();
+    let shutdown_signal = state.shutdown_signal.clone();
+    tokio::spawn(async move {
+        shutdown_signal.notify_waiters();
+        let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
+            Ok(Ok(())) => shutdown_exit_code(true),
+            Ok(Err(error)) => {
+                tracing::error!(
+                    target: "openducktor.browser-backend",
+                    error = %error,
+                    "Browser backend shutdown failed"
+                );
+                shutdown_exit_code(false)
+            }
+            Err(error) => {
+                tracing::error!(
+                    target: "openducktor.browser-backend",
+                    error = %error,
+                    "Browser backend shutdown task failed"
+                );
+                shutdown_exit_code(false)
+            }
+        };
+        tokio::task::yield_now().await;
+        std::process::exit(exit_code);
+    });
+
+    (StatusCode::ACCEPTED, Json(json!({ "ok": true })))
+}
+
 async fn events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
         state.events,
@@ -91,6 +176,7 @@ async fn dev_server_events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
         state.dev_server_events,
@@ -104,6 +190,10 @@ async fn invoke_handler(
     State(state): State<HeadlessState>,
     args: Result<Json<Value>, JsonRejection>,
 ) -> impl IntoResponse {
+    if let Err(error) = reject_when_shutting_down(&state) {
+        return error.into_response();
+    }
+
     let args = match args {
         Ok(Json(args)) => args,
         Err(error) => return json_rejection_error(error).into_response(),
@@ -239,6 +329,72 @@ mod tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    #[test]
+    fn classify_shutdown_request_starts_only_once() {
+        assert_eq!(classify_shutdown_request(false), ShutdownRequestAction::Start);
+        assert_eq!(
+            classify_shutdown_request(true),
+            ShutdownRequestAction::AlreadyStarted
+        );
+    }
+
+    #[test]
+    fn shutdown_exit_code_maps_success_and_failure() {
+        assert_eq!(shutdown_exit_code(true), 0);
+        assert_eq!(shutdown_exit_code(false), 1);
+    }
+
+    #[tokio::test]
+    async fn shutdown_handler_returns_accepted_when_shutdown_already_started() {
+        let fixture = test_state_fixture();
+        fixture
+            .state
+            .shutdown_started
+            .store(true, Ordering::SeqCst);
+
+        let response = shutdown_handler(State(fixture.state.clone())).await.into_response();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::ACCEPTED);
+        assert_eq!(payload, json!({ "ok": true }));
+    }
+
+    #[tokio::test]
+    async fn invoke_handler_rejects_new_work_when_shutdown_started() {
+        let fixture = test_state_fixture();
+        fixture
+            .state
+            .shutdown_started
+            .store(true, Ordering::SeqCst);
+
+        let response = invoke_handler(
+            Path("workspace_list".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            payload,
+            json!({
+                "error": "Browser backend is shutting down and is no longer accepting new work."
+            })
+        );
+    }
+
     struct TestStateFixture {
         state: HeadlessState,
         root: PathBuf,
@@ -273,6 +429,8 @@ mod tests {
                 events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 registry,
+                shutdown_signal: Arc::new(Notify::new()),
+                shutdown_started: Arc::new(AtomicBool::new(false)),
             },
             root,
         }

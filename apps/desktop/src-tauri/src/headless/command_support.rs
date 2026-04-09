@@ -10,7 +10,9 @@ use host_application::{AppService, HookTrustConfirmationPort, HookTrustConfirmat
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use tokio::sync::Notify;
 
 #[derive(Clone)]
 pub(super) struct HeadlessState {
@@ -18,6 +20,8 @@ pub(super) struct HeadlessState {
     pub(super) events: HeadlessEventBus,
     pub(super) dev_server_events: HeadlessEventBus,
     pub(super) registry: Arc<CommandRegistry>,
+    pub(super) shutdown_signal: Arc<Notify>,
+    pub(super) shutdown_started: Arc<AtomicBool>,
 }
 
 #[derive(Debug)]

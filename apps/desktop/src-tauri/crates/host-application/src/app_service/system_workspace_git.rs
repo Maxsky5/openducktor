@@ -13,9 +13,9 @@ use host_domain::{
 };
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
-    resolve_central_beads_dir, run_command, run_command_allow_failure_with_env, version_command,
-    AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides,
-    RepoConfig,
+    resolve_repo_live_database_dir, run_command, run_command_allow_failure_with_env,
+    version_command, AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings,
+    PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -167,7 +167,7 @@ impl AppService {
         }
 
         let repo = Path::new(repo_path);
-        match resolve_central_beads_dir(repo) {
+        match resolve_repo_live_database_dir(repo) {
             Ok(path) => {
                 let path_string = path.to_string_lossy().to_string();
                 match self.ensure_repo_initialized(repo_path) {

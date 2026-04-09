@@ -5,7 +5,8 @@ use host_domain::{
     UpdateTaskPatch,
 };
 use host_infra_system::{
-    compute_beads_database_name, compute_repo_slug, resolve_central_beads_dir,
+    compute_beads_database_name, compute_repo_slug, resolve_repo_beads_attachment_dir,
+    resolve_shared_dolt_root, restore_shared_dolt_database_from_backup,
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};

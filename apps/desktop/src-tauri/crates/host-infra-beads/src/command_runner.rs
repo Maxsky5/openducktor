@@ -3,6 +3,8 @@ use host_infra_system::{run_command_allow_failure_with_env, run_command_with_env
 use std::path::Path;
 
 pub(crate) trait CommandRunner: Send + Sync {
+    fn uses_real_processes(&self) -> bool;
+
     fn run_with_env(
         &self,
         program: &str,
@@ -24,6 +26,10 @@ pub(crate) trait CommandRunner: Send + Sync {
 pub(crate) struct ProcessCommandRunner;
 
 impl CommandRunner for ProcessCommandRunner {
+    fn uses_real_processes(&self) -> bool {
+        true
+    }
+
     fn run_with_env(
         &self,
         program: &str,

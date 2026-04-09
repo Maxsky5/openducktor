@@ -61,10 +61,12 @@ Key boundary:
  - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
  - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
  - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
-6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. Today that startup path still spawns OpenCode with `OPENCODE_CONFIG_CONTENT` containing MCP server `openducktor` and env (`ODT_REPO_PATH`, `ODT_BEADS_DIR`, `ODT_METADATA_NAMESPACE`).
+6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this spawns the MCP server `openducktor` with host-owned Beads attachment and shared Dolt connection env (`ODT_REPO_PATH`, `ODT_BEADS_ATTACHMENT_DIR`, `ODT_DOLT_HOST`, `ODT_DOLT_PORT`, `ODT_DATABASE_NAME`, `ODT_METADATA_NAMESPACE`).
 7. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
 8. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
 9. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
+
+For the exact Beads attachment and shared Dolt startup/shutdown command sequence, see `docs/beads-shared-dolt-lifecycle.md`.
 
 Critical session invariants:
 - Read-only roles (`spec`, `planner`, `qa`) must auto-reject mutating permission prompts; on auto-reply failure, permission remains actionable and a system error is emitted.
@@ -129,6 +131,7 @@ Concrete adapters today:
 
 ## Related Docs
 - `docs/agent-orchestrator-module-map.md`
+- `docs/beads-shared-dolt-lifecycle.md`
 - `docs/runtime-integration-guide.md`
 - `docs/task-workflow-status-model.md`
 - `docs/task-workflow-actions.md`
