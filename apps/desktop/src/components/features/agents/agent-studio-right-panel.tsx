@@ -1,6 +1,7 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
@@ -40,6 +41,9 @@ const rightPanelLabel = (kind: AgentStudioRightPanelKind): string => {
   return "builder tools";
 };
 
+const COMPACT_DEV_SERVER_PANEL_SIZE = 12;
+const EXPANDED_DEV_SERVER_PANEL_SIZE = 40;
+
 function AgentStudioBuildToolsPanel({
   diffModel,
   devServerModel,
@@ -47,27 +51,31 @@ function AgentStudioBuildToolsPanel({
   diffModel: AgentStudioGitPanelModel;
   devServerModel: AgentStudioDevServerPanelModel;
 }): ReactElement {
-  if (!devServerModel.isExpanded) {
-    return (
-      <DiffWorkerProvider>
-        <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <AgentStudioGitPanel model={diffModel} />
-          </div>
-          <AgentStudioDevServerPanel model={devServerModel} />
-        </div>
-      </DiffWorkerProvider>
+  const devServerPanelRef = useRef<PanelImperativeHandle | null>(null);
+
+  useEffect(() => {
+    const panel = devServerPanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    panel.resize(
+      devServerModel.isExpanded ? EXPANDED_DEV_SERVER_PANEL_SIZE : COMPACT_DEV_SERVER_PANEL_SIZE,
     );
-  }
+  }, [devServerModel.isExpanded]);
 
   return (
     <DiffWorkerProvider>
       <ResizablePanelGroup direction="vertical">
-        <ResizablePanel defaultSize={60} minSize={30}>
+        <ResizablePanel defaultSize={100 - COMPACT_DEV_SERVER_PANEL_SIZE} minSize={30}>
           <AgentStudioGitPanel model={diffModel} />
         </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={40} minSize={20}>
+        <ResizableHandle withHandle={devServerModel.isExpanded} />
+        <ResizablePanel
+          panelRef={devServerPanelRef}
+          defaultSize={COMPACT_DEV_SERVER_PANEL_SIZE}
+          minSize={devServerModel.isExpanded ? 20 : COMPACT_DEV_SERVER_PANEL_SIZE}
+        >
           <AgentStudioDevServerPanel model={devServerModel} />
         </ResizablePanel>
       </ResizablePanelGroup>
