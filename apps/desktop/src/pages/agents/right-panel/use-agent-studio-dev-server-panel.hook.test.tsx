@@ -895,4 +895,67 @@ describe("useAgentStudioDevServerPanel", () => {
       view.unmount();
     }
   });
+
+  test("surfaces restart failures without promoting them to fatal action crashes", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async () =>
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+    devServerRestart = async () => {
+      throw new Error("Dev server exited with code 1.");
+    };
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("active");
+      });
+
+      act(() => {
+        getLatest().onRestart();
+      });
+
+      await waitFor(() => {
+        expect(getLatest().error).toBe("Dev server exited with code 1.");
+      });
+      expect(getLatest().isRestartPending).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
 });

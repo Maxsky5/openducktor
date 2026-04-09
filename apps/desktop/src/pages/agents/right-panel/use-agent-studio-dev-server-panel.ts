@@ -702,13 +702,13 @@ export function useAgentStudioDevServerPanel({
     isRestartPending: restartMutation.isPending,
     onSelectScript,
     onStart: () => {
-      void startMutation.mutateAsync();
+      startMutation.mutate();
     },
     onStop: () => {
-      void stopMutation.mutateAsync();
+      stopMutation.mutate();
     },
     onRestart: () => {
-      void restartMutation.mutateAsync();
+      restartMutation.mutate();
     },
   };
 }
