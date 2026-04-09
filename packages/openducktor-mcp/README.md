@@ -5,7 +5,8 @@ OpenDucktor MCP server for local repository task workflows.
 The MCP package is a thin client of the running Rust host.
 
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
-- Standalone use must provide a reachable host bridge explicitly.
+- Standalone use auto-discovers a running host bridge from the local registry.
+- `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 - Legacy direct `bd` / `dolt` startup parameters are rejected.
 
 For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
@@ -19,8 +20,7 @@ For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-
       "command": "bunx",
       "args": [
         "@openducktor/mcp",
-        "--repo", "/absolute/path/to/repo",
-        "--host-url", "http://127.0.0.1:14327"
+        "--repo", "/absolute/path/to/repo"
       ]
     }
   }
@@ -32,15 +32,22 @@ Optional arguments:
 - `--host-url <url>`
 - `--metadata-namespace <name>`
 
-Required environment for standalone use:
+Equivalent environment variables:
 
 - `ODT_REPO_PATH`
-- `ODT_HOST_URL`
+- `ODT_HOST_URL` optional override
 - `ODT_METADATA_NAMESPACE` optional, defaults to `openducktor`
+
+Automatic discovery:
+
+- The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
+- The default config directory is `~/.openducktor`.
+- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge-ports.json` instead.
 
 Startup behavior:
 
-- The MCP validates `ODT_HOST_URL` or `--host-url`.
+- The MCP uses `ODT_HOST_URL` or `--host-url` first when provided.
+- Otherwise it discovers host ports from the local registry and tries them in order.
 - It checks the host bridge `/health` endpoint.
 - It calls `odt_mcp_ready` before serving requests.
 - Startup fails if the host does not expose the full ODT tool surface.

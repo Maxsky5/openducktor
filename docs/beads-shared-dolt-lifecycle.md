@@ -319,7 +319,7 @@ When OpenDucktor launches its MCP sidecar for OpenCode, it passes host bridge co
 
 The Rust host owns the Beads attachment directory, shared Dolt connection details, attachment verification, repair, and all task reads and writes.
 
-The MCP sidecar no longer connects to Dolt or runs Beads directly. In desktop-managed mode the host injects a loopback `ODT_HOST_URL`, and the MCP forwards task, document, and workflow calls back to the running host. Standalone MCP use must provide that same host URL explicitly.
+The MCP sidecar no longer connects to Dolt or runs Beads directly. In desktop-managed mode the host injects a loopback `ODT_HOST_URL`, and the MCP forwards task, document, and workflow calls back to the running host. Standalone MCP use auto-discovers running host bridge ports from the local registry and can still use `ODT_HOST_URL` as an explicit override.
 
 ## What Happens On App Exit
 

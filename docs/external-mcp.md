@@ -7,7 +7,8 @@ This document describes the public OpenDucktor MCP package that can be used outs
 Both desktop-managed and standalone MCP paths now route task operations through the Rust host. The TypeScript MCP package does not talk to Beads or Dolt directly.
 
 - Desktop-managed launches receive `ODT_HOST_URL` from the desktop host automatically.
-- Standalone external use must provide a reachable host bridge explicitly.
+- Standalone external use auto-discovers a running host bridge from the local registry.
+- `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 - Startup fails if the host bridge is unhealthy or does not expose the required ODT tool surface.
 
 For the full Beads and shared Dolt lifecycle, including why the Rust host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
@@ -31,8 +32,7 @@ Example MCP config:
       "command": "bunx",
       "args": [
         "@openducktor/mcp",
-        "--repo", "/absolute/path/to/repo",
-        "--host-url", "http://127.0.0.1:14327"
+        "--repo", "/absolute/path/to/repo"
       ]
     }
   }
@@ -47,15 +47,23 @@ Optional arguments:
 Equivalent environment variables:
 
 - `ODT_REPO_PATH`
-- `ODT_HOST_URL`
+- `ODT_HOST_URL` optional override
 - `ODT_METADATA_NAMESPACE`
+
+Automatic discovery:
+
+- The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
+- The default config directory is `~/.openducktor`.
+- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge-ports.json` instead.
 
 Startup contract:
 
-1. Normalize and validate the repo path and host URL.
-2. Call the host bridge `/health` endpoint.
-3. Call `odt_mcp_ready` through the loopback host API.
-4. Refuse startup if any required ODT tool name is missing.
+1. Normalize and validate the repo path.
+2. Use `ODT_HOST_URL` or `--host-url` first when provided.
+3. Otherwise read the local discovery registry and try discovered bridge ports in order.
+4. Call the host bridge `/health` endpoint.
+5. Call `odt_mcp_ready` through the loopback host API.
+6. Refuse startup if any required ODT tool name is missing.
 
 ## Public Tools
 

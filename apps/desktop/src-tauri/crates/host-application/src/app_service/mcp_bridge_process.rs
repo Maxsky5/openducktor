@@ -1,17 +1,12 @@
+use super::mcp_bridge_registry::{bridge_base_url, health_check};
 use super::{terminate_child_process, AppService, McpBridgeProcess};
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::pick_free_port;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::io::Read;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const MCP_BRIDGE_READY_TIMEOUT: Duration = Duration::from_secs(5);
-const MCP_BRIDGE_HEALTH_PATH: &str = "/health";
-
-fn bridge_base_url(port: u16) -> String {
-    format!("http://127.0.0.1:{port}")
-}
 
 fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
     let Some(mut reader) = pipe.take() else {
@@ -20,37 +15,6 @@ fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
     let mut output = String::new();
     let _ = reader.read_to_string(&mut output);
     output.trim().to_string()
-}
-
-fn health_check(port: u16) -> Result<bool> {
-    let address: SocketAddr = format!("127.0.0.1:{port}")
-        .parse()
-        .context("Invalid localhost MCP bridge address")?;
-    let mut stream = match TcpStream::connect_timeout(&address, Duration::from_millis(200)) {
-        Ok(stream) => stream,
-        Err(_) => return Ok(false),
-    };
-    stream
-        .set_read_timeout(Some(Duration::from_millis(200)))
-        .context("Failed setting MCP bridge read timeout")?;
-    stream
-        .set_write_timeout(Some(Duration::from_millis(200)))
-        .context("Failed setting MCP bridge write timeout")?;
-    stream
-        .write_all(
-            format!(
-                "GET {MCP_BRIDGE_HEALTH_PATH} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
-            )
-            .as_bytes(),
-        )
-        .context("Failed writing MCP bridge health request")?;
-
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .context("Failed reading MCP bridge health response")?;
-
-    Ok(response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200"))
 }
 
 fn wait_for_bridge_ready(child: &mut Child, port: u16) -> Result<()> {
@@ -146,6 +110,7 @@ impl AppService {
                 .context("Failed checking MCP bridge process state")?
                 .is_none()
             {
+                self.register_mcp_bridge_port(process.port)?;
                 return Ok(process.base_url.clone());
             }
             *bridge = None;
@@ -159,8 +124,13 @@ impl AppService {
         }
 
         let base_url = bridge_base_url(port);
+        if let Err(error) = self.register_mcp_bridge_port(port) {
+            terminate_child_process(&mut child);
+            return Err(error);
+        }
         *bridge = Some(McpBridgeProcess {
             base_url: base_url.clone(),
+            port,
             child,
         });
         Ok(base_url)
@@ -171,10 +141,11 @@ impl AppService {
             .mcp_bridge_process
             .lock()
             .map_err(|_| anyhow!("MCP bridge process state lock poisoned"))?;
-        if let Some(process) = bridge.as_mut() {
+        if let Some(mut process) = bridge.take() {
+            let port = process.port;
             terminate_child_process(&mut process.child);
+            self.unregister_mcp_bridge_port(port)?;
         }
-        *bridge = None;
         Ok(())
     }
 }

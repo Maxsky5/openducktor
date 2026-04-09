@@ -163,6 +163,7 @@ pub struct AppService {
         Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, Arc<OpencodeSessionStatusFlight>>>>,
     pub(super) opencode_session_status_probe_limiter: Arc<OpencodeSessionStatusProbeLimiter>,
     pub(super) opencode_process_registry_path: PathBuf,
+    pub(super) mcp_bridge_registry_path: PathBuf,
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
     pub(super) runtime_check_cache: Arc<Mutex<Option<CachedRuntimeCheck>>>,
@@ -193,6 +194,7 @@ pub(crate) struct AgentRuntimeProcess {
 
 pub(crate) struct McpBridgeProcess {
     pub(super) base_url: String,
+    pub(super) port: u16,
     pub(super) child: Child,
 }
 
@@ -259,6 +261,7 @@ impl AppService {
     ) -> Self {
         let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
         let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
+        let mcp_bridge_registry_path = Self::mcp_bridge_registry_path(&config_store);
         let instance_pid = std::process::id();
         let service = Self {
             task_store,
@@ -278,6 +281,7 @@ impl AppService {
                 OpencodeSessionStatusProbeLimiter::new(4),
             ),
             opencode_process_registry_path,
+            mcp_bridge_registry_path,
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
             runtime_check_cache: Arc::new(Mutex::new(None)),
@@ -291,6 +295,11 @@ impl AppService {
         if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
             eprintln!(
                 "OpenDucktor warning: failed reconciling orphan OpenCode processes at startup: {error:#}"
+            );
+        }
+        if let Err(error) = service.reconcile_mcp_bridge_registry_on_startup() {
+            eprintln!(
+                "OpenDucktor warning: failed reconciling MCP bridge discovery registry at startup: {error:#}"
             );
         }
         service

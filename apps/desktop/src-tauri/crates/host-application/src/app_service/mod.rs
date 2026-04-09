@@ -23,6 +23,7 @@ mod events;
 mod git_provider;
 mod hook_security;
 mod mcp_bridge_process;
+mod mcp_bridge_registry;
 mod odt_mcp;
 mod opencode_runtime;
 mod opencode_session_status;
@@ -41,6 +42,8 @@ mod workspace_policy;
 
 pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
+#[cfg(test)]
+pub(crate) use mcp_bridge_registry::{read_mcp_bridge_registry, MCP_BRIDGE_REGISTRY_RELATIVE_PATH};
 pub use odt_mcp::{
     OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
