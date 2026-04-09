@@ -35,17 +35,17 @@ const notAvailable = async <T>(): Promise<T> => {
 };
 
 const createSafeCleanup = (cleanup: AsyncCleanup): (() => void) => {
-  let settledCleanup = cleanup;
+  let pendingCleanup = cleanup;
   let called = false;
 
   return () => {
-    if (called || !settledCleanup) {
+    if (called || !pendingCleanup) {
       return;
     }
 
     called = true;
-    const currentCleanup = settledCleanup;
-    settledCleanup = null;
+    const currentCleanup = pendingCleanup;
+    pendingCleanup = null;
 
     try {
       const result = currentCleanup();

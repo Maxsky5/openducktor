@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let isBrowserAppMode = false;
@@ -7,33 +7,33 @@ let listenImpl:
   | ((event: string, handler: (event: { payload: unknown }) => void) => unknown)
   | null = null;
 
-mock.module("@/lib/browser-mode", () => ({
-  isBrowserAppMode: () => isBrowserAppMode,
-  getBrowserBackendUrl: () => "http://127.0.0.1:14327",
-}));
-
-mock.module("@/lib/runtime", () => ({
-  isTauriRuntime: () => isTauriRuntime,
-}));
-
-mock.module("@tauri-apps/api/event", () => ({
-  listen: (event: string, handler: (event: { payload: unknown }) => void) => {
-    if (!listenImpl) {
-      throw new Error("listenImpl not configured");
-    }
-
-    return listenImpl(event, handler);
-  },
-}));
-
 describe("host-client", () => {
   beforeEach(() => {
     isBrowserAppMode = false;
     isTauriRuntime = false;
     listenImpl = null;
+
+    mock.module("@/lib/browser-mode", () => ({
+      isBrowserAppMode: () => isBrowserAppMode,
+      getBrowserBackendUrl: () => "http://127.0.0.1:14327",
+    }));
+
+    mock.module("@/lib/runtime", () => ({
+      isTauriRuntime: () => isTauriRuntime,
+    }));
+
+    mock.module("@tauri-apps/api/event", () => ({
+      listen: (event: string, handler: (event: { payload: unknown }) => void) => {
+        if (!listenImpl) {
+          throw new Error("listenImpl not configured");
+        }
+
+        return listenImpl(event, handler);
+      },
+    }));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       ["@/lib/browser-mode", () => import("@/lib/browser-mode")],
       ["@/lib/runtime", () => import("@/lib/runtime")],
