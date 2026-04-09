@@ -8,6 +8,7 @@ import { isBrowserAppMode } from "@/lib/browser-mode";
 import { isTauriRuntime } from "@/lib/runtime";
 
 type RunEventListener = (payload: unknown) => void;
+type AsyncCleanup = (() => void | Promise<void>) | null | undefined;
 type HostBridge = {
   client: TauriHostClient;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
@@ -18,6 +19,7 @@ const RUN_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
   "Run-event subscriptions require the desktop shell or browser live mode.";
 const DEV_SERVER_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
   "Dev-server event subscriptions require the desktop shell or browser live mode.";
+const TAURI_EVENT_UNSUBSCRIBE_LOG_PREFIX = "[host-client] Tauri event unsubscribe failed";
 
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
 
@@ -30,6 +32,32 @@ const getTauriCoreModule = (): Promise<typeof import("@tauri-apps/api/core")> =>
 
 const notAvailable = async <T>(): Promise<T> => {
   throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+};
+
+const createSafeCleanup = (cleanup: AsyncCleanup): (() => void) => {
+  let pendingCleanup = cleanup;
+  let called = false;
+
+  return () => {
+    if (called || !pendingCleanup) {
+      return;
+    }
+
+    called = true;
+    const currentCleanup = pendingCleanup;
+    pendingCleanup = null;
+
+    try {
+      const result = currentCleanup();
+      if (result && typeof result.then === "function") {
+        void result.catch((error: unknown) => {
+          console.warn(TAURI_EVENT_UNSUBSCRIBE_LOG_PREFIX, error);
+        });
+      }
+    } catch (error) {
+      console.warn(TAURI_EVENT_UNSUBSCRIBE_LOG_PREFIX, error);
+    }
+  };
 };
 
 const createHostCommands = (): TauriHostClient => {
@@ -56,9 +84,11 @@ const createRunEventSubscription = (): HostBridge["subscribeRunEvents"] => async
   }
 
   const events = await import("@tauri-apps/api/event");
-  return events.listen("openducktor://run-event", (event) => {
+  const cleanup = await events.listen("openducktor://run-event", (event) => {
     listener(event.payload);
   });
+
+  return createSafeCleanup(cleanup);
 };
 
 const createDevServerEventSubscription =
@@ -72,9 +102,11 @@ const createDevServerEventSubscription =
     }
 
     const events = await import("@tauri-apps/api/event");
-    return events.listen("openducktor://dev-server-event", (event) => {
+    const cleanup = await events.listen("openducktor://dev-server-event", (event) => {
       listener(event.payload);
     });
+
+    return createSafeCleanup(cleanup);
   };
 
 export const createHostBridge = (): HostBridge => ({
