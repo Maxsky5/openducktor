@@ -1,9 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { act } from "react";
-import {
-  buildTodoItem,
-  createComposerDraft,
-} from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
@@ -271,62 +268,6 @@ describe("useAgentStudioPageModels", () => {
     }
     sendResolver.current(true);
     await sendPromise;
-    await harness.unmount();
-  });
-
-  test("requests a bottom resync when a todo first appears", async () => {
-    const harness = createHookHarness(createHookArgs());
-
-    await harness.mount();
-
-    const syncBottomAfterComposerLayout = mock(() => {});
-    harness.getLatest().agentChatModel.thread.syncBottomAfterComposerLayoutRef.current =
-      syncBottomAfterComposerLayout;
-
-    const sessionWithTodo = createSession("session-1", "external-1", {
-      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
-    });
-
-    await harness.update(
-      createHookArgs({
-        core: {
-          activeSession: sessionWithTodo,
-          sessionsForTask: [toAgentSessionSummary(sessionWithTodo)],
-        },
-      }),
-    );
-
-    expect(syncBottomAfterComposerLayout).toHaveBeenCalledTimes(1);
-
-    await harness.unmount();
-  });
-
-  test("requests a bottom resync when toggling the todo panel", async () => {
-    const sessionWithTodo = createSession("session-1", "external-1", {
-      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
-    });
-    const harness = createHookHarness(
-      createHookArgs({
-        core: {
-          activeSession: sessionWithTodo,
-          sessionsForTask: [toAgentSessionSummary(sessionWithTodo)],
-        },
-      }),
-    );
-
-    await harness.mount();
-
-    const syncBottomAfterComposerLayout = mock(() => {});
-    harness.getLatest().agentChatModel.thread.syncBottomAfterComposerLayoutRef.current =
-      syncBottomAfterComposerLayout;
-
-    await act(async () => {
-      harness.getLatest().agentChatModel.thread.onToggleTodoPanel();
-      await Promise.resolve();
-    });
-
-    expect(syncBottomAfterComposerLayout).toHaveBeenCalledTimes(1);
-
     await harness.unmount();
   });
 

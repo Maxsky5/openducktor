@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type RefObject,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -646,6 +647,50 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     }));
   }, [activeTurnKey, stagedTurns]);
   const allowTurnContainment = !hasAttachmentMessages;
+  const bottomStackRef = useRef<HTMLDivElement | null>(null);
+  const bottomStackHeightRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!hasBottomStack) {
+      bottomStackHeightRef.current = null;
+      return;
+    }
+
+    const bottomStack = bottomStackRef.current;
+    if (!bottomStack || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const syncAfterBottomStackResize = (height: number) => {
+      if (!Number.isFinite(height)) {
+        return;
+      }
+
+      if (
+        bottomStackHeightRef.current !== null &&
+        Math.abs(bottomStackHeightRef.current - height) < 0.5
+      ) {
+        return;
+      }
+
+      bottomStackHeightRef.current = height;
+      syncBottomAfterComposerLayoutRef.current?.();
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      const matchingEntry = entries.find((entry) => entry.target === bottomStack) ?? entries[0];
+      const nextHeight =
+        matchingEntry?.contentRect.height ?? bottomStack.getBoundingClientRect().height;
+      syncAfterBottomStackResize(nextHeight);
+    });
+
+    observer.observe(bottomStack);
+    syncAfterBottomStackResize(bottomStack.getBoundingClientRect().height);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasBottomStack, syncBottomAfterComposerLayoutRef]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -675,22 +720,24 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       />
 
       {hasBottomStack && session ? (
-        <AgentChatBottomStack
-          sessionId={session.sessionId}
-          pendingQuestions={session.pendingQuestions}
-          pendingPermissions={session.pendingPermissions}
-          todos={session.todos}
-          agentStudioReady={agentStudioReady}
-          isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
-          onSubmitQuestionAnswers={onSubmitQuestionAnswers}
-          isSubmittingPermissionByRequestId={isSubmittingPermissionByRequestId}
-          permissionReplyErrorByRequestId={permissionReplyErrorByRequestId}
-          onReplyPermission={onReplyPermission}
-          todoPanelCollapsed={todoPanelCollapsed}
-          isSessionWorking={isSessionWorking}
-          sessionAccentColor={sessionAccentColor}
-          onToggleTodoPanel={onToggleTodoPanel}
-        />
+        <div ref={bottomStackRef}>
+          <AgentChatBottomStack
+            sessionId={session.sessionId}
+            pendingQuestions={session.pendingQuestions}
+            pendingPermissions={session.pendingPermissions}
+            todos={session.todos}
+            agentStudioReady={agentStudioReady}
+            isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
+            onSubmitQuestionAnswers={onSubmitQuestionAnswers}
+            isSubmittingPermissionByRequestId={isSubmittingPermissionByRequestId}
+            permissionReplyErrorByRequestId={permissionReplyErrorByRequestId}
+            onReplyPermission={onReplyPermission}
+            todoPanelCollapsed={todoPanelCollapsed}
+            isSessionWorking={isSessionWorking}
+            sessionAccentColor={sessionAccentColor}
+            onToggleTodoPanel={onToggleTodoPanel}
+          />
+        </div>
       ) : null}
       {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
       {session ? <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} /> : null}

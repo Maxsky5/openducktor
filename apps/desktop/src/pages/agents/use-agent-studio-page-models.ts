@@ -1,9 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { getVisibleSessionTodos } from "@/components/features/agents/agent-chat/agent-session-todo-panel";
 import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
@@ -280,20 +279,6 @@ export function useAgentStudioPageModels({
   const activeTodoPanelCollapsed = activeSessionId
     ? (todoPanelCollapsedBySession[activeSessionId] ?? true)
     : true;
-  const todoLayoutKey = useMemo(() => {
-    if (!threadSession) {
-      return null;
-    }
-
-    const visibleTodos = getVisibleSessionTodos(threadSession.todos);
-    if (visibleTodos.length === 0) {
-      return null;
-    }
-
-    return `${threadSession.sessionId}:${activeTodoPanelCollapsed}:${visibleTodos
-      .map((todo) => `${todo.id}:${todo.status}:${todo.content}`)
-      .join("|")}`;
-  }, [activeTodoPanelCollapsed, threadSession]);
   const composerSessionId = core.activeSession?.sessionId ?? null;
   const composerSelectedModel = core.activeSession?.selectedModel ?? null;
   const composerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
@@ -328,14 +313,6 @@ export function useAgentStudioPageModels({
       [activeSessionId]: !(current[activeSessionId] ?? true),
     }));
   }, [activeSessionId]);
-
-  useLayoutEffect(() => {
-    if (!todoLayoutKey) {
-      return;
-    }
-
-    syncBottomAfterComposerLayoutRef.current?.();
-  }, [todoLayoutKey]);
 
   const agentChatThreadModel = useAgentStudioThreadModel({
     threadSession,
