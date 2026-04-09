@@ -1,8 +1,8 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
-    deserialize_args, request_error, serialize_value, CommandResult, HeadlessState,
+    deserialize_args, handle_repo_scoped_input_operation_blocking, request_error, serialize_value,
+    CommandResult, HeadlessState,
 };
-use host_application::{OdtCreateTaskInput, OdtSearchTasksInput};
 use host_domain::PlanSubtaskInput;
 use serde::Deserialize;
 use serde_json::Value;
@@ -28,22 +28,6 @@ struct ReadTaskDocumentsArgs {
     include_spec: Option<bool>,
     include_plan: Option<bool>,
     include_qa_report: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CreateTaskArgs {
-    repo_path: String,
-    #[serde(flatten)]
-    input: OdtCreateTaskInput,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SearchTasksArgs {
-    repo_path: String,
-    #[serde(flatten)]
-    input: OdtSearchTasksInput,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,25 +177,23 @@ async fn handle_odt_read_task_documents(state: &HeadlessState, args: Value) -> C
 }
 
 async fn handle_create_task(state: &HeadlessState, args: Value) -> CommandResult {
-    let CreateTaskArgs { repo_path, input } = deserialize_args(args)?;
-    let service = state.service.clone();
-    serialize_value(
-        super::command_support::run_headless_blocking("create_task", move || {
-            service.odt_create_task(&repo_path, input)
-        })
-        .await?,
+    handle_repo_scoped_input_operation_blocking(
+        state,
+        args,
+        "create_task",
+        |service, repo_path, input| service.odt_create_task(&repo_path, input),
     )
+    .await
 }
 
 async fn handle_search_tasks(state: &HeadlessState, args: Value) -> CommandResult {
-    let SearchTasksArgs { repo_path, input } = deserialize_args(args)?;
-    let service = state.service.clone();
-    serialize_value(
-        super::command_support::run_headless_blocking("search_tasks", move || {
-            service.odt_search_tasks(&repo_path, input)
-        })
-        .await?,
+    handle_repo_scoped_input_operation_blocking(
+        state,
+        args,
+        "search_tasks",
+        |service, repo_path, input| service.odt_search_tasks(&repo_path, input),
     )
+    .await
 }
 
 async fn handle_odt_set_spec(state: &HeadlessState, args: Value) -> CommandResult {
@@ -337,6 +319,8 @@ async fn handle_qa_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::headless::command_support::RepoScopedInputArgs;
+    use host_application::{OdtCreateTaskInput, OdtSearchTasksInput};
 
     #[test]
     fn ready_args_deserialize_repo_path() {
@@ -372,16 +356,17 @@ mod tests {
 
     #[test]
     fn create_task_args_accept_flat_public_tool_shape() {
-        let parsed: CreateTaskArgs = serde_json::from_value(serde_json::json!({
-            "repoPath": "/repo",
-            "title": "Bridge task",
-            "issueType": "task",
-            "priority": 2,
-            "description": "Create through host bridge",
-            "labels": ["mcp"],
-            "aiReviewEnabled": true,
-        }))
-        .expect("args should parse");
+        let parsed: RepoScopedInputArgs<OdtCreateTaskInput> =
+            serde_json::from_value(serde_json::json!({
+                "repoPath": "/repo",
+                "title": "Bridge task",
+                "issueType": "task",
+                "priority": 2,
+                "description": "Create through host bridge",
+                "labels": ["mcp"],
+                "aiReviewEnabled": true,
+            }))
+            .expect("args should parse");
 
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.input.title, "Bridge task");
@@ -391,14 +376,15 @@ mod tests {
 
     #[test]
     fn search_tasks_args_accept_flat_public_tool_shape() {
-        let parsed: SearchTasksArgs = serde_json::from_value(serde_json::json!({
-            "repoPath": "/repo",
-            "status": "open",
-            "title": "bridge",
-            "tags": ["mcp"],
-            "limit": 10,
-        }))
-        .expect("args should parse");
+        let parsed: RepoScopedInputArgs<OdtSearchTasksInput> =
+            serde_json::from_value(serde_json::json!({
+                "repoPath": "/repo",
+                "status": "open",
+                "title": "bridge",
+                "tags": ["mcp"],
+                "limit": 10,
+            }))
+            .expect("args should parse");
 
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.input.limit, 10);

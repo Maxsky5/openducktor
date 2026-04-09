@@ -33,8 +33,8 @@ fn write_latest_qa_report(
     };
 
     let source_tool = match verdict {
-        QaVerdict::Approved => "odt_qa_approved",
-        QaVerdict::Rejected => "odt_qa_rejected",
+        QaVerdict::Approved => ODT_QA_APPROVED_SOURCE_TOOL,
+        QaVerdict::Rejected => ODT_QA_REJECTED_SOURCE_TOOL,
     };
     let entry = QaEntry {
         markdown: markdown.trim().to_string(),
@@ -98,7 +98,7 @@ impl BeadsTaskStore {
             markdown: markdown.trim().to_string(),
             updated_at: timestamp.clone(),
             updated_by: "planner-agent".to_string(),
-            source_tool: "odt_set_spec".to_string(),
+            source_tool: ODT_SET_SPEC_SOURCE_TOOL.to_string(),
             revision: next_revision,
         };
 
@@ -161,7 +161,7 @@ impl BeadsTaskStore {
             markdown: markdown.trim().to_string(),
             updated_at: timestamp.clone(),
             updated_by: "planner-agent".to_string(),
-            source_tool: "odt_set_plan".to_string(),
+            source_tool: ODT_SET_PLAN_SOURCE_TOOL.to_string(),
             revision: next_revision,
         };
 
