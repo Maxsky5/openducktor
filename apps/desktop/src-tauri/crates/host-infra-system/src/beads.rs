@@ -660,14 +660,24 @@ fn terminate_process_by_pid(pid: u32, expected_shared_server_root: &Path) -> Res
             return Err(std::io::Error::last_os_error())
                 .with_context(|| format!("Failed sending SIGTERM to Dolt pid {pid}"));
         }
-        wait_for_process_exit(pid, Duration::from_secs(3));
+        let terminated_after_term = wait_for_process_exit(pid, Duration::from_secs(3));
         if is_process_alive(pid) {
             let kill_status = unsafe { libc::kill(raw_pid, libc::SIGKILL) };
             if kill_status != 0 {
                 return Err(std::io::Error::last_os_error())
                     .with_context(|| format!("Failed sending SIGKILL to Dolt pid {pid}"));
             }
-            wait_for_process_exit(pid, Duration::from_secs(2));
+            if !wait_for_process_exit(pid, Duration::from_secs(2)) {
+                return Err(anyhow!(
+                    "Dolt pid {} is still alive after SIGKILL timeout",
+                    pid
+                ));
+            }
+        } else if !terminated_after_term {
+            return Err(anyhow!(
+                "Dolt pid {} is still alive after SIGTERM timeout",
+                pid
+            ));
         }
         Ok(())
     }
@@ -685,7 +695,12 @@ fn terminate_process_by_pid(pid: u32, expected_shared_server_root: &Path) -> Res
                 return Err(anyhow!("Failed terminating Dolt pid {pid}"));
             }
         }
-        wait_for_process_exit(pid, Duration::from_secs(3));
+        if !wait_for_process_exit(pid, Duration::from_secs(3)) {
+            return Err(anyhow!(
+                "Dolt pid {} is still alive after termination timeout",
+                pid
+            ));
+        }
         Ok(())
     }
 }
@@ -826,14 +841,17 @@ mod tests {
         resolve_repo_beads_attachment_dir, resolve_repo_beads_attachment_root,
         resolve_repo_beads_paths, resolve_repo_live_database_dir, resolve_server_lock_file,
         resolve_server_state_file, resolve_shared_dolt_root, resolve_shared_server_root,
-        stop_shared_dolt_server_for_current_owner, wrap_port_candidate, write_dolt_config_file,
-        SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
+        restore_shared_dolt_database_from_backup, stop_shared_dolt_server_for_current_owner,
+        wrap_port_candidate, write_dolt_config_file, SharedDoltServerState,
+        SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START, SHARED_DOLT_SERVER_HOST,
+        SHARED_DOLT_SERVER_USER,
     };
-    use anyhow::Result;
+    use anyhow::{anyhow, Result};
     use host_test_support::{lock_env, EnvVarGuard};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use url::Url;
 
     fn temp_config_root(label: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -1302,6 +1320,134 @@ mod tests {
         assert!(error
             .to_string()
             .contains("is unhealthy but still owned by live pid"));
+
+        assert!(stop_shared_dolt_server_for_current_owner(owner_pid)?);
+        let _ = fs::remove_dir_all(config_root);
+        Ok(())
+    }
+
+    fn create_test_dolt_backup(backup_root: &Path) -> Result<()> {
+        let source_root = backup_root.join("source");
+        fs::create_dir_all(&source_root)?;
+        crate::run_command("dolt", &["init"], Some(&source_root))?;
+        crate::run_command(
+            "dolt",
+            &["sql", "-q", "create table t (id int primary key)"],
+            Some(&source_root),
+        )?;
+        crate::run_command("dolt", &["add", "."], Some(&source_root))?;
+
+        let commit_env = [
+            ("DOLT_AUTHOR_NAME", "OpenDucktor Test"),
+            ("DOLT_AUTHOR_EMAIL", "test@example.com"),
+        ];
+        crate::run_command_with_env(
+            "dolt",
+            &["commit", "-m", "init"],
+            Some(&source_root),
+            &commit_env,
+        )?;
+
+        let backup_dir = backup_root.join("backup");
+        let backup_url = Url::from_file_path(&backup_dir)
+            .map_err(|()| anyhow!("Failed converting {} into file URL", backup_dir.display()))?;
+        crate::run_command(
+            "dolt",
+            &["backup", "add", "localbackup", backup_url.as_str()],
+            Some(&source_root),
+        )?;
+        crate::run_command(
+            "dolt",
+            &["backup", "sync", "localbackup"],
+            Some(&source_root),
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn restore_shared_dolt_database_rejects_live_owner_mismatch() -> Result<()> {
+        if skip_if_dolt_unavailable() {
+            return Ok(());
+        }
+
+        let _env_lock = lock_env();
+        let config_root = temp_config_root("restore-owner-mismatch");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_CONFIG_DIR",
+            config_root.to_string_lossy().as_ref(),
+        );
+
+        let owner_pid = std::process::id();
+        let state = ensure_shared_dolt_server_running(owner_pid)?;
+        let backup_dir = config_root.join("backup-source").join("backup");
+
+        let error = restore_shared_dolt_database_from_backup(
+            owner_pid.saturating_add(1),
+            "odt_restore_owner_mismatch_deadbeef",
+            &backup_dir,
+        )
+        .expect_err("restore should fail when another live owner controls the server");
+        assert!(error
+            .to_string()
+            .contains("cannot be stopped for restore by pid"));
+        assert!(is_process_alive(state.pid));
+
+        assert!(stop_shared_dolt_server_for_current_owner(owner_pid)?);
+        let _ = fs::remove_dir_all(config_root);
+        Ok(())
+    }
+
+    #[test]
+    fn restore_shared_dolt_database_restarts_server_after_successful_restore() -> Result<()> {
+        if skip_if_dolt_unavailable() {
+            return Ok(());
+        }
+
+        let _env_lock = lock_env();
+        let config_root = temp_config_root("restore-restart");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_CONFIG_DIR",
+            config_root.to_string_lossy().as_ref(),
+        );
+
+        let owner_pid = std::process::id();
+        let initial_state = ensure_shared_dolt_server_running(owner_pid)?;
+        let backup_root = config_root.join("backup-source");
+        create_test_dolt_backup(&backup_root)?;
+        let backup_dir = backup_root.join("backup");
+        let database_name = "odt_restore_restart_deadbeef";
+
+        restore_shared_dolt_database_from_backup(owner_pid, database_name, &backup_dir)?;
+
+        let restored_state = read_shared_dolt_server_state()?.expect("shared state should exist");
+        let restored_db_dir = resolve_shared_dolt_root()?.join(database_name);
+        assert_eq!(restored_state.owner_pid, owner_pid);
+        assert!(is_process_alive(restored_state.pid));
+        assert!(restored_db_dir.exists());
+        assert_ne!(restored_state.pid, initial_state.pid);
+
+        let port = restored_state.port.to_string();
+        let (ok, stdout, stderr) = crate::run_command_allow_failure(
+            "dolt",
+            &[
+                "--host",
+                SHARED_DOLT_SERVER_HOST,
+                "--port",
+                port.as_str(),
+                "--no-tls",
+                "-u",
+                SHARED_DOLT_SERVER_USER,
+                "-p",
+                "",
+                "sql",
+                "-q",
+                "show databases",
+            ],
+            None,
+        )?;
+        assert!(ok, "show databases should succeed: {stderr}");
+        assert!(stdout.contains(database_name));
 
         assert!(stop_shared_dolt_server_for_current_owner(owner_pid)?);
         let _ = fs::remove_dir_all(config_root);
