@@ -31,9 +31,10 @@ export function useTaskResetDialog({
   useEffect(() => {
     if (!sheetOpen) {
       setResetDialogOpen(false);
-      setIsResetting(false);
       setResetError(null);
-      resetRequestInFlightRef.current = false;
+      if (!resetRequestInFlightRef.current) {
+        setIsResetting(false);
+      }
     }
   }, [sheetOpen]);
 

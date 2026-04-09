@@ -1,4 +1,6 @@
-use super::cleanup_plans::{normalize_path_for_comparison, normalize_path_key};
+use super::cleanup_plans::{
+    normalize_path_for_comparison, normalize_path_key, IMPLEMENTATION_SESSION_ROLES,
+};
 use crate::app_service::{
     dedupe_opencode_session_status_probe_targets, has_live_opencode_session_status,
     service_core::AppService, OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
@@ -22,7 +24,6 @@ impl<'a> TaskActivityGuard<'a> {
         repo_path: &str,
         task_ids: &[&str],
     ) -> Result<()> {
-        const IMPLEMENTATION_SESSION_ROLES: &[&str] = &["build", "qa"];
         let mut active_tasks = Vec::new();
         for task_id in task_ids {
             let sessions = self.service.agent_sessions_list(repo_path, task_id)?;
@@ -425,7 +426,7 @@ fn build_session_probe_plans(
 
         session_plans.push(SessionProbePlan {
             worktree_key,
-            role: session.role.clone(),
+            role: session.role.trim().to_string(),
             external_session_id: external_session_id.to_string(),
             primary_target,
             fallback_target,

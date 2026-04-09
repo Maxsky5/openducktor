@@ -14,6 +14,7 @@ type HarnessProps = {
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
+let originalIsReactActEnvironment: boolean | undefined;
 
 const makeTask = (id: string): TaskCard => ({
   id,
@@ -69,6 +70,7 @@ describe("use-task-reset-dialog", () => {
   };
 
   beforeEach(() => {
+    originalIsReactActEnvironment = reactActEnvironment.IS_REACT_ACT_ENVIRONMENT;
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     latest = null;
     harness = null;
@@ -78,6 +80,11 @@ describe("use-task-reset-dialog", () => {
     await harness?.unmount();
     harness = null;
     latest = null;
+    if (originalIsReactActEnvironment === undefined) {
+      delete reactActEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = originalIsReactActEnvironment;
+    }
   });
 
   test("closes the sheet after a successful reset", async () => {
@@ -135,6 +142,54 @@ describe("use-task-reset-dialog", () => {
 
     await run(() => latest?.closeResetDialog());
     expect(latest?.isResetDialogOpen).toBe(true);
+
+    await run(() => {
+      resolveReset?.();
+    });
+
+    expect(latest?.isResetPending).toBe(false);
+  });
+
+  test("keeps the in-flight guard active after the sheet closes", async () => {
+    let resolveReset: (() => void) | null = null;
+    const onResetTask = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveReset = resolve;
+        }),
+    );
+
+    await mount({
+      sheetOpen: true,
+      task: makeTask("ODT-4"),
+      onOpenChange: () => {},
+      onResetTask,
+    });
+
+    await run(() => latest?.openResetDialog());
+    await act(async () => {
+      latest?.confirmReset();
+      await Promise.resolve();
+    });
+
+    await harness?.update({
+      sheetOpen: false,
+      task: makeTask("ODT-4"),
+      onOpenChange: () => {},
+      onResetTask,
+    });
+    expect(latest?.isResetPending).toBe(true);
+
+    await harness?.update({
+      sheetOpen: true,
+      task: makeTask("ODT-4"),
+      onOpenChange: () => {},
+      onResetTask,
+    });
+    await run(() => latest?.openResetDialog());
+    await run(() => latest?.confirmReset());
+
+    expect(onResetTask).toHaveBeenCalledTimes(1);
 
     await run(() => {
       resolveReset?.();

@@ -13,12 +13,12 @@ import {
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
-import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
 import {
   type DocumentSectionKey,
   type TaskDocumentState,
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
+import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
 
 type TaskDetailsSheetViewModel = {
   taskId: string | null;

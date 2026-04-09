@@ -9,8 +9,8 @@ import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
 import { TaskDetailsSheetFooter } from "@/components/features/task-details/task-details-sheet-footer";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
-import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
+import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
 import { useTaskDetailsSheetViewModel } from "@/components/features/task-details/use-task-details-sheet-view-model";
 import {
   Sheet,

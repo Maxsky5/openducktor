@@ -528,6 +528,7 @@ describe("KanbanPage session start modal flow", () => {
     humanRequestChangesTaskMock.mockClear();
     deleteTaskMock.mockClear();
     resetTaskImplementationMock.mockClear();
+    resetTaskMock.mockClear();
     deferTaskMock.mockClear();
     resumeDeferredTaskMock.mockClear();
     toastSuccessMock.mockClear();

@@ -1,7 +1,7 @@
 use super::{
     cleanup_plans::{
         ensure_task_full_reset_status_allowed, with_task_reset_cleanup_progress, BranchCleanupPlan,
-        WorktreeCleanupPlan,
+        WorktreeCleanupPlan, TASK_RESET_SESSION_ROLES,
     },
     task_activity_guard::TaskActivityGuard,
     task_context::LoadedTaskContext,
@@ -66,7 +66,7 @@ impl<'a> TaskResetService<'a> {
             task_id,
             &sessions,
             "reset task",
-            &["spec", "planner", "build", "qa"],
+            TASK_RESET_SESSION_ROLES,
         )?;
         let branch_prefix = self
             .service
@@ -85,6 +85,7 @@ impl<'a> TaskResetService<'a> {
             task_id,
             branch_prefix.as_str(),
             &sessions,
+            TASK_RESET_SESSION_ROLES,
             "reset task",
             false,
         )?;
@@ -160,7 +161,7 @@ impl<'a> TaskResetService<'a> {
 
         self.service
             .task_store
-            .clear_agent_sessions_by_roles(repo_dir, task_id, &["spec", "planner", "build", "qa"])
+            .clear_agent_sessions_by_roles(repo_dir, task_id, TASK_RESET_SESSION_ROLES)
             .with_context(|| format!("Failed to clear linked agent sessions for {task_id}"))
             .map_err(|error| cleanup_progress.wrap(error))?;
         cleanup_progress

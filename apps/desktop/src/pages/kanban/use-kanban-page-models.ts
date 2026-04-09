@@ -177,11 +177,14 @@ export function useKanbanPageModels({
         taskId,
         roles: ["spec", "planner", "build", "qa"],
       });
-      void loadAgentSessions(taskId).catch((error: unknown) => {
+      try {
+        await loadAgentSessions(taskId);
+      } catch (error: unknown) {
         toast.error("Failed to refresh sessions", {
           description: errorMessage(error),
         });
-      });
+        throw error;
+      }
     },
     [loadAgentSessions, removeAgentSessions, resetTask],
   );

@@ -2,6 +2,7 @@ use super::{
     cleanup_plans::{
         derive_reset_implementation_status, ensure_task_reset_status_allowed,
         with_reset_cleanup_progress, BranchCleanupPlan, WorktreeCleanupPlan,
+        IMPLEMENTATION_SESSION_ROLES,
     },
     task_activity_guard::TaskActivityGuard,
     task_context::LoadedTaskContext,
@@ -65,7 +66,7 @@ impl<'a> ImplementationResetService<'a> {
             task_id,
             &sessions,
             "reset implementation",
-            &["build", "qa"],
+            IMPLEMENTATION_SESSION_ROLES,
         )?;
         let rollback_status = derive_reset_implementation_status(&context.task);
         let branch_prefix = self
@@ -85,6 +86,7 @@ impl<'a> ImplementationResetService<'a> {
             task_id,
             branch_prefix.as_str(),
             &sessions,
+            IMPLEMENTATION_SESSION_ROLES,
             "reset implementation",
             false,
         )?;

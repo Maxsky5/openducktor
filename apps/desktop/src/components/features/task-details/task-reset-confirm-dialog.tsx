@@ -91,7 +91,7 @@ export function TaskResetConfirmDialog({
           <Button
             type="button"
             variant="destructive"
-            className="w-[132px] justify-center disabled:bg-rose-400 disabled:text-rose-50 disabled:opacity-100"
+            className="w-[132px] justify-center disabled:bg-destructive/80 disabled:text-destructive-foreground disabled:opacity-100"
             disabled={isResetPending || isLoadingImpact}
             aria-busy={isResetPending || isLoadingImpact}
             onClick={onConfirm}

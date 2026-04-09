@@ -15,6 +15,9 @@ pub(super) struct WorktreeCleanupPlan {
     paths: Vec<String>,
 }
 
+pub(super) const IMPLEMENTATION_SESSION_ROLES: &[&str] = &["build", "qa"];
+pub(super) const TASK_RESET_SESSION_ROLES: &[&str] = &["spec", "planner", "build", "qa"];
+
 impl WorktreeCleanupPlan {
     pub(super) fn for_delete_targets(
         service: &AppService,
@@ -32,6 +35,7 @@ impl WorktreeCleanupPlan {
                 target_task.id.as_str(),
                 branch_prefix,
                 &sessions,
+                IMPLEMENTATION_SESSION_ROLES,
                 "delete",
                 true,
             )?;
@@ -52,6 +56,7 @@ impl WorktreeCleanupPlan {
         task_id: &str,
         branch_prefix: &str,
         sessions: &[AgentSessionDocument],
+        session_roles: &[&str],
         operation_label: &'static str,
         skip_detached_head: bool,
     ) -> Result<Self> {
@@ -72,10 +77,20 @@ impl WorktreeCleanupPlan {
             operation_label,
             skip_detached_head,
         };
+        let managed_roles = session_roles
+            .iter()
+            .map(|role| role.trim())
+            .collect::<HashSet<_>>();
 
         for session in sessions {
             let worktree_path = session.working_directory.trim();
-            if !is_managed_task_worktree_session(service, &scope, session, worktree_path)? {
+            if !is_managed_task_worktree_session(
+                service,
+                &scope,
+                &managed_roles,
+                session,
+                worktree_path,
+            )? {
                 continue;
             }
             let worktree_key = normalize_path_key(worktree_path);
@@ -339,10 +354,11 @@ struct ManagedTaskWorktreeScope<'a> {
 fn is_managed_task_worktree_session(
     service: &AppService,
     scope: &ManagedTaskWorktreeScope<'_>,
+    managed_roles: &HashSet<&str>,
     session: &AgentSessionDocument,
     working_directory: &str,
 ) -> Result<bool> {
-    if !matches!(session.role.as_str(), "build" | "qa") || working_directory.is_empty() {
+    if !managed_roles.contains(session.role.trim()) || working_directory.is_empty() {
         return Ok(false);
     }
 

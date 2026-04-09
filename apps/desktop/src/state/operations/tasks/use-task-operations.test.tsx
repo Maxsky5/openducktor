@@ -9,6 +9,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
 import { kanbanTaskListQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import {
@@ -564,36 +565,113 @@ describe("use-task-operations", () => {
       taskReset: host.taskReset,
       tasksList: host.tasksList,
       runsList: host.runsList,
+      taskDocumentGet: host.taskDocumentGet,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
     };
     host.taskReset = taskReset;
     host.tasksList = tasksList;
     host.runsList = runsList;
+    host.taskDocumentGet = (async () => ({
+      markdown: "",
+      updatedAt: null,
+    })) as typeof host.taskDocumentGet;
+    host.taskDocumentGetFresh = (async () => ({
+      markdown: "",
+      updatedAt: null,
+    })) as typeof host.taskDocumentGetFresh;
 
-    const harness = createHookHarness({
-      activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
-    });
+    const queryClient = createQueryClient();
+    const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+    const invalidateQueriesMock = mock(
+      (filters: Parameters<typeof queryClient.invalidateQueries>[0]) =>
+        originalInvalidateQueries(filters),
+    );
+    queryClient.invalidateQueries = invalidateQueriesMock as typeof queryClient.invalidateQueries;
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const getLatest = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeRepo: "/repo",
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+            beadsOk: true,
+            beadsPath: "/repo/.beads",
+            beadsError: null,
+          }),
+        },
+      },
+      { wrapper },
+    );
 
     try {
-      await harness.mount();
-      await harness.waitFor((value) => value.tasks[0]?.status === "human_review");
-
-      await harness.run(async (value) => {
-        await value.resetTask("A");
+      queryClient.setQueryData(documentQueryKeys.spec("/repo", "A"), {
+        markdown: "# Spec",
+        updatedAt: "2026-03-28T00:00:00.000Z",
       });
-      await harness.waitFor((value) => value.tasks[0]?.status === "open");
+      queryClient.setQueryData(documentQueryKeys.plan("/repo", "A"), {
+        markdown: "# Plan",
+        updatedAt: "2026-03-28T00:00:00.000Z",
+      });
+      queryClient.setQueryData(documentQueryKeys.qaReport("/repo", "A"), {
+        markdown: "# QA",
+        updatedAt: "2026-03-28T00:00:00.000Z",
+      });
+      queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "A"), [buildAgentSession()]);
+
+      await harness.mount();
+      await harness.waitFor(() => getLatest().tasks[0]?.status === "human_review");
+
+      await harness.run(async () => {
+        await getLatest().resetTask("A");
+      });
+      await harness.waitFor(() => getLatest().tasks[0]?.status === "open");
 
       expect(taskReset).toHaveBeenCalledWith("/repo", "A");
-      expect(harness.getLatest().tasks[0]?.status).toBe("open");
+      expect(getLatest().tasks[0]?.status).toBe("open");
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({
+        queryKey: agentSessionQueryKeys.list("/repo", "A"),
+        exact: true,
+        refetchType: "none",
+      });
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({
+        queryKey: documentQueryKeys.qaReport("/repo", "A"),
+        exact: true,
+        refetchType: "none",
+      });
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({
+        queryKey: documentQueryKeys.spec("/repo", "A"),
+        exact: true,
+        refetchType: "none",
+      });
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({
+        queryKey: documentQueryKeys.plan("/repo", "A"),
+        exact: true,
+        refetchType: "none",
+      });
     } finally {
       await harness.unmount();
       host.taskReset = original.taskReset;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
+      host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
   });
 
