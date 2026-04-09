@@ -47,7 +47,11 @@ fn classify_shutdown_request(already_started: bool) -> ShutdownRequestAction {
 }
 
 fn shutdown_exit_code(success: bool) -> i32 {
-    if success { 0 } else { 1 }
+    if success {
+        0
+    } else {
+        1
+    }
 }
 
 fn reject_when_shutting_down(state: &HeadlessState) -> Result<(), HeadlessCommandError> {
@@ -331,7 +335,10 @@ mod tests {
 
     #[test]
     fn classify_shutdown_request_starts_only_once() {
-        assert_eq!(classify_shutdown_request(false), ShutdownRequestAction::Start);
+        assert_eq!(
+            classify_shutdown_request(false),
+            ShutdownRequestAction::Start
+        );
         assert_eq!(
             classify_shutdown_request(true),
             ShutdownRequestAction::AlreadyStarted
@@ -347,12 +354,11 @@ mod tests {
     #[tokio::test]
     async fn shutdown_handler_returns_accepted_when_shutdown_already_started() {
         let fixture = test_state_fixture();
-        fixture
-            .state
-            .shutdown_started
-            .store(true, Ordering::SeqCst);
+        fixture.state.shutdown_started.store(true, Ordering::SeqCst);
 
-        let response = shutdown_handler(State(fixture.state.clone())).await.into_response();
+        let response = shutdown_handler(State(fixture.state.clone()))
+            .await
+            .into_response();
         let status = response.status();
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
@@ -367,10 +373,7 @@ mod tests {
     #[tokio::test]
     async fn invoke_handler_rejects_new_work_when_shutdown_started() {
         let fixture = test_state_fixture();
-        fixture
-            .state
-            .shutdown_started
-            .store(true, Ordering::SeqCst);
+        fixture.state.shutdown_started.store(true, Ordering::SeqCst);
 
         let response = invoke_handler(
             Path("workspace_list".to_string()),

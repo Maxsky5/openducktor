@@ -1,7 +1,7 @@
 use super::{
     cleanup_plans::{
         ensure_task_full_reset_status_allowed, with_task_reset_cleanup_progress, BranchCleanupPlan,
-        WorktreeCleanupPlan, TASK_RESET_SESSION_ROLES,
+        WorktreeCleanupPlan, WorktreeCleanupSessionOptions, TASK_RESET_SESSION_ROLES,
     },
     task_activity_guard::TaskActivityGuard,
     task_context::LoadedTaskContext,
@@ -85,9 +85,11 @@ impl<'a> TaskResetService<'a> {
             task_id,
             branch_prefix.as_str(),
             &sessions,
-            TASK_RESET_SESSION_ROLES,
-            "reset task",
-            false,
+            WorktreeCleanupSessionOptions {
+                session_roles: TASK_RESET_SESSION_ROLES,
+                operation_label: "reset task",
+                skip_detached_head: false,
+            },
         )?;
 
         Ok(TaskResetPlan {

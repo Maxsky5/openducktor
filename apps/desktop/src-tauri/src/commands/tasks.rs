@@ -130,8 +130,10 @@ pub async fn task_reset(
     task_id: String,
 ) -> Result<TaskCard, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("task_reset", move || service.task_reset(&repo_path, &task_id))
-        .await;
+    let result = run_service_blocking("task_reset", move || {
+        service.task_reset(&repo_path, &task_id)
+    })
+    .await;
     as_error(result)
 }
 

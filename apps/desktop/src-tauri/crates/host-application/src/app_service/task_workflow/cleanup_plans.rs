@@ -18,6 +18,12 @@ pub(super) struct WorktreeCleanupPlan {
 pub(super) const IMPLEMENTATION_SESSION_ROLES: &[&str] = &["build", "qa"];
 pub(super) const TASK_RESET_SESSION_ROLES: &[&str] = &["spec", "planner", "build", "qa"];
 
+pub(super) struct WorktreeCleanupSessionOptions<'a> {
+    pub(super) session_roles: &'a [&'a str],
+    pub(super) operation_label: &'static str,
+    pub(super) skip_detached_head: bool,
+}
+
 impl WorktreeCleanupPlan {
     pub(super) fn for_delete_targets(
         service: &AppService,
@@ -35,9 +41,11 @@ impl WorktreeCleanupPlan {
                 target_task.id.as_str(),
                 branch_prefix,
                 &sessions,
-                IMPLEMENTATION_SESSION_ROLES,
-                "delete",
-                true,
+                WorktreeCleanupSessionOptions {
+                    session_roles: IMPLEMENTATION_SESSION_ROLES,
+                    operation_label: "delete",
+                    skip_detached_head: true,
+                },
             )?;
             for worktree_path in task_worktree_plan.paths {
                 let worktree_key = normalize_path_key(worktree_path.as_str());
@@ -56,9 +64,7 @@ impl WorktreeCleanupPlan {
         task_id: &str,
         branch_prefix: &str,
         sessions: &[AgentSessionDocument],
-        session_roles: &[&str],
-        operation_label: &'static str,
-        skip_detached_head: bool,
+        options: WorktreeCleanupSessionOptions<'_>,
     ) -> Result<Self> {
         let mut paths = Vec::new();
         let mut seen_worktree_keys = HashSet::new();
@@ -74,10 +80,11 @@ impl WorktreeCleanupPlan {
             branch_prefix,
             normalized_repo: normalized_repo.as_path(),
             managed_worktree_base: managed_worktree_base.as_path(),
-            operation_label,
-            skip_detached_head,
+            operation_label: options.operation_label,
+            skip_detached_head: options.skip_detached_head,
         };
-        let managed_roles = session_roles
+        let managed_roles = options
+            .session_roles
             .iter()
             .map(|role| role.trim())
             .collect::<HashSet<_>>();

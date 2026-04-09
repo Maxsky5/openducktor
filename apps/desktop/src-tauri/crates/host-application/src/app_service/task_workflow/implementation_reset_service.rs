@@ -2,7 +2,7 @@ use super::{
     cleanup_plans::{
         derive_reset_implementation_status, ensure_task_reset_status_allowed,
         with_reset_cleanup_progress, BranchCleanupPlan, WorktreeCleanupPlan,
-        IMPLEMENTATION_SESSION_ROLES,
+        WorktreeCleanupSessionOptions, IMPLEMENTATION_SESSION_ROLES,
     },
     task_activity_guard::TaskActivityGuard,
     task_context::LoadedTaskContext,
@@ -86,9 +86,11 @@ impl<'a> ImplementationResetService<'a> {
             task_id,
             branch_prefix.as_str(),
             &sessions,
-            IMPLEMENTATION_SESSION_ROLES,
-            "reset implementation",
-            false,
+            WorktreeCleanupSessionOptions {
+                session_roles: IMPLEMENTATION_SESSION_ROLES,
+                operation_label: "reset implementation",
+                skip_detached_head: false,
+            },
         )?;
 
         Ok(ImplementationResetPlan {
