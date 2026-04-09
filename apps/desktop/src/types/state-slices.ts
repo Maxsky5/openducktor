@@ -115,6 +115,7 @@ export type TasksStateContextValue = {
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
+  resetTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;

@@ -22,11 +22,17 @@ impl<'a> TaskActivityGuard<'a> {
         repo_path: &str,
         task_ids: &[&str],
     ) -> Result<()> {
+        const IMPLEMENTATION_SESSION_ROLES: &[&str] = &["build", "qa"];
         let mut active_tasks = Vec::new();
         for task_id in task_ids {
             let sessions = self.service.agent_sessions_list(repo_path, task_id)?;
             let evidence = self
-                .collect_active_task_work_evidence(repo_path, task_id, &sessions)
+                .collect_active_task_work_evidence(
+                    repo_path,
+                    task_id,
+                    &sessions,
+                    IMPLEMENTATION_SESSION_ROLES,
+                )
                 .with_context(|| {
                     format!("Failed checking active task work before deleting {task_id}")
                 })?;
@@ -63,21 +69,23 @@ impl<'a> TaskActivityGuard<'a> {
         ))
     }
 
-    pub(super) fn ensure_no_active_task_reset_runs(
+    pub(super) fn ensure_no_active_task_reset_activity(
         &self,
         repo_path: &str,
         task_id: &str,
         sessions: &[AgentSessionDocument],
+        operation_label: &str,
+        session_roles: &[&str],
     ) -> Result<()> {
         let evidence = self
-            .collect_active_task_work_evidence(repo_path, task_id, sessions)
+            .collect_active_task_work_evidence(repo_path, task_id, sessions, session_roles)
             .with_context(|| {
-                format!("Failed checking live runtime state before resetting {task_id}")
+                format!("Failed checking live runtime state before {operation_label} {task_id}")
             })?;
 
         if evidence.has_active_run {
             return Err(anyhow!(
-                "Cannot reset implementation while builder work is active for task {task_id}. Stop the active run first."
+                "Cannot {operation_label} while builder work is active for task {task_id}. Stop the active run first."
             ));
         }
 
@@ -86,7 +94,7 @@ impl<'a> TaskActivityGuard<'a> {
         }
 
         Err(anyhow!(
-            "Cannot reset implementation while active {} session(s) exist for task {task_id}. Stop the active session(s) first.",
+            "Cannot {operation_label} while active {} session(s) exist for task {task_id}. Stop the active session(s) first.",
             evidence.active_session_roles.join("/")
         ))
     }
@@ -96,6 +104,7 @@ impl<'a> TaskActivityGuard<'a> {
         repo_path: &str,
         task_id: &str,
         sessions: &[AgentSessionDocument],
+        session_roles: &[&str],
     ) -> Result<TaskActiveWorkEvidence> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
         let candidate_runs = self.collect_candidate_runs(&normalized_repo, task_id)?;
@@ -104,6 +113,7 @@ impl<'a> TaskActivityGuard<'a> {
         let probe_plan = self.build_probe_plan(
             &candidate_runs,
             sessions,
+            session_roles,
             &runtime_routes_by_worktree,
             &repo_runtime_routes_by_kind,
         );
@@ -164,6 +174,7 @@ impl<'a> TaskActivityGuard<'a> {
         &self,
         candidate_runs: &[RunProbeCandidate],
         sessions: &[AgentSessionDocument],
+        session_roles: &[&str],
         runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
         repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
     ) -> TaskActivityProbePlan {
@@ -171,6 +182,7 @@ impl<'a> TaskActivityGuard<'a> {
         let run_plans = build_run_probe_plans(candidate_runs, sessions, &mut primary_probe_targets);
         let session_plans = build_session_probe_plans(
             sessions,
+            session_roles,
             runtime_routes_by_worktree,
             repo_runtime_routes_by_kind,
             &mut primary_probe_targets,
@@ -367,14 +379,19 @@ fn build_run_probe_plans(
 
 fn build_session_probe_plans(
     sessions: &[AgentSessionDocument],
+    session_roles: &[&str],
     runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
     repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
     primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
 ) -> Vec<SessionProbePlan> {
+    let allowed_roles = session_roles
+        .iter()
+        .map(|role| role.trim())
+        .collect::<HashSet<_>>();
     let mut session_plans = Vec::new();
     for session in sessions
         .iter()
-        .filter(|session| matches!(session.role.as_str(), "build" | "qa"))
+        .filter(|session| allowed_roles.contains(session.role.trim()))
     {
         let external_session_id = session
             .external_session_id

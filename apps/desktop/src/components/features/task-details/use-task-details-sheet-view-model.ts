@@ -12,6 +12,7 @@ import {
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
+import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
 import {
   type DocumentSectionKey,
   type TaskDocumentState,
@@ -43,10 +44,17 @@ type TaskDetailsSheetViewModel = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   impactError: string | null;
+  isResetDialogOpen: boolean;
+  isResetPending: boolean;
+  resetError: string | null;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
   confirmDelete: () => void;
+  openResetDialog: () => void;
+  closeResetDialog: () => void;
+  handleResetDialogOpenChange: (nextOpen: boolean) => void;
+  confirmReset: () => void;
 };
 
 type UseTaskDetailsSheetViewModelOptions = {
@@ -71,6 +79,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   onHumanApprove: TaskDetailsSheetProps["onHumanApprove"] | undefined;
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
   onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
+  onResetTask: TaskDetailsSheetProps["onResetTask"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
   taskDocumentsHook?: typeof useTaskDocuments;
   taskDeleteImpactHook?: typeof useTaskDeleteImpact;
@@ -94,6 +103,7 @@ export function useTaskDetailsSheetViewModel({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  onResetTask,
   onDelete,
   taskDocumentsHook = useTaskDocuments,
   taskDeleteImpactHook = useTaskDeleteImpact,
@@ -132,9 +142,28 @@ export function useTaskDetailsSheetViewModel({
     onOpenChange,
     onDelete,
   });
+  const {
+    isResetDialogOpen,
+    isResetPending,
+    resetError,
+    openResetDialog,
+    closeResetDialog,
+    handleResetDialogOpenChange,
+    confirmReset,
+  } = useTaskResetDialog({
+    sheetOpen: open,
+    task,
+    onOpenChange,
+    onResetTask,
+  });
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
+      if (action === "reset_task") {
+        openResetDialog();
+        return;
+      }
+
       runTaskWorkflowAction(
         action,
         taskId,
@@ -168,6 +197,7 @@ export function useTaskDetailsSheetViewModel({
       onQaOpen,
       onQaStart,
       onResetImplementation,
+      openResetDialog,
       onResumeDeferred,
       taskId,
     ],
@@ -224,9 +254,16 @@ export function useTaskDetailsSheetViewModel({
     hasManagedSessionCleanup,
     managedWorktreeCount,
     impactError,
+    isResetDialogOpen,
+    isResetPending,
+    resetError,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,
     confirmDelete,
+    openResetDialog,
+    closeResetDialog,
+    handleResetDialogOpenChange,
+    confirmReset,
   };
 }

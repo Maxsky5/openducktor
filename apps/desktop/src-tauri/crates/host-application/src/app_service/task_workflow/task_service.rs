@@ -1,7 +1,7 @@
 use crate::app_service::service_core::AppService;
 use crate::app_service::task_workflow::{
     implementation_reset_service::ImplementationResetService,
-    task_deletion_service::TaskDeletionService,
+    task_deletion_service::TaskDeletionService, task_reset_service::TaskResetService,
 };
 use crate::app_service::workflow_rules::{
     default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
@@ -73,6 +73,10 @@ impl AppService {
 
     pub fn task_reset_implementation(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
         ImplementationResetService::new(self).reset(repo_path, task_id)
+    }
+
+    pub fn task_reset(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
+        TaskResetService::new(self).reset(repo_path, task_id)
     }
 
     pub(super) fn clear_task_runs(&self, repo_path: &str, task_id: &str) -> Result<()> {

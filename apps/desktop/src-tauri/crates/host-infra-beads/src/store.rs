@@ -199,6 +199,10 @@ impl TaskStore for BeadsTaskStore {
         self.clear_agent_sessions_by_roles_impl(repo_path, task_id, roles)
     }
 
+    fn clear_workflow_documents(&self, repo_path: &Path, task_id: &str) -> Result<()> {
+        self.clear_workflow_documents_impl(repo_path, task_id)
+    }
+
     fn clear_qa_reports(&self, repo_path: &Path, task_id: &str) -> Result<()> {
         self.clear_qa_reports_impl(repo_path, task_id)
     }

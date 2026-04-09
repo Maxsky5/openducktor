@@ -1,5 +1,7 @@
 use crate::app_service::service_core::AppService;
-use crate::app_service::workflow_rules::can_reset_implementation_from_status;
+use crate::app_service::workflow_rules::{
+    can_reset_implementation_from_status, can_reset_task_from_status,
+};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, GitWorktreeSummary, TaskCard, TaskStatus, DEFAULT_BRANCH_PREFIX,
@@ -203,6 +205,17 @@ pub(super) fn ensure_task_reset_status_allowed(task: &TaskCard) -> Result<()> {
     ))
 }
 
+pub(super) fn ensure_task_full_reset_status_allowed(task: &TaskCard) -> Result<()> {
+    if can_reset_task_from_status(&task.status) {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Task reset is only allowed from open, spec_ready, ready_for_dev, in_progress, blocked, ai_review, or human_review (current: {}).",
+        task.status.as_cli_value()
+    ))
+}
+
 pub(super) fn with_reset_cleanup_progress(
     error: anyhow::Error,
     removed_worktrees: &[String],
@@ -212,6 +225,22 @@ pub(super) fn with_reset_cleanup_progress(
         error,
         removed_worktrees,
         deleted_branches,
+        "Reset cleanup",
+        "Retry reset to finish cleanup safely.",
+    )
+}
+
+pub(super) fn with_task_reset_cleanup_progress(
+    error: anyhow::Error,
+    removed_worktrees: &[String],
+    deleted_branches: &[String],
+    completed_steps: &[&str],
+) -> anyhow::Error {
+    with_cleanup_progress_and_steps(
+        error,
+        removed_worktrees,
+        deleted_branches,
+        completed_steps,
         "Reset cleanup",
         "Retry reset to finish cleanup safely.",
     )
@@ -238,6 +267,24 @@ fn with_cleanup_progress(
     cleanup_label: &str,
     retry_instruction: &str,
 ) -> anyhow::Error {
+    with_cleanup_progress_and_steps(
+        error,
+        removed_worktrees,
+        deleted_branches,
+        &[],
+        cleanup_label,
+        retry_instruction,
+    )
+}
+
+fn with_cleanup_progress_and_steps(
+    error: anyhow::Error,
+    removed_worktrees: &[String],
+    deleted_branches: &[String],
+    completed_steps: &[&str],
+    cleanup_label: &str,
+    retry_instruction: &str,
+) -> anyhow::Error {
     let mut progress = Vec::new();
     if !removed_worktrees.is_empty() {
         progress.push(format!(
@@ -249,6 +296,12 @@ fn with_cleanup_progress(
         progress.push(format!(
             "{cleanup_label} already deleted branches: {}.",
             deleted_branches.join(", ")
+        ));
+    }
+    if !completed_steps.is_empty() {
+        progress.push(format!(
+            "{cleanup_label} already completed: {}.",
+            completed_steps.join(", ")
         ));
     }
     if progress.is_empty() {

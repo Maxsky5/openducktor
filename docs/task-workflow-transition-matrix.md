@@ -40,6 +40,7 @@ Human actions:
 
 Native task actions:
 - `reset_implementation(taskId)`
+- `reset_task(taskId)`
 
 ## Transition Matrix
 | Trigger | From | Guards | To |
@@ -53,6 +54,7 @@ Native task actions:
 | `odt_build_resumed` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | task/bug optional flow + blocked resume | `in_progress` |
 | `odt_build_blocked` | `in_progress` | reason required | `blocked` |
 | `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | reject while live build/QA activity exists; reject on unsafe branch cleanup; retained plan/spec determine rollback target | `ready_for_dev`, `spec_ready`, or `open` |
+| `reset_task` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | reject while live spec/planner/build/QA activity exists; reject on unsafe branch cleanup; clear workflow documents, linked sessions, delivery metadata, and in-memory runs | `open` |
 | `odt_build_completed` | `in_progress` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
 | `odt_build_completed` | `in_progress` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
 | `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | provider id and PR number required; OpenDucktor resolves canonical PR metadata | unchanged |

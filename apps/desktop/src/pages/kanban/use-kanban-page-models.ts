@@ -69,6 +69,7 @@ export function useKanbanPageModels({
     unlinkingPullRequestTaskId,
     deleteTask,
     resetTaskImplementation,
+    resetTask,
     deferTask,
     resumeDeferredTask,
     humanApproveTask,
@@ -168,6 +169,21 @@ export function useKanbanPageModels({
       void unlinkPullRequest(taskId);
     },
     [unlinkPullRequest],
+  );
+  const onResetTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      await resetTask(taskId);
+      removeAgentSessions({
+        taskId,
+        roles: ["spec", "planner", "build", "qa"],
+      });
+      void loadAgentSessions(taskId).catch((error: unknown) => {
+        toast.error("Failed to refresh sessions", {
+          description: errorMessage(error),
+        });
+      });
+    },
+    [loadAgentSessions, removeAgentSessions, resetTask],
   );
   const { handleResolveGitConflict } = useGitConflictResolution({
     activeRepo,
@@ -286,6 +302,7 @@ export function useKanbanPageModels({
       onHumanApprove,
       onHumanRequestChanges,
       onResetImplementation: openResetImplementation,
+      onResetTask,
       onDetectPullRequest,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,

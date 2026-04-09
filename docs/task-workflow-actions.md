@@ -20,6 +20,7 @@ The backend is the single source of truth for which actions are currently allowe
 - `build_start`
 - `open_builder`
 - `reset_implementation`
+- `reset_task`
 - `qa_start`
 - `open_qa`
 - `defer_issue`
@@ -63,6 +64,21 @@ The backend is the single source of truth for which actions are currently allowe
   - fail if task-owned branch cleanup is unsafe, including checked-out branches.
   - preserve retained spec and plan documents.
 
+### `reset_task`
+- Purpose: fully restart a non-completed task without deleting the task record.
+- Transition: `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, or `human_review` -> `open`.
+- Cleanup:
+  - clear spec, plan, and QA documents.
+  - clear linked spec/planner/build/QA sessions.
+  - clear linked pull request and direct-merge metadata.
+  - clear in-memory run state.
+  - stop task-scoped dev servers.
+  - remove task-managed worktrees and related local branches.
+- Guardrails:
+  - reject while live spec/planner/build/QA activity still exists for the task.
+  - reject on unsafe branch cleanup, including checked-out branches.
+  - preserve task identity and user-authored task fields.
+
 ### `qa_start`
 - Purpose: request or start a QA review loop for the current task state.
 - Transition: none directly; it opens the QA workflow from `ai_review` or `human_review`.
@@ -104,6 +120,7 @@ Current card/detail primary+menu rendering uses workflow actions:
 - `build_start`
 - `open_builder`
 - `reset_implementation`
+- `reset_task`
 - `qa_start`
 - `open_qa`
 - `defer_issue`

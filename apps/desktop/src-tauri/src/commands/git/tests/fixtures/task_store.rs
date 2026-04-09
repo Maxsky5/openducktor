@@ -153,6 +153,12 @@ impl TaskStore for CommandTaskStore {
         ))
     }
 
+    fn clear_workflow_documents(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<()> {
+        Err(anyhow!(
+            "unexpected task store clear_workflow_documents call in git command tests"
+        ))
+    }
+
     fn clear_qa_reports(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<()> {
         Err(anyhow!(
             "unexpected task store clear_qa_reports call in git command tests"

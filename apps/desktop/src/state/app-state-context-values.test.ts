@@ -115,6 +115,7 @@ describe("app-state-context-values", () => {
       updateTask: async () => {},
       deleteTask: async () => {},
       resetTaskImplementation: async () => {},
+      resetTask: async () => {},
       transitionTask: async () => {},
       deferTask: async () => {},
       resumeDeferredTask: async () => {},

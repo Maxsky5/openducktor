@@ -26,6 +26,7 @@ describe("taskActionLabel", () => {
     expect(taskActionLabel("resume_deferred", task)).toBe("Resume Task");
     expect(taskActionLabel("human_approve", task)).toBe("Approve Task");
     expect(taskActionLabel("reset_implementation", task)).toBe("Reset Implementation");
+    expect(taskActionLabel("reset_task", task)).toBe("Reset Task");
   });
 
   test("uses open wording for spec-ready follow-up actions", () => {
@@ -85,9 +86,11 @@ describe("taskActionLabel", () => {
     expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
     expect(taskPrimaryActionVariant("defer_issue")).toBe("outline");
     expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
+    expect(taskPrimaryActionVariant("reset_task")).toBe("destructive");
 
     expect(taskActionIsDestructive("human_request_changes")).toBe(false);
     expect(taskActionIsDestructive("defer_issue")).toBe(false);
     expect(taskActionIsDestructive("reset_implementation")).toBe(true);
+    expect(taskActionIsDestructive("reset_task")).toBe(true);
   });
 });

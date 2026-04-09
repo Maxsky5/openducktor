@@ -158,6 +158,10 @@ pub(crate) fn can_reset_implementation_from_status(status: &TaskStatus) -> bool 
     )
 }
 
+pub(crate) fn can_reset_task_from_status(status: &TaskStatus) -> bool {
+    !matches!(status, TaskStatus::Deferred | TaskStatus::Closed)
+}
+
 pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) -> Vec<TaskAction> {
     let mut actions = vec![TaskAction::ViewDetails];
 
@@ -190,6 +194,10 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
 
     if can_reset_implementation_from_status(&task.status) {
         actions.push(TaskAction::ResetImplementation);
+    }
+
+    if can_reset_task_from_status(&task.status) {
+        actions.push(TaskAction::ResetTask);
     }
 
     if is_qa_rejected_rework(task) {

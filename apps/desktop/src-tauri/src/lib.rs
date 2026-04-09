@@ -362,6 +362,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         task_update,
         task_delete,
         task_reset_implementation,
+        task_reset,
         task_transition,
         task_defer,
         task_resume_deferred,

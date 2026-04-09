@@ -57,6 +57,7 @@ export const TaskDetailsSheetController = forwardRef<
     onHumanApprove,
     onHumanRequestChanges,
     onResetImplementation,
+    onResetTask,
     onDetectPullRequest,
     onUnlinkPullRequest,
     detectingPullRequestTaskId,
@@ -130,6 +131,7 @@ export const TaskDetailsSheetController = forwardRef<
       {...(onHumanApprove ? { onHumanApprove } : {})}
       {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
       {...(onResetImplementation ? { onResetImplementation } : {})}
+      {...(onResetTask ? { onResetTask } : {})}
       {...(onDetectPullRequest ? { onDetectPullRequest } : {})}
       {...(onUnlinkPullRequest ? { onUnlinkPullRequest } : {})}
       {...(detectingPullRequestTaskId !== undefined ? { detectingPullRequestTaskId } : {})}

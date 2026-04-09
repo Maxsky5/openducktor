@@ -45,6 +45,7 @@ const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async () => {});
+const resetTaskMock = mock(async () => {});
 const deferTaskMock = mock(async () => {});
 const resumeDeferredTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
@@ -440,6 +441,7 @@ describe("KanbanPage session start modal flow", () => {
         pendingMergedPullRequest: currentPendingMergedPullRequest,
         deleteTask: deleteTaskMock,
         resetTaskImplementation: resetTaskImplementationMock,
+        resetTask: resetTaskMock,
         transitionTask: async () => {},
         deferTask: deferTaskMock,
         resumeDeferredTask: resumeDeferredTaskMock,

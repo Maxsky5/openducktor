@@ -52,6 +52,13 @@ struct TaskResetImplementationArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct TaskResetArgs {
+    repo_path: String,
+    task_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct TaskTransitionArgs {
     repo_path: String,
     task_id: String,
@@ -130,6 +137,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("task_reset_implementation", |state, args| {
         Box::pin(handle_task_reset_implementation(state, args))
+    })?;
+    registry.register("task_reset", |state, args| {
+        Box::pin(handle_task_reset(state, args))
     })?;
     registry.register("task_transition", |state, args| {
         Box::pin(handle_task_transition(state, args))
@@ -278,6 +288,17 @@ async fn handle_task_reset_implementation(state: &HeadlessState, args: Value) ->
     serialize_value(
         super::command_support::run_headless_blocking("task_reset_implementation", move || {
             service.task_reset_implementation(&repo_path, &task_id)
+        })
+        .await?,
+    )
+}
+
+async fn handle_task_reset(state: &HeadlessState, args: Value) -> CommandResult {
+    let TaskResetArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        super::command_support::run_headless_blocking("task_reset", move || {
+            service.task_reset(&repo_path, &task_id)
         })
         .await?,
     )

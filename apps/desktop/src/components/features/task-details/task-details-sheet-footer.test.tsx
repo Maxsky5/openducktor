@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -60,6 +60,31 @@ describe("TaskDetailsSheetFooter", () => {
     expect(screen.getByText("Open Builder")).toBeDefined();
     expect(screen.getByText("More")).toBeDefined();
     expect(screen.queryByText("Start Builder")).toBeNull();
+
+    unmount();
+  });
+
+  test("renders Reset Task directly above Delete task in the details action menu", () => {
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({
+          status: "in_progress",
+          availableActions: ["open_builder", "reset_implementation", "reset_task"],
+        })}
+        onOpenChange={() => {}}
+        includeActions={["open_builder", "reset_implementation", "reset_task"]}
+        onWorkflowAction={() => {}}
+        onDeleteSelect={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("More"));
+    const menu = screen.getByRole("dialog");
+    const buttons = within(menu)
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
+
+    expect(buttons).toEqual(["Reset Implementation", "Reset Task", "Delete task"]);
 
     unmount();
   });

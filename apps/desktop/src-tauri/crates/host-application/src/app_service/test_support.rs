@@ -105,6 +105,7 @@ pub(crate) struct TaskStoreState {
     pub(crate) upserted_sessions: Vec<(String, AgentSessionDocument)>,
     pub(crate) cleared_session_roles: Vec<(String, Vec<String>)>,
     pub(crate) clear_agent_sessions_error: Option<String>,
+    pub(crate) cleared_workflow_documents: Vec<String>,
     pub(crate) cleared_qa_reports: Vec<String>,
     pub(crate) set_delivery_metadata_error: Option<String>,
     pub(crate) pull_requests: HashMap<String, PullRequestRecord>,
@@ -384,6 +385,16 @@ impl TaskStore for FakeTaskStore {
         state
             .agent_sessions
             .retain(|session| !roles.iter().any(|role| session.role == *role));
+        Ok(())
+    }
+
+    fn clear_workflow_documents(&self, _repo_path: &Path, task_id: &str) -> Result<()> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state.cleared_workflow_documents.push(task_id.to_string());
+        if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
+            task.document_summary = TaskDocumentSummary::default();
+        }
+        state.latest_qa_report = None;
         Ok(())
     }
 
@@ -1057,6 +1068,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         upserted_sessions: Vec::new(),
         cleared_session_roles: Vec::new(),
         clear_agent_sessions_error: None,
+        cleared_workflow_documents: Vec::new(),
         cleared_qa_reports: Vec::new(),
         set_delivery_metadata_error: None,
         pull_requests: HashMap::new(),
@@ -1145,6 +1157,7 @@ pub(crate) fn build_service_with_git_state(
         upserted_sessions: Vec::new(),
         cleared_session_roles: Vec::new(),
         clear_agent_sessions_error: None,
+        cleared_workflow_documents: Vec::new(),
         cleared_qa_reports: Vec::new(),
         set_delivery_metadata_error: None,
         pull_requests: HashMap::new(),
@@ -1677,6 +1690,7 @@ pub(crate) fn build_service_with_store(
         upserted_sessions: Vec::new(),
         cleared_session_roles: Vec::new(),
         clear_agent_sessions_error: None,
+        cleared_workflow_documents: Vec::new(),
         cleared_qa_reports: Vec::new(),
         set_delivery_metadata_error: None,
         pull_requests: HashMap::new(),

@@ -37,6 +37,7 @@ const TASK_METHODS = [
   "taskUpdate",
   "taskDelete",
   "taskResetImplementation",
+  "taskReset",
   "taskTransition",
   "taskDefer",
   "taskResumeDeferred",

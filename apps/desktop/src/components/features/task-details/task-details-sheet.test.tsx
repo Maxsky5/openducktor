@@ -94,6 +94,7 @@ describe("TaskDetailsSheet", () => {
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
+      onResetTask: undefined,
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
       taskDeleteImpactHook: taskDeleteImpactHookMock,
