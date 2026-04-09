@@ -70,8 +70,8 @@ Startup contract:
 
 Public external tools:
 
-- `create_task`
-- `search_tasks`
+- `odt_create_task`
+- `odt_search_tasks`
 - `odt_read_task`
 - `odt_read_task_documents`
 
@@ -85,11 +85,11 @@ Internal workflow tools remain on the same MCP server:
 - `odt_qa_approved`
 - `odt_qa_rejected`
 
-Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task` or `search_tasks` in their tool selection.
+Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `odt_create_task` or `odt_search_tasks` in their tool selection.
 
 ## Shared Response Model
 
-`create_task`, `search_tasks`, and `odt_read_task` reuse the same lightweight public task summary shape:
+`odt_create_task`, `odt_search_tasks`, and `odt_read_task` reuse the same lightweight public task summary shape:
 
 ```json
 {
@@ -125,7 +125,7 @@ Public MCP task snapshots intentionally do not expose:
 - `availableActions`
 - `agentWorkflows`
 
-## `create_task`
+## `odt_create_task`
 
 Creates a new public task.
 
@@ -182,7 +182,7 @@ Output:
 
 Call `odt_read_task` first to discover task state, `qaVerdict`, and document availability. Use `odt_read_task_documents` only when you need the actual persisted markdown bodies.
 
-## `search_tasks`
+## `odt_search_tasks`
 
 Searches active tasks only.
 

@@ -30,8 +30,8 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "deny",
     });
-    expect(rules).toContainEqual({ permission: "create_task", pattern: "*", action: "deny" });
-    expect(rules).toContainEqual({ permission: "search_tasks", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({ permission: "odt_create_task", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({ permission: "odt_search_tasks", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_read_task",
       pattern: "*",

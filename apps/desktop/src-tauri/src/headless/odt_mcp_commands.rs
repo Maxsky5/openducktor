@@ -90,10 +90,10 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("odt_read_task_documents", |state, args| {
         Box::pin(handle_odt_read_task_documents(state, args))
     })?;
-    registry.register("create_task", |state, args| {
+    registry.register("odt_create_task", |state, args| {
         Box::pin(handle_create_task(state, args))
     })?;
-    registry.register("search_tasks", |state, args| {
+    registry.register("odt_search_tasks", |state, args| {
         Box::pin(handle_search_tasks(state, args))
     })?;
     registry.register("odt_set_spec", |state, args| {
@@ -180,7 +180,7 @@ async fn handle_create_task(state: &HeadlessState, args: Value) -> CommandResult
     handle_repo_scoped_input_operation_blocking(
         state,
         args,
-        "create_task",
+        "odt_create_task",
         |service, repo_path, input| service.odt_create_task(&repo_path, input),
     )
     .await
@@ -190,7 +190,7 @@ async fn handle_search_tasks(state: &HeadlessState, args: Value) -> CommandResul
     handle_repo_scoped_input_operation_blocking(
         state,
         args,
-        "search_tasks",
+        "odt_search_tasks",
         |service, repo_path, input| service.odt_search_tasks(&repo_path, input),
     )
     .await

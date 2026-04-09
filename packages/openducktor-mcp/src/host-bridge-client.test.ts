@@ -110,18 +110,18 @@ describe("OdtHostBridgeClient", () => {
     ]);
   });
 
-  test("create_task and search_tasks keep the flat public tool payload shape", async () => {
+  test("odt_create_task and odt_search_tasks keep the flat public tool payload shape", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
       requests.push({ url, body });
 
-      if (url.endsWith("/invoke/create_task")) {
+      if (url.endsWith("/invoke/odt_create_task")) {
         return jsonResponse(summaryPayload);
       }
 
-      if (url.endsWith("/invoke/search_tasks")) {
+      if (url.endsWith("/invoke/odt_search_tasks")) {
         return jsonResponse({
           results: [summaryPayload],
           limit: 10,
@@ -139,7 +139,7 @@ describe("OdtHostBridgeClient", () => {
     );
 
     await expect(
-      client.call("create_task", {
+      client.call("odt_create_task", {
         title: "Bridge task",
         issueType: "task",
         priority: 2,
@@ -150,7 +150,7 @@ describe("OdtHostBridgeClient", () => {
     ).resolves.toEqual(summaryPayload);
 
     await expect(
-      client.call("search_tasks", {
+      client.call("odt_search_tasks", {
         status: "open",
         title: "Bridge",
         tags: ["mcp"],
@@ -165,7 +165,7 @@ describe("OdtHostBridgeClient", () => {
 
     expect(requests).toEqual([
       {
-        url: "http://127.0.0.1:14327/invoke/create_task",
+        url: "http://127.0.0.1:14327/invoke/odt_create_task",
         body: {
           repoPath: "/repo",
           title: "Bridge task",
@@ -177,7 +177,7 @@ describe("OdtHostBridgeClient", () => {
         },
       },
       {
-        url: "http://127.0.0.1:14327/invoke/search_tasks",
+        url: "http://127.0.0.1:14327/invoke/odt_search_tasks",
         body: {
           repoPath: "/repo",
           status: "open",

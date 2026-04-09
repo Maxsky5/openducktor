@@ -55,14 +55,14 @@ Startup behavior:
 
 ## Public Tools
 
-- `create_task`
-- `search_tasks`
+- `odt_create_task`
+- `odt_search_tasks`
 - `odt_read_task`
 - `odt_read_task_documents`
 
 The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
-## `create_task`
+## `odt_create_task`
 
 Creates a new `task`, `feature`, or `bug`.
 
@@ -77,7 +77,7 @@ Input fields:
 
 `issueType=epic` is rejected by the MCP schema.
 
-## `search_tasks`
+## `odt_search_tasks`
 
 Searches active tasks only. Closed and deferred tasks are excluded.
 Active epics may appear in search results.
@@ -93,7 +93,7 @@ Optional filters:
 
 ## Output Model
 
-`create_task` and `odt_read_task` return the same lightweight public task summary model. `search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
+`odt_create_task` and `odt_read_task` return the same lightweight public task summary model. `odt_search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
 
 ```json
 {

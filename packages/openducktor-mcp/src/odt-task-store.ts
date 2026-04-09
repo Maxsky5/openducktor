@@ -36,11 +36,11 @@ export class OdtTaskStore {
   }
 
   async createTask(rawInput: unknown) {
-    return this.execute("create_task", rawInput);
+    return this.execute("odt_create_task", rawInput);
   }
 
   async searchTasks(rawInput: unknown) {
-    return this.execute("search_tasks", rawInput);
+    return this.execute("odt_search_tasks", rawInput);
   }
 
   async setSpec(rawInput: unknown) {

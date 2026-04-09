@@ -199,12 +199,12 @@ export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
       "Read only the requested OpenDucktor task document bodies. Provide taskId plus one or more true include flags for spec, implementation plan, or latest QA report.",
     execute: (store, input) => store.readTaskDocuments(input),
   },
-  create_task: {
+  odt_create_task: {
     description:
       "Create a new OpenDucktor task, feature, or bug using the same lightweight public task summary model as odt_read_task. Epic creation is not supported by this public tool.",
     execute: (store, input) => store.createTask(input),
   },
-  search_tasks: {
+  odt_search_tasks: {
     description:
       "Search active OpenDucktor tasks using exact filters for priority/issueType/status plus title substring and tag AND matching. The response is paginated as { results, limit, totalCount, hasMore }, and each item in results uses the same lightweight single-task summary model as odt_read_task, with qaVerdict and documents nested under task.",
     execute: (store, input) => store.searchTasks(input),
@@ -279,7 +279,7 @@ export const createOpenducktorMcpServer = async (
     },
     {
       instructions:
-        "OpenDucktor workflow server. Public task access uses create_task, search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
+        "OpenDucktor workflow server. Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
     },
   );
 

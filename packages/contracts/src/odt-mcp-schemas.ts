@@ -249,8 +249,8 @@ export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
 
 export const ODT_TOOL_SCHEMAS = {
   ...ODT_WORKFLOW_TOOL_SCHEMAS,
-  create_task: CreateTaskInputSchema,
-  search_tasks: SearchTasksInputSchema,
+  odt_create_task: CreateTaskInputSchema,
+  odt_search_tasks: SearchTasksInputSchema,
 } as const;
 export type OdtToolName = keyof typeof ODT_TOOL_SCHEMAS;
 
@@ -349,8 +349,8 @@ export const odtHostBridgeReadySchema = z
 export type OdtHostBridgeReady = z.infer<typeof odtHostBridgeReadySchema>;
 
 export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
-  create_task: createTaskResultSchema,
-  search_tasks: searchTasksResultSchema,
+  odt_create_task: createTaskResultSchema,
+  odt_search_tasks: searchTasksResultSchema,
   odt_read_task: taskSummarySchema,
   odt_read_task_documents: taskDocumentsReadSchema,
   odt_set_spec: setSpecResultSchema,

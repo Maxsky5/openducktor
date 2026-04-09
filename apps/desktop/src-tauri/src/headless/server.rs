@@ -781,11 +781,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invoke_handler_creates_task_through_flat_mcp_bridge_payload() {
+    async fn invoke_handler_creates_task_through_flat_odt_mcp_bridge_payload() {
         let (fixture, task_state, repo_path) = test_state_fixture_with_task_store(Vec::new());
 
         let response = invoke_handler(
-            Path("create_task".to_string()),
+            Path("odt_create_task".to_string()),
             State(fixture.state.clone()),
             Ok(Json(json!({
                 "repoPath": repo_path,
@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invoke_handler_searches_tasks_through_flat_mcp_bridge_payload() {
+    async fn invoke_handler_searches_tasks_through_flat_odt_mcp_bridge_payload() {
         let tasks = vec![
             make_task("task-1", "Bridge task", TaskStatus::Open, vec!["mcp"]),
             make_task("task-2", "Closed task", TaskStatus::Closed, vec!["mcp"]),
@@ -825,7 +825,7 @@ mod tests {
         let (fixture, _task_state, repo_path) = test_state_fixture_with_task_store(tasks);
 
         let response = invoke_handler(
-            Path("search_tasks".to_string()),
+            Path("odt_search_tasks".to_string()),
             State(fixture.state.clone()),
             Ok(Json(json!({
                 "repoPath": repo_path,

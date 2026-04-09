@@ -10,8 +10,8 @@ use std::collections::HashSet;
 
 const MAX_TASK_CANDIDATES: usize = 5;
 const ODT_MCP_TOOL_NAMES: [&str; 12] = [
-    "create_task",
-    "search_tasks",
+    "odt_create_task",
+    "odt_search_tasks",
     "odt_read_task",
     "odt_read_task_documents",
     "odt_set_spec",
@@ -504,7 +504,9 @@ impl AppService {
         input: OdtCreateTaskInput,
     ) -> Result<OdtTaskSummary> {
         if input.issue_type == IssueType::Epic {
-            return Err(anyhow!("Epic creation is not supported by create_task."));
+            return Err(anyhow!(
+                "Epic creation is not supported by odt_create_task."
+            ));
         }
 
         let task = self.task_create(
