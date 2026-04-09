@@ -348,7 +348,7 @@ describe("TaskDocumentStore", () => {
     });
   });
 
-  test("appendQaReport stores only latest report and uses max revision + 1", async () => {
+  test("persistQaReport stores only latest report and uses max revision + 1", async () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -384,7 +384,7 @@ describe("TaskDocumentStore", () => {
     });
 
     const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
-    await documents.appendQaReport("task-1", "needs changes", "rejected");
+    await documents.persistQaReport("task-1", "needs changes", "rejected");
 
     const updatedIssue = harness.getIssue();
     expect(updatedIssue.metadata).toEqual({

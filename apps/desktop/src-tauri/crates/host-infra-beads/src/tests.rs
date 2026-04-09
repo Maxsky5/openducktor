@@ -603,7 +603,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "verdict": "approved",
             "updatedAt": "2026-02-17T13:10:00Z",
             "updatedBy": "qa-agent",
-            "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
             "revision": 2
         },
         {
@@ -682,7 +682,7 @@ fn metadata_parsing_benchmark_scaffold() {
                     "verdict": if index % 2 == 0 { "approved" } else { "rejected" },
                     "updatedAt": "2026-02-17T13:10:00Z",
                     "updatedBy": "qa-agent",
-                    "sourceTool": if index % 2 == 0 { "qa_approved" } else { "qa_rejected" },
+                    "sourceTool": if index % 2 == 0 { "odt_qa_approved" } else { "odt_qa_rejected" },
                     "revision": index + 1
                 })
             })
@@ -1029,7 +1029,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
                                 "verdict": "approved",
                                 "updatedAt": "2026-02-20T10:00:00Z",
                                 "updatedBy": "qa-agent",
-                                "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
                                 "revision": 1
                             }
                         ]
@@ -1112,7 +1112,7 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T09:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
                             "revision": 1
                         },
                         {
@@ -1120,7 +1120,7 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+            "sourceTool": "odt_qa_rejected",
                             "revision": 2
                         }
                     ]
@@ -1998,7 +1998,7 @@ fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+                            "sourceTool": "odt_qa_approved",
                             "revision": 1
                         }
                     ]
@@ -2036,7 +2036,7 @@ fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
-        Value::String("qa_rejected".to_string())
+        Value::String("odt_qa_rejected".to_string())
     );
     Ok(())
 }
@@ -2059,7 +2059,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+                            "sourceTool": "odt_qa_rejected",
                             "revision": 1
                         }
                     ]
@@ -2082,7 +2082,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+                            "sourceTool": "odt_qa_rejected",
                             "revision": 1
                         },
                         {
@@ -2090,7 +2090,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+                            "sourceTool": "odt_qa_approved",
                             "revision": 2
                         }
                     ]
@@ -2139,7 +2139,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
-        Value::String("qa_approved".to_string())
+        Value::String("odt_qa_approved".to_string())
     );
     Ok(())
 }
@@ -2162,7 +2162,7 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_rejected",
+                            "sourceTool": "odt_qa_rejected",
                             "revision": 1
                         },
                         {
@@ -2170,7 +2170,7 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T11:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+                            "sourceTool": "odt_qa_approved",
                             "revision": 2
                         }
                     ]
@@ -2410,7 +2410,7 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "qa_approved",
+            "sourceTool": "odt_qa_approved",
                             "revision": 1
                         }
                     ]

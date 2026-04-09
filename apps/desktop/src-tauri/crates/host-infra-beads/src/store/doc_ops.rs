@@ -19,8 +19,8 @@ fn write_latest_qa_report(
         .unwrap_or(1);
 
     let source_tool = match verdict {
-        QaVerdict::Approved => "qa_approved",
-        QaVerdict::Rejected => "qa_rejected",
+        QaVerdict::Approved => "odt_qa_approved",
+        QaVerdict::Rejected => "odt_qa_rejected",
     };
     let entry = QaEntry {
         markdown: markdown.trim().to_string(),
@@ -230,7 +230,7 @@ impl BeadsTaskStore {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        let entry = write_latest_qa_report(&mut documents_map, markdown, verdict)?;
+        write_latest_qa_report(&mut documents_map, markdown, verdict)?;
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
         root.insert(namespace_key, Value::Object(namespace_map));
 

@@ -70,7 +70,7 @@ export type TaskDocumentPort = {
   readDocuments(issue: RawIssue, input: ReadTaskDocumentsInput): ReadTaskDocumentsResult;
   persistSpec(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult>;
   persistImplementationPlan(taskId: string, markdown: string): Promise<PersistedTaskDocumentResult>;
-  appendQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void>;
+  persistQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void>;
   prepareQaReportWrite(
     issue: RawIssue,
     markdown: string,
@@ -121,7 +121,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
     });
   }
 
-  async appendQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void> {
+  async persistQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void> {
     const issue = await this.persistence.showRawIssue(taskId);
     const preparedWrite = this.prepareQaReportWrite(issue, markdown, verdict);
     await this.persistence.writeNamespace(taskId, preparedWrite.root, preparedWrite.namespace);
