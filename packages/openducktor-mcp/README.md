@@ -30,7 +30,6 @@ For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-
 Optional arguments:
 
 - `--host-url <url>`
-- `--metadata-namespace <name>`
 
 Equivalent environment variables:
 

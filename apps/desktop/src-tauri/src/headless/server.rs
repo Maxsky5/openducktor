@@ -460,6 +460,16 @@ mod tests {
             Err(anyhow!("set_plan not implemented in headless test store"))
         }
 
+        fn clear_workflow_documents(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+        ) -> Result<()> {
+            Err(anyhow!(
+                "clear_workflow_documents not implemented in headless test store"
+            ))
+        }
+
         fn get_latest_qa_report(
             &self,
             _repo_path: &std::path::Path,

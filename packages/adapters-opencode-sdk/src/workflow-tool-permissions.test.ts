@@ -32,6 +32,14 @@ describe("workflow-tool-permissions", () => {
     });
     expect(rules).toContainEqual({ permission: "odt_create_task", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({ permission: "odt_search_tasks", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({ permission: "odt_read_task", pattern: "*", action: "allow" });
+    expect(rules).toContainEqual({
+      permission: "odt_read_task_documents",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(rules).toContainEqual({ permission: "odt_set_spec", pattern: "*", action: "allow" });
+    expect(rules).toContainEqual({ permission: "odt_set_plan", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_read_task",
       pattern: "*",
@@ -73,6 +81,11 @@ describe("workflow-tool-permissions", () => {
     expect(rules).not.toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
     expect(rules).not.toContainEqual({ permission: "write", pattern: "*", action: "deny" });
     expect(rules).not.toContainEqual({ permission: "apply_patch", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({
+      permission: "odt_build_completed",
+      pattern: "*",
+      action: "allow",
+    });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_build_completed",
       pattern: "*",

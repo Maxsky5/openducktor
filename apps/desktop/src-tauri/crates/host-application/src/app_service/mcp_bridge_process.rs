@@ -97,6 +97,10 @@ fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
 }
 
 impl AppService {
+    pub fn ensure_external_mcp_discovery_ready(&self) -> Result<()> {
+        self.ensure_mcp_bridge_url().map(|_| ())
+    }
+
     pub(crate) fn ensure_mcp_bridge_url(&self) -> Result<String> {
         let mut bridge = self
             .mcp_bridge_process

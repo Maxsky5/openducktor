@@ -42,7 +42,6 @@ Example MCP config:
 Optional arguments:
 
 - `--host-url <url>`
-- `--metadata-namespace <name>`
 
 Equivalent environment variables:
 

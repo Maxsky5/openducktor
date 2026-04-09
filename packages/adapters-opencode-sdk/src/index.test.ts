@@ -643,6 +643,26 @@ describe("OpencodeSdkAdapter", () => {
       action: "deny",
     });
     expect(permissionRules).toContainEqual({
+      permission: "odt_read_task",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "odt_read_task_documents",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "odt_set_plan",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "odt_set_spec",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
       permission: "openducktor_odt_read_task",
       pattern: "*",
       action: "allow",

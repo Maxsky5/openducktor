@@ -311,11 +311,10 @@ The custom status command is needed because OpenDucktor adds workflow states on 
 
 ## How MCP Fits In
 
-When OpenDucktor launches its MCP sidecar for OpenCode, it passes host bridge context explicitly:
+When OpenDucktor launches its MCP sidecar for OpenCode, it passes only the host bridge context the MCP actually uses:
 
 - repo path
 - host bridge URL
-- metadata namespace
 
 The Rust host owns the Beads attachment directory, shared Dolt connection details, attachment verification, repair, and all task reads and writes.
 
