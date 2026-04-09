@@ -113,9 +113,7 @@ impl AppService {
         emit_group_snapshot(self.dev_server_groups.clone(), &key);
 
         let mut errors = Vec::new();
-        let mut started_scripts = Vec::new();
         for script in repo_config.dev_servers.iter().cloned() {
-            let script_id = script.id.clone();
             match self.start_dev_server_script(
                 key.as_str(),
                 repo_path.as_str(),
@@ -123,22 +121,14 @@ impl AppService {
                 worktree_path.as_str(),
                 script,
             ) {
-                Ok(pid) => started_scripts.push((script_id, pid)),
+                Ok(_pid) => {}
                 Err(error) => errors.push(error.to_string()),
-            }
-        }
-
-        if !errors.is_empty() {
-            let rollback_errors =
-                self.rollback_started_dev_server_scripts(key.as_str(), started_scripts);
-            if !rollback_errors.is_empty() {
-                errors.extend(rollback_errors);
             }
         }
 
         let state = self.dev_server_get_state(repo_path.as_str(), task_id)?;
         emit_group_snapshot(self.dev_server_groups.clone(), &key);
-        if errors.is_empty() {
+        if errors.is_empty() || state.scripts.iter().any(script_has_live_process) {
             Ok(state)
         } else {
             Err(anyhow!(errors.join("\n")))
@@ -397,33 +387,6 @@ impl AppService {
         }
 
         start_result
-    }
-
-    fn rollback_started_dev_server_scripts(
-        &self,
-        group_key: &str,
-        started_scripts: Vec<(String, u32)>,
-    ) -> Vec<String> {
-        let mut errors = Vec::new();
-
-        for (script_id, pid) in started_scripts {
-            if let Err(error) = stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT) {
-                self.mark_dev_server_stop_failed(
-                    group_key,
-                    script_id.as_str(),
-                    pid,
-                    &error.to_string(),
-                );
-                errors.push(format!(
-                    "Failed rolling back partially started dev server {script_id}: {error}"
-                ));
-                continue;
-            }
-
-            self.mark_dev_server_stopped(group_key, script_id.as_str(), pid, None);
-        }
-
-        errors
     }
 
     fn mark_dev_servers_stopping(&self, group_key: &str) -> Result<Vec<(String, u32)>> {
@@ -1185,12 +1148,21 @@ mod tests {
         set_env_var, spawn_sleep_process_group, unique_temp_path, wait_for_path_exists,
         wait_for_process_exit, write_executable_script,
     };
+    use crate::app_service::{HookTrustConfirmationPort, HookTrustConfirmationRequest};
     use host_domain::{GitCurrentBranch, TaskStatus};
     use host_infra_system::AppConfigStore;
     use std::fs;
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
+
+    struct AllowHookTrustConfirmationPort;
+
+    impl HookTrustConfirmationPort for AllowHookTrustConfirmationPort {
+        fn confirm_trusted_hooks(&self, _request: &HookTrustConfirmationRequest) -> Result<()> {
+            Ok(())
+        }
+    }
 
     fn repo_config(dev_servers: Vec<RepoDevServerScript>) -> RepoConfig {
         RepoConfig {
@@ -1568,6 +1540,112 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails() {
+        let root = unique_temp_path("dev-server-partial-start");
+        let repo = root.join("repo");
+        init_git_repo(&repo).expect("test repo should initialize");
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_path = repo.join(".openducktor-worktree");
+        fs::create_dir_all(&worktree_path).expect("create worktree path");
+        let worktree_path = worktree_path.to_string_lossy().to_string();
+
+        service
+            .workspace_add(repo_path.as_str())
+            .expect("workspace should add");
+        service
+            .workspace_update_repo_config(
+                repo_path.as_str(),
+                RepoConfig {
+                    trusted_hooks: true,
+                    dev_servers: vec![
+                        RepoDevServerScript {
+                            id: "frontend".to_string(),
+                            name: "Frontend".to_string(),
+                            command: "sleep 20".to_string(),
+                        },
+                        RepoDevServerScript {
+                            id: "backend".to_string(),
+                            name: "Backend".to_string(),
+                            command: "__odt_missing_executable__ --port 3000".to_string(),
+                        },
+                    ],
+                    ..Default::default()
+                },
+            )
+            .expect("repo config should persist");
+        let challenge = service
+            .workspace_prepare_trusted_hooks_challenge(repo_path.as_str())
+            .expect("trust challenge should prepare");
+        service
+            .workspace_set_trusted_hooks(
+                repo_path.as_str(),
+                true,
+                Some(challenge.nonce.as_str()),
+                Some(challenge.fingerprint.as_str()),
+                &AllowHookTrustConfirmationPort,
+            )
+            .expect("hook trust should persist");
+
+        let mut session = crate::app_service::test_support::make_session("task-1", "build-session");
+        session.role = "build".to_string();
+        session.working_directory = worktree_path;
+        service
+            .agent_session_upsert(repo_path.as_str(), "task-1", session)
+            .expect("builder session should persist");
+
+        let emitter: DevServerEmitter = Arc::new(|_| {});
+        let state = service
+            .dev_server_start(repo_path.as_str(), "task-1", emitter)
+            .expect("partial dev server start should keep successful scripts running");
+
+        let frontend = state
+            .scripts
+            .iter()
+            .find(|script| script.script_id == "frontend")
+            .expect("frontend script present");
+        assert_eq!(frontend.status, DevServerScriptStatus::Running);
+        assert!(frontend.pid.is_some());
+
+        let backend = state
+            .scripts
+            .iter()
+            .find(|script| script.script_id == "backend")
+            .expect("backend script present");
+        assert_eq!(backend.status, DevServerScriptStatus::Failed);
+        assert_eq!(backend.exit_code, Some(127));
+        assert!(matches!(
+            backend.last_error.as_deref(),
+            Some(message) if message.contains("Dev server exited with code 127")
+        ));
+
+        let stopped = service
+            .dev_server_stop(repo_path.as_str(), "task-1")
+            .expect("running scripts should stop cleanly");
+        let stopped_frontend = stopped
+            .scripts
+            .iter()
+            .find(|script| script.script_id == "frontend")
+            .expect("frontend script present after stop");
+        assert_eq!(stopped_frontend.status, DevServerScriptStatus::Stopped);
+        assert_eq!(stopped_frontend.pid, None);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn start_dev_server_script_uses_augmented_subprocess_path() {
         let _env_lock = lock_env();
         let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
@@ -1916,62 +1994,6 @@ sleep 5
         assert_eq!(runtime.state.scripts[1].last_error, None);
         assert_eq!(runtime.state.scripts[1].exit_code, None);
         assert!(runtime.state.scripts[1].buffered_terminal_chunks.is_empty());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn rollback_started_dev_server_scripts_stops_live_processes() {
-        let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
-        let mut child = spawn_sleep_process_group(20);
-        let pid = child.id();
-        let group_key = "repo::task-rollback";
-
-        service
-            .dev_server_groups
-            .lock()
-            .expect("group lock poisoned")
-            .insert(
-                group_key.to_string(),
-                DevServerGroupRuntime {
-                    state: DevServerGroupState {
-                        repo_path: "repo".to_string(),
-                        task_id: "task-rollback".to_string(),
-                        worktree_path: Some("/tmp/worktree".to_string()),
-                        scripts: vec![DevServerScriptState {
-                            script_id: "frontend".to_string(),
-                            name: "Frontend".to_string(),
-                            command: "sleep 20".to_string(),
-                            status: DevServerScriptStatus::Running,
-                            pid: Some(pid),
-                            started_at: Some("2026-03-19T10:00:00Z".to_string()),
-                            exit_code: None,
-                            last_error: None,
-                            buffered_terminal_chunks: Vec::new(),
-                            next_terminal_sequence: 0,
-                        }],
-                        updated_at: "2026-03-19T10:00:00Z".to_string(),
-                    },
-                    emitter: None,
-                },
-            );
-
-        let errors = service
-            .rollback_started_dev_server_scripts(group_key, vec![("frontend".to_string(), pid)]);
-
-        assert!(errors.is_empty());
-        assert!(wait_for_process_exit(pid as i32, Duration::from_secs(2)));
-        let groups = service
-            .dev_server_groups
-            .lock()
-            .expect("group lock poisoned");
-        let runtime = groups.get(group_key).expect("runtime present");
-        assert_eq!(
-            runtime.state.scripts[0].status,
-            DevServerScriptStatus::Stopped
-        );
-        assert_eq!(runtime.state.scripts[0].pid, None);
-        drop(groups);
-        let _ = child.wait().expect("failed waiting rollback child");
     }
 
     #[cfg(unix)]
