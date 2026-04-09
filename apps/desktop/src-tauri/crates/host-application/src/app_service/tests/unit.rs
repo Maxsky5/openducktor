@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use host_domain::{
     AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitBranch, IssueType,
     PlanSubtaskInput, PullRequestRecord, QaWorkflowVerdict, RuntimeInstanceSummary, RuntimeRole,
-    TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
@@ -973,11 +973,55 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
 
 #[test]
 fn task_reset_rejects_live_spec_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::SpecReady,
+        "spec",
+        "spec_authoring",
+        "Cannot reset task while active spec session(s) exist",
+    )
+}
+
+#[test]
+fn task_reset_rejects_live_planner_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::ReadyForDev,
+        "planner",
+        "plan_authoring",
+        "Cannot reset task while active planner session(s) exist",
+    )
+}
+
+#[test]
+fn task_reset_rejects_live_build_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::InProgress,
+        "build",
+        "build_implementation_start",
+        "Cannot reset task while active build session(s) exist",
+    )
+}
+
+#[test]
+fn task_reset_rejects_live_qa_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::AiReview,
+        "qa",
+        "qa_review",
+        "Cannot reset task while active qa session(s) exist",
+    )
+}
+
+fn assert_task_reset_rejects_live_session_status(
+    status: TaskStatus,
+    role: &str,
+    scenario: &str,
+    expected_message: &str,
+) -> Result<()> {
     let repo_path = unique_temp_path("reset-task-live-spec-shared-runtime-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
 
-    let task = make_task("task-1", "task", TaskStatus::SpecReady);
+    let task = make_task("task-1", "task", status);
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![task],
         Vec::new(),
@@ -999,28 +1043,101 @@ fn task_reset_rejects_live_spec_session_status_with_repo_runtime_without_run() -
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "spec-session".to_string(),
-        external_session_id: Some("external-spec-session".to_string()),
-        role: "spec".to_string(),
-        scenario: "spec_authoring".to_string(),
+        session_id: format!("{role}-session"),
+        external_session_id: Some(format!("external-{role}-session")),
+        role: role.to_string(),
+        scenario: scenario.to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
         selected_model: None,
     }];
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-spec-session":{"type":"busy"}}"#)?;
+    let status_payload = format!(r#"{{"external-{role}-session":{{"type":"busy"}}}}"#);
+    let status_payload = Box::leak(status_payload.into_boxed_str());
+    let (port, server_handle) = spawn_opencode_session_status_server(status_payload)?;
     insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_reset(&repo_path.to_string_lossy(), "task-1")
-        .expect_err("live spec session should block full reset");
-    assert!(error
-        .to_string()
-        .contains("Cannot reset task while active spec session(s) exist"));
+        .expect_err("live session should block full reset");
+    assert!(error.to_string().contains(expected_message));
     server_handle
         .join()
         .expect("status server thread should finish");
+    Ok(())
+}
+
+#[test]
+fn task_reset_only_mutates_the_selected_task() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-selected-task-only-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let parent = make_task("task-parent", "epic", TaskStatus::HumanReview);
+    let mut child = make_task("task-child", "task", TaskStatus::InProgress);
+    child.parent_id = Some("task-parent".to_string());
+    child.document_summary.spec.has = true;
+    child.document_summary.plan.has = true;
+    child.document_summary.qa_report.has = true;
+    child.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![
+            TaskCard {
+                subtask_ids: vec!["task-child".to_string()],
+                ..parent
+            },
+            child,
+        ],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+
+    let reset = service.task_reset(&repo_path.to_string_lossy(), "task-parent")?;
+
+    assert_eq!(reset.status, TaskStatus::Open);
+    let state = task_state.lock().expect("task store lock poisoned");
+    assert_eq!(
+        state.cleared_workflow_documents,
+        vec!["task-parent".to_string()]
+    );
+    assert_eq!(
+        state.cleared_session_roles,
+        vec![(
+            "task-parent".to_string(),
+            vec![
+                "spec".to_string(),
+                "planner".to_string(),
+                "build".to_string(),
+                "qa".to_string(),
+            ],
+        )]
+    );
+    let child = state
+        .tasks
+        .iter()
+        .find(|task| task.id == "task-child")
+        .expect("child task should remain present");
+    assert_eq!(child.status, TaskStatus::InProgress);
+    assert!(child.document_summary.spec.has);
+    assert!(child.document_summary.plan.has);
+    assert!(child.document_summary.qa_report.has);
+    assert_eq!(
+        child.document_summary.qa_report.verdict,
+        QaWorkflowVerdict::Rejected
+    );
     Ok(())
 }
 

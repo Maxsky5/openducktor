@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
   collectDeleteImpactTaskIds,
+  collectResetImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -41,9 +42,13 @@ type TaskDetailsSheetViewModel = {
   isDeletePending: boolean;
   deleteError: string | null;
   isLoadingDeleteImpact: boolean;
-  hasManagedSessionCleanup: boolean;
-  managedWorktreeCount: number;
-  impactError: string | null;
+  hasManagedDeleteSessionCleanup: boolean;
+  deleteManagedWorktreeCount: number;
+  deleteImpactError: string | null;
+  isLoadingResetImpact: boolean;
+  hasManagedResetSessionCleanup: boolean;
+  resetManagedWorktreeCount: number;
+  resetImpactError: string | null;
   isResetDialogOpen: boolean;
   isResetPending: boolean;
   resetError: string | null;
@@ -120,8 +125,19 @@ export function useTaskDetailsSheetViewModel({
     () => collectDeleteImpactTaskIds(task, taskById),
     [task, taskById],
   );
-  const { hasManagedSessionCleanup, managedWorktreeCount, impactError, isLoadingImpact } =
-    taskDeleteImpactHook(deleteImpactTaskIds, open);
+  const resetImpactTaskIds = useMemo(() => collectResetImpactTaskIds(task), [task]);
+  const {
+    hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
+    managedWorktreeCount: deleteManagedWorktreeCount,
+    impactError: deleteImpactError,
+    isLoadingImpact: isLoadingDeleteImpact,
+  } = taskDeleteImpactHook(deleteImpactTaskIds, open);
+  const {
+    hasManagedSessionCleanup: hasManagedResetSessionCleanup,
+    managedWorktreeCount: resetManagedWorktreeCount,
+    impactError: resetImpactError,
+    isLoadingImpact: isLoadingResetImpact,
+  } = taskDeleteImpactHook(resetImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -250,10 +266,14 @@ export function useTaskDetailsSheetViewModel({
     isDeleteDialogOpen,
     isDeletePending,
     deleteError,
-    isLoadingDeleteImpact: isLoadingImpact,
-    hasManagedSessionCleanup,
-    managedWorktreeCount,
-    impactError,
+    isLoadingDeleteImpact,
+    hasManagedDeleteSessionCleanup,
+    deleteManagedWorktreeCount,
+    deleteImpactError,
+    isLoadingResetImpact,
+    hasManagedResetSessionCleanup,
+    resetManagedWorktreeCount,
+    resetImpactError,
     isResetDialogOpen,
     isResetPending,
     resetError,

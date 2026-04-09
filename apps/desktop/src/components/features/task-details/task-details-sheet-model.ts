@@ -81,6 +81,14 @@ export const collectDeleteImpactTaskIds = (
   return collectedIds;
 };
 
+export const collectResetImpactTaskIds = (task: TaskCard | null): string[] => {
+  if (!task) {
+    return [];
+  }
+
+  return [task.id];
+};
+
 export const runTaskWorkflowAction = (
   action: TaskWorkflowAction,
   taskId: string | null,

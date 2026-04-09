@@ -197,9 +197,9 @@ export function TaskDetailsSheet({
           subtasksCount={viewModel.subtasks.length}
           hasSubtasks={viewModel.subtasks.length > 0}
           isLoadingImpact={viewModel.isLoadingDeleteImpact}
-          hasManagedSessionCleanup={viewModel.hasManagedSessionCleanup}
-          managedWorktreeCount={viewModel.managedWorktreeCount}
-          impactError={viewModel.impactError}
+          hasManagedSessionCleanup={viewModel.hasManagedDeleteSessionCleanup}
+          managedWorktreeCount={viewModel.deleteManagedWorktreeCount}
+          impactError={viewModel.deleteImpactError}
           isDeletePending={viewModel.isDeletePending}
           deleteError={viewModel.deleteError}
         />
@@ -212,10 +212,10 @@ export function TaskDetailsSheet({
           onCancel={viewModel.closeResetDialog}
           onConfirm={viewModel.confirmReset}
           taskId={viewModel.taskId}
-          isLoadingImpact={viewModel.isLoadingDeleteImpact}
-          hasManagedSessionCleanup={viewModel.hasManagedSessionCleanup}
-          managedWorktreeCount={viewModel.managedWorktreeCount}
-          impactError={viewModel.impactError}
+          isLoadingImpact={viewModel.isLoadingResetImpact}
+          hasManagedSessionCleanup={viewModel.hasManagedResetSessionCleanup}
+          managedWorktreeCount={viewModel.resetManagedWorktreeCount}
+          impactError={viewModel.resetImpactError}
           isResetPending={viewModel.isResetPending}
           resetError={viewModel.resetError}
         />
