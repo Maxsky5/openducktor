@@ -9,16 +9,13 @@ export const devServerScriptStatusSchema = z.enum([
 ]);
 export type DevServerScriptStatus = z.infer<typeof devServerScriptStatusSchema>;
 
-export const devServerLogStreamSchema = z.enum(["stdout", "stderr", "system"]);
-export type DevServerLogStream = z.infer<typeof devServerLogStreamSchema>;
-
-export const devServerLogLineSchema = z.object({
+export const devServerTerminalChunkSchema = z.object({
   scriptId: z.string().min(1),
-  stream: devServerLogStreamSchema,
-  text: z.string(),
+  sequence: z.number().int().nonnegative(),
+  data: z.string(),
   timestamp: z.string(),
 });
-export type DevServerLogLine = z.infer<typeof devServerLogLineSchema>;
+export type DevServerTerminalChunk = z.infer<typeof devServerTerminalChunkSchema>;
 
 export const devServerScriptStateSchema = z.object({
   scriptId: z.string().min(1),
@@ -29,7 +26,7 @@ export const devServerScriptStateSchema = z.object({
   startedAt: z.string().nullable(),
   exitCode: z.number().int().nullable(),
   lastError: z.string().nullable(),
-  bufferedLogLines: z.array(devServerLogLineSchema).default([]),
+  bufferedTerminalChunks: z.array(devServerTerminalChunkSchema).default([]),
 });
 export type DevServerScriptState = z.infer<typeof devServerScriptStateSchema>;
 
@@ -55,10 +52,10 @@ export const devServerEventSchema = z.discriminatedUnion("type", [
     updatedAt: z.string(),
   }),
   z.object({
-    type: z.literal("log_line"),
+    type: z.literal("terminal_chunk"),
     repoPath: z.string().min(1),
     taskId: z.string().min(1),
-    logLine: devServerLogLineSchema,
+    terminalChunk: devServerTerminalChunkSchema,
   }),
 ]);
 export type DevServerEvent = z.infer<typeof devServerEventSchema>;

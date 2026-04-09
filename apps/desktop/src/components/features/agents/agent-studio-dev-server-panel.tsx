@@ -1,24 +1,11 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
-import {
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type {
-  AgentStudioDevServerLogBuffer,
-  AgentStudioDevServerLogEntry,
-} from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import { getDevServerLogEntryAt } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { cn } from "@/lib/utils";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
@@ -33,7 +20,7 @@ export type AgentStudioDevServerPanelModel = {
   scripts: DevServerScriptState[];
   selectedScriptId: string | null;
   selectedScript: DevServerScriptState | null;
-  selectedScriptLogBuffer: AgentStudioDevServerLogBuffer | null;
+  selectedScriptTerminalBuffer: AgentStudioDevServerTerminalBuffer | null;
   error: string | null;
   isStartPending: boolean;
   isStopPending: boolean;
@@ -42,28 +29,6 @@ export type AgentStudioDevServerPanelModel = {
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
-};
-
-const AUTO_SCROLL_THRESHOLD_PX = 48;
-
-const formatLogTimestamp = (timestamp: string): string => {
-  if (timestamp.length >= 19) {
-    return timestamp.slice(11, 19);
-  }
-
-  return timestamp;
-};
-
-const streamClassName = (stream: "stdout" | "stderr" | "system"): string => {
-  if (stream === "stderr") {
-    return "text-[var(--dev-server-terminal-stderr)]";
-  }
-
-  if (stream === "system") {
-    return "text-[var(--dev-server-terminal-system)]";
-  }
-
-  return "text-[var(--dev-server-terminal-foreground)]";
 };
 
 const getClipboardErrorMessage = (error: unknown): string => {
@@ -111,80 +76,33 @@ const getStartLabel = (isLoading: boolean, isStartPending: boolean): string => {
   return "Start dev servers";
 };
 
-const getEmptyLogMessage = (script: DevServerScriptState): string => {
+const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   if (script.status === "starting") {
     return "Starting this dev server...";
   }
 
   if (script.status === "failed") {
-    return script.lastError ?? "This dev server exited before producing logs.";
+    return script.lastError ?? "This dev server exited before producing terminal output.";
   }
 
-  return "Logs will appear here once this dev server writes output.";
+  return "Terminal output will appear here once this dev server writes output.";
 };
-
-const AgentStudioDevServerLogRow = memo(function AgentStudioDevServerLogRow({
-  logLine,
-}: {
-  logLine: AgentStudioDevServerLogEntry;
-}): ReactElement {
-  return (
-    <div
-      className="flex gap-3 [content-visibility:auto] [contain-intrinsic-size:20px]"
-      data-testid="agent-studio-dev-server-log-line"
-    >
-      <span className="shrink-0 text-[var(--dev-server-terminal-subtle)]">
-        {formatLogTimestamp(logLine.timestamp)}
-      </span>
-      <span className="shrink-0 text-[var(--dev-server-terminal-muted)]">[{logLine.stream}]</span>
-      <span
-        className={cn("min-w-0 whitespace-pre-wrap break-words", streamClassName(logLine.stream))}
-      >
-        {logLine.text}
-      </span>
-    </div>
-  );
-});
-
-const AgentStudioDevServerLogList = memo(function AgentStudioDevServerLogList({
-  logBuffer,
-}: {
-  logBuffer: AgentStudioDevServerLogBuffer;
-}): ReactElement {
-  const logRows = useMemo(() => {
-    const rows: ReactElement[] = [];
-
-    for (let offset = 0; offset < logBuffer.entries.length; offset += 1) {
-      const logLine = getDevServerLogEntryAt(logBuffer, offset);
-      if (!logLine) {
-        continue;
-      }
-
-      rows.push(<AgentStudioDevServerLogRow key={logLine.id} logLine={logLine} />);
-    }
-
-    return rows;
-  }, [logBuffer]);
-
-  return <div className="space-y-1 px-4 py-4 font-mono text-[11px] leading-5">{logRows}</div>;
-});
 
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
 }: {
   model: AgentStudioDevServerPanelModel;
 }): ReactElement {
-  const logViewportContainerRef = useRef<HTMLDivElement | null>(null);
-  const shouldAutoScrollRef = useRef(true);
-  const [logViewport, setLogViewport] = useState<HTMLElement | null>(null);
   const [copiedWorktreePath, setCopiedWorktreePath] = useState(false);
+  const [rendererError, setRendererError] = useState<string | null>(null);
   const selectedScript = model.selectedScript;
   const isActionPending = model.isStartPending || model.isStopPending || model.isRestartPending;
   const hasExpandedActions = model.mode === "active";
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const selectedScriptLogBuffer = model.selectedScriptLogBuffer;
-  const selectedScriptLogCount = selectedScriptLogBuffer?.entries.length ?? 0;
+  const selectedScriptTerminalBuffer = model.selectedScriptTerminalBuffer;
+  const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
+  const panelError = model.error ?? rendererError;
 
   useEffect(() => {
     if (!copiedWorktreePath) {
@@ -194,55 +112,6 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     const timeoutId = setTimeout(() => setCopiedWorktreePath(false), 2000);
     return () => clearTimeout(timeoutId);
   }, [copiedWorktreePath]);
-
-  useLayoutEffect(() => {
-    if (selectedTabsValue === "__none__") {
-      setLogViewport(null);
-      return;
-    }
-
-    const nextViewport = logViewportContainerRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    setLogViewport((currentViewport) =>
-      currentViewport === nextViewport ? currentViewport : (nextViewport ?? null),
-    );
-  }, [selectedTabsValue]);
-
-  useEffect(() => {
-    if (!logViewport) {
-      return;
-    }
-
-    const updateAutoScroll = (): void => {
-      const distanceFromBottom =
-        logViewport.scrollHeight - logViewport.scrollTop - logViewport.clientHeight;
-      shouldAutoScrollRef.current = distanceFromBottom <= AUTO_SCROLL_THRESHOLD_PX;
-    };
-
-    updateAutoScroll();
-    logViewport.addEventListener("scroll", updateAutoScroll, { passive: true });
-    return () => {
-      logViewport.removeEventListener("scroll", updateAutoScroll);
-    };
-  }, [logViewport]);
-
-  useLayoutEffect(() => {
-    if (!shouldAutoScrollRef.current) {
-      return;
-    }
-
-    if (selectedTabsValue === "__none__" || !logViewport) {
-      return;
-    }
-
-    if (selectedScriptLogCount === 0) {
-      logViewport.scrollTop = 0;
-      return;
-    }
-
-    logViewport.scrollTop = logViewport.scrollHeight;
-  }, [logViewport, selectedScriptLogCount, selectedTabsValue]);
 
   const headerSummary = useMemo(() => {
     if (model.mode === "empty") {
@@ -263,7 +132,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
     return model.worktreePath
       ? `Running in ${model.worktreePath}`
-      : "Builder dev server logs stream here while the task worktree is active.";
+      : "Builder dev server terminals stream here while the task worktree is active.";
   }, [model.mode, model.worktreePath]);
 
   const handleCopyWorktreePath = useCallback(() => {
@@ -317,12 +186,12 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
             {headerSummary}
           </div>
         ) : null}
-        {model.error ? (
+        {panelError ? (
           <div
             className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
             data-testid="agent-studio-dev-server-error-banner"
           >
-            {model.error}
+            {panelError}
           </div>
         ) : null}
       </div>
@@ -395,12 +264,12 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         )}
       </div>
 
-      {model.error ? (
+      {panelError ? (
         <div
           className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive"
           data-testid="agent-studio-dev-server-error-banner"
         >
-          {model.error}
+          {panelError}
         </div>
       ) : null}
 
@@ -452,19 +321,20 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                   </div>
                 </div>
 
-                <div ref={logViewportContainerRef} className="min-h-0 flex-1 overflow-hidden">
-                  <ScrollArea className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
-                    {selectedScriptLogCount > 0 && selectedScriptLogBuffer ? (
-                      <AgentStudioDevServerLogList logBuffer={selectedScriptLogBuffer} />
-                    ) : (
-                      <div
-                        className="flex h-full min-h-0 items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"
-                        data-testid="agent-studio-dev-server-empty-log-state"
-                      >
-                        {getEmptyLogMessage(selectedScriptContent)}
-                      </div>
-                    )}
-                  </ScrollArea>
+                <div className="relative min-h-0 flex-1 overflow-hidden bg-[var(--dev-server-terminal-panel)]">
+                  <AgentStudioDevServerTerminal
+                    scriptId={selectedScriptContent.scriptId}
+                    terminalBuffer={selectedScriptTerminalBuffer}
+                    onRendererError={setRendererError}
+                  />
+                  {selectedScriptTerminalChunkCount === 0 ? (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"
+                      data-testid="agent-studio-dev-server-empty-log-state"
+                    >
+                      {getEmptyTerminalMessage(selectedScriptContent)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </TabsContent>

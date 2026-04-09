@@ -2,19 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
 
-const buildLogBuffer = (script: DevServerScriptState): AgentStudioDevServerLogBuffer => ({
-  entries: script.bufferedLogLines.map((logLine, index) => ({
-    id: `${script.scriptId}:${index}`,
-    timestamp: logLine.timestamp,
-    stream: logLine.stream,
-    text: logLine.text,
-  })),
+const buildTerminalBuffer = (script: DevServerScriptState): AgentStudioDevServerTerminalBuffer => ({
+  entries: script.bufferedTerminalChunks,
+  lastSequence: script.bufferedTerminalChunks.at(-1)?.sequence ?? null,
+  resetToken: 0,
 });
 
 const baseModel = (
@@ -29,7 +26,7 @@ const baseModel = (
   scripts: [],
   selectedScriptId: null,
   selectedScript: null,
-  selectedScriptLogBuffer: null,
+  selectedScriptTerminalBuffer: null,
   error: null,
   isStartPending: false,
   isStopPending: false,
@@ -50,17 +47,17 @@ const runningScript: DevServerScriptState = {
   startedAt: "2026-03-19T15:30:00.000Z",
   exitCode: null,
   lastError: null,
-  bufferedLogLines: [
+  bufferedTerminalChunks: [
     {
       scriptId: "frontend",
-      stream: "system",
-      text: "Starting `bun run dev`",
+      sequence: 0,
+      data: "Starting `bun run dev`\r\n",
       timestamp: "2026-03-19T15:30:00.000Z",
     },
     {
       scriptId: "frontend",
-      stream: "stdout",
-      text: "ready on http://localhost:5173",
+      sequence: 1,
+      data: "ready on http://localhost:5173\r\n",
       timestamp: "2026-03-19T15:30:01.000Z",
     },
   ],
@@ -75,11 +72,11 @@ const backendScript: DevServerScriptState = {
   startedAt: "2026-03-19T15:31:00.000Z",
   exitCode: null,
   lastError: null,
-  bufferedLogLines: [
+  bufferedTerminalChunks: [
     {
       scriptId: "backend",
-      stream: "stdout",
-      text: "api ready",
+      sequence: 0,
+      data: "api ready\r\n",
       timestamp: "2026-03-19T15:31:01.000Z",
     },
   ],
@@ -94,11 +91,11 @@ const failedScript: DevServerScriptState = {
   startedAt: null,
   exitCode: 1,
   lastError: "Process exited",
-  bufferedLogLines: [
+  bufferedTerminalChunks: [
     {
       scriptId: "failed",
-      stream: "stderr",
-      text: "Process exited",
+      sequence: 0,
+      data: "Process exited\r\n",
       timestamp: "2026-03-19T15:32:01.000Z",
     },
   ],
@@ -131,7 +128,7 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("disabled");
   });
 
-  test("renders expanded terminal tabs and logs while active", () => {
+  test("renders expanded terminal tabs and terminal surface while active", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {
         model: baseModel({
@@ -140,7 +137,7 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript],
           selectedScriptId: runningScript.scriptId,
           selectedScript: runningScript,
-          selectedScriptLogBuffer: buildLogBuffer(runningScript),
+          selectedScriptTerminalBuffer: buildTerminalBuffer(runningScript),
         }),
       }),
     );
@@ -153,12 +150,10 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("/tmp/worktree/task-7");
     expect(html).toContain("inline-flex max-w-full items-center gap-1.5");
     expect(html).toContain("bg-[var(--dev-server-terminal-panel)]");
-    expect(html).toContain("h-9 w-auto max-w-[320px]");
-    expect(html).toContain("ready on http://localhost:5173");
-    expect(html).toContain("[stdout]");
+    expect(html).toContain('data-testid="agent-studio-dev-server-terminal"');
   });
 
-  test("renders only the selected script log content", () => {
+  test("renders only the selected script terminal content frame", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {
         model: baseModel({
@@ -167,13 +162,13 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [runningScript, backendScript],
           selectedScriptId: backendScript.scriptId,
           selectedScript: backendScript,
-          selectedScriptLogBuffer: buildLogBuffer(backendScript),
+          selectedScriptTerminalBuffer: buildTerminalBuffer(backendScript),
         }),
       }),
     );
 
     expect(html).toContain("Backend");
-    expect(html).toContain("api ready");
+    expect(html).toContain("bun run api");
     expect(html).not.toContain("ready on http://localhost:5173");
   });
 
@@ -186,7 +181,7 @@ describe("AgentStudioDevServerPanel", () => {
           scripts: [failedScript],
           selectedScriptId: failedScript.scriptId,
           selectedScript: failedScript,
-          selectedScriptLogBuffer: buildLogBuffer(failedScript),
+          selectedScriptTerminalBuffer: buildTerminalBuffer(failedScript),
         }),
       }),
     );

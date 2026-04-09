@@ -1,113 +1,105 @@
 import type {
   DevServerGroupState,
-  DevServerLogLine,
   DevServerScriptState,
+  DevServerTerminalChunk,
 } from "@openducktor/contracts";
 
-const ESC = String.fromCharCode(27);
-const CSI = String.fromCharCode(155);
-const ANSI_ESCAPE_SEQUENCE = new RegExp(
-  `(?:${ESC}\\[[0-?]*[ -/]*[@-~])|(?:${CSI}[0-?]*[ -/]*[@-~])|(?:\\uFFFD\\[[0-9;]*[A-Za-z])`,
-  "g",
-);
+export const MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS = 2_000;
 
-export const MAX_BUFFERED_DEV_SERVER_LOG_LINES = 2_000;
+export type AgentStudioDevServerTerminalChunkEntry = DevServerTerminalChunk;
 
-export type AgentStudioDevServerLogEntry = {
-  id: string;
-  timestamp: string;
-  stream: DevServerScriptState["bufferedLogLines"][number]["stream"];
-  text: string;
+export type AgentStudioDevServerTerminalBuffer = {
+  entries: readonly AgentStudioDevServerTerminalChunkEntry[];
+  lastSequence: number | null;
+  resetToken: number;
 };
 
-export type AgentStudioDevServerLogBuffer = {
-  entries: readonly AgentStudioDevServerLogEntry[];
-};
-
-type DevServerLogBufferState = {
-  entries: AgentStudioDevServerLogEntry[];
+type DevServerTerminalBufferState = {
+  entries: AgentStudioDevServerTerminalChunkEntry[];
   head: number;
   size: number;
-  nextSequence: number;
+  lastSequence: number | null;
+  resetToken: number;
 };
 
-export type DevServerLogBufferStore = Map<string, DevServerLogBufferState>;
+export type DevServerTerminalBufferStore = Map<string, DevServerTerminalBufferState>;
 
-export const trimDevServerLogLines = (lines: DevServerLogLine[]): DevServerLogLine[] => {
-  if (lines.length <= MAX_BUFFERED_DEV_SERVER_LOG_LINES) {
-    return lines;
+export const trimDevServerTerminalChunks = (
+  chunks: DevServerTerminalChunk[],
+): DevServerTerminalChunk[] => {
+  if (chunks.length <= MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS) {
+    return chunks;
   }
 
-  return lines.slice(-MAX_BUFFERED_DEV_SERVER_LOG_LINES);
+  return chunks.slice(-MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS);
 };
 
-const sanitizeLogText = (text: string): string => text.replace(ANSI_ESCAPE_SEQUENCE, "");
-
-const createDevServerLogBufferState = (): DevServerLogBufferState => ({
+const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => ({
   entries: [],
   head: 0,
   size: 0,
-  nextSequence: 0,
+  lastSequence: null,
+  resetToken: 0,
 });
 
-const getOrCreateDevServerLogBufferState = (
-  store: DevServerLogBufferStore,
+const getOrCreateDevServerTerminalBufferState = (
+  store: DevServerTerminalBufferStore,
   scriptId: string,
-): DevServerLogBufferState => {
+): DevServerTerminalBufferState => {
   const existingBuffer = store.get(scriptId);
   if (existingBuffer) {
     return existingBuffer;
   }
 
-  const nextBuffer = createDevServerLogBufferState();
+  const nextBuffer = createDevServerTerminalBufferState();
   store.set(scriptId, nextBuffer);
   return nextBuffer;
 };
 
-export const createDevServerLogBufferStore = (): DevServerLogBufferStore => new Map();
+export const createDevServerTerminalBufferStore = (): DevServerTerminalBufferStore => new Map();
 
-export const appendDevServerLogLine = (
-  store: DevServerLogBufferStore,
-  logLine: DevServerLogLine,
+export const appendDevServerTerminalChunk = (
+  store: DevServerTerminalBufferStore,
+  terminalChunk: DevServerTerminalChunk,
 ): void => {
-  const buffer = getOrCreateDevServerLogBufferState(store, logLine.scriptId);
-  const entry: AgentStudioDevServerLogEntry = {
-    id: `${logLine.scriptId}:${buffer.nextSequence}`,
-    timestamp: logLine.timestamp,
-    stream: logLine.stream,
-    text: sanitizeLogText(logLine.text),
-  };
-  buffer.nextSequence += 1;
-
-  if (buffer.size < MAX_BUFFERED_DEV_SERVER_LOG_LINES) {
-    const insertionIndex = (buffer.head + buffer.size) % MAX_BUFFERED_DEV_SERVER_LOG_LINES;
-    buffer.entries[insertionIndex] = entry;
-    buffer.size += 1;
+  const buffer = getOrCreateDevServerTerminalBufferState(store, terminalChunk.scriptId);
+  if (buffer.lastSequence !== null && terminalChunk.sequence <= buffer.lastSequence) {
     return;
   }
 
-  buffer.entries[buffer.head] = entry;
-  buffer.head = (buffer.head + 1) % MAX_BUFFERED_DEV_SERVER_LOG_LINES;
+  if (buffer.size < MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS) {
+    const insertionIndex = (buffer.head + buffer.size) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS;
+    buffer.entries[insertionIndex] = terminalChunk;
+    buffer.size += 1;
+  } else {
+    buffer.entries[buffer.head] = terminalChunk;
+    buffer.head = (buffer.head + 1) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS;
+  }
+
+  buffer.lastSequence = terminalChunk.sequence;
 };
 
-export const replaceDevServerLogBuffer = (
-  store: DevServerLogBufferStore,
+export const replaceDevServerTerminalBuffer = (
+  store: DevServerTerminalBufferStore,
   scriptId: string,
-  logLines: DevServerLogLine[],
+  terminalChunks: DevServerTerminalChunk[],
 ): void => {
-  const buffer = getOrCreateDevServerLogBufferState(store, scriptId);
+  const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
+  const trimmedChunks = trimDevServerTerminalChunks(terminalChunks);
+
   buffer.entries.length = 0;
   buffer.head = 0;
   buffer.size = 0;
-  buffer.nextSequence = 0;
+  buffer.lastSequence = null;
+  buffer.resetToken += 1;
 
-  for (const logLine of trimDevServerLogLines(logLines)) {
-    appendDevServerLogLine(store, logLine);
+  for (const terminalChunk of trimmedChunks) {
+    appendDevServerTerminalChunk(store, terminalChunk);
   }
 };
 
-export const syncDevServerLogBufferStore = (
-  store: DevServerLogBufferStore,
+export const syncDevServerTerminalBufferStore = (
+  store: DevServerTerminalBufferStore,
   state: DevServerGroupState | null,
 ): void => {
   if (!state) {
@@ -123,14 +115,14 @@ export const syncDevServerLogBufferStore = (
   }
 
   for (const script of state.scripts) {
-    replaceDevServerLogBuffer(store, script.scriptId, script.bufferedLogLines);
+    replaceDevServerTerminalBuffer(store, script.scriptId, script.bufferedTerminalChunks);
   }
 };
 
-export const getDevServerLogBuffer = (
-  store: DevServerLogBufferStore,
+export const getDevServerTerminalBuffer = (
+  store: DevServerTerminalBufferStore,
   scriptId: string | null,
-): AgentStudioDevServerLogBuffer | null => {
+): AgentStudioDevServerTerminalBuffer | null => {
   if (!scriptId) {
     return null;
   }
@@ -142,23 +134,20 @@ export const getDevServerLogBuffer = (
 
   return {
     entries: Array.from({ length: buffer.size }, (_, offset) => {
-      const entry = buffer.entries[(buffer.head + offset) % MAX_BUFFERED_DEV_SERVER_LOG_LINES];
+      const entry =
+        buffer.entries[(buffer.head + offset) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS];
       if (!entry) {
-        throw new Error(`Missing dev server log entry at logical offset ${offset}.`);
+        throw new Error(`Missing dev server terminal chunk at logical offset ${offset}.`);
       }
 
       return entry;
     }),
+    lastSequence: buffer.lastSequence,
+    resetToken: buffer.resetToken,
   };
 };
 
-export const getDevServerLogEntryAt = (
-  buffer: AgentStudioDevServerLogBuffer,
-  offset: number,
-): AgentStudioDevServerLogEntry | null => {
-  if (offset < 0 || offset >= buffer.entries.length) {
-    return null;
-  }
-
-  return buffer.entries[offset] ?? null;
+export const getLatestBufferedTerminalSequence = (script: DevServerScriptState): number | null => {
+  const lastChunk = script.bufferedTerminalChunks.at(-1);
+  return lastChunk ? lastChunk.sequence : null;
 };

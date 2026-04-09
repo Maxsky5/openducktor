@@ -1,14 +1,14 @@
 use super::{validate_hook_trust, AppService, DevServerEmitter, DevServerGroupRuntime};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    now_rfc3339, DevServerEvent, DevServerGroupState, DevServerLogLine, DevServerLogStream,
-    DevServerScriptState, DevServerScriptStatus,
+    now_rfc3339, DevServerEvent, DevServerGroupState, DevServerScriptState, DevServerScriptStatus,
+    DevServerTerminalChunk,
 };
 use host_infra_system::{subprocess_path_env, RepoConfig, RepoDevServerScript};
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 #[cfg(unix)]
 use std::os::fd::FromRawFd;
 use std::process::{Command, Stdio};
@@ -16,7 +16,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const DEV_SERVER_LOG_BUFFER_LIMIT: usize = 2_000;
+const DEV_SERVER_TERMINAL_BUFFER_CHUNK_LIMIT: usize = 2_000;
+const DEV_SERVER_TERMINAL_BUFFER_BYTE_LIMIT: usize = 512 * 1024;
+const DEV_SERVER_TERMINAL_CHUNK_READ_SIZE: usize = 4 * 1024;
 const DEV_SERVER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const DEV_SERVER_START_GRACE_PERIOD: Duration = Duration::from_millis(150);
 
@@ -249,14 +251,13 @@ impl AppService {
             state.started_at = None;
             state.exit_code = None;
             state.last_error = None;
-            state.buffered_log_lines.clear();
+            state.buffered_terminal_chunks.clear();
         })?;
-        self.append_log(
+        self.append_terminal_system_message(
             group_key,
             repo_path,
             task_id,
             script.id.as_str(),
-            DevServerLogStream::System,
             format!("Starting `{}`", script.command),
         );
 
@@ -276,18 +277,20 @@ impl AppService {
             configure_process_group(&mut command);
 
             #[cfg(unix)]
-            let (stdout, stderr): (Box<dyn Read + Send>, Box<dyn Read + Send>) = {
-                let (stdout_reader, stdout_writer) = open_pty_pair()?;
-                let (stderr_reader, stderr_writer) = open_pty_pair()?;
+            let terminal_reader: Box<dyn Read + Send> = {
+                let (terminal_reader, terminal_writer) = open_pty_pair()?;
+                let stdout_writer = terminal_writer
+                    .try_clone()
+                    .context("Failed duplicating pseudo terminal handle for dev server stdout")?;
                 command.stdout(Stdio::from(stdout_writer));
-                command.stderr(Stdio::from(stderr_writer));
-                (Box::new(stdout_reader), Box::new(stderr_reader))
+                command.stderr(Stdio::from(terminal_writer));
+                Box::new(terminal_reader)
             };
 
             #[cfg(not(unix))]
-            command.stdout(Stdio::piped());
-            #[cfg(not(unix))]
-            command.stderr(Stdio::piped());
+            return Err(anyhow!(
+                "Builder dev servers require PTY-backed terminal capture and are only supported on Unix hosts in this build."
+            ));
 
             #[cfg(unix)]
             let mut child = command.spawn().with_context(|| {
@@ -315,34 +318,15 @@ impl AppService {
                 );
             }
 
-            #[cfg(not(unix))]
-            let stdout = child.stdout.take().ok_or_else(|| {
-                anyhow!("Failed capturing stdout for dev server {}.", script.name)
-            })?;
-
-            #[cfg(not(unix))]
-            let stderr = child.stderr.take().ok_or_else(|| {
-                anyhow!("Failed capturing stderr for dev server {}.", script.name)
-            })?;
             let started_at = now_rfc3339();
 
-            spawn_log_forwarder(
+            spawn_terminal_forwarder(
                 self.dev_server_groups.clone(),
                 group_key.to_string(),
                 repo_path.to_string(),
                 task_id.to_string(),
                 script.id.clone(),
-                DevServerLogStream::Stdout,
-                stdout,
-            );
-            spawn_log_forwarder(
-                self.dev_server_groups.clone(),
-                group_key.to_string(),
-                repo_path.to_string(),
-                task_id.to_string(),
-                script.id.clone(),
-                DevServerLogStream::Stderr,
-                stderr,
+                terminal_reader,
             );
 
             self.update_script_state(group_key, script.id.as_str(), |state| {
@@ -455,7 +439,7 @@ impl AppService {
         let mut targets = Vec::new();
         let mut changed_scripts = Vec::new();
         for script in &mut runtime.state.scripts {
-            script.buffered_log_lines.clear();
+            script.buffered_terminal_chunks.clear();
             if let Some(pid) = script.pid {
                 script.status = DevServerScriptStatus::Stopping;
                 script.last_error = None;
@@ -539,14 +523,7 @@ impl AppService {
             state.exit_code = None;
             state.last_error = Some(message.to_string());
         });
-        self.append_log(
-            group_key,
-            repo_path,
-            task_id,
-            script_id,
-            DevServerLogStream::System,
-            message.to_string(),
-        );
+        self.append_terminal_system_message(group_key, repo_path, task_id, script_id, message);
     }
 
     fn mark_dev_server_start_exit_failed(
@@ -565,14 +542,7 @@ impl AppService {
             state.exit_code = exit_code;
             state.last_error = Some(message.to_string());
         });
-        self.append_log(
-            group_key,
-            repo_path,
-            task_id,
-            script_id,
-            DevServerLogStream::System,
-            message.to_string(),
-        );
+        self.append_terminal_system_message(group_key, repo_path, task_id, script_id, message);
     }
 
     fn update_script_state<F>(&self, group_key: &str, script_id: &str, update: F) -> Result<()>
@@ -619,26 +589,21 @@ impl AppService {
             .and_then(|target| target.map(|entry| entry.working_directory))
     }
 
-    fn append_log(
+    fn append_terminal_system_message(
         &self,
         group_key: &str,
         repo_path: &str,
         task_id: &str,
         script_id: &str,
-        stream: DevServerLogStream,
-        text: String,
+        message: impl AsRef<str>,
     ) {
-        emit_log_line(
+        emit_terminal_chunk(
             &self.dev_server_groups,
             group_key,
             repo_path,
             task_id,
-            DevServerLogLine {
-                script_id: script_id.to_string(),
-                stream,
-                text,
-                timestamp: now_rfc3339(),
-            },
+            script_id,
+            format_terminal_system_message(message.as_ref()),
         );
     }
 }
@@ -703,7 +668,8 @@ fn new_script_state(script: &RepoDevServerScript) -> DevServerScriptState {
         started_at: None,
         exit_code: None,
         last_error: None,
-        buffered_log_lines: Vec::new(),
+        buffered_terminal_chunks: Vec::new(),
+        next_terminal_sequence: 0,
     }
 }
 
@@ -733,14 +699,20 @@ fn emit_group_snapshot(
     }
 }
 
-fn emit_log_line(
+fn emit_terminal_chunk(
     groups: &Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
     group_key: &str,
     repo_path: &str,
     task_id: &str,
-    log_line: DevServerLogLine,
+    script_id: &str,
+    data: String,
 ) {
-    let emitter = {
+    if data.is_empty() {
+        return;
+    }
+
+    let timestamp = now_rfc3339();
+    let (emitter, terminal_chunk) = {
         let Ok(mut groups) = groups.lock() else {
             return;
         };
@@ -751,60 +723,193 @@ fn emit_log_line(
             .state
             .scripts
             .iter_mut()
-            .find(|script| script.script_id == log_line.script_id)
+            .find(|script| script.script_id == script_id)
         else {
             return;
         };
-        script.buffered_log_lines.push(log_line.clone());
-        if script.buffered_log_lines.len() > DEV_SERVER_LOG_BUFFER_LIMIT {
-            let overflow = script.buffered_log_lines.len() - DEV_SERVER_LOG_BUFFER_LIMIT;
-            script.buffered_log_lines.drain(0..overflow);
-        }
+        let terminal_chunk = push_terminal_chunk(script, data, timestamp);
         runtime.state.updated_at = now_rfc3339();
-        runtime.emitter.clone()
+        (runtime.emitter.clone(), terminal_chunk)
     };
 
     if let Some(emitter) = emitter {
-        emitter(DevServerEvent::LogLine {
+        emitter(DevServerEvent::TerminalChunk {
             repo_path: repo_path.to_string(),
             task_id: task_id.to_string(),
-            log_line,
+            terminal_chunk,
         });
     }
 }
 
-fn spawn_log_forwarder<R>(
+fn spawn_terminal_forwarder<R>(
     groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
     group_key: String,
     repo_path: String,
     task_id: String,
     script_id: String,
-    stream: DevServerLogStream,
     reader: R,
 ) where
     R: Read + Send + 'static,
 {
     std::thread::spawn(move || {
-        let reader = BufReader::new(reader);
-        for line in reader.lines() {
-            let Ok(line) = line else {
-                break;
-            };
-            let text = line.trim_end_matches('\r').to_string();
-            emit_log_line(
-                &groups,
-                group_key.as_str(),
-                repo_path.as_str(),
-                task_id.as_str(),
-                DevServerLogLine {
-                    script_id: script_id.clone(),
-                    stream: stream.clone(),
-                    text,
-                    timestamp: now_rfc3339(),
-                },
-            );
+        let mut reader = reader;
+        let mut buffer = [0_u8; DEV_SERVER_TERMINAL_CHUNK_READ_SIZE];
+        let mut pending = Vec::new();
+
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => {
+                    let _ = flush_pending_terminal_bytes(
+                        &groups,
+                        group_key.as_str(),
+                        repo_path.as_str(),
+                        task_id.as_str(),
+                        script_id.as_str(),
+                        &mut pending,
+                        true,
+                    );
+                    break;
+                }
+                Ok(read) => {
+                    pending.extend_from_slice(&buffer[..read]);
+                    if !flush_pending_terminal_bytes(
+                        &groups,
+                        group_key.as_str(),
+                        repo_path.as_str(),
+                        task_id.as_str(),
+                        script_id.as_str(),
+                        &mut pending,
+                        false,
+                    ) {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    emit_terminal_chunk(
+                        &groups,
+                        group_key.as_str(),
+                        repo_path.as_str(),
+                        task_id.as_str(),
+                        script_id.as_str(),
+                        format_terminal_system_message(
+                            format!("Dev server terminal stream failed: {error}").as_str(),
+                        ),
+                    );
+                    break;
+                }
+            }
         }
     });
+}
+
+fn flush_pending_terminal_bytes(
+    groups: &Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
+    group_key: &str,
+    repo_path: &str,
+    task_id: &str,
+    script_id: &str,
+    pending: &mut Vec<u8>,
+    reached_eof: bool,
+) -> bool {
+    loop {
+        if pending.is_empty() {
+            return true;
+        }
+
+        match std::str::from_utf8(pending) {
+            Ok(text) => {
+                emit_terminal_chunk(
+                    groups,
+                    group_key,
+                    repo_path,
+                    task_id,
+                    script_id,
+                    text.to_string(),
+                );
+                pending.clear();
+                return true;
+            }
+            Err(error) => {
+                let valid_up_to = error.valid_up_to();
+                if valid_up_to > 0 {
+                    let text = std::str::from_utf8(&pending[..valid_up_to])
+                        .expect("valid UTF-8 prefix should decode");
+                    emit_terminal_chunk(
+                        groups,
+                        group_key,
+                        repo_path,
+                        task_id,
+                        script_id,
+                        text.to_string(),
+                    );
+                    pending.drain(0..valid_up_to);
+                    continue;
+                }
+
+                if error.error_len().is_none() && !reached_eof {
+                    return true;
+                }
+
+                emit_terminal_chunk(
+                    groups,
+                    group_key,
+                    repo_path,
+                    task_id,
+                    script_id,
+                    format_terminal_system_message(
+                        "Dev server terminal output contained invalid UTF-8 bytes and could not be fully rendered.",
+                    ),
+                );
+                pending.clear();
+                return false;
+            }
+        }
+    }
+}
+
+fn push_terminal_chunk(
+    script: &mut DevServerScriptState,
+    data: String,
+    timestamp: String,
+) -> DevServerTerminalChunk {
+    let terminal_chunk = DevServerTerminalChunk {
+        script_id: script.script_id.clone(),
+        sequence: script.next_terminal_sequence,
+        data,
+        timestamp,
+    };
+    script.next_terminal_sequence = script.next_terminal_sequence.saturating_add(1);
+    script.buffered_terminal_chunks.push(terminal_chunk.clone());
+    trim_terminal_chunk_buffer(&mut script.buffered_terminal_chunks);
+    terminal_chunk
+}
+
+fn trim_terminal_chunk_buffer(chunks: &mut Vec<DevServerTerminalChunk>) {
+    let mut remove_count = 0;
+    let mut total_bytes = chunks.iter().map(|chunk| chunk.data.len()).sum::<usize>();
+
+    while chunks.len().saturating_sub(remove_count) > DEV_SERVER_TERMINAL_BUFFER_CHUNK_LIMIT
+        || total_bytes > DEV_SERVER_TERMINAL_BUFFER_BYTE_LIMIT
+    {
+        let Some(chunk) = chunks.get(remove_count) else {
+            break;
+        };
+        total_bytes = total_bytes.saturating_sub(chunk.data.len());
+        remove_count += 1;
+    }
+
+    if remove_count > 0 {
+        chunks.drain(0..remove_count);
+    }
+}
+
+fn format_terminal_system_message(message: &str) -> String {
+    let normalized = message.replace("\r\n", "\n").replace('\n', "\r\n");
+    if normalized.ends_with("\r\n") {
+        normalized
+    } else {
+        format!("{normalized}\r\n")
+    }
 }
 
 fn wait_for_immediate_dev_server_exit(
@@ -934,7 +1039,7 @@ fn spawn_waiter(
             Err(error) => (None, format!("Failed waiting for dev server exit: {error}")),
         };
 
-        let mut emitted_log = None;
+        let mut emitted_terminal_chunk = None;
         let (emitter, script, updated_at) = {
             let Ok(mut groups) = groups.lock() else {
                 return;
@@ -963,18 +1068,11 @@ fn spawn_waiter(
             } else {
                 script.status = DevServerScriptStatus::Failed;
                 script.last_error = Some(message.clone());
-                let log_line = DevServerLogLine {
-                    script_id: script_id.clone(),
-                    stream: DevServerLogStream::System,
-                    text: message.clone(),
-                    timestamp: now_rfc3339(),
-                };
-                script.buffered_log_lines.push(log_line.clone());
-                if script.buffered_log_lines.len() > DEV_SERVER_LOG_BUFFER_LIMIT {
-                    let overflow = script.buffered_log_lines.len() - DEV_SERVER_LOG_BUFFER_LIMIT;
-                    script.buffered_log_lines.drain(0..overflow);
-                }
-                emitted_log = Some(log_line);
+                emitted_terminal_chunk = Some(push_terminal_chunk(
+                    script,
+                    format_terminal_system_message(message.as_str()),
+                    now_rfc3339(),
+                ));
             }
             runtime.state.updated_at = now_rfc3339();
             (
@@ -985,11 +1083,11 @@ fn spawn_waiter(
         };
 
         if let Some(emitter) = emitter {
-            if let Some(log_line) = emitted_log {
-                emitter(DevServerEvent::LogLine {
+            if let Some(terminal_chunk) = emitted_terminal_chunk {
+                emitter(DevServerEvent::TerminalChunk {
                     repo_path: repo_path.clone(),
                     task_id: task_id.clone(),
-                    log_line,
+                    terminal_chunk,
                 });
             }
             emitter(DevServerEvent::ScriptStatusChanged {
@@ -1117,12 +1215,13 @@ mod tests {
                     started_at: None,
                     exit_code: None,
                     last_error: None,
-                    buffered_log_lines: vec![DevServerLogLine {
+                    buffered_terminal_chunks: vec![DevServerTerminalChunk {
                         script_id: "frontend".to_string(),
-                        stream: DevServerLogStream::Stdout,
-                        text: "kept".to_string(),
+                        sequence: 0,
+                        data: "kept\r\n".to_string(),
                         timestamp: "2026-03-19T10:00:00Z".to_string(),
                     }],
+                    next_terminal_sequence: 1,
                 },
                 DevServerScriptState {
                     script_id: "orphan".to_string(),
@@ -1133,7 +1232,8 @@ mod tests {
                     started_at: Some("2026-03-19T10:01:00Z".to_string()),
                     exit_code: None,
                     last_error: None,
-                    buffered_log_lines: Vec::new(),
+                    buffered_terminal_chunks: Vec::new(),
+                    next_terminal_sequence: 0,
                 },
             ],
             updated_at: "2026-03-19T10:00:00Z".to_string(),
@@ -1165,13 +1265,13 @@ mod tests {
         assert_eq!(state.scripts[1].script_id, "frontend");
         assert_eq!(state.scripts[1].name, "Frontend");
         assert_eq!(state.scripts[1].command, "bun run web");
-        assert_eq!(state.scripts[1].buffered_log_lines.len(), 1);
+        assert_eq!(state.scripts[1].buffered_terminal_chunks.len(), 1);
         assert_eq!(state.scripts[2].script_id, "orphan");
         assert_eq!(state.scripts[2].pid, Some(4242));
     }
 
     #[test]
-    fn emit_log_line_trims_buffer_and_emits_events() {
+    fn emit_terminal_chunk_trims_buffer_and_emits_events() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let emitter_events = events.clone();
         let emitter: DevServerEmitter = Arc::new(move |event| {
@@ -1196,7 +1296,8 @@ mod tests {
                         started_at: Some("2026-03-19T10:00:00Z".to_string()),
                         exit_code: None,
                         last_error: None,
-                        buffered_log_lines: Vec::new(),
+                        buffered_terminal_chunks: Vec::new(),
+                        next_terminal_sequence: 0,
                     }],
                     updated_at: "2026-03-19T10:00:00Z".to_string(),
                 },
@@ -1204,38 +1305,88 @@ mod tests {
             },
         )])));
 
-        for index in 0..(DEV_SERVER_LOG_BUFFER_LIMIT + 5) {
-            emit_log_line(
+        for index in 0..(DEV_SERVER_TERMINAL_BUFFER_CHUNK_LIMIT + 5) {
+            emit_terminal_chunk(
                 &groups,
                 "repo::task-1",
                 "repo",
                 "task-1",
-                DevServerLogLine {
-                    script_id: "server-1".to_string(),
-                    stream: DevServerLogStream::Stdout,
-                    text: format!("line-{index}"),
-                    timestamp: format!("2026-03-19T10:00:{:02}Z", index % 60),
-                },
+                "server-1",
+                format!("line-{index}"),
             );
         }
 
         let groups = groups.lock().expect("group lock poisoned");
         let runtime = groups.get("repo::task-1").expect("runtime present");
-        let logs = &runtime.state.scripts[0].buffered_log_lines;
-        assert_eq!(logs.len(), DEV_SERVER_LOG_BUFFER_LIMIT);
-        assert_eq!(logs.first().map(|line| line.text.as_str()), Some("line-5"));
+        let logs = &runtime.state.scripts[0].buffered_terminal_chunks;
+        assert_eq!(logs.len(), DEV_SERVER_TERMINAL_BUFFER_CHUNK_LIMIT);
         assert_eq!(
-            logs.last().map(|line| line.text.as_str()),
+            logs.first().map(|chunk| chunk.data.as_str()),
+            Some("line-5")
+        );
+        assert_eq!(
+            logs.last().map(|chunk| chunk.data.as_str()),
             Some("line-2004")
         );
         drop(groups);
 
         let emitted = events.lock().expect("event lock poisoned");
-        assert_eq!(emitted.len(), DEV_SERVER_LOG_BUFFER_LIMIT + 5);
+        assert_eq!(emitted.len(), DEV_SERVER_TERMINAL_BUFFER_CHUNK_LIMIT + 5);
         assert!(matches!(
             emitted.last(),
-            Some(DevServerEvent::LogLine { log_line, .. }) if log_line.text == "line-2004"
+            Some(DevServerEvent::TerminalChunk { terminal_chunk, .. }) if terminal_chunk.data == "line-2004"
         ));
+    }
+
+    #[test]
+    fn emit_terminal_chunk_trims_buffer_by_byte_budget() {
+        let groups = Arc::new(Mutex::new(HashMap::from([(
+            "repo::task-1".to_string(),
+            DevServerGroupRuntime {
+                state: DevServerGroupState {
+                    repo_path: "repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    worktree_path: Some("/tmp/worktree".to_string()),
+                    scripts: vec![DevServerScriptState {
+                        script_id: "server-1".to_string(),
+                        name: "Server".to_string(),
+                        command: "bun run dev".to_string(),
+                        status: DevServerScriptStatus::Running,
+                        pid: Some(99),
+                        started_at: Some("2026-03-19T10:00:00Z".to_string()),
+                        exit_code: None,
+                        last_error: None,
+                        buffered_terminal_chunks: Vec::new(),
+                        next_terminal_sequence: 0,
+                    }],
+                    updated_at: "2026-03-19T10:00:00Z".to_string(),
+                },
+                emitter: None,
+            },
+        )])));
+
+        emit_terminal_chunk(
+            &groups,
+            "repo::task-1",
+            "repo",
+            "task-1",
+            "server-1",
+            "a".repeat(DEV_SERVER_TERMINAL_BUFFER_BYTE_LIMIT - 32),
+        );
+        emit_terminal_chunk(
+            &groups,
+            "repo::task-1",
+            "repo",
+            "task-1",
+            "server-1",
+            "b".repeat(128),
+        );
+
+        let groups = groups.lock().expect("group lock poisoned");
+        let runtime = groups.get("repo::task-1").expect("runtime present");
+        let buffered = &runtime.state.scripts[0].buffered_terminal_chunks;
+        assert_eq!(buffered.len(), 1);
+        assert!(buffered[0].data.starts_with('b'));
     }
 
     #[test]
@@ -1295,8 +1446,8 @@ mod tests {
             script.last_error.as_deref(),
             Some(message) if message.contains("Dev server command is empty for Frontend")
         ));
-        assert!(script.buffered_log_lines.iter().any(|line| line
-            .text
+        assert!(script.buffered_terminal_chunks.iter().any(|chunk| chunk
+            .data
             .contains("Dev server command is empty for Frontend")));
     }
 
@@ -1410,9 +1561,9 @@ mod tests {
             Some(message) if message.contains("Dev server exited with code")
         ));
         assert!(script
-            .buffered_log_lines
+            .buffered_terminal_chunks
             .iter()
-            .any(|line| line.text.contains("Dev server exited with code")));
+            .any(|chunk| chunk.data.contains("Dev server exited with code")));
     }
 
     #[cfg(unix)]
@@ -1530,12 +1681,15 @@ sleep 5
             Some(worktree_path.clone()),
             &repo_config(vec![script.clone()]),
         );
-        state.scripts[0].buffered_log_lines.push(DevServerLogLine {
-            script_id: "frontend".to_string(),
-            stream: DevServerLogStream::Stdout,
-            text: "stale log".to_string(),
-            timestamp: "2026-03-19T10:00:00Z".to_string(),
-        });
+        state.scripts[0]
+            .buffered_terminal_chunks
+            .push(DevServerTerminalChunk {
+                script_id: "frontend".to_string(),
+                sequence: 0,
+                data: "stale log\r\n".to_string(),
+                timestamp: "2026-03-19T10:00:00Z".to_string(),
+            });
+        state.scripts[0].next_terminal_sequence = 1;
 
         service
             .dev_server_groups
@@ -1572,17 +1726,17 @@ sleep 5
             let script = &runtime.state.scripts[0];
             pid = script.pid;
             assert!(script
-                .buffered_log_lines
+                .buffered_terminal_chunks
                 .iter()
-                .all(|line| line.text != "stale log"));
+                .all(|chunk| chunk.data != "stale log\r\n"));
             saw_setup_log = script
-                .buffered_log_lines
+                .buffered_terminal_chunks
                 .iter()
-                .any(|line| line.text.contains("db generated"));
+                .any(|chunk| chunk.data.contains("db generated"));
             saw_ready_log = script
-                .buffered_log_lines
+                .buffered_terminal_chunks
                 .iter()
-                .any(|line| line.text.contains("ready"));
+                .any(|chunk| chunk.data.contains("ready"));
             if saw_setup_log && saw_ready_log {
                 break;
             }
@@ -1609,8 +1763,80 @@ sleep 5
         }
     }
 
+    #[cfg(unix)]
     #[test]
-    fn mark_dev_servers_stopping_clears_logs_and_resets_failed_scripts() {
+    fn start_dev_server_script_preserves_terminal_sequences_and_merges_stderr() {
+        let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+        let repo_path = "/repo";
+        let task_id = "task-terminal";
+        let worktree_path = unique_temp_path("dev-server-terminal-worktree");
+        fs::create_dir_all(&worktree_path).expect("create worktree path");
+        let worktree_path = worktree_path.to_string_lossy().to_string();
+        let group_key = dev_server_group_key(repo_path, task_id);
+        let script = RepoDevServerScript {
+            id: "frontend".to_string(),
+            name: "Frontend".to_string(),
+            command: "printf '\033[32mready\033[0m\r' && printf 'stderr info\r\n' >&2 && sleep 5"
+                .to_string(),
+        };
+
+        service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned")
+            .insert(
+                group_key.clone(),
+                DevServerGroupRuntime {
+                    state: build_group_state(
+                        repo_path,
+                        task_id,
+                        Some(worktree_path.clone()),
+                        &repo_config(vec![script.clone()]),
+                    ),
+                    emitter: None,
+                },
+            );
+
+        service
+            .start_dev_server_script(
+                group_key.as_str(),
+                repo_path,
+                task_id,
+                worktree_path.as_str(),
+                script,
+            )
+            .expect("dev server should start");
+
+        let mut pid = None;
+        let mut captured = String::new();
+        for _ in 0..30 {
+            thread::sleep(Duration::from_millis(100));
+            let groups = service
+                .dev_server_groups
+                .lock()
+                .expect("group lock poisoned");
+            let runtime = groups.get(&group_key).expect("runtime present");
+            let script = &runtime.state.scripts[0];
+            pid = script.pid;
+            captured = script
+                .buffered_terminal_chunks
+                .iter()
+                .map(|chunk| chunk.data.as_str())
+                .collect::<String>();
+            if captured.contains("stderr info") {
+                break;
+            }
+        }
+
+        assert!(captured.contains("\u{1b}[32mready\u{1b}[0m\r"));
+        assert!(captured.contains("stderr info\r\n"));
+
+        let pid = pid.expect("dev server pid missing");
+        stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop terminal dev server");
+    }
+
+    #[test]
+    fn mark_dev_servers_stopping_clears_terminal_replay_and_resets_failed_scripts() {
         let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
         let group_key = "repo::task-stop".to_string();
         service
@@ -1634,12 +1860,13 @@ sleep 5
                                 started_at: Some("2026-03-19T10:00:00Z".to_string()),
                                 exit_code: None,
                                 last_error: None,
-                                buffered_log_lines: vec![DevServerLogLine {
+                                buffered_terminal_chunks: vec![DevServerTerminalChunk {
                                     script_id: "frontend".to_string(),
-                                    stream: DevServerLogStream::Stdout,
-                                    text: "ready".to_string(),
+                                    sequence: 0,
+                                    data: "ready\r\n".to_string(),
                                     timestamp: "2026-03-19T10:00:00Z".to_string(),
                                 }],
+                                next_terminal_sequence: 1,
                             },
                             DevServerScriptState {
                                 script_id: "backend".to_string(),
@@ -1650,12 +1877,13 @@ sleep 5
                                 started_at: None,
                                 exit_code: Some(1),
                                 last_error: Some("boom".to_string()),
-                                buffered_log_lines: vec![DevServerLogLine {
+                                buffered_terminal_chunks: vec![DevServerTerminalChunk {
                                     script_id: "backend".to_string(),
-                                    stream: DevServerLogStream::System,
-                                    text: "boom".to_string(),
+                                    sequence: 0,
+                                    data: "boom\r\n".to_string(),
                                     timestamp: "2026-03-19T10:00:01Z".to_string(),
                                 }],
+                                next_terminal_sequence: 1,
                             },
                         ],
                         updated_at: "2026-03-19T10:00:00Z".to_string(),
@@ -1679,14 +1907,14 @@ sleep 5
             runtime.state.scripts[0].status,
             DevServerScriptStatus::Stopping
         );
-        assert!(runtime.state.scripts[0].buffered_log_lines.is_empty());
+        assert!(runtime.state.scripts[0].buffered_terminal_chunks.is_empty());
         assert_eq!(
             runtime.state.scripts[1].status,
             DevServerScriptStatus::Stopped
         );
         assert_eq!(runtime.state.scripts[1].last_error, None);
         assert_eq!(runtime.state.scripts[1].exit_code, None);
-        assert!(runtime.state.scripts[1].buffered_log_lines.is_empty());
+        assert!(runtime.state.scripts[1].buffered_terminal_chunks.is_empty());
     }
 
     #[cfg(unix)]
@@ -1717,7 +1945,8 @@ sleep 5
                             started_at: Some("2026-03-19T10:00:00Z".to_string()),
                             exit_code: None,
                             last_error: None,
-                            buffered_log_lines: Vec::new(),
+                            buffered_terminal_chunks: Vec::new(),
+                            next_terminal_sequence: 0,
                         }],
                         updated_at: "2026-03-19T10:00:00Z".to_string(),
                     },

@@ -11,14 +11,14 @@ import type {
   AgentStudioDevServerPanelModel,
 } from "@/components/features/agents/agent-studio-dev-server-panel";
 import {
-  type AgentStudioDevServerLogBuffer,
-  appendDevServerLogLine,
-  createDevServerLogBufferStore,
-  type DevServerLogBufferStore,
-  getDevServerLogBuffer,
-  replaceDevServerLogBuffer,
-  syncDevServerLogBufferStore,
-  trimDevServerLogLines,
+  type AgentStudioDevServerTerminalBuffer,
+  appendDevServerTerminalChunk,
+  createDevServerTerminalBufferStore,
+  type DevServerTerminalBufferStore,
+  getDevServerTerminalBuffer,
+  replaceDevServerTerminalBuffer,
+  syncDevServerTerminalBufferStore,
+  trimDevServerTerminalChunks,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
@@ -34,6 +34,12 @@ type UseAgentStudioDevServerPanelArgs = {
 
 type SelectedScriptMemory = Map<string, string>;
 
+type DevServerSubscriptionControlEvent = {
+  __openducktorBrowserLive: true;
+  kind: "reconnected" | "stream-warning";
+  message?: string;
+};
+
 const buildTaskMemoryKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
 
 const replaceScript = (
@@ -42,6 +48,25 @@ const replaceScript = (
 ): DevServerScriptState[] =>
   scripts.map((script) => (script.scriptId === nextScript.scriptId ? nextScript : script));
 
+const trimBufferedTerminalReplay = (script: DevServerScriptState): DevServerScriptState => ({
+  ...script,
+  bufferedTerminalChunks: trimDevServerTerminalChunks(script.bufferedTerminalChunks),
+});
+
+const isDevServerSubscriptionControlEvent = (
+  payload: unknown,
+): payload is DevServerSubscriptionControlEvent => {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const record = payload as Record<string, unknown>;
+  return (
+    record.__openducktorBrowserLive === true &&
+    (record.kind === "reconnected" || record.kind === "stream-warning")
+  );
+};
+
 export const applyDevServerEventToState = (
   state: DevServerGroupState | null,
   event: DevServerEvent,
@@ -49,10 +74,7 @@ export const applyDevServerEventToState = (
   if (event.type === "snapshot") {
     return {
       ...event.state,
-      scripts: event.state.scripts.map((script) => ({
-        ...script,
-        bufferedLogLines: trimDevServerLogLines(script.bufferedLogLines),
-      })),
+      scripts: event.state.scripts.map(trimBufferedTerminalReplay),
     };
   }
 
@@ -64,16 +86,13 @@ export const applyDevServerEventToState = (
     return {
       ...state,
       updatedAt: event.updatedAt,
-      scripts: replaceScript(state.scripts, {
-        ...event.script,
-        bufferedLogLines: trimDevServerLogLines(event.script.bufferedLogLines),
-      }),
+      scripts: replaceScript(state.scripts, trimBufferedTerminalReplay(event.script)),
     };
   }
 
   return {
     ...state,
-    updatedAt: event.logLine.timestamp,
+    updatedAt: event.terminalChunk.timestamp,
     scripts: state.scripts,
   };
 };
@@ -136,13 +155,16 @@ export function useAgentStudioDevServerPanel({
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
   const selectionMemoryRef = useRef<SelectedScriptMemory>(new Map());
-  const logBuffersRef = useRef<DevServerLogBufferStore>(createDevServerLogBufferStore());
+  const terminalBuffersRef = useRef<DevServerTerminalBufferStore>(
+    createDevServerTerminalBufferStore(),
+  );
+  const forceHydrateFromQueryRef = useRef(false);
   const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
   const selectedScriptIdRef = useRef<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<DevServerGroupState | null>(null);
-  const [selectedScriptLogBuffer, setSelectedScriptLogBuffer] =
-    useState<AgentStudioDevServerLogBuffer | null>(null);
+  const [selectedScriptTerminalBuffer, setSelectedScriptTerminalBuffer] =
+    useState<AgentStudioDevServerTerminalBuffer | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
 
@@ -200,17 +222,27 @@ export function useAgentStudioDevServerPanel({
     taskId,
   ]);
 
-  const syncSelectedScriptLogBuffer = useCallback((scriptId: string | null): void => {
-    setSelectedScriptLogBuffer(getDevServerLogBuffer(logBuffersRef.current, scriptId));
+  const syncSelectedScriptTerminalBuffer = useCallback((scriptId: string | null): void => {
+    setSelectedScriptTerminalBuffer(
+      getDevServerTerminalBuffer(terminalBuffersRef.current, scriptId),
+    );
   }, []);
 
-  const hydrateLogBuffersFromState = useCallback((state: DevServerGroupState | null): void => {
-    if (logBuffersRef.current.size > 0) {
-      return;
-    }
+  const hydrateTerminalBuffersFromState = useCallback(
+    (state: DevServerGroupState | null, force = false): void => {
+      if (!force && terminalBuffersRef.current.size > 0) {
+        return;
+      }
 
-    syncDevServerLogBufferStore(logBuffersRef.current, state);
-  }, []);
+      syncDevServerTerminalBufferStore(terminalBuffersRef.current, state);
+    },
+    [],
+  );
+
+  const requestTerminalRehydrate = useCallback((): void => {
+    forceHydrateFromQueryRef.current = true;
+    void stateQuery.refetch();
+  }, [stateQuery]);
 
   const syncStateFromEvent = useCallback(
     (event: DevServerEvent): void => {
@@ -219,18 +251,18 @@ export function useAgentStudioDevServerPanel({
       }
 
       if (event.type === "snapshot") {
-        syncDevServerLogBufferStore(logBuffersRef.current, event.state);
+        syncDevServerTerminalBufferStore(terminalBuffersRef.current, event.state);
       } else if (event.type === "script_status_changed") {
-        replaceDevServerLogBuffer(
-          logBuffersRef.current,
+        replaceDevServerTerminalBuffer(
+          terminalBuffersRef.current,
           event.script.scriptId,
-          event.script.bufferedLogLines,
+          event.script.bufferedTerminalChunks,
         );
       } else {
-        appendDevServerLogLine(logBuffersRef.current, event.logLine);
+        appendDevServerTerminalChunk(terminalBuffersRef.current, event.terminalChunk);
       }
 
-      if (event.type !== "log_line") {
+      if (event.type !== "terminal_chunk") {
         const queryKey = devServerQueryKeys.state(repoPath, taskId);
         const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
         setLiveState((current) => {
@@ -250,12 +282,12 @@ export function useAgentStudioDevServerPanel({
           ? selectedId
           : event.type === "script_status_changed"
             ? event.script.scriptId
-            : event.logLine.scriptId;
+            : event.terminalChunk.scriptId;
       if (selectedId && touchedScriptId === selectedId) {
-        syncSelectedScriptLogBuffer(selectedId);
+        syncSelectedScriptTerminalBuffer(selectedId);
       }
     },
-    [queryClient, repoPath, syncSelectedScriptLogBuffer, taskId],
+    [queryClient, repoPath, syncSelectedScriptTerminalBuffer, taskId],
   );
 
   useEffect(() => {
@@ -263,21 +295,23 @@ export function useAgentStudioDevServerPanel({
     previousTaskMemoryKeyRef.current = taskMemoryKey;
 
     if (scopeChanged) {
-      logBuffersRef.current.clear();
+      terminalBuffersRef.current.clear();
+      forceHydrateFromQueryRef.current = false;
       setLiveState(null);
       setSelectedScriptId(null);
-      setSelectedScriptLogBuffer(null);
+      setSelectedScriptTerminalBuffer(null);
       setActionError(null);
       setSubscriptionError(null);
     }
 
     if (!queryEnabled) {
-      logBuffersRef.current.clear();
+      terminalBuffersRef.current.clear();
+      forceHydrateFromQueryRef.current = false;
       setLiveState(null);
       setActionError(null);
       setSubscriptionError(null);
       setSelectedScriptId(null);
-      setSelectedScriptLogBuffer(null);
+      setSelectedScriptTerminalBuffer(null);
       return;
     }
 
@@ -286,16 +320,17 @@ export function useAgentStudioDevServerPanel({
       stateQuery.data &&
       stateQuery.dataUpdatedAt >= queryActivationState.since
     ) {
-      hydrateLogBuffersFromState(stateQuery.data);
+      hydrateTerminalBuffersFromState(stateQuery.data, forceHydrateFromQueryRef.current);
+      forceHydrateFromQueryRef.current = false;
       setLiveState(stateQuery.data);
-      syncSelectedScriptLogBuffer(selectedScriptIdRef.current);
+      syncSelectedScriptTerminalBuffer(selectedScriptIdRef.current);
     }
   }, [
-    hydrateLogBuffersFromState,
+    hydrateTerminalBuffersFromState,
     queryActivationState.enabled,
     queryActivationState.since,
     queryEnabled,
-    syncSelectedScriptLogBuffer,
+    syncSelectedScriptTerminalBuffer,
     stateQuery.data,
     stateQuery.dataUpdatedAt,
     taskMemoryKey,
@@ -307,12 +342,18 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      hydrateLogBuffersFromState(nextState);
+      hydrateTerminalBuffersFromState(nextState);
       queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
       setLiveState(nextState);
-      syncSelectedScriptLogBuffer(selectedScriptIdRef.current);
+      syncSelectedScriptTerminalBuffer(selectedScriptIdRef.current);
     },
-    [hydrateLogBuffersFromState, queryClient, repoPath, syncSelectedScriptLogBuffer, taskId],
+    [
+      hydrateTerminalBuffersFromState,
+      queryClient,
+      repoPath,
+      syncSelectedScriptTerminalBuffer,
+      taskId,
+    ],
   );
 
   const invalidateState = useCallback((): void => {
@@ -425,8 +466,8 @@ export function useAgentStudioDevServerPanel({
 
   useLayoutEffect(() => {
     selectedScriptIdRef.current = effectiveSelectedScriptId;
-    syncSelectedScriptLogBuffer(effectiveSelectedScriptId);
-  }, [effectiveSelectedScriptId, syncSelectedScriptLogBuffer]);
+    syncSelectedScriptTerminalBuffer(effectiveSelectedScriptId);
+  }, [effectiveSelectedScriptId, syncSelectedScriptTerminalBuffer]);
 
   useEffect(() => {
     if (!shouldSubscribeToEvents || repoPath === null || taskId === null) {
@@ -437,6 +478,11 @@ export function useAgentStudioDevServerPanel({
     let unsubscribe: (() => void) | null = null;
 
     void subscribeDevServerEvents((payload) => {
+      if (isDevServerSubscriptionControlEvent(payload)) {
+        requestTerminalRehydrate();
+        return;
+      }
+
       const parsed = devServerEventSchema.safeParse(payload);
       if (!parsed.success) {
         console.error(
@@ -486,7 +532,7 @@ export function useAgentStudioDevServerPanel({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [repoPath, shouldSubscribeToEvents, syncStateFromEvent, taskId]);
+  }, [repoPath, requestTerminalRehydrate, shouldSubscribeToEvents, syncStateFromEvent, taskId]);
 
   useEffect(() => {
     if (!taskMemoryKey) {
@@ -560,7 +606,7 @@ export function useAgentStudioDevServerPanel({
     scripts: effectiveState?.scripts ?? [],
     selectedScriptId: effectiveSelectedScriptId,
     selectedScript,
-    selectedScriptLogBuffer,
+    selectedScriptTerminalBuffer,
     error,
     isStartPending: startMutation.isPending,
     isStopPending: stopMutation.isPending,

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AgentStudioDevServerLogBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
@@ -109,11 +109,11 @@ const selectedScript: DevServerScriptState = {
   startedAt: "2026-03-19T10:00:00.000Z",
   exitCode: null,
   lastError: null,
-  bufferedLogLines: [
+  bufferedTerminalChunks: [
     {
       scriptId: "frontend",
-      stream: "stdout",
-      text: "ready in 120ms",
+      sequence: 0,
+      data: "ready in 120ms\r\n",
       timestamp: "2026-03-19T10:00:01.000Z",
     },
   ],
@@ -129,14 +129,13 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   scripts: [selectedScript],
   selectedScriptId: selectedScript.scriptId,
   selectedScript,
-  selectedScriptLogBuffer: {
-    entries: selectedScript.bufferedLogLines.map((logLine, index) => ({
-      id: `${selectedScript.scriptId}:${index}`,
-      timestamp: logLine.timestamp,
-      stream: logLine.stream,
-      text: logLine.text,
+  selectedScriptTerminalBuffer: {
+    entries: selectedScript.bufferedTerminalChunks.map((terminalChunk) => ({
+      ...terminalChunk,
     })),
-  } satisfies AgentStudioDevServerLogBuffer,
+    lastSequence: selectedScript.bufferedTerminalChunks.at(-1)?.sequence ?? null,
+    resetToken: 0,
+  } satisfies AgentStudioDevServerTerminalBuffer,
   error: null,
   isStartPending: false,
   isStopPending: false,
@@ -218,6 +217,6 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Target");
     expect(html).toContain("origin/main");
     expect(html).toContain("Stop");
-    expect(html).toContain("ready in 120ms");
+    expect(html).toContain("agent-studio-dev-server-terminal");
   });
 });

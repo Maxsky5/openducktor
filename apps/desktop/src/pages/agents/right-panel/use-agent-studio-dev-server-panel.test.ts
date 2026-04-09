@@ -19,7 +19,7 @@ const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerSc
   startedAt: null,
   exitCode: null,
   lastError: null,
-  bufferedLogLines: [],
+  bufferedTerminalChunks: [],
   ...overrides,
 });
 
@@ -33,24 +33,24 @@ const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGrou
 });
 
 describe("useAgentStudioDevServerPanel helpers", () => {
-  test("applies log line events without cloning script log buffers into state", () => {
-    const initialLogs = Array.from({ length: 2_000 }, (_, index) => ({
+  test("applies terminal chunk events without cloning buffered replay into query state", () => {
+    const initialChunks = Array.from({ length: 2_000 }, (_, index) => ({
       scriptId: "frontend",
-      stream: "stdout" as const,
-      text: `line-${index}`,
+      sequence: index,
+      data: `line-${index}`,
       timestamp: `2026-03-19T15:30:${String(index % 60).padStart(2, "0")}.000Z`,
     }));
     const state = buildState({
-      scripts: [buildScript({ bufferedLogLines: initialLogs })],
+      scripts: [buildScript({ bufferedTerminalChunks: initialChunks })],
     });
     const event: DevServerEvent = {
-      type: "log_line",
+      type: "terminal_chunk",
       repoPath: "/repo",
       taskId: "task-7",
-      logLine: {
+      terminalChunk: {
         scriptId: "frontend",
-        stream: "stderr",
-        text: "latest-line",
+        sequence: 2000,
+        data: "latest-chunk",
         timestamp: "2026-03-19T15:31:00.000Z",
       },
     };
@@ -58,7 +58,7 @@ describe("useAgentStudioDevServerPanel helpers", () => {
     const nextState = applyDevServerEventToState(state, event);
 
     expect(nextState?.scripts).toBe(state.scripts);
-    expect(nextState?.scripts[0]?.bufferedLogLines).toBe(initialLogs);
+    expect(nextState?.scripts[0]?.bufferedTerminalChunks).toBe(initialChunks);
     expect(nextState?.updatedAt).toBe("2026-03-19T15:31:00.000Z");
   });
 
