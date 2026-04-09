@@ -203,7 +203,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       className="flex h-full min-h-0 flex-col overflow-hidden bg-card"
       data-testid="agent-studio-dev-server-expanded-panel"
     >
-      <div className="border-b border-border px-3 py-3">
+      <div className="border-b border-border px-3 pt-3 pb-1">
         <div className="grid grid-cols-2 gap-2">
           <Button
             type="button"
@@ -234,7 +234,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         </div>
 
         {model.worktreePath ? (
-          <div className="mt-3 inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground">
             <p className="min-w-0 truncate" data-testid="agent-studio-dev-server-header-summary">
               {headerSummary}
             </p>

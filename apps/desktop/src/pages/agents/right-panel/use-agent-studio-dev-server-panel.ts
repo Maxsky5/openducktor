@@ -59,6 +59,20 @@ const trimBufferedTerminalReplay = (script: DevServerScriptState): DevServerScri
   bufferedTerminalChunks: trimDevServerTerminalChunks(script.bufferedTerminalChunks),
 });
 
+const buildOptimisticStartingState = (state: DevServerGroupState): DevServerGroupState => ({
+  ...state,
+  updatedAt: new Date().toISOString(),
+  scripts: state.scripts.map((script) => ({
+    ...script,
+    status: "starting",
+    pid: null,
+    startedAt: null,
+    exitCode: null,
+    lastError: null,
+    bufferedTerminalChunks: [],
+  })),
+});
+
 const isDevServerSubscriptionControlEvent = (
   payload: unknown,
 ): payload is DevServerSubscriptionControlEvent => {
@@ -447,6 +461,19 @@ export function useAgentStudioDevServerPanel({
     ],
   );
 
+  const restoreCachedState = useCallback((): void => {
+    if (!repoPath || !taskId) {
+      return;
+    }
+
+    const cachedState =
+      queryClient.getQueryData<DevServerGroupState>(devServerQueryKeys.state(repoPath, taskId)) ??
+      null;
+    syncDevServerTerminalBufferStore(terminalBuffersRef.current, cachedState);
+    setLiveState(cachedState);
+    syncSelectedScriptTerminalBuffer(selectedScriptIdRef.current);
+  }, [queryClient, repoPath, syncSelectedScriptTerminalBuffer, taskId]);
+
   const invalidateState = useCallback((): void => {
     if (!repoPath || !taskId) {
       return;
@@ -474,6 +501,7 @@ export function useAgentStudioDevServerPanel({
     onSuccess: syncQueryState,
     onError: (error: unknown) => {
       pendingMutationReplaySyncRef.current = null;
+      restoreCachedState();
       setActionError(errorMessage(error));
     },
     onSettled: (_data, error) => {
@@ -704,6 +732,13 @@ export function useAgentStudioDevServerPanel({
     isRestartPending: restartMutation.isPending,
     onSelectScript,
     onStart: () => {
+      setActionError(null);
+      if (effectiveState) {
+        const optimisticState = buildOptimisticStartingState(effectiveState);
+        syncDevServerTerminalBufferStore(terminalBuffersRef.current, optimisticState);
+        setLiveState(optimisticState);
+        syncSelectedScriptTerminalBuffer(selectedScriptIdRef.current);
+      }
       startMutation.mutate();
     },
     onStop: () => {
