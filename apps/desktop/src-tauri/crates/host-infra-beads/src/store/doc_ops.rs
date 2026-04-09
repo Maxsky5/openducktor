@@ -5,18 +5,32 @@ fn write_latest_qa_report(
     markdown: &str,
     verdict: QaVerdict,
 ) -> Result<QaEntry> {
-    let next_revision = documents_map
-        .get("qaReports")
-        .and_then(parse_qa_entries)
-        .map(|entries| {
+    let next_revision = match documents_map.get("qaReports") {
+        None => 1,
+        Some(raw_reports) => {
+            let raw_entries = raw_reports.as_array().ok_or_else(|| {
+                anyhow::Error::msg("Invalid existing qaReports metadata: expected an array")
+            })?;
+            let entries = raw_entries
+                .iter()
+                .enumerate()
+                .map(|(index, entry)| {
+                    serde_json::from_value::<QaEntry>(entry.clone()).map_err(|error| {
+                        anyhow::Error::msg(format!(
+                            "Invalid existing qaReports metadata at index {index}: {error}"
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+
             entries
                 .iter()
                 .map(|entry| entry.revision)
                 .max()
                 .unwrap_or(0)
                 + 1
-        })
-        .unwrap_or(1);
+        }
+    };
 
     let source_tool = match verdict {
         QaVerdict::Approved => "odt_qa_approved",

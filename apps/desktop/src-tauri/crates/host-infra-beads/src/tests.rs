@@ -2042,6 +2042,40 @@ fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
 }
 
 #[test]
+fn append_qa_report_rejects_malformed_existing_metadata() {
+    let repo = RepoFixture::new("qa-docs-invalid");
+    let malformed = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "qaReports": {
+                        "unexpected": true
+                    }
+                }
+            }
+        })),
+    );
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([malformed]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let error = store
+        .append_qa_report(repo.path(), "task-1", "Needs fixes", QaVerdict::Rejected)
+        .expect_err("malformed qaReports metadata should fail");
+    assert!(error
+        .to_string()
+        .contains("Invalid existing qaReports metadata: expected an array"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+}
+
+#[test]
 fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<()> {
     let repo = RepoFixture::new("qa-outcome");
     let current = issue_value(
@@ -2077,14 +2111,6 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
             "openducktor": {
                 "documents": {
                     "qaReports": [
-                        {
-                            "markdown": "Initial QA",
-                            "verdict": "rejected",
-                            "updatedAt": "2026-02-20T10:00:00Z",
-                            "updatedBy": "qa-agent",
-                            "sourceTool": "odt_qa_rejected",
-                            "revision": 1
-                        },
                         {
                             "markdown": "Looks good",
                             "verdict": "approved",
