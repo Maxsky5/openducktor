@@ -14,6 +14,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -260,6 +261,7 @@ export const AgentChatComposer = forwardRef<
     composerFormRef,
     composerEditorRef,
     onComposerEditorInput,
+    syncBottomAfterComposerLayoutRef,
   } = model;
 
   const [draft, setDraft] = useState(createEmptyComposerDraft);
@@ -340,6 +342,17 @@ export const AgentChatComposer = forwardRef<
   const hasBlockingAttachments = Object.keys(attachmentErrors).length > 0;
   const hasSlashAttachmentConflict =
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
+  const attachmentLayoutKey = useMemo(() => {
+    const attachments = draft.attachments ?? [];
+    if (attachments.length === 0) {
+      return null;
+    }
+
+    return attachments
+      .map((attachment) => `${attachment.id}:${attachmentErrors[attachment.id] ?? "ok"}`)
+      .join("|");
+  }, [attachmentErrors, draft.attachments]);
+  const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
 
   const sendDisabled =
     (isSending && !isSessionWorking) ||
@@ -357,6 +370,20 @@ export const AgentChatComposer = forwardRef<
   latestDraftRef.current = draft;
   latestOnSendRef.current = onSend;
   latestSendDisabledRef.current = sendDisabled;
+
+  useLayoutEffect(() => {
+    if (previousAttachmentLayoutKeyRef.current === attachmentLayoutKey) {
+      return;
+    }
+
+    const previousAttachmentLayoutKey = previousAttachmentLayoutKeyRef.current;
+    previousAttachmentLayoutKeyRef.current = attachmentLayoutKey;
+    if (typeof previousAttachmentLayoutKey === "undefined") {
+      return;
+    }
+
+    syncBottomAfterComposerLayoutRef.current?.();
+  }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
   const selectorDisabled =
     !taskId || isSelectionCatalogLoading || isSubmitting || !agentStudioReady || isReadOnly;

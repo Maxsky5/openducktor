@@ -53,6 +53,7 @@ const buildModel = () => ({
   composerEditorRef: createRef<HTMLDivElement>(),
   onComposerEditorInput: () => {},
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
+  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
 describe("AgentChatComposer", () => {

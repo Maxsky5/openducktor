@@ -384,6 +384,7 @@ export function useAgentStudioPageModels({
     composerEditorRef,
     resizeComposerEditor,
     scrollToBottomOnSendRef,
+    syncBottomAfterComposerLayoutRef,
   });
 
   const agentChatModel = useMemo(

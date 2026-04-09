@@ -90,6 +90,59 @@ type ScrollContainerMock = {
   scrollTop: number;
 };
 
+type MockResizeObserverController = {
+  callback: ResizeObserverCallback;
+  observer: ResizeObserver;
+  observedElements: Set<Element>;
+};
+
+const mockResizeObserverControllers = new Set<MockResizeObserverController>();
+
+class MockResizeObserver implements ResizeObserver {
+  private readonly observedElements = new Set<Element>();
+
+  constructor(callback: ResizeObserverCallback) {
+    mockResizeObserverControllers.add({
+      callback,
+      observer: this,
+      observedElements: this.observedElements,
+    });
+  }
+
+  disconnect(): void {
+    this.observedElements.clear();
+  }
+
+  observe(target: Element): void {
+    this.observedElements.add(target);
+  }
+
+  unobserve(target: Element): void {
+    this.observedElements.delete(target);
+  }
+}
+
+const triggerResizeObservers = (heightByElement = new Map<Element, number>()): void => {
+  for (const controller of mockResizeObserverControllers) {
+    if (controller.observedElements.size === 0) {
+      continue;
+    }
+
+    controller.callback(
+      Array.from(controller.observedElements).map((target) => ({
+        borderBoxSize: [] as ResizeObserverSize[],
+        contentBoxSize: [] as ResizeObserverSize[],
+        contentRect: {
+          height: heightByElement.get(target) ?? 0,
+        } as DOMRectReadOnly,
+        devicePixelContentBoxSize: [] as ResizeObserverSize[],
+        target,
+      })),
+      controller.observer,
+    );
+  }
+};
+
 const buildLongSession = (sessionId: string, count = 80) => {
   const messages = Array.from({ length: count }, (_, index) =>
     buildMessage("user", `Message ${index + 1}`, {
@@ -112,8 +165,10 @@ describe("AgentChatThread", () => {
   const originalMatchMedia = globalThis.matchMedia;
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const originalResizeObserver = globalThis.ResizeObserver;
 
   beforeEach(() => {
+    mockResizeObserverControllers.clear();
     let nextAnimationFrameTime = 16;
     globalThis.matchMedia = ((query: string) =>
       ({
@@ -135,6 +190,7 @@ describe("AgentChatThread", () => {
       return 1;
     }) as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     globalThis.IntersectionObserver = class MockIntersectionObserver {
       disconnect(): void {}
 
@@ -154,6 +210,7 @@ describe("AgentChatThread", () => {
     globalThis.matchMedia = originalMatchMedia;
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   test("renders empty state when no session is active", () => {
@@ -698,6 +755,119 @@ describe("AgentChatThread", () => {
     await act(flush);
 
     expect(containerNode.scrollTop).toBe(2_000);
+
+    rendered.unmount();
+  });
+
+  test("resyncs the transcript when the todo stack first appears", async () => {
+    const syncBottomAfterComposerLayout = mock(() => {});
+    const syncBottomAfterComposerLayoutRef = {
+      current: null,
+    } as { current: (() => void) | null };
+    const model = {
+      ...buildBaseModel(),
+      syncBottomAfterComposerLayoutRef,
+      session: buildSession({
+        pendingQuestions: [],
+        pendingPermissions: [],
+        todos: [],
+      }),
+    };
+
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model,
+      }),
+    );
+    await act(flush);
+    syncBottomAfterComposerLayoutRef.current = syncBottomAfterComposerLayout;
+
+    rendered.rerender(
+      createElement(AgentChatThread, {
+        model: {
+          ...model,
+          session: buildSession({
+            sessionId: model.session?.sessionId,
+            pendingQuestions: [],
+            pendingPermissions: [],
+            todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
+          }),
+        },
+      }),
+    );
+    await act(flush);
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    if (!(bottomStack instanceof HTMLDivElement)) {
+      throw new Error("Expected bottom stack element");
+    }
+    const bottomStackWrapper = bottomStack.parentElement;
+    if (!(bottomStackWrapper instanceof HTMLDivElement)) {
+      throw new Error("Expected bottom stack wrapper element");
+    }
+
+    syncBottomAfterComposerLayoutRef.current = syncBottomAfterComposerLayout;
+    syncBottomAfterComposerLayout.mockClear();
+
+    triggerResizeObservers(new Map([[bottomStackWrapper, 72]]));
+
+    expect(syncBottomAfterComposerLayout).toHaveBeenCalledTimes(1);
+
+    rendered.unmount();
+  });
+
+  test("resyncs the transcript when the todo panel expands", async () => {
+    const syncBottomAfterComposerLayout = mock(() => {});
+    const syncBottomAfterComposerLayoutRef = {
+      current: null,
+    } as { current: (() => void) | null };
+    const session = buildSession({
+      pendingQuestions: [],
+      pendingPermissions: [],
+      todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
+    });
+    const model = {
+      ...buildBaseModel(),
+      syncBottomAfterComposerLayoutRef,
+      session,
+      todoPanelCollapsed: true,
+    };
+
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model,
+      }),
+    );
+    await act(flush);
+    syncBottomAfterComposerLayoutRef.current = syncBottomAfterComposerLayout;
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    if (!(bottomStack instanceof HTMLDivElement)) {
+      throw new Error("Expected bottom stack element");
+    }
+    const bottomStackWrapper = bottomStack.parentElement;
+    if (!(bottomStackWrapper instanceof HTMLDivElement)) {
+      throw new Error("Expected bottom stack wrapper element");
+    }
+
+    syncBottomAfterComposerLayout.mockClear();
+    triggerResizeObservers(new Map([[bottomStackWrapper, 56]]));
+    syncBottomAfterComposerLayout.mockClear();
+
+    rendered.rerender(
+      createElement(AgentChatThread, {
+        model: {
+          ...model,
+          todoPanelCollapsed: false,
+        },
+      }),
+    );
+    await act(flush);
+
+    syncBottomAfterComposerLayoutRef.current = syncBottomAfterComposerLayout;
+    triggerResizeObservers(new Map([[bottomStackWrapper, 140]]));
+
+    expect(syncBottomAfterComposerLayout).toHaveBeenCalledTimes(1);
 
     rendered.unmount();
   });

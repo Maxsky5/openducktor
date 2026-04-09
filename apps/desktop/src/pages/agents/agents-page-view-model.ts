@@ -170,6 +170,7 @@ type AgentChatComposerModelArgs = {
   composerEditorRef: RefObject<HTMLDivElement | null>;
   onComposerEditorInput: () => void;
   scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
+  syncBottomAfterComposerLayoutRef: AgentChatModel["composer"]["syncBottomAfterComposerLayoutRef"];
 };
 
 export const buildAgentChatThreadModel = (
@@ -249,6 +250,7 @@ export const buildAgentChatComposerModel = (
   composerEditorRef: args.composerEditorRef,
   onComposerEditorInput: args.onComposerEditorInput,
   scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
+  syncBottomAfterComposerLayoutRef: args.syncBottomAfterComposerLayoutRef,
 });
 
 export const buildAgentChatModel = (

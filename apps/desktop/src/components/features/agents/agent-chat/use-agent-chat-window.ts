@@ -70,6 +70,9 @@ export function useAgentChatWindow({
   });
   const pendingBottomResetRef = useRef(false);
   const visibleWindowKey = `${windowStart}:${windowedRows.length}`;
+  const isFollowingTranscript = useCallback(() => {
+    return !userScrolledRef.current;
+  }, [userScrolledRef]);
 
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     if (turnStart === latestTurnStart) {
@@ -118,6 +121,10 @@ export function useAgentChatWindow({
     };
 
     syncBottomAfterComposerLayoutRef.current = () => {
+      if (!isFollowingTranscript()) {
+        return;
+      }
+
       cancelScheduledComposerLayoutSync();
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
       if (typeof requestAnimationFrameFn !== "function") {
@@ -151,7 +158,12 @@ export function useAgentChatWindow({
         syncBottomAfterComposerLayoutRef.current = null;
       }
     };
-  }, [forceScrollToBottom, syncBottomAfterComposerLayoutRef, userScrollIntentVersionRef]);
+  }, [
+    forceScrollToBottom,
+    isFollowingTranscript,
+    syncBottomAfterComposerLayoutRef,
+    userScrollIntentVersionRef,
+  ]);
 
   useLayoutEffect(() => {
     if (!pendingBottomResetRef.current) {

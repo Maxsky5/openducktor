@@ -92,6 +92,7 @@ export type AgentChatComposerModel = {
   composerEditorRef: RefObject<HTMLDivElement | null>;
   onComposerEditorInput: () => void;
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
+  syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
 export type AgentChatModel = {
