@@ -122,6 +122,10 @@ Use `odt_read_task` first to discover the task summary object, including task st
 
 Use `odt_read_task_documents` only when you need document bodies:
 
+- Requested document keys are returned consistently even when no persisted body exists yet.
+- Missing spec and plan return empty markdown with `updatedAt: null`.
+- Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
+
 ```json
 {
   "taskId": "repo-123",

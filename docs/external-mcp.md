@@ -256,6 +256,9 @@ Constraints:
 
 - Unknown input fields are rejected.
 - At least one include flag must be `true`.
+- Requested document keys are returned consistently even when no persisted body exists yet.
+- Missing spec and plan return `{ "markdown": "", "updatedAt": null }`.
+- Missing latest QA report returns `{ "markdown": "", "updatedAt": null, "verdict": "not_reviewed" }`.
 
 Output:
 

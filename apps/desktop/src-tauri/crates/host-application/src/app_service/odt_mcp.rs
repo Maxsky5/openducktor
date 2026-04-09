@@ -249,6 +249,24 @@ fn map_markdown_document(document: SpecDocument) -> OdtMarkdownDocument {
     }
 }
 
+fn map_qa_report_document(report: Option<host_domain::QaReportDocument>) -> OdtQaReportDocument {
+    match report {
+        Some(report) => OdtQaReportDocument {
+            markdown: report.markdown,
+            updated_at: Some(report.updated_at),
+            verdict: match report.verdict {
+                host_domain::QaVerdict::Approved => QaWorkflowVerdict::Approved,
+                host_domain::QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+            },
+        },
+        None => OdtQaReportDocument {
+            markdown: String::new(),
+            updated_at: None,
+            verdict: QaWorkflowVerdict::NotReviewed,
+        },
+    }
+}
+
 fn map_task_documents(
     metadata: TaskMetadata,
     include_spec: bool,
@@ -259,18 +277,7 @@ fn map_task_documents(
         documents: OdtRequestedDocuments {
             spec: include_spec.then(|| map_markdown_document(metadata.spec)),
             implementation_plan: include_plan.then(|| map_markdown_document(metadata.plan)),
-            latest_qa_report: if include_qa {
-                metadata.qa_report.map(|report| OdtQaReportDocument {
-                    markdown: report.markdown,
-                    updated_at: Some(report.updated_at),
-                    verdict: match report.verdict {
-                        host_domain::QaVerdict::Approved => QaWorkflowVerdict::Approved,
-                        host_domain::QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
-                    },
-                })
-            } else {
-                None
-            },
+            latest_qa_report: include_qa.then(|| map_qa_report_document(metadata.qa_report)),
         },
     }
 }
@@ -810,5 +817,36 @@ mod tests {
         assert!(!result.has_more);
         assert_eq!(result.results.len(), 1);
         assert_eq!(result.results[0].task.task.id, "task-1");
+    }
+
+    #[test]
+    fn odt_read_task_documents_returns_requested_empty_documents_consistently() {
+        let (service, _, _) = build_service_with_state(vec![task("fairnest-4y3", "Fairnest")]);
+
+        let result = service
+            .odt_read_task_documents("/repo", "fairnest-4y3", true, true, true)
+            .expect("read task documents should succeed");
+
+        let spec = result
+            .documents
+            .spec
+            .expect("spec should be present when requested");
+        assert_eq!(spec.markdown, "");
+        assert_eq!(spec.updated_at, None);
+
+        let plan = result
+            .documents
+            .implementation_plan
+            .expect("plan should be present when requested");
+        assert_eq!(plan.markdown, "");
+        assert_eq!(plan.updated_at, None);
+
+        let qa = result
+            .documents
+            .latest_qa_report
+            .expect("qa report should be present when requested");
+        assert_eq!(qa.markdown, "");
+        assert_eq!(qa.updated_at, None);
+        assert_eq!(qa.verdict, QaWorkflowVerdict::NotReviewed);
     }
 }
