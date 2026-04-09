@@ -311,18 +311,15 @@ The custom status command is needed because OpenDucktor adds workflow states on 
 
 ## How MCP Fits In
 
-When OpenDucktor launches its MCP sidecar for OpenCode, it passes the Beads and Dolt context explicitly:
+When OpenDucktor launches its MCP sidecar for OpenCode, it passes host bridge context explicitly:
 
 - repo path
-- Beads attachment directory
-- Dolt host
-- Dolt port
-- Dolt database name
+- host bridge URL
 - metadata namespace
 
-These values are passed explicitly because the MCP sidecar must connect to the exact same live shared Dolt server and the exact same repo database as the Rust host.
+The Rust host owns the Beads attachment directory, shared Dolt connection details, attachment verification, repair, and all task reads and writes.
 
-Today the MCP sidecar still contains its own Beads client logic. That is internal plumbing, and it is one reason these parameters exist. The desktop host injects them automatically.
+The MCP sidecar no longer connects to Dolt or runs Beads directly. In desktop-managed mode the host injects a loopback `ODT_HOST_URL`, and the MCP forwards task, document, and workflow calls back to the running host. Standalone MCP use must provide that same host URL explicitly.
 
 ## What Happens On App Exit
 

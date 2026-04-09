@@ -1,5 +1,5 @@
 use super::command_support::{CommandResult, HeadlessCommandError, HeadlessState};
-use super::{git_commands, runtime_commands, task_commands, workspace_commands};
+use super::{git_commands, odt_mcp_commands, runtime_commands, task_commands, workspace_commands};
 use anyhow::anyhow;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -47,6 +47,7 @@ pub(super) fn build_registry() -> anyhow::Result<CommandRegistry> {
     workspace_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     git_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     task_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
+    odt_mcp_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     runtime_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     Ok(registry)
 }

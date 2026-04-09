@@ -2,9 +2,13 @@
 
 OpenDucktor MCP server for local repository task workflows.
 
-When OpenDucktor launches this MCP from the desktop app it injects the Beads attachment dir and shared Dolt connection details automatically. For standalone use, you must provide the same contract yourself.
+The MCP package is a thin client of the running Rust host.
 
-For the full Beads attachment and shared Dolt lifecycle, including why these parameters exist, see `../../docs/beads-shared-dolt-lifecycle.md`.
+- Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
+- Standalone use must provide a reachable host bridge explicitly.
+- Legacy direct `bd` / `dolt` startup parameters are rejected.
+
+For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
 
 ## Usage
 
@@ -16,10 +20,7 @@ For the full Beads attachment and shared Dolt lifecycle, including why these par
       "args": [
         "@openducktor/mcp",
         "--repo", "/absolute/path/to/repo",
-        "--beads-attachment-dir", "/absolute/path/to/openducktor/beads/<repo-id>/.beads",
-        "--dolt-host", "127.0.0.1",
-        "--dolt-port", "3310",
-        "--database-name", "odt_repo_deadbeefcafe"
+        "--host-url", "http://127.0.0.1:14327"
       ]
     }
   }
@@ -28,11 +29,21 @@ For the full Beads attachment and shared Dolt lifecycle, including why these par
 
 Optional arguments:
 
-- `--beads-attachment-dir <path>`
-- `--dolt-host <host>`
-- `--dolt-port <port>`
-- `--database-name <name>`
+- `--host-url <url>`
 - `--metadata-namespace <name>`
+
+Required environment for standalone use:
+
+- `ODT_REPO_PATH`
+- `ODT_HOST_URL`
+- `ODT_METADATA_NAMESPACE` optional, defaults to `openducktor`
+
+Startup behavior:
+
+- The MCP validates `ODT_HOST_URL` or `--host-url`.
+- It checks the host bridge `/health` endpoint.
+- It calls `odt_mcp_ready` before serving requests.
+- Startup fails if the host does not expose the full ODT tool surface.
 
 ## Public Tools
 

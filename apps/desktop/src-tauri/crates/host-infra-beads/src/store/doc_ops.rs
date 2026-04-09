@@ -69,6 +69,7 @@ impl BeadsTaskStore {
                 .map(|entry| entry.markdown.clone())
                 .unwrap_or_default(),
             updated_at: latest.map(|entry| entry.updated_at.clone()),
+            revision: latest.map(|entry| entry.revision),
         })
     }
 
@@ -112,6 +113,7 @@ impl BeadsTaskStore {
         Ok(SpecDocument {
             markdown: entry.markdown,
             updated_at: Some(timestamp),
+            revision: Some(entry.revision),
         })
     }
 
@@ -130,6 +132,7 @@ impl BeadsTaskStore {
                 .map(|entry| entry.markdown.clone())
                 .unwrap_or_default(),
             updated_at: latest.map(|entry| entry.updated_at.clone()),
+            revision: latest.map(|entry| entry.revision),
         })
     }
 
@@ -173,6 +176,7 @@ impl BeadsTaskStore {
         Ok(SpecDocument {
             markdown: entry.markdown,
             updated_at: Some(timestamp),
+            revision: Some(entry.revision),
         })
     }
 

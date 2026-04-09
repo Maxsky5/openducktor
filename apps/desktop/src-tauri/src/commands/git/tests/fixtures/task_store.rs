@@ -11,6 +11,7 @@ fn empty_spec_document() -> SpecDocument {
     SpecDocument {
         markdown: String::new(),
         updated_at: None,
+        revision: None,
     }
 }
 
@@ -70,6 +71,7 @@ impl TaskStore for CommandTaskStore {
         Ok(SpecDocument {
             markdown: markdown.to_string(),
             updated_at: None,
+            revision: None,
         })
     }
 
@@ -86,6 +88,7 @@ impl TaskStore for CommandTaskStore {
         Ok(SpecDocument {
             markdown: markdown.to_string(),
             updated_at: None,
+            revision: None,
         })
     }
 

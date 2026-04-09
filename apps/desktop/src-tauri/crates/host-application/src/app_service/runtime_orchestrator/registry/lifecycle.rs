@@ -205,6 +205,10 @@ impl AppService {
             Err(_) => cleanup_errors.push("Agent runtime state lock poisoned".to_string()),
         }
 
+        if let Err(error) = self.stop_mcp_bridge_process() {
+            cleanup_errors.push(format!("Failed shutting down MCP host bridge: {error:#}"));
+        }
+
         if let Err(error) = stop_shared_dolt_server_for_current_owner(self.instance_pid) {
             cleanup_errors.push(format!(
                 "Failed shutting down shared Dolt server: {error:#}"

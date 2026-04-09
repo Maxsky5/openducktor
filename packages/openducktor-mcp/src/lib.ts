@@ -1,15 +1,43 @@
-export { computeRepoId, resolveRepoBeadsAttachmentDir } from "./beads-runtime";
-export type {
-  IssueType,
-  PlanSubtaskInput,
-  PublicTask,
-  TaskCard,
-  TaskStatus,
-} from "./contracts";
-export { OdtTaskStore, type OdtTaskStoreDeps } from "./odt-task-store";
-export { normalizePlanSubtasks } from "./plan-subtasks";
 export {
+  type BuildBlockedInput,
+  BuildBlockedInputSchema,
+  type BuildCompletedInput,
+  BuildCompletedInputSchema,
+  type BuildResumedInput,
+  BuildResumedInputSchema,
+  buildBlockedResultSchema,
+  buildCompletedResultSchema,
+  buildResumedResultSchema,
+  type CreateTaskInput,
+  CreateTaskInputSchema,
+  createTaskResultSchema,
+  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_TOOL_SCHEMAS,
+  odtHostBridgeReadySchema,
+  type PublicTask,
   publicTaskSchema,
+  type QaApprovedInput,
+  QaApprovedInputSchema,
+  type QaRejectedInput,
+  QaRejectedInputSchema,
+  qaApprovedResultSchema,
+  qaRejectedResultSchema,
+  type ReadTaskDocumentsInput,
+  ReadTaskDocumentsInputSchema,
+  type ReadTaskInput,
+  ReadTaskInputSchema,
+  type SearchTasksInput,
+  SearchTasksInputSchema,
+  type SetPlanInput,
+  SetPlanInputSchema,
+  type SetPullRequestInput,
+  SetPullRequestInputSchema,
+  type SetSpecInput,
+  SetSpecInputSchema,
+  searchTasksResultSchema,
+  setPlanResultSchema,
+  setPullRequestResultSchema,
+  setSpecResultSchema,
   type TaskDocumentsRead,
   type TaskRequestedDocuments,
   type TaskSummary,
@@ -17,20 +45,7 @@ export {
   taskDocumentsReadSchema,
   taskRequestedDocumentsSchema,
   taskSummarySchema,
-} from "./public-schemas";
+} from "@openducktor/contracts";
+export { OdtHostBridgeClient, type OdtHostBridgeClientPort } from "./host-bridge-client";
+export { OdtTaskStore, type OdtTaskStoreDeps } from "./odt-task-store";
 export { type OdtStoreContext, resolveStoreContext } from "./store-context";
-export {
-  type BuildBlockedInput,
-  type BuildCompletedInput,
-  type BuildResumedInput,
-  type CreateTaskInput,
-  ODT_TOOL_SCHEMAS,
-  type QaApprovedInput,
-  type QaRejectedInput,
-  type ReadTaskDocumentsInput,
-  type ReadTaskInput,
-  type SearchTasksInput,
-  type SetPlanInput,
-  type SetPullRequestInput,
-  type SetSpecInput,
-} from "./tool-schemas";

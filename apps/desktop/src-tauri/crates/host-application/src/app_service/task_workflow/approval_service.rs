@@ -74,6 +74,26 @@ impl AppService {
         )
     }
 
+    pub fn task_pull_request_link(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        provider_id: &str,
+        number: u32,
+    ) -> Result<PullRequestRecord> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let resolved = PullRequestProviderService::new(self).fetch_pull_request_by_number(
+            repo_path.as_str(),
+            provider_id,
+            number,
+        )?;
+        PullRequestProviderService::new(self).store_linked_pull_request_metadata(
+            repo_path.as_str(),
+            task_id,
+            resolved,
+        )
+    }
+
     pub fn repo_pull_request_sync(&self, repo_path: &str) -> Result<bool> {
         PullRequestSyncService::new(self).repo_pull_request_sync(repo_path)
     }

@@ -171,6 +171,7 @@ pub struct AppService {
     pub(super) enforce_repo_allowlist: bool,
     pub(super) hook_trust_challenges: Arc<Mutex<HashMap<String, HookTrustChallenge>>>,
     pub(super) dev_server_groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
+    pub(super) mcp_bridge_process: Arc<Mutex<Option<McpBridgeProcess>>>,
 }
 
 pub(crate) struct RunProcess {
@@ -188,6 +189,11 @@ pub(crate) struct AgentRuntimeProcess {
     pub(super) child: Child,
     pub(super) _opencode_process_guard: Option<TrackedOpencodeProcessGuard>,
     pub(super) cleanup_target: Option<RuntimeCleanupTarget>,
+}
+
+pub(crate) struct McpBridgeProcess {
+    pub(super) base_url: String,
+    pub(super) child: Child,
 }
 
 #[allow(dead_code)]
@@ -280,6 +286,7 @@ impl AppService {
             enforce_repo_allowlist,
             hook_trust_challenges: Arc::new(Mutex::new(HashMap::new())),
             dev_server_groups: Arc::new(Mutex::new(HashMap::new())),
+            mcp_bridge_process: Arc::new(Mutex::new(None)),
         };
         if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
             eprintln!(

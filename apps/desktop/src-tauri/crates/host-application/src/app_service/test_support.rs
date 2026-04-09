@@ -236,6 +236,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: String::new(),
             updated_at: None,
+            revision: None,
         })
     }
 
@@ -247,6 +248,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: markdown.to_string(),
             updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            revision: Some(1),
         })
     }
 
@@ -256,6 +258,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: String::new(),
             updated_at: None,
+            revision: None,
         })
     }
 
@@ -267,6 +270,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: markdown.to_string(),
             updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            revision: Some(1),
         })
     }
 
@@ -497,10 +501,12 @@ impl TaskStore for FakeTaskStore {
             spec: SpecDocument {
                 markdown: String::new(),
                 updated_at: None,
+                revision: None,
             },
             plan: SpecDocument {
                 markdown: String::new(),
                 updated_at: None,
+                revision: None,
             },
             qa_report,
             pull_request: state.pull_requests.get(_task_id).cloned(),

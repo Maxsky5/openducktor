@@ -22,6 +22,8 @@ mod dev_server_manager;
 mod events;
 mod git_provider;
 mod hook_security;
+mod mcp_bridge_process;
+mod odt_mcp;
 mod opencode_runtime;
 mod opencode_session_status;
 mod process_registry;
@@ -39,11 +41,16 @@ mod workspace_policy;
 
 pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
+pub use odt_mcp::{
+    OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
+    OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
+    OdtTaskResult, OdtTaskSummary,
+};
 pub use opencode_runtime::OpencodeStartupWaitFailure;
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
-    resolve_opencode_binary_path, spawn_opencode_server, terminate_child_process,
-    terminate_process_by_pid, wait_for_local_server_with_process, wait_for_process_exit_by_pid,
+    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
+    wait_for_local_server_with_process, wait_for_process_exit_by_pid,
     OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
 };
 pub(crate) use opencode_session_status::{
@@ -59,7 +66,7 @@ pub(crate) use process_registry::{
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 pub(crate) use service_core::{
-    AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, RunProcess,
+    AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess, RunProcess,
     RuntimeCleanupTarget,
 };
 pub use service_core::{AppService, DevServerEmitter, RunEmitter};

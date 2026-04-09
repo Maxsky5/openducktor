@@ -4,9 +4,13 @@
 
 This document describes the public OpenDucktor MCP package that can be used outside the desktop app.
 
-Desktop-managed MCP launches receive the Beads attachment path and shared Dolt connection details from the host automatically. Standalone external use must provide those values explicitly.
+Both desktop-managed and standalone MCP paths now route task operations through the Rust host. The TypeScript MCP package does not talk to Beads or Dolt directly.
 
-For the full Beads attachment and shared Dolt lifecycle, including why these parameters exist and how the host currently owns server startup, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
+- Desktop-managed launches receive `ODT_HOST_URL` from the desktop host automatically.
+- Standalone external use must provide a reachable host bridge explicitly.
+- Startup fails if the host bridge is unhealthy or does not expose the required ODT tool surface.
+
+For the full Beads and shared Dolt lifecycle, including why the Rust host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
 
 Package name:
 
@@ -28,10 +32,7 @@ Example MCP config:
       "args": [
         "@openducktor/mcp",
         "--repo", "/absolute/path/to/repo",
-        "--beads-attachment-dir", "/absolute/path/to/openducktor/beads/<repo-id>/.beads",
-        "--dolt-host", "127.0.0.1",
-        "--dolt-port", "3310",
-        "--database-name", "odt_repo_deadbeefcafe"
+        "--host-url", "http://127.0.0.1:14327"
       ]
     }
   }
@@ -40,11 +41,21 @@ Example MCP config:
 
 Optional arguments:
 
-- `--beads-attachment-dir <path>`
-- `--dolt-host <host>`
-- `--dolt-port <port>`
-- `--database-name <name>`
+- `--host-url <url>`
 - `--metadata-namespace <name>`
+
+Equivalent environment variables:
+
+- `ODT_REPO_PATH`
+- `ODT_HOST_URL`
+- `ODT_METADATA_NAMESPACE`
+
+Startup contract:
+
+1. Normalize and validate the repo path and host URL.
+2. Call the host bridge `/health` endpoint.
+3. Call `odt_mcp_ready` through the loopback host API.
+4. Refuse startup if any required ODT tool name is missing.
 
 ## Public Tools
 
@@ -66,12 +77,6 @@ Internal workflow tools remain on the same MCP server:
 - `odt_qa_rejected`
 
 Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `create_task` or `search_tasks` in their tool selection.
-
-Maintainer note:
-
-- the TypeScript MCP sidecar still contains its own Beads client today
-- that lifecycle currently duplicates some host-side Beads logic
-- the duplication is temporary, but if you change Beads or shared-Dolt behavior you must review both this package and the Rust host in the same change
 
 ## Shared Response Model
 
@@ -258,3 +263,9 @@ Output:
   }
 }
 ```
+
+## Architecture Notes
+
+- `packages/openducktor-mcp` owns MCP transport, request validation, response validation, and packaging.
+- The Rust host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
+- The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.
