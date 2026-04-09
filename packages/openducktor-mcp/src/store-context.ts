@@ -96,7 +96,17 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
     return port;
   });
 
-  return [...new Set(ports)].sort((left, right) => left - right);
+  const discoveredPorts: number[] = [];
+  const seen = new Set<number>();
+  for (const port of ports) {
+    if (seen.has(port)) {
+      continue;
+    }
+    seen.add(port);
+    discoveredPorts.push(port);
+  }
+
+  return discoveredPorts;
 };
 
 const discoverHostUrl = async (repoPath: string): Promise<string> => {

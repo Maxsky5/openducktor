@@ -60,10 +60,11 @@ Startup contract:
 
 1. Normalize and validate the repo path.
 2. Use `ODT_HOST_URL` or `--host-url` first when provided.
-3. Otherwise read the local discovery registry and try discovered bridge ports in order.
-4. Call the host bridge `/health` endpoint.
-5. Call `odt_mcp_ready` through the loopback host API.
-6. Refuse startup if any required ODT tool name is missing.
+3. Otherwise read the local discovery registry and try discovered bridge ports in registry order.
+4. The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
+5. Call the host bridge `/health` endpoint.
+6. Call `odt_mcp_ready` through the loopback host API.
+7. Refuse startup if any required ODT tool name is missing.
 
 ## Public Tools
 

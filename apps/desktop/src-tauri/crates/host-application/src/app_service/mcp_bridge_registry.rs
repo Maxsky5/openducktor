@@ -48,8 +48,8 @@ pub(super) fn health_check(port: u16) -> Result<bool> {
 }
 
 fn normalize_bridge_ports(ports: &mut Vec<u16>) {
-    ports.sort_unstable();
-    ports.dedup();
+    let mut seen = HashSet::new();
+    ports.retain(|port| seen.insert(*port));
 }
 
 fn with_locked_mcp_bridge_registry<T>(
@@ -128,13 +128,16 @@ where
             if Some(port) == remove_port {
                 continue;
             }
-            if Some(port) == register_port || is_healthy(port)? {
+            if Some(port) == register_port {
+                continue;
+            }
+            if is_healthy(port)? {
                 retained.push(port);
             }
         }
 
         if let Some(port) = register_port {
-            retained.push(port);
+            retained.insert(0, port);
         }
 
         *ports = retained;
@@ -223,10 +226,34 @@ mod tests {
         )
         .expect("registry reconcile should succeed");
 
-        assert_eq!(ports, vec![4200, 4400]);
+        assert_eq!(ports, vec![4400, 4200]);
         assert_eq!(
             read_mcp_bridge_registry(path.as_path()).expect("registry read should succeed"),
-            vec![4200, 4400]
+            vec![4400, 4200]
+        );
+    }
+
+    #[test]
+    fn reconcile_registry_moves_re_registered_port_to_front() {
+        let path = unique_temp_path("reregister").join("runtime/mcp-bridge-ports.json");
+        with_locked_mcp_bridge_registry(path.as_path(), |ports| {
+            *ports = vec![4200, 4300, 4400];
+            Ok(())
+        })
+        .expect("seed registry should succeed");
+
+        let ports = reconcile_mcp_bridge_registry_with_health_check(
+            path.as_path(),
+            Some(4300),
+            None,
+            |_port| Ok(true),
+        )
+        .expect("registry reconcile should succeed");
+
+        assert_eq!(ports, vec![4300, 4200, 4400]);
+        assert_eq!(
+            read_mcp_bridge_registry(path.as_path()).expect("registry read should succeed"),
+            vec![4300, 4200, 4400]
         );
     }
 

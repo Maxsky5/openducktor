@@ -47,7 +47,8 @@ Automatic discovery:
 Startup behavior:
 
 - The MCP uses `ODT_HOST_URL` or `--host-url` first when provided.
-- Otherwise it discovers host ports from the local registry and tries them in order.
+- Otherwise it discovers host ports from the local registry and tries them in registry order.
+- The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
 - It checks the host bridge `/health` endpoint.
 - It calls `odt_mcp_ready` before serving requests.
 - Startup fails if the host does not expose the full ODT tool surface.
