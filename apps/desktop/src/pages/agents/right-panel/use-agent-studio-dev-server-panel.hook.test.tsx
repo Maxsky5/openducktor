@@ -265,6 +265,77 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("hydrates terminal replay from a successful start mutation before live events arrive", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async () => buildState();
+    devServerStart = async () =>
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+            bufferedTerminalChunks: [
+              {
+                scriptId: "frontend",
+                sequence: 0,
+                data: "Starting `bun run dev`\r\n",
+                timestamp: "2026-03-19T15:30:00.000Z",
+              },
+            ],
+          }),
+        ],
+      });
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("stopped");
+      });
+
+      await act(async () => {
+        getLatest().onStart();
+      });
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "Starting `bun run dev`\r\n",
+        );
+      });
+      expect(getLatest().scripts[0]?.status).toBe("running");
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("stores terminal chunks in the selected script buffer without rewriting script state", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

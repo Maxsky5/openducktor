@@ -13,8 +13,8 @@ afterEach(() => {
 
 describe("AgentStudioDevServerTerminal", () => {
   test("creates a read-only terminal and replays buffered chunks", async () => {
-    const open = mock(() => {});
-    const loadAddon = mock(() => {});
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const write = mock(() => {});
@@ -61,8 +61,8 @@ describe("AgentStudioDevServerTerminal", () => {
   });
 
   test("appends only new chunks until a reset token forces replay", async () => {
-    const open = mock(() => {});
-    const loadAddon = mock(() => {});
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const write = mock(() => {});

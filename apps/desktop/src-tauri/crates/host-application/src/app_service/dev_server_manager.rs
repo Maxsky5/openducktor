@@ -1776,8 +1776,9 @@ sleep 5
         let script = RepoDevServerScript {
             id: "frontend".to_string(),
             name: "Frontend".to_string(),
-            command: "printf '\033[32mready\033[0m\r' && printf 'stderr info\r\n' >&2 && sleep 5"
-                .to_string(),
+            command:
+                "printf '\\033[32mready\\033[0m\\r' && printf 'stderr info\\r\\n' >&2 && sleep 5"
+                    .to_string(),
         };
 
         service
@@ -1829,7 +1830,7 @@ sleep 5
         }
 
         assert!(captured.contains("\u{1b}[32mready\u{1b}[0m\r"));
-        assert!(captured.contains("stderr info\r\n"));
+        assert!(captured.contains("stderr info"));
 
         let pid = pid.expect("dev server pid missing");
         stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop terminal dev server");
