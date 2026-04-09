@@ -1,5 +1,44 @@
 use super::*;
 
+fn write_latest_qa_report(
+    documents_map: &mut serde_json::Map<String, Value>,
+    markdown: &str,
+    verdict: QaVerdict,
+) -> Result<QaEntry> {
+    let next_revision = documents_map
+        .get("qaReports")
+        .and_then(parse_qa_entries)
+        .map(|entries| {
+            entries
+                .iter()
+                .map(|entry| entry.revision)
+                .max()
+                .unwrap_or(0)
+                + 1
+        })
+        .unwrap_or(1);
+
+    let source_tool = match verdict {
+        QaVerdict::Approved => "qa_approved",
+        QaVerdict::Rejected => "qa_rejected",
+    };
+    let entry = QaEntry {
+        markdown: markdown.trim().to_string(),
+        verdict,
+        updated_at: now_rfc3339(),
+        updated_by: "qa-agent".to_string(),
+        source_tool: source_tool.to_string(),
+        revision: next_revision,
+    };
+
+    documents_map.insert(
+        "qaReports".to_string(),
+        Value::Array(vec![serde_json::to_value(&entry)?]),
+    );
+
+    Ok(entry)
+}
+
 impl BeadsTaskStore {
     pub(super) fn get_spec_impl(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
@@ -162,43 +201,14 @@ impl BeadsTaskStore {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-
-        let mut entries = documents_map
-            .get("qaReports")
-            .and_then(parse_qa_entries)
-            .unwrap_or_default();
-        let next_revision = entries.last().map(|entry| entry.revision + 1).unwrap_or(1);
-
-        let timestamp = now_rfc3339();
-        let entry = QaEntry {
-            markdown: markdown.trim().to_string(),
-            verdict: verdict.clone(),
-            updated_at: timestamp.clone(),
-            updated_by: "qa-agent".to_string(),
-            source_tool: match verdict {
-                QaVerdict::Approved => "qa_approved".to_string(),
-                QaVerdict::Rejected => "qa_rejected".to_string(),
-            },
-            revision: next_revision,
-        };
-
-        entries.push(entry.clone());
-        documents_map.insert(
-            "qaReports".to_string(),
-            Value::Array(
-                entries
-                    .iter()
-                    .map(serde_json::to_value)
-                    .collect::<std::result::Result<Vec<_>, _>>()?,
-            ),
-        );
+        let entry = write_latest_qa_report(&mut documents_map, markdown, verdict)?;
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
 
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         Ok(QaReportDocument {
             markdown: entry.markdown,
             verdict: entry.verdict,
-            updated_at: timestamp,
+            updated_at: entry.updated_at,
             revision: entry.revision,
         })
     }
@@ -220,36 +230,7 @@ impl BeadsTaskStore {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-
-        let mut entries = documents_map
-            .get("qaReports")
-            .and_then(parse_qa_entries)
-            .unwrap_or_default();
-        let next_revision = entries.last().map(|entry| entry.revision + 1).unwrap_or(1);
-
-        let timestamp = now_rfc3339();
-        let entry = QaEntry {
-            markdown: markdown.trim().to_string(),
-            verdict: verdict.clone(),
-            updated_at: timestamp,
-            updated_by: "qa-agent".to_string(),
-            source_tool: match verdict {
-                QaVerdict::Approved => "qa_approved".to_string(),
-                QaVerdict::Rejected => "qa_rejected".to_string(),
-            },
-            revision: next_revision,
-        };
-
-        entries.push(entry);
-        documents_map.insert(
-            "qaReports".to_string(),
-            Value::Array(
-                entries
-                    .iter()
-                    .map(serde_json::to_value)
-                    .collect::<std::result::Result<Vec<_>, _>>()?,
-            ),
-        );
+        let entry = write_latest_qa_report(&mut documents_map, markdown, verdict)?;
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
         root.insert(namespace_key, Value::Object(namespace_map));
 

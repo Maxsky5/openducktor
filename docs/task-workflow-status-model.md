@@ -131,7 +131,7 @@ Root namespace key is fixed to `openducktor`.
 ```
 
 ## Document History Policy
-- `qaReports`: append-only history (full timeline retained).
+- `qaReports`: list structure, but V1 retains only the latest entry in the list (list length = 1).
 - `spec`: list structure, but V1 retains only the latest entry in the list (list length = 1).
 - `implementationPlan`: list structure, but V1 retains only the latest entry in the list (list length = 1).
 

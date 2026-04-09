@@ -150,7 +150,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
       ...namespace,
       documents: {
         ...documents,
-        qaReports: [...entries, entry],
+        qaReports: [entry],
       },
     };
 

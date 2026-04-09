@@ -348,7 +348,7 @@ describe("TaskDocumentStore", () => {
     });
   });
 
-  test("appendQaReport appends new report and uses max revision + 1", async () => {
+  test("appendQaReport stores only latest report and uses max revision + 1", async () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -391,22 +391,6 @@ describe("TaskDocumentStore", () => {
       openducktor: {
         documents: {
           qaReports: [
-            {
-              markdown: "initial",
-              verdict: "approved",
-              updatedAt: "2026-02-22T00:00:00.000Z",
-              updatedBy: "qa-agent",
-              sourceTool: "odt_qa_approved",
-              revision: 4,
-            },
-            {
-              markdown: "older",
-              verdict: "rejected",
-              updatedAt: "2026-02-20T00:00:00.000Z",
-              updatedBy: "qa-agent",
-              sourceTool: "odt_qa_rejected",
-              revision: 2,
-            },
             {
               markdown: "needs changes",
               verdict: "rejected",

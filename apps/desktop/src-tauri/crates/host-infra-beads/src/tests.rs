@@ -1980,7 +1980,7 @@ fn get_and_set_plan_use_implementation_plan_metadata() -> Result<()> {
 }
 
 #[test]
-fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
+fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
     let repo = RepoFixture::new("qa-docs");
     let empty = issue_value("task-1", "open", "task", None, json!([]), None);
     let with_reports = issue_value(
@@ -2031,8 +2031,8 @@ fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
     let reports = metadata_root["openducktor"]["documents"]["qaReports"]
         .as_array()
         .expect("qaReports should be an array");
-    assert_eq!(reports.len(), 2);
-    let newest = reports.last().expect("newest report missing");
+    assert_eq!(reports.len(), 1);
+    let newest = reports.first().expect("latest report missing");
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
@@ -2132,8 +2132,8 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
     let reports = metadata_root["openducktor"]["documents"]["qaReports"]
         .as_array()
         .expect("qaReports should be an array");
-    assert_eq!(reports.len(), 2);
-    let newest = reports.last().expect("newest report missing");
+    assert_eq!(reports.len(), 1);
+    let newest = reports.first().expect("latest report missing");
     assert_eq!(newest["markdown"], Value::String("Looks good".to_string()));
     assert_eq!(newest["verdict"], Value::String("approved".to_string()));
     assert_eq!(newest["revision"], Value::Number(2.into()));
