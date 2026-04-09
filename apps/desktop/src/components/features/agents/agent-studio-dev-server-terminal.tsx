@@ -5,7 +5,9 @@ import { memo, type ReactElement, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
 type TerminalBinding = {
-  terminal: Pick<Terminal, "dispose" | "loadAddon" | "open" | "options" | "reset" | "write">;
+  terminal: Pick<Terminal, "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
+    write(data: string, callback?: () => void): void;
+  };
   fitAddon: Pick<FitAddon, "dispose" | "fit">;
 };
 
@@ -52,6 +54,19 @@ const terminalOptions = (container: HTMLElement): ITerminalOptions => ({
   theme: buildTerminalTheme(container),
 });
 
+const writeTerminalOutput = (
+  terminal: TerminalBinding["terminal"],
+  data: string,
+): Promise<void> => {
+  if (data.length === 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    terminal.write(data, resolve);
+  });
+};
+
 export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTerminal({
   scriptId,
   terminalBuffer,
@@ -63,6 +78,8 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
   const renderedScriptIdRef = useRef<string | null>(null);
   const renderedResetTokenRef = useRef<number | null>(null);
   const renderedLastSequenceRef = useRef<number | null>(null);
+  const renderQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const renderGenerationRef = useRef(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -109,6 +126,8 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
       renderedScriptIdRef.current = null;
       renderedResetTokenRef.current = null;
       renderedLastSequenceRef.current = null;
+      renderGenerationRef.current += 1;
+      renderQueueRef.current = Promise.resolve();
     };
   }, [createTerminalBinding, onRendererError]);
 
@@ -122,27 +141,47 @@ export const AgentStudioDevServerTerminal = memo(function AgentStudioDevServerTe
     const nextResetToken = terminalBuffer?.resetToken ?? 0;
     const didScriptChange = renderedScriptIdRef.current !== scriptId;
     const didResetTokenChange = renderedResetTokenRef.current !== nextResetToken;
+    const renderGeneration = renderGenerationRef.current + 1;
+    renderGenerationRef.current = renderGeneration;
+    const nextRenderedLastSequence = terminalBuffer?.lastSequence ?? null;
 
-    if (didScriptChange || didResetTokenChange) {
-      binding.terminal.reset();
-      for (const entry of entries) {
-        binding.terminal.write(entry.data);
-      }
-      binding.fitAddon.fit();
-      renderedScriptIdRef.current = scriptId;
-      renderedResetTokenRef.current = nextResetToken;
-      renderedLastSequenceRef.current = terminalBuffer?.lastSequence ?? null;
-      return;
-    }
+    renderQueueRef.current = renderQueueRef.current
+      .catch(() => {})
+      .then(async () => {
+        const queuedBinding = bindingRef.current;
+        if (!queuedBinding || renderGeneration !== renderGenerationRef.current) {
+          return;
+        }
 
-    const lastRenderedSequence = renderedLastSequenceRef.current;
-    const appendedEntries = entries.filter(
-      (entry) => lastRenderedSequence === null || entry.sequence > lastRenderedSequence,
-    );
-    for (const entry of appendedEntries) {
-      binding.terminal.write(entry.data);
-    }
-    renderedLastSequenceRef.current = terminalBuffer?.lastSequence ?? null;
+        if (didScriptChange || didResetTokenChange) {
+          queuedBinding.terminal.reset();
+          await writeTerminalOutput(
+            queuedBinding.terminal,
+            entries.map((entry) => entry.data).join(""),
+          );
+          if (!bindingRef.current || renderGeneration !== renderGenerationRef.current) {
+            return;
+          }
+
+          queuedBinding.fitAddon.fit();
+          renderedScriptIdRef.current = scriptId;
+          renderedResetTokenRef.current = nextResetToken;
+          renderedLastSequenceRef.current = nextRenderedLastSequence;
+          return;
+        }
+
+        const lastRenderedSequence = renderedLastSequenceRef.current;
+        const appendedOutput = entries
+          .filter((entry) => lastRenderedSequence === null || entry.sequence > lastRenderedSequence)
+          .map((entry) => entry.data)
+          .join("");
+        await writeTerminalOutput(queuedBinding.terminal, appendedOutput);
+        if (!bindingRef.current || renderGeneration !== renderGenerationRef.current) {
+          return;
+        }
+
+        renderedLastSequenceRef.current = nextRenderedLastSequence;
+      });
   }, [scriptId, terminalBuffer]);
 
   return (
