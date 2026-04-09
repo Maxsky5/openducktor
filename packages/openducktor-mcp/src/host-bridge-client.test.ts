@@ -9,6 +9,27 @@ const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
     ...init,
   });
 
+const summaryPayload = {
+  task: {
+    id: "task-1",
+    title: "Bridge task",
+    description: "",
+    status: "open",
+    priority: 2,
+    issueType: "task",
+    aiReviewEnabled: true,
+    labels: [],
+    createdAt: "2026-04-09T00:00:00.000Z",
+    updatedAt: "2026-04-09T00:00:00.000Z",
+    qaVerdict: "not_reviewed",
+    documents: {
+      hasSpec: false,
+      hasPlan: false,
+      hasQaReport: false,
+    },
+  },
+};
+
 describe("OdtHostBridgeClient", () => {
   test("ready validates host health and required tool coverage", async () => {
     const fetchImpl: typeof fetch = async (input) => {
@@ -68,26 +89,7 @@ describe("OdtHostBridgeClient", () => {
         url,
         body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
       });
-      return jsonResponse({
-        task: {
-          id: "task-1",
-          title: "Bridge task",
-          description: "",
-          status: "open",
-          priority: 2,
-          issueType: "task",
-          aiReviewEnabled: true,
-          labels: [],
-          createdAt: "2026-04-09T00:00:00.000Z",
-          updatedAt: "2026-04-09T00:00:00.000Z",
-          qaVerdict: "not_reviewed",
-          documents: {
-            hasSpec: false,
-            hasPlan: false,
-            hasQaReport: false,
-          },
-        },
-      });
+      return jsonResponse(summaryPayload);
     };
 
     const client = new OdtHostBridgeClient(
@@ -103,6 +105,85 @@ describe("OdtHostBridgeClient", () => {
         body: {
           repoPath: "/repo",
           taskId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  test("create_task and search_tasks keep the flat public tool payload shape", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      requests.push({ url, body });
+
+      if (url.endsWith("/invoke/create_task")) {
+        return jsonResponse(summaryPayload);
+      }
+
+      if (url.endsWith("/invoke/search_tasks")) {
+        return jsonResponse({
+          results: [summaryPayload],
+          limit: 10,
+          totalCount: 1,
+          hasMore: false,
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const client = new OdtHostBridgeClient(
+      { baseUrl: "http://127.0.0.1:14327", repoPath: "/repo" },
+      { fetchImpl },
+    );
+
+    await expect(
+      client.call("create_task", {
+        title: "Bridge task",
+        issueType: "task",
+        priority: 2,
+        description: "Created through host bridge",
+        labels: ["mcp"],
+        aiReviewEnabled: true,
+      }),
+    ).resolves.toEqual(summaryPayload);
+
+    await expect(
+      client.call("search_tasks", {
+        status: "open",
+        title: "Bridge",
+        tags: ["mcp"],
+        limit: 10,
+      }),
+    ).resolves.toEqual({
+      results: [summaryPayload],
+      limit: 10,
+      totalCount: 1,
+      hasMore: false,
+    });
+
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:14327/invoke/create_task",
+        body: {
+          repoPath: "/repo",
+          title: "Bridge task",
+          issueType: "task",
+          priority: 2,
+          description: "Created through host bridge",
+          labels: ["mcp"],
+          aiReviewEnabled: true,
+        },
+      },
+      {
+        url: "http://127.0.0.1:14327/invoke/search_tasks",
+        body: {
+          repoPath: "/repo",
+          status: "open",
+          title: "Bridge",
+          tags: ["mcp"],
+          limit: 10,
         },
       },
     ]);

@@ -34,6 +34,7 @@ struct ReadTaskDocumentsArgs {
 #[serde(rename_all = "camelCase")]
 struct CreateTaskArgs {
     repo_path: String,
+    #[serde(flatten)]
     input: OdtCreateTaskInput,
 }
 
@@ -41,6 +42,7 @@ struct CreateTaskArgs {
 #[serde(rename_all = "camelCase")]
 struct SearchTasksArgs {
     repo_path: String,
+    #[serde(flatten)]
     input: OdtSearchTasksInput,
 }
 
@@ -366,5 +368,41 @@ mod tests {
         .expect("args should parse");
         assert_eq!(parsed.provider_id, "github");
         assert_eq!(parsed.number, 42);
+    }
+
+    #[test]
+    fn create_task_args_accept_flat_public_tool_shape() {
+        let parsed: CreateTaskArgs = serde_json::from_value(serde_json::json!({
+            "repoPath": "/repo",
+            "title": "Bridge task",
+            "issueType": "task",
+            "priority": 2,
+            "description": "Create through host bridge",
+            "labels": ["mcp"],
+            "aiReviewEnabled": true,
+        }))
+        .expect("args should parse");
+
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.input.title, "Bridge task");
+        assert_eq!(parsed.input.priority, 2);
+        assert_eq!(parsed.input.labels, Some(vec!["mcp".to_string()]));
+    }
+
+    #[test]
+    fn search_tasks_args_accept_flat_public_tool_shape() {
+        let parsed: SearchTasksArgs = serde_json::from_value(serde_json::json!({
+            "repoPath": "/repo",
+            "status": "open",
+            "title": "bridge",
+            "tags": ["mcp"],
+            "limit": 10,
+        }))
+        .expect("args should parse");
+
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.input.limit, 10);
+        assert_eq!(parsed.input.title.as_deref(), Some("bridge"));
+        assert_eq!(parsed.input.tags, Some(vec!["mcp".to_string()]));
     }
 }

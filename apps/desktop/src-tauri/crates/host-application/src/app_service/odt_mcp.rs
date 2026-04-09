@@ -702,6 +702,7 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_service::test_support::build_service_with_state;
     use host_domain::{
         IssueType, TaskCard, TaskDocumentPresence, TaskDocumentSummary, TaskQaDocumentPresence,
     };
@@ -751,5 +752,63 @@ mod tests {
         assert!(error.to_string().contains("ambiguous"));
         assert!(error.to_string().contains("alpha-wsp"));
         assert!(error.to_string().contains("beta-wsp"));
+    }
+
+    #[test]
+    fn odt_create_task_returns_summary_for_created_task() {
+        let (service, task_state, _) = build_service_with_state(Vec::new());
+
+        let result = service
+            .odt_create_task(
+                "/repo",
+                OdtCreateTaskInput {
+                    title: "Bridge task".to_string(),
+                    issue_type: IssueType::Task,
+                    priority: 1,
+                    description: Some("Created through host bridge".to_string()),
+                    labels: Some(vec!["mcp".to_string()]),
+                    ai_review_enabled: Some(true),
+                },
+            )
+            .expect("create task should succeed");
+
+        assert_eq!(result.task.task.title, "Bridge task");
+        assert_eq!(result.task.task.issue_type, IssueType::Task);
+        assert_eq!(result.task.qa_verdict, QaWorkflowVerdict::NotReviewed);
+
+        let state = task_state.lock().expect("task state lock poisoned");
+        assert_eq!(state.created_inputs.len(), 1);
+        assert_eq!(state.created_inputs[0].title, "Bridge task");
+    }
+
+    #[test]
+    fn odt_search_tasks_returns_filtered_public_results() {
+        let mut open = task("task-1", "Bridge work");
+        open.labels = vec!["mcp".to_string()];
+
+        let mut closed = task("task-2", "Closed work");
+        closed.status = TaskStatus::Closed;
+        closed.labels = vec!["mcp".to_string()];
+
+        let (service, _, _) = build_service_with_state(vec![open, closed]);
+
+        let result = service
+            .odt_search_tasks(
+                "/repo",
+                OdtSearchTasksInput {
+                    priority: None,
+                    issue_type: None,
+                    status: Some(TaskStatus::Open),
+                    title: Some("bridge".to_string()),
+                    tags: Some(vec!["mcp".to_string()]),
+                    limit: 10,
+                },
+            )
+            .expect("search should succeed");
+
+        assert_eq!(result.total_count, 1);
+        assert!(!result.has_more);
+        assert_eq!(result.results.len(), 1);
+        assert_eq!(result.results[0].task.task.id, "task-1");
     }
 }

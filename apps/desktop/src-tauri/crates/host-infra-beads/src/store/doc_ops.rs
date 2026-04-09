@@ -98,7 +98,7 @@ impl BeadsTaskStore {
             markdown: markdown.trim().to_string(),
             updated_at: timestamp.clone(),
             updated_by: "planner-agent".to_string(),
-            source_tool: "set_spec".to_string(),
+            source_tool: "odt_set_spec".to_string(),
             revision: next_revision,
         };
 
@@ -161,7 +161,7 @@ impl BeadsTaskStore {
             markdown: markdown.trim().to_string(),
             updated_at: timestamp.clone(),
             updated_by: "planner-agent".to_string(),
-            source_tool: "set_plan".to_string(),
+            source_tool: "odt_set_plan".to_string(),
             revision: next_revision,
         };
 
