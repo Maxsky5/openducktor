@@ -261,4 +261,86 @@ describe("AgentStudioDevServerTerminal", () => {
       );
     });
   });
+
+  test("surfaces renderer update failures", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    const reset = mock(() => {});
+    const dispose = mock(() => {});
+    const onRendererError = mock(() => {});
+    let shouldThrow = false;
+    const write = mock((data: string, callback?: () => void) => {
+      if (shouldThrow && data === "broken\r\n") {
+        throw new Error("write failed");
+      }
+
+      callback?.();
+    });
+    const createTerminalBinding = (container: HTMLElement) => {
+      open(container);
+      loadAddon({});
+      return {
+        terminal: { dispose, loadAddon, open, options: {}, reset, write },
+        fitAddon: { dispose, fit },
+      };
+    };
+
+    const view = render(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalled();
+    });
+
+    shouldThrow = true;
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "ready\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 1,
+              data: "broken\r\n",
+              timestamp: "2026-03-19T15:30:01.000Z",
+            },
+          ],
+          lastSequence: 1,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onRendererError).toHaveBeenCalledWith(
+        "Failed to render dev server terminal: write failed",
+      );
+    });
+  });
 });
