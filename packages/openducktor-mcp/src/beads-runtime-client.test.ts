@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { computeBeadsDatabaseName } from "./beads-runtime";
 import { BeadsRuntimeClient } from "./beads-runtime-client";
 
@@ -168,7 +169,12 @@ describe("BeadsRuntimeClient", () => {
 
     expect(calls.map((call) => call.args)).toEqual([
       ["where", "--json"],
-      ["backup", "restore", `file://${join(beadsDir, "backup")}`, "odt_fairnest_deadbeefcafe"],
+      [
+        "backup",
+        "restore",
+        pathToFileURL(join(beadsDir, "backup")).toString(),
+        "odt_fairnest_deadbeefcafe",
+      ],
       ["where", "--json"],
     ]);
     expect(calls[1]?.command).toBe("dolt");

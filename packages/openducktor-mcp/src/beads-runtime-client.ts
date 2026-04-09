@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   type BeadsAttachmentDirResolver,
   CUSTOM_STATUS_VALUES,
@@ -197,7 +198,7 @@ export class BeadsRuntimeClient {
     mkdirSync(sharedDoltRoot, { recursive: true });
     await this.runCommand(
       "dolt",
-      ["backup", "restore", `file://${backupPath}`, this.databaseName],
+      ["backup", "restore", pathToFileURL(backupPath).toString(), this.databaseName],
       sharedDoltRoot,
       {},
     );
