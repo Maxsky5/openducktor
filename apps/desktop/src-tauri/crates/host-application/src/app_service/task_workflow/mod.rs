@@ -16,6 +16,7 @@ mod session_service;
 mod task_activity_guard;
 mod task_context;
 mod task_deletion_service;
+mod task_reset_service;
 mod task_service;
 
 pub(crate) use cleanup_plans::normalize_path_for_comparison;

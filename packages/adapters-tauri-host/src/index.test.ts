@@ -74,7 +74,7 @@ describe("TauriHostClient", () => {
   test("does not export a redundant runtime constructor alias", async () => {
     const module = await import("./index");
 
-    expect(module).not.toHaveProperty("TauriHostClient");
+    expect(Object.prototype.hasOwnProperty.call(module, "TauriHostClient")).toBe(false);
   });
 
   test("exports a value and type-compatible host client", async () => {
@@ -145,6 +145,8 @@ describe("TauriHostClient", () => {
       "taskCreate",
       "taskUpdate",
       "taskDelete",
+      "taskResetImplementation",
+      "taskReset",
       "taskTransition",
       "taskDefer",
       "taskResumeDeferred",
@@ -519,6 +521,9 @@ describe("TauriHostClient", () => {
       kanban: {
         doneVisibleDays: 1,
       },
+      autopilot: {
+        rules: [],
+      },
       repos: {
         "/repo": {
           defaultRuntimeKind: "opencode",
@@ -527,6 +532,7 @@ describe("TauriHostClient", () => {
           git: {
             providers: {},
           },
+          devServers: [],
           trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
           worktreeFileCopies: [],
@@ -553,6 +559,9 @@ describe("TauriHostClient", () => {
             kanban: {
               doneVisibleDays: 1,
             },
+            autopilot: {
+              rules: [],
+            },
             repos: {
               "/repo": {
                 defaultRuntimeKind: "opencode",
@@ -561,6 +570,7 @@ describe("TauriHostClient", () => {
                 git: {
                   providers: {},
                 },
+                devServers: [],
                 trustedHooks: false,
                 hooks: { preStart: [], postComplete: [] },
                 worktreeFileCopies: [],
@@ -661,6 +671,28 @@ describe("TauriHostClient", () => {
     await expect(client.taskDelete("/repo", "epic-1", true)).rejects.toThrow(
       "Expected { ok: boolean } payload from host command task_delete",
     );
+  });
+
+  test("taskReset uses the dedicated IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_reset") {
+        return makeTaskCardPayload();
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const task = await client.taskReset("/repo", "task-1");
+
+    expect(task.id).toBe("task-1");
+    expect(calls).toEqual([
+      {
+        command: "task_reset",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+    ]);
   });
 
   test("git commands use expected IPC routes and payloads", async () => {
@@ -1312,7 +1344,7 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.buildContinuationTargetGet("/repo", "task-1")).resolves.toBeNull();
+    expect(await client.buildContinuationTargetGet("/repo", "task-1")).toBe(null);
   });
 
   test("runtime and build ack commands reject malformed host payloads", async () => {
@@ -1808,9 +1840,9 @@ describe("TauriHostClient", () => {
     });
 
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
-    await expect(
-      client.taskDirectMerge("/repo", "task-1", { mergeMethod: "merge_commit" }),
-    ).resolves.toEqual({
+    expect(
+      await client.taskDirectMerge("/repo", "task-1", { mergeMethod: "merge_commit" }),
+    ).toEqual({
       outcome: "conflicts",
       conflict: {
         operation: "direct_merge_rebase",
@@ -1895,7 +1927,7 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.workspacePrepareTrustedHooksChallenge("/repo")).resolves.toEqual({
+    expect(await client.workspacePrepareTrustedHooksChallenge("/repo")).toEqual({
       nonce: "nonce-1",
       repoPath: "/repo",
       fingerprint: "fp-1",

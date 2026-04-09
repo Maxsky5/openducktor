@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import {
   collectDeleteImpactTaskIds,
+  collectResetImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -64,6 +65,11 @@ describe("task-details-sheet-model", () => {
 
     expect(collectDeleteImpactTaskIds(parent, byId)).toEqual(["T-1", "T-2", "T-999", "T-3"]);
     expect(collectDeleteImpactTaskIds(null, byId)).toEqual([]);
+  });
+
+  test("collects reset impact ids only for the selected task", () => {
+    expect(collectResetImpactTaskIds(makeTask("T-1", { subtaskIds: ["T-2"] }))).toEqual(["T-1"]);
+    expect(collectResetImpactTaskIds(null)).toEqual([]);
   });
 
   test("routes workflow actions to matching callbacks", () => {

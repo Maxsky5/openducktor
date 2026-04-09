@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use host_domain::{
     AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitBranch, IssueType,
     PlanSubtaskInput, PullRequestRecord, QaWorkflowVerdict, RuntimeInstanceSummary, RuntimeRole,
-    TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
@@ -102,6 +102,7 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             upserted_sessions: Vec::new(),
             cleared_session_roles: Vec::new(),
             clear_agent_sessions_error: None,
+            cleared_workflow_documents: Vec::new(),
             cleared_qa_reports: Vec::new(),
             set_delivery_metadata_error: None,
             pull_requests: std::collections::HashMap::new(),
@@ -801,6 +802,561 @@ fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_i
     let reset = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
 
     assert_eq!(reset.status, TaskStatus::Open);
+    Ok(())
+}
+
+#[test]
+fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-clears-workflow-artifacts-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let mut task = make_task("task-1", "task", TaskStatus::HumanReview);
+    task.document_summary.spec.has = true;
+    task.document_summary.plan.has = true;
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Approved;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![
+        AgentSessionDocument {
+            session_id: "spec-session".to_string(),
+            external_session_id: Some("external-spec-session".to_string()),
+            role: "spec".to_string(),
+            scenario: "spec_authoring".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: repo_path.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "planner-session".to_string(),
+            external_session_id: Some("external-planner-session".to_string()),
+            role: "planner".to_string(),
+            scenario: "plan_authoring".to_string(),
+            started_at: "2026-03-17T11:00:01Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: repo_path.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: Some("external-build-session".to_string()),
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T11:00:02Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: repo_path.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "qa-session".to_string(),
+            external_session_id: Some("external-qa-session".to_string()),
+            role: "qa".to_string(),
+            scenario: "qa_review".to_string(),
+            started_at: "2026-03-17T11:00:03Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: repo_path.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+    ];
+    {
+        let mut state = task_state.lock().expect("task store lock poisoned");
+        state.pull_requests.insert(
+            "task-1".to_string(),
+            PullRequestRecord {
+                provider_id: "github".to_string(),
+                number: 42,
+                url: "https://example.com/pr/42".to_string(),
+                state: "open".to_string(),
+                created_at: "2026-03-17T11:00:00Z".to_string(),
+                updated_at: "2026-03-17T11:05:00Z".to_string(),
+                last_synced_at: None,
+                merged_at: None,
+                closed_at: None,
+            },
+        );
+        state.direct_merge_records.insert(
+            "task-1".to_string(),
+            host_domain::DirectMergeRecord {
+                method: host_domain::GitMergeMethod::Squash,
+                source_branch: "odt/task-1".to_string(),
+                target_branch: host_domain::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                merged_at: "2026-03-17T11:10:00Z".to_string(),
+            },
+        );
+    }
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-1".to_string(),
+            crate::app_service::RunProcess {
+                summary: serde_json::from_value(json!({
+                    "runId": "run-1",
+                    "runtimeKind": "opencode",
+                    "runtimeRoute": {
+                        "type": "local_http",
+                        "endpoint": "http://127.0.0.1:3001",
+                    },
+                    "repoPath": repo_path.to_string_lossy().to_string(),
+                    "taskId": "task-1",
+                    "branch": "odt/task-1",
+                    "worktreePath": repo_path.to_string_lossy().to_string(),
+                    "port": 3001,
+                    "state": "completed",
+                    "lastMessage": null,
+                    "startedAt": "2026-03-17T11:00:00Z",
+                }))?,
+                child: None,
+                _opencode_process_guard: None,
+                repo_path: repo_path.to_string_lossy().to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: repo_path.to_string_lossy().to_string(),
+                repo_config: host_infra_system::RepoConfig {
+                    branch_prefix: "odt".to_string(),
+                    ..Default::default()
+                },
+            },
+        );
+
+    let reset = service.task_reset(&repo_path.to_string_lossy(), "task-1")?;
+
+    assert_eq!(reset.status, TaskStatus::Open);
+    let state = task_state.lock().expect("task store lock poisoned");
+    assert_eq!(state.cleared_workflow_documents, vec!["task-1".to_string()]);
+    assert_eq!(
+        state.cleared_session_roles,
+        vec![(
+            "task-1".to_string(),
+            vec![
+                "spec".to_string(),
+                "planner".to_string(),
+                "build".to_string(),
+                "qa".to_string(),
+            ],
+        )]
+    );
+    assert!(!state.pull_requests.contains_key("task-1"));
+    assert!(!state.direct_merge_records.contains_key("task-1"));
+    assert!(state.agent_sessions.is_empty());
+    drop(state);
+    assert!(service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn task_reset_rejects_live_spec_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::SpecReady,
+        "spec",
+        "spec_authoring",
+        "Cannot reset task while active spec session(s) exist",
+    )
+}
+
+#[test]
+fn task_reset_rejects_live_planner_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::ReadyForDev,
+        "planner",
+        "plan_authoring",
+        "Cannot reset task while active planner session(s) exist",
+    )
+}
+
+#[test]
+fn task_reset_rejects_live_build_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::InProgress,
+        "build",
+        "build_implementation_start",
+        "Cannot reset task while active build session(s) exist",
+    )
+}
+
+#[test]
+fn task_reset_rejects_live_qa_session_status_with_repo_runtime_without_run() -> Result<()> {
+    assert_task_reset_rejects_live_session_status(
+        TaskStatus::AiReview,
+        "qa",
+        "qa_review",
+        "Cannot reset task while active qa session(s) exist",
+    )
+}
+
+fn assert_task_reset_rejects_live_session_status(
+    status: TaskStatus,
+    role: &str,
+    scenario: &str,
+    expected_message: &str,
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-live-spec-shared-runtime-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", status);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: format!("{role}-session"),
+        external_session_id: Some(format!("external-{role}-session")),
+        role: role.to_string(),
+        scenario: scenario.to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+    let status_payload = format!(r#"{{"external-{role}-session":{{"type":"busy"}}}}"#);
+    let status_payload = Box::leak(status_payload.into_boxed_str());
+    let (port, server_handle) = spawn_opencode_session_status_server(status_payload)?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+
+    let error = service
+        .task_reset(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("live session should block full reset");
+    assert!(error.to_string().contains(expected_message));
+    server_handle
+        .join()
+        .expect("status server thread should finish");
+    Ok(())
+}
+
+#[test]
+fn task_reset_only_mutates_the_selected_task() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-selected-task-only-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let parent = make_task("task-parent", "epic", TaskStatus::HumanReview);
+    let mut child = make_task("task-child", "task", TaskStatus::InProgress);
+    child.parent_id = Some("task-parent".to_string());
+    child.document_summary.spec.has = true;
+    child.document_summary.plan.has = true;
+    child.document_summary.qa_report.has = true;
+    child.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![
+            TaskCard {
+                subtask_ids: vec!["task-child".to_string()],
+                ..parent
+            },
+            child,
+        ],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+
+    let reset = service.task_reset(&repo_path.to_string_lossy(), "task-parent")?;
+
+    assert_eq!(reset.status, TaskStatus::Open);
+    let state = task_state.lock().expect("task store lock poisoned");
+    assert_eq!(
+        state.cleared_workflow_documents,
+        vec!["task-parent".to_string()]
+    );
+    assert_eq!(
+        state.cleared_session_roles,
+        vec![(
+            "task-parent".to_string(),
+            vec![
+                "spec".to_string(),
+                "planner".to_string(),
+                "build".to_string(),
+                "qa".to_string(),
+            ],
+        )]
+    );
+    let child = state
+        .tasks
+        .iter()
+        .find(|task| task.id == "task-child")
+        .expect("child task should remain present");
+    assert_eq!(child.status, TaskStatus::InProgress);
+    assert!(child.document_summary.spec.has);
+    assert!(child.document_summary.plan.has);
+    assert!(child.document_summary.qa_report.has);
+    assert_eq!(
+        child.document_summary.qa_report.verdict,
+        QaWorkflowVerdict::Rejected
+    );
+    Ok(())
+}
+
+#[test]
+fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-owned-planning-worktrees-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let spec_worktree = worktree_base.join("task-1-spec");
+    let planner_worktree = worktree_base.join("task-1-plan");
+    let unrelated_worktree = worktree_base.join("scratch");
+    fs::create_dir_all(&spec_worktree)?;
+    fs::create_dir_all(&planner_worktree)?;
+    fs::create_dir_all(&unrelated_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::ReadyForDev);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        workspace.path.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.current_branches_by_path.insert(
+            spec_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        state.current_branches_by_path.insert(
+            planner_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        state.current_branches_by_path.insert(
+            unrelated_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("user/scratch".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    }
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![
+        AgentSessionDocument {
+            session_id: "spec-session".to_string(),
+            external_session_id: None,
+            role: "spec".to_string(),
+            scenario: "spec_authoring".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: spec_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "planner-session".to_string(),
+            external_session_id: None,
+            role: "planner".to_string(),
+            scenario: "plan_authoring".to_string(),
+            started_at: "2026-03-17T12:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: planner_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: None,
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T13:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: unrelated_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+    ];
+
+    let _ = service.task_reset(workspace.path.as_str(), "task-1")?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &spec_worktree.to_string_lossy() && *force
+    )));
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &planner_worktree.to_string_lossy() && *force
+    )));
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, .. }
+            if worktree_path == &unrelated_worktree.to_string_lossy()
+    )));
+
+    Ok(())
+}
+
+#[test]
+fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whitespace() -> Result<()>
+{
+    let repo_path = unique_temp_path("task-delete-live-qa-trimmed-role-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::Open);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "qa-session".to_string(),
+        external_session_id: Some("external-qa-session".to_string()),
+        role: "qa ".to_string(),
+        scenario: "qa_review".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+    let (port, server_handle) =
+        spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+
+    let error = service
+        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
+        .expect_err("trimmed QA session should still block delete as QA work");
+    let error_text = error.to_string();
+    assert!(error_text.contains("Cannot delete tasks with active QA work in progress"));
+    assert!(error_text.contains("task-1 (qa session)"));
+    server_handle
+        .join()
+        .expect("status server thread should finish");
+    Ok(())
+}
+
+#[test]
+fn task_reset_reports_completed_cleanup_steps_when_later_cleanup_fails() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-partial-cleanup-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let mut task = make_task("task-1", "task", TaskStatus::ReadyForDev);
+    task.document_summary.spec.has = true;
+    task.document_summary.plan.has = true;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .set_delivery_metadata_error = Some("delivery cleanup failed".to_string());
+
+    let error = service
+        .task_reset(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("delivery cleanup failure should bubble with progress details");
+    let error_text = format!("{error:#}");
+
+    assert!(error_text.contains("Failed to clear delivery metadata for task-1"));
+    assert!(error_text.contains(
+        "Reset cleanup already completed: cleared workflow documents, cleared linked agent sessions."
+    ));
+    assert!(error_text.contains("Retry reset to finish cleanup safely."));
+    assert_eq!(
+        task_state.lock().expect("task store lock poisoned").tasks[0].status,
+        TaskStatus::ReadyForDev
+    );
     Ok(())
 }
 

@@ -151,6 +151,15 @@ export class TauriTaskClient {
     return taskCardSchema.parse(payload);
   }
 
+  async taskReset(repoPath: string, taskId: string): Promise<TaskCard> {
+    const payload = await this.invokeFn("task_reset", {
+      repoPath,
+      taskId,
+    });
+    this.invalidateTaskMetadata(repoPath, taskId);
+    return taskCardSchema.parse(payload);
+  }
+
   async taskTransition(
     repoPath: string,
     taskId: string,

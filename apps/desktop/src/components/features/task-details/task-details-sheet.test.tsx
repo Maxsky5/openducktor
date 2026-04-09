@@ -50,9 +50,20 @@ describe("TaskDetailsSheet", () => {
   test("passes activeRepo into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
 
+    const childTask = createTaskCardFixture({
+      id: "TASK-2",
+      title: "Task 2",
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+      },
+    });
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Task 1",
+      issueType: "epic",
+      subtaskIds: ["TASK-2"],
       documentSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
@@ -80,7 +91,7 @@ describe("TaskDetailsSheet", () => {
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
       activeRepo: "/repo-a",
       task,
-      allTasks: [task],
+      allTasks: [task, childTask],
       open: true,
       onOpenChange: () => {},
       onPlan: undefined,
@@ -94,6 +105,7 @@ describe("TaskDetailsSheet", () => {
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
+      onResetTask: undefined,
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
       taskDeleteImpactHook: taskDeleteImpactHookMock,
@@ -102,7 +114,8 @@ describe("TaskDetailsSheet", () => {
     try {
       await harness.mount();
       expect(taskDocumentsHookMock).toHaveBeenCalledWith("TASK-1", true, "/repo-a");
-      expect(taskDeleteImpactHookMock).toHaveBeenCalledWith(["TASK-1"], true);
+      expect(taskDeleteImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], true);
+      expect(taskDeleteImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], true);
     } finally {
       await harness.unmount();
     }

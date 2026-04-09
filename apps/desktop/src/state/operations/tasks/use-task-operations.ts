@@ -53,6 +53,7 @@ type UseTaskOperationsResult = {
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
+  resetTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;
@@ -490,6 +491,47 @@ export function useTaskOperations({
     [activeRepo, queryClient, refreshTaskData],
   );
 
+  const resetTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      const repoPath = requireActiveRepo(activeRepo);
+      try {
+        await host.taskReset(repoPath, taskId);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: agentSessionQueryKeys.list(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          queryClient.invalidateQueries({
+            queryKey: documentQueryKeys.qaReport(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          queryClient.invalidateQueries({
+            queryKey: documentQueryKeys.spec(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+          queryClient.invalidateQueries({
+            queryKey: documentQueryKeys.plan(repoPath, taskId),
+            exact: true,
+            refetchType: "none",
+          }),
+        ]);
+        await refreshTaskData(repoPath, taskId);
+        toast.success("Task reset", {
+          description: taskId,
+        });
+      } catch (error) {
+        toast.error("Failed to reset task", {
+          description: errorMessage(error),
+        });
+        throw error;
+      }
+    },
+    [activeRepo, queryClient, refreshTaskData],
+  );
+
   const transitionTask = useCallback(
     async (taskId: string, status: TaskStatus, reason?: string): Promise<void> => {
       await runTaskMutation({
@@ -605,6 +647,7 @@ export function useTaskOperations({
     updateTask,
     deleteTask,
     resetTaskImplementation,
+    resetTask,
     transitionTask,
     deferTask,
     resumeDeferredTask,

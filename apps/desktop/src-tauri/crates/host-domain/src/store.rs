@@ -67,6 +67,7 @@ pub trait TaskStore: Send + Sync {
         task_id: &str,
         roles: &[&str],
     ) -> Result<()>;
+    fn clear_workflow_documents(&self, repo_path: &Path, task_id: &str) -> Result<()>;
     fn clear_qa_reports(&self, repo_path: &Path, task_id: &str) -> Result<()>;
     /// Persist pull request and direct merge metadata together in one store update.
     fn set_delivery_metadata(

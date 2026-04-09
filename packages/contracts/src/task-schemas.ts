@@ -27,6 +27,7 @@ export const taskActionSchema = z.enum([
   "open_builder",
   "open_qa",
   "reset_implementation",
+  "reset_task",
   "defer_issue",
   "resume_deferred",
   "human_request_changes",

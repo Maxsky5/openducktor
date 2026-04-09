@@ -10,6 +10,7 @@ import { TaskDetailsSheetBody } from "@/components/features/task-details/task-de
 import { TaskDetailsSheetFooter } from "@/components/features/task-details/task-details-sheet-footer";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
+import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
 import { useTaskDetailsSheetViewModel } from "@/components/features/task-details/use-task-details-sheet-view-model";
 import {
   Sheet,
@@ -32,9 +33,14 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "human_approve",
   "human_request_changes",
   "reset_implementation",
+  "reset_task",
   "defer_issue",
   "resume_deferred",
 ];
+
+const DETAIL_ACTIONS_WITHOUT_TASK_RESET = DETAIL_ACTIONS.filter(
+  (action) => action !== "reset_task",
+);
 
 export function TaskDetailsSheet({
   activeRepo = null,
@@ -59,6 +65,7 @@ export function TaskDetailsSheet({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  onResetTask,
   onDetectPullRequest,
   onUnlinkPullRequest,
   detectingPullRequestTaskId = null,
@@ -88,6 +95,7 @@ export function TaskDetailsSheet({
     onHumanApprove,
     onHumanRequestChanges,
     onResetImplementation,
+    onResetTask,
     onDelete,
   });
 
@@ -112,6 +120,7 @@ export function TaskDetailsSheet({
   }
 
   const canDetectPullRequestForTask = canDetectTaskPullRequest(task, runs);
+  const detailActions = onResetTask ? DETAIL_ACTIONS : DETAIL_ACTIONS_WITHOUT_TASK_RESET;
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
@@ -166,7 +175,7 @@ export function TaskDetailsSheet({
           onOpenChange={onOpenChange}
           {...(workflowActionsEnabled
             ? {
-                includeActions: DETAIL_ACTIONS,
+                includeActions: detailActions,
                 hasActiveSession,
                 ...(activeSessionRole ? { activeSessionRole } : {}),
                 ...(historicalSessionRoles.length > 0 ? { historicalSessionRoles } : {}),
@@ -188,11 +197,27 @@ export function TaskDetailsSheet({
           subtasksCount={viewModel.subtasks.length}
           hasSubtasks={viewModel.subtasks.length > 0}
           isLoadingImpact={viewModel.isLoadingDeleteImpact}
-          hasManagedSessionCleanup={viewModel.hasManagedSessionCleanup}
-          managedWorktreeCount={viewModel.managedWorktreeCount}
-          impactError={viewModel.impactError}
+          hasManagedSessionCleanup={viewModel.hasManagedDeleteSessionCleanup}
+          managedWorktreeCount={viewModel.deleteManagedWorktreeCount}
+          impactError={viewModel.deleteImpactError}
           isDeletePending={viewModel.isDeletePending}
           deleteError={viewModel.deleteError}
+        />
+      ) : null}
+
+      {onResetTask && viewModel.taskId ? (
+        <TaskResetConfirmDialog
+          open={viewModel.isResetDialogOpen}
+          onOpenChange={viewModel.handleResetDialogOpenChange}
+          onCancel={viewModel.closeResetDialog}
+          onConfirm={viewModel.confirmReset}
+          taskId={viewModel.taskId}
+          isLoadingImpact={viewModel.isLoadingResetImpact}
+          hasManagedSessionCleanup={viewModel.hasManagedResetSessionCleanup}
+          managedWorktreeCount={viewModel.resetManagedWorktreeCount}
+          impactError={viewModel.resetImpactError}
+          isResetPending={viewModel.isResetPending}
+          resetError={viewModel.resetError}
         />
       ) : null}
     </Sheet>

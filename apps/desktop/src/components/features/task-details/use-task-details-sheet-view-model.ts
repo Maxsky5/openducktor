@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
   collectDeleteImpactTaskIds,
+  collectResetImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -17,6 +18,7 @@ import {
   type TaskDocumentState,
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
+import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
 
 type TaskDetailsSheetViewModel = {
   taskId: string | null;
@@ -40,13 +42,24 @@ type TaskDetailsSheetViewModel = {
   isDeletePending: boolean;
   deleteError: string | null;
   isLoadingDeleteImpact: boolean;
-  hasManagedSessionCleanup: boolean;
-  managedWorktreeCount: number;
-  impactError: string | null;
+  hasManagedDeleteSessionCleanup: boolean;
+  deleteManagedWorktreeCount: number;
+  deleteImpactError: string | null;
+  isLoadingResetImpact: boolean;
+  hasManagedResetSessionCleanup: boolean;
+  resetManagedWorktreeCount: number;
+  resetImpactError: string | null;
+  isResetDialogOpen: boolean;
+  isResetPending: boolean;
+  resetError: string | null;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
   confirmDelete: () => void;
+  openResetDialog: () => void;
+  closeResetDialog: () => void;
+  handleResetDialogOpenChange: (nextOpen: boolean) => void;
+  confirmReset: () => void;
 };
 
 type UseTaskDetailsSheetViewModelOptions = {
@@ -71,6 +84,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   onHumanApprove: TaskDetailsSheetProps["onHumanApprove"] | undefined;
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
   onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
+  onResetTask: TaskDetailsSheetProps["onResetTask"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
   taskDocumentsHook?: typeof useTaskDocuments;
   taskDeleteImpactHook?: typeof useTaskDeleteImpact;
@@ -94,6 +108,7 @@ export function useTaskDetailsSheetViewModel({
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
+  onResetTask,
   onDelete,
   taskDocumentsHook = useTaskDocuments,
   taskDeleteImpactHook = useTaskDeleteImpact,
@@ -110,8 +125,19 @@ export function useTaskDetailsSheetViewModel({
     () => collectDeleteImpactTaskIds(task, taskById),
     [task, taskById],
   );
-  const { hasManagedSessionCleanup, managedWorktreeCount, impactError, isLoadingImpact } =
-    taskDeleteImpactHook(deleteImpactTaskIds, open);
+  const resetImpactTaskIds = useMemo(() => collectResetImpactTaskIds(task), [task]);
+  const {
+    hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
+    managedWorktreeCount: deleteManagedWorktreeCount,
+    impactError: deleteImpactError,
+    isLoadingImpact: isLoadingDeleteImpact,
+  } = taskDeleteImpactHook(deleteImpactTaskIds, open);
+  const {
+    hasManagedSessionCleanup: hasManagedResetSessionCleanup,
+    managedWorktreeCount: resetManagedWorktreeCount,
+    impactError: resetImpactError,
+    isLoadingImpact: isLoadingResetImpact,
+  } = taskDeleteImpactHook(resetImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -132,9 +158,28 @@ export function useTaskDetailsSheetViewModel({
     onOpenChange,
     onDelete,
   });
+  const {
+    isResetDialogOpen,
+    isResetPending,
+    resetError,
+    openResetDialog,
+    closeResetDialog,
+    handleResetDialogOpenChange,
+    confirmReset,
+  } = useTaskResetDialog({
+    sheetOpen: open,
+    task,
+    onOpenChange,
+    onResetTask,
+  });
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
+      if (action === "reset_task") {
+        openResetDialog();
+        return;
+      }
+
       runTaskWorkflowAction(
         action,
         taskId,
@@ -168,6 +213,7 @@ export function useTaskDetailsSheetViewModel({
       onQaOpen,
       onQaStart,
       onResetImplementation,
+      openResetDialog,
       onResumeDeferred,
       taskId,
     ],
@@ -220,13 +266,24 @@ export function useTaskDetailsSheetViewModel({
     isDeleteDialogOpen,
     isDeletePending,
     deleteError,
-    isLoadingDeleteImpact: isLoadingImpact,
-    hasManagedSessionCleanup,
-    managedWorktreeCount,
-    impactError,
+    isLoadingDeleteImpact,
+    hasManagedDeleteSessionCleanup,
+    deleteManagedWorktreeCount,
+    deleteImpactError,
+    isLoadingResetImpact,
+    hasManagedResetSessionCleanup,
+    resetManagedWorktreeCount,
+    resetImpactError,
+    isResetDialogOpen,
+    isResetPending,
+    resetError,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,
     confirmDelete,
+    openResetDialog,
+    closeResetDialog,
+    handleResetDialogOpenChange,
+    confirmReset,
   };
 }

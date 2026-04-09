@@ -362,6 +362,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         task_update,
         task_delete,
         task_reset_implementation,
+        task_reset,
         task_transition,
         task_defer,
         task_resume_deferred,
@@ -449,7 +450,8 @@ fn startup_phase_exit_shutdown_handler(
 
     move |handle, event| {
         if let TauriRunEvent::ExitRequested { api, code, .. } = event {
-            let action = classify_exit_request(code.is_some(), shutdown_started.load(Ordering::SeqCst));
+            let action =
+                classify_exit_request(code.is_some(), shutdown_started.load(Ordering::SeqCst));
             if action == ExitRequestAction::AllowProgrammaticExit {
                 return;
             }
@@ -469,26 +471,27 @@ fn startup_phase_exit_shutdown_handler(
             let shutdown_service = app_service.clone();
             let exit_handle = handle.clone();
             std::thread::spawn(move || {
-                let exit_code = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
-                    move || shutdown_service.shutdown(),
-                )) {
-                    Ok(Ok(())) => shutdown_exit_code(true),
-                    Ok(Err(error)) => {
-                        tracing::error!(
-                            target: "openducktor.desktop-shutdown",
-                            error = %error,
-                            "Desktop shutdown failed"
-                        );
-                        shutdown_exit_code(false)
-                    }
-                    Err(_) => {
-                        tracing::error!(
-                            target: "openducktor.desktop-shutdown",
-                            "Desktop shutdown panicked"
-                        );
-                        shutdown_exit_code(false)
-                    }
-                };
+                let exit_code =
+                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                        shutdown_service.shutdown()
+                    })) {
+                        Ok(Ok(())) => shutdown_exit_code(true),
+                        Ok(Err(error)) => {
+                            tracing::error!(
+                                target: "openducktor.desktop-shutdown",
+                                error = %error,
+                                "Desktop shutdown failed"
+                            );
+                            shutdown_exit_code(false)
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                target: "openducktor.desktop-shutdown",
+                                "Desktop shutdown panicked"
+                            );
+                            shutdown_exit_code(false)
+                        }
+                    };
                 exit_handle.exit(exit_code);
             });
         }
@@ -513,7 +516,11 @@ fn classify_exit_request(code_present: bool, shutdown_already_started: bool) -> 
 }
 
 fn shutdown_exit_code(success: bool) -> i32 {
-    if success { 0 } else { 1 }
+    if success {
+        0
+    } else {
+        1
+    }
 }
 
 pub fn run() -> anyhow::Result<()> {

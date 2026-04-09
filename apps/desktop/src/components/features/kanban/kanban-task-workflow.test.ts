@@ -164,6 +164,21 @@ describe("resolveTaskCardActions", () => {
     expect(result.secondaryActions).toContain("reset_implementation");
   });
 
+  test("keeps reset task last so detail menus place it above delete", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: ["open_builder", "reset_implementation", "reset_task"],
+    });
+
+    const result = resolveTaskCardActions(task, {
+      include: ["open_builder", "reset_implementation", "reset_task"],
+    });
+
+    expect(result.primaryAction).toBe("open_builder");
+    expect(result.secondaryActions).toEqual(["reset_implementation", "reset_task"]);
+  });
+
   test("filters build_start from human review actions", () => {
     const task = createTaskCardFixture({
       status: "human_review",

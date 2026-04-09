@@ -1,7 +1,7 @@
 use super::{
-    allows_transition, can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
-    derive_agent_workflows, derive_available_actions, normalize_subtask_plan_inputs,
-    normalize_title_key,
+    allows_transition, can_replace_epic_subtask_status, can_reset_task_from_status, can_set_plan,
+    can_set_spec_from_status, derive_agent_workflows, derive_available_actions,
+    normalize_subtask_plan_inputs, normalize_title_key,
 };
 use crate::app_service::test_support::make_task;
 use host_domain::{PlanSubtaskInput, QaWorkflowVerdict, TaskAction, TaskStatus};
@@ -16,6 +16,7 @@ struct WorkflowContractFixture {
     set_spec_allowed_statuses: Vec<String>,
     set_plan_allowed_statuses: BTreeMap<String, Vec<String>>,
     reset_implementation_allowed_statuses: Vec<String>,
+    reset_task_allowed_statuses: Vec<String>,
     epic_subtask_replacement_allowed_statuses: Vec<String>,
 }
 
@@ -116,6 +117,58 @@ fn module_derive_available_actions_exposes_reset_for_implementation_stage_status
         assert!(
             !actions.contains(&TaskAction::ResetImplementation),
             "unexpected reset implementation for status {}",
+            task.status.as_cli_value()
+        );
+    }
+}
+
+#[test]
+fn module_reset_task_status_guard_matches_contract_fixture() {
+    let fixture = load_workflow_contract_fixture();
+
+    for status_name in fixture.statuses {
+        let status = parse_status(status_name.as_str());
+        let expected = fixture
+            .reset_task_allowed_statuses
+            .iter()
+            .any(|allowed| allowed == status_name.as_str());
+        assert_eq!(
+            can_reset_task_from_status(&status),
+            expected,
+            "reset task guard mismatch for status {}",
+            status_name
+        );
+    }
+}
+
+#[test]
+fn module_derive_available_actions_exposes_reset_task_for_allowed_statuses_only() {
+    for status in [
+        TaskStatus::Open,
+        TaskStatus::SpecReady,
+        TaskStatus::ReadyForDev,
+        TaskStatus::InProgress,
+        TaskStatus::Blocked,
+        TaskStatus::AiReview,
+        TaskStatus::HumanReview,
+    ] {
+        let task = make_task("task-1", "task", status);
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+        assert!(
+            actions.contains(&TaskAction::ResetTask),
+            "expected reset task for status {}",
+            task.status.as_cli_value()
+        );
+    }
+
+    for status in [TaskStatus::Deferred, TaskStatus::Closed] {
+        let task = make_task("task-2", "task", status);
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+        assert!(
+            !actions.contains(&TaskAction::ResetTask),
+            "unexpected reset task for status {}",
             task.status.as_cli_value()
         );
     }
