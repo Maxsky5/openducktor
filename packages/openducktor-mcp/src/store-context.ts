@@ -9,7 +9,6 @@ import {
 export type OdtStoreOptions = {
   repoPath: string;
   hostUrl: string;
-  metadataNamespace: string;
 };
 
 export type OdtStoreContext = {
@@ -19,7 +18,6 @@ export type OdtStoreContext = {
   doltHost?: string;
   doltPort?: string;
   databaseName?: string;
-  metadataNamespace?: string;
 };
 
 const rejectLegacyContract = (context: OdtStoreContext): void => {
@@ -42,6 +40,7 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
       normalizeOptionalInput(context.databaseName) ??
         normalizeOptionalInput(process.env.ODT_DATABASE_NAME),
     ],
+    ["ODT_METADATA_NAMESPACE", normalizeOptionalInput(process.env.ODT_METADATA_NAMESPACE)],
   ].filter(([, value]) => value !== undefined);
 
   if (legacyEntries.length === 0) {
@@ -51,7 +50,9 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
   throw new Error(
     `Direct Beads/Dolt MCP startup is no longer supported. Remove ${legacyEntries
       .map(([name]) => name)
-      .join(", ")} and use the host bridge discovery path or ODT_HOST_URL instead.`,
+      .join(
+        ", ",
+      )} and use the host bridge discovery path or ODT_HOST_URL instead. Metadata namespace is now owned by the Rust host.`,
   );
 };
 
@@ -164,11 +165,6 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   }
 
   const normalizedRepoPath = await resolveCanonicalPath(repoPath);
-  const metadataNamespace =
-    normalizeOptionalInput(context.metadataNamespace) ??
-    normalizeOptionalInput(process.env.ODT_METADATA_NAMESPACE) ??
-    "openducktor";
-
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
   const hostUrl = explicitHostUrl
@@ -178,7 +174,6 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   const resolved = {
     repoPath: normalizedRepoPath,
     hostUrl,
-    metadataNamespace,
   };
 
   return resolved;

@@ -23,15 +23,11 @@ impl AppService {
         &self,
         working_directory: &Path,
         repo_path_for_mcp: &Path,
-        metadata_namespace: &str,
         port: u16,
     ) -> Result<Child> {
         let host_url = self.ensure_mcp_bridge_url()?;
-        let config_content = mcp_config::build_opencode_config_content(
-            repo_path_for_mcp,
-            metadata_namespace,
-            host_url.as_str(),
-        )?;
+        let config_content =
+            mcp_config::build_opencode_config_content(repo_path_for_mcp, host_url.as_str())?;
         process_lifecycle::spawn_opencode_server_with_config(
             working_directory,
             config_content.as_str(),

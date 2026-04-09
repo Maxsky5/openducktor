@@ -30,7 +30,6 @@ describe("OdtTaskStore", () => {
       ready: async () => ({
         bridgeVersion: 1,
         repoPath: "/repo",
-        metadataNamespace: "openducktor",
         toolNames: [],
       }),
       call: async (toolName, input) => {
@@ -40,7 +39,7 @@ describe("OdtTaskStore", () => {
     } as OdtHostBridgeClientPort;
 
     const store = new OdtTaskStore(
-      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327", metadataNamespace: "openducktor" },
+      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327" },
       { client },
     );
 
@@ -53,14 +52,13 @@ describe("OdtTaskStore", () => {
       ready: async () => ({
         bridgeVersion: 1,
         repoPath: "/repo",
-        metadataNamespace: "openducktor",
         toolNames: [],
       }),
       call: async () => summaryPayload,
     } as OdtHostBridgeClientPort;
 
     const store = new OdtTaskStore(
-      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327", metadataNamespace: "openducktor" },
+      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327" },
       { client },
     );
 

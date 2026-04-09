@@ -3,7 +3,7 @@ use super::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{
     CreateTaskInput, IssueType, PlanSubtaskInput, PullRequestRecord, QaWorkflowVerdict,
-    SpecDocument, TaskCard, TaskMetadata, TaskStatus, TASK_METADATA_NAMESPACE,
+    SpecDocument, TaskCard, TaskMetadata, TaskStatus,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -181,7 +181,6 @@ pub struct OdtCreateTaskInput {
 pub struct OdtHostBridgeReady {
     pub bridge_version: u8,
     pub repo_path: String,
-    pub metadata_namespace: String,
     pub tool_names: Vec<String>,
 }
 
@@ -465,7 +464,6 @@ impl AppService {
         Ok(OdtHostBridgeReady {
             bridge_version: 1,
             repo_path,
-            metadata_namespace: TASK_METADATA_NAMESPACE.to_string(),
             tool_names: ODT_MCP_TOOL_NAMES
                 .iter()
                 .map(|name| name.to_string())

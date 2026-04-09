@@ -48,7 +48,6 @@ Equivalent environment variables:
 
 - `ODT_REPO_PATH`
 - `ODT_HOST_URL` optional override
-- `ODT_METADATA_NAMESPACE`
 
 Automatic discovery:
 

@@ -136,7 +136,6 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
 
 pub(crate) fn build_opencode_config_content(
     repo_path_for_mcp: &Path,
-    metadata_namespace: &str,
     host_url: &str,
 ) -> Result<String> {
     let mcp_command = resolve_mcp_command()?;
@@ -150,7 +149,6 @@ pub(crate) fn build_opencode_config_content(
                 "environment": {
                     "ODT_REPO_PATH": repo_path_for_mcp.to_string_lossy().to_string(),
                     "ODT_HOST_URL": host_url,
-                    "ODT_METADATA_NAMESPACE": metadata_namespace,
                 }
             }
         }

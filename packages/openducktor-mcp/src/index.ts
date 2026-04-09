@@ -107,8 +107,9 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
     }
 
     if (current === "--metadata-namespace") {
-      next.metadataNamespace = value;
-      index += 1;
+      throw new Error(
+        "--metadata-namespace is no longer supported. Metadata namespace is owned by the Rust host.",
+      );
     }
   }
 

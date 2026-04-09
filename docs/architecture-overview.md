@@ -61,7 +61,7 @@ Key boundary:
  - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
  - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
  - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
-6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_REPO_PATH`, `ODT_HOST_URL`, and `ODT_METADATA_NAMESPACE`.
+6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_REPO_PATH` and `ODT_HOST_URL`.
 7. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
 8. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
 9. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.

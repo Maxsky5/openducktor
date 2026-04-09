@@ -51,7 +51,6 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: 1,
           repoPath: "/repo",
-          metadataNamespace: "openducktor",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -64,7 +63,6 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       repoPath: "/repo",
       hostUrl: "http://127.0.0.1:14327",
-      metadataNamespace: "openducktor",
     });
   });
 
@@ -110,7 +108,6 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: 1,
           repoPath: "/repo",
-          metadataNamespace: "openducktor",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -120,7 +117,6 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       repoPath: "/repo",
       hostUrl: "http://127.0.0.1:14327",
-      metadataNamespace: "openducktor",
     });
   });
 
@@ -144,7 +140,6 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: 1,
           repoPath: "/repo",
-          metadataNamespace: "openducktor",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -154,8 +149,17 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       repoPath: "/repo",
       hostUrl: "http://127.0.0.1:14328",
-      metadataNamespace: "openducktor",
     });
+  });
+
+  test("rejects legacy metadata namespace configuration", async () => {
+    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+    process.env.ODT_METADATA_NAMESPACE = "legacy-namespace";
+
+    await expect(resolveStoreContext({})).rejects.toThrow(
+      "Metadata namespace is now owned by the Rust host",
+    );
   });
 
   test("fails clearly when discovery cannot find any running host", async () => {

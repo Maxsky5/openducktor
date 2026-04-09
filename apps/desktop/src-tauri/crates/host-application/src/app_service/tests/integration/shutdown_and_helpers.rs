@@ -995,12 +995,9 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
         r#"["/usr/local/bin/openducktor-mcp","--stdio"]"#,
     );
 
-    let config = build_opencode_config_content(
-        Path::new("/tmp/openducktor-repo"),
-        "odt-ns",
-        "http://127.0.0.1:14327",
-    )
-    .expect("config should serialize");
+    let config =
+        build_opencode_config_content(Path::new("/tmp/openducktor-repo"), "http://127.0.0.1:14327")
+            .expect("config should serialize");
 
     match previous {
         Some(value) => std::env::set_var("OPENDUCKTOR_MCP_COMMAND_JSON", value),
@@ -1020,6 +1017,5 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
 
     let env = &parsed["mcp"]["openducktor"]["environment"];
     assert_eq!(env["ODT_REPO_PATH"].as_str(), Some("/tmp/openducktor-repo"));
-    assert_eq!(env["ODT_METADATA_NAMESPACE"].as_str(), Some("odt-ns"));
     assert_eq!(env["ODT_HOST_URL"].as_str(), Some("http://127.0.0.1:14327"));
 }

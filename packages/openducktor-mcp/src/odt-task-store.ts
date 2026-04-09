@@ -11,12 +11,10 @@ type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Nam
 
 export class OdtTaskStore {
   readonly repoPath: string;
-  readonly metadataNamespace: string;
   private readonly client: OdtHostBridgeClientPort;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
-    this.metadataNamespace = options.metadataNamespace;
     this.client =
       deps.client ??
       new OdtHostBridgeClient({ baseUrl: options.hostUrl, repoPath: options.repoPath });
