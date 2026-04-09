@@ -278,18 +278,18 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         onValueChange={model.onSelectScript}
         className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
-        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[var(--dev-server-terminal-surface)] text-[var(--dev-server-terminal-foreground)]">
-          <div className="border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-chrome)] px-0">
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-(--dev-server-terminal-surface) text-(--dev-server-terminal-foreground)">
+          <div className="border-b border-(--dev-server-terminal-border) px-0">
             <TabsList className="h-auto w-full justify-start gap-0 overflow-x-auto rounded-none border-0 bg-transparent p-0">
               {model.scripts.map((script) => {
                 return (
                   <TabsTrigger
                     key={script.scriptId}
                     value={script.scriptId}
-                    className="h-9 w-auto max-w-[320px] flex-none justify-start rounded-none border-r border-t-2 border-r-[var(--dev-server-terminal-border)] border-t-transparent bg-[var(--dev-server-terminal-chrome)] px-3 py-1.5 font-mono text-[11px] text-[var(--dev-server-terminal-muted)] data-[state=active]:border-t-primary data-[state=active]:bg-[var(--dev-server-terminal-tab-active)] data-[state=active]:text-[var(--dev-server-terminal-foreground)]"
+                    className="h-8 w-auto max-w-[320px] flex-none justify-start rounded-none border-b-0 border-l-0 border-r border-t-4 bg-(--dev-server-terminal-tab-inactive) border-r-(--dev-server-terminal-border) border-t-transparent px-3 py-1 font-mono text-[11px] text-(--dev-server-terminal-muted) data-[state=active]:border-t-primary data-[state=active]:bg-(--dev-server-terminal-tab-active) data-[state=active]:border-r-(--dev-server-terminal-border) data-[state=active]:text-(--dev-server-terminal-foreground)"
                     data-testid={`agent-studio-dev-server-tab-${script.scriptId}`}
                   >
-                    <span className="mr-2 font-mono text-[11px] text-[var(--dev-server-terminal-subtle)]">
+                    <span className="mr-2 font-mono text-[11px] text-(--dev-server-terminal-subtle)">
                       &gt;_
                     </span>
                     <span className="truncate">{script.name}</span>
