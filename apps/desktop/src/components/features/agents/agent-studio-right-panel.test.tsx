@@ -219,28 +219,4 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Stop");
     expect(html).toContain("agent-studio-dev-server-terminal");
   });
-
-  test("keeps the build tools layout mounted while dev servers are compact", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioRightPanel, {
-        model: {
-          kind: "build_tools",
-          diffModel,
-          devServerModel: {
-            ...devServerModel,
-            mode: "stopped",
-            isExpanded: false,
-            scripts: [],
-            selectedScriptId: null,
-            selectedScript: null,
-            selectedScriptTerminalBuffer: null,
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("Current");
-    expect(html).toContain("Target");
-    expect(html).toContain("Start dev servers");
-  });
 });

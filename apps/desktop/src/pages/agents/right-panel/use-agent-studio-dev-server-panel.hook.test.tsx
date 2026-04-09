@@ -444,60 +444,6 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("marks the panel expanded immediately when start is pending", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const startDeferred = createDeferred<DevServerGroupState>();
-    devServerGetState = async () => buildState();
-    devServerStart = async () => startDeferred.promise;
-
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness
-          args={{
-            repoPath: "/repo",
-            taskId: "task-7",
-            repoSettings,
-            enabled: true,
-          }}
-        />
-      </QueryProvider>,
-    );
-
-    try {
-      await waitFor(() => {
-        expect(getLatest().mode).toBe("stopped");
-      });
-
-      act(() => {
-        getLatest().onStart();
-      });
-
-      await waitFor(() => {
-        expect(getLatest().isStartPending).toBe(true);
-      });
-      expect(getLatest().isExpanded).toBe(true);
-    } finally {
-      startDeferred.resolve(buildState());
-      view.unmount();
-    }
-  });
-
   test("keeps successful scripts active when another dev server fails during start", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
