@@ -23,6 +23,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[path = "tests/lifecycle.rs"]
+mod lifecycle;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CallKind {
     WithEnv,
@@ -448,6 +451,7 @@ fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let error = store
+        .lifecycle
         .verify_repo_initialized(repo.path(), &beads_dir)
         .expect_err("invalid where payload should fail");
     let message = error.to_string();
@@ -471,7 +475,9 @@ fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
     )))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
-    let (is_ready, reason) = store.verify_repo_initialized(repo.path(), &beads_dir)?;
+    let (is_ready, reason) = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)?;
     assert!(!is_ready);
     assert_eq!(reason, "database \"beads\" not found");
     Ok(())
@@ -738,22 +744,25 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     let repo = RepoFixture::new("init-ready");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
-    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
-        true,
-        json!({
-            "path": beads_dir,
-            "prefix": "openducktor"
-        })
-        .to_string(),
-        String::new(),
-    )))]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+        MockStep::WithEnv(Ok("configured statuses".to_string())),
+    ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 1);
+    assert_eq!(calls.len(), 2);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[0].args,
@@ -764,6 +773,13 @@ fn ensure_repo_initialized_skips_init_when_store_is_ready() -> Result<()> {
     );
     assert_beads_env(&calls[0]);
     assert_attachment_root_cwd(&calls[0], repo.path());
+    assert_eq!(calls[1].kind, CallKind::WithEnv);
+    assert_eq!(
+        calls[1].args,
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+    );
+    assert_beads_env(&calls[1]);
+    assert_attachment_root_cwd(&calls[1], repo.path());
     Ok(())
 }
 
@@ -782,6 +798,7 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
             .to_string(),
             String::new(),
         ))),
+        MockStep::WithEnv(Ok("configured statuses".to_string())),
         MockStep::AllowFailureWithEnv(Ok((
             true,
             json!({
@@ -802,7 +819,7 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
     assert_eq!(runner.remaining_steps(), 0);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 4);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_init_args(&calls[0], repo.path(), &beads_dir);
     assert_beads_env(&calls[0]);
@@ -817,16 +834,23 @@ fn ensure_repo_initialized_runs_init_then_uses_cache_when_store_exists() -> Resu
     );
     assert_beads_env(&calls[1]);
     assert_attachment_root_cwd(&calls[1], repo.path());
-    assert_eq!(calls[2].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(calls[2].kind, CallKind::WithEnv);
     assert_eq!(
         calls[2].args,
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+    );
+    assert_beads_env(&calls[2]);
+    assert_attachment_root_cwd(&calls[2], repo.path());
+    assert_eq!(calls[3].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(
+        calls[3].args,
         vec!["where", "--json"]
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
     );
-    assert_beads_env(&calls[2]);
-    assert_attachment_root_cwd(&calls[2], repo.path());
+    assert_beads_env(&calls[3]);
+    assert_attachment_root_cwd(&calls[3], repo.path());
     Ok(())
 }
 
@@ -855,13 +879,14 @@ fn ensure_repo_initialized_repairs_unready_store_footprint() -> Result<()> {
             .to_string(),
             String::new(),
         ))),
+        MockStep::WithEnv(Ok("configured statuses".to_string())),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 4);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(
         calls[0].args,
@@ -889,9 +914,16 @@ fn ensure_repo_initialized_repairs_unready_store_footprint() -> Result<()> {
     assert_beads_env(&calls[0]);
     assert_beads_env(&calls[1]);
     assert_beads_env(&calls[2]);
+    assert_eq!(calls[3].kind, CallKind::WithEnv);
+    assert_eq!(
+        calls[3].args,
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+    );
+    assert_beads_env(&calls[3]);
     assert_attachment_root_cwd(&calls[0], repo.path());
     assert_attachment_root_cwd(&calls[1], repo.path());
     assert_attachment_root_cwd(&calls[2], repo.path());
+    assert_attachment_root_cwd(&calls[3], repo.path());
     Ok(())
 }
 
@@ -922,23 +954,31 @@ fn ensure_repo_initialized_bootstraps_when_database_is_missing() -> Result<()> {
             .to_string(),
             String::new(),
         ))),
+        MockStep::WithEnv(Ok("configured statuses".to_string())),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 4);
     assert_eq!(calls[0].kind, CallKind::AllowFailureWithEnv);
     assert_eq!(calls[1].kind, CallKind::WithEnv);
     assert_eq!(calls[2].kind, CallKind::AllowFailureWithEnv);
+    assert_eq!(calls[3].kind, CallKind::WithEnv);
     assert_eq!(calls[0].args, vec!["where", "--json"]);
     assert_dolt_backup_restore_args(&calls[1], repo.path(), &beads_dir);
     assert_eq!(calls[2].args, vec!["where", "--json"]);
+    assert_eq!(
+        calls[3].args,
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+    );
     assert_beads_env(&calls[0]);
     assert_beads_env(&calls[2]);
+    assert_beads_env(&calls[3]);
     assert_attachment_root_cwd(&calls[0], repo.path());
     assert_attachment_root_cwd(&calls[2], repo.path());
+    assert_attachment_root_cwd(&calls[3], repo.path());
     Ok(())
 }
 
@@ -2253,7 +2293,6 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
         })),
     );
     let runner = MockCommandRunner::with_steps(vec![
-        MockStep::WithEnv(Ok("ok".to_string())),
         MockStep::WithEnv(Ok(json!([current]).to_string())),
         MockStep::WithEnv(Ok(updated.to_string())),
         MockStep::WithEnv(Ok(json!([updated]).to_string())),
@@ -2270,15 +2309,8 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
     assert_eq!(task.status, TaskStatus::HumanReview);
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 4);
-    assert_eq!(
-        calls[0].args,
-        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-    );
-    let update_call = &calls[2];
+    assert_eq!(calls.len(), 3);
+    let update_call = &calls[1];
     assert!(update_call.args.iter().any(|entry| entry == "--status"));
     assert!(update_call.args.iter().any(|entry| entry == "human_review"));
 

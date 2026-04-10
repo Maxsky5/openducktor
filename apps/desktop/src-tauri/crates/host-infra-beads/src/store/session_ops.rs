@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 
 fn parse_pull_request_record(value: &Value) -> Option<PullRequestRecord> {
     serde_json::from_value(value.clone()).ok()

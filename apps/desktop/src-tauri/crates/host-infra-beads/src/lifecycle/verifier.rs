@@ -1,13 +1,11 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::{compute_beads_database_name, ensure_shared_dolt_server_running};
+use host_infra_system::compute_beads_database_name;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
-use crate::constants::CUSTOM_STATUS_VALUES;
-use crate::store::BeadsTaskStore;
+use super::BeadsLifecycle;
 
 #[derive(Debug, Deserialize)]
 struct BeadsAttachmentMetadata {
@@ -25,40 +23,13 @@ struct BeadsWherePayload {
     error: Option<String>,
 }
 
-impl BeadsTaskStore {
-    pub(crate) fn repo_key(repo_path: &Path) -> String {
-        fs::canonicalize(repo_path)
-            .unwrap_or_else(|_| repo_path.to_path_buf())
-            .to_string_lossy()
-            .to_string()
-    }
-
-    pub(crate) fn repo_lock(&self, repo_key: &str) -> Result<Arc<Mutex<()>>> {
-        let mut lock_map = self
-            .init_locks
-            .lock()
-            .map_err(|_| anyhow!("Beads init lock poisoned"))?;
-        Ok(lock_map
-            .entry(repo_key.to_string())
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone())
-    }
-
-    pub(crate) fn is_repo_cached_initialized(&self, repo_key: &str) -> Result<bool> {
-        let cache = self
-            .initialized_repos
-            .lock()
-            .map_err(|_| anyhow!("Beads init cache lock poisoned"))?;
-        Ok(cache.contains(repo_key))
-    }
-
-    pub(crate) fn mark_repo_initialized(&self, repo_key: &str) -> Result<()> {
-        let mut cache = self
-            .initialized_repos
-            .lock()
-            .map_err(|_| anyhow!("Beads init cache lock poisoned"))?;
-        cache.insert(repo_key.to_string());
-        Ok(())
+impl BeadsLifecycle {
+    pub(crate) fn reason_requires_shared_database_seed(reason: &str) -> bool {
+        let normalized = reason.to_ascii_lowercase();
+        normalized.contains("not found on dolt server")
+            || normalized.contains("server not reachable")
+            || normalized.contains("dolt server unreachable")
+            || normalized.contains("error 1049")
     }
 
     pub(crate) fn verify_repo_initialized(
@@ -75,7 +46,7 @@ impl BeadsTaskStore {
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect::<Vec<_>>();
         let working_dir = self.ensure_beads_working_dir(repo_path)?;
-        let (ok, stdout, stderr) = self.command_runner.run_allow_failure_with_env(
+        let (ok, stdout, stderr) = self.command_runner().run_allow_failure_with_env(
             "bd",
             &["where", "--json"],
             Some(&working_dir),
@@ -85,9 +56,6 @@ impl BeadsTaskStore {
         let json_payload = Self::extract_json_payload(&stdout, &stderr);
 
         if !json_payload.is_empty() {
-            // Treat malformed JSON as a hard failure: the CLI contract for
-            // `bd where --json` is broken in that case, so attempting repair
-            // would mask an unexpected protocol error.
             let payload: Value = serde_json::from_str(json_payload)
                 .context("Failed to parse `bd where --json` output")?;
             let where_payload: BeadsWherePayload = serde_json::from_value(payload.clone())
@@ -160,7 +128,7 @@ impl BeadsTaskStore {
     ) -> Result<()> {
         let metadata_path = beads_dir.join("metadata.json");
         if !metadata_path.is_file() {
-            if !self.command_runner.uses_real_processes() {
+            if !self.command_runner().uses_real_processes() {
                 return Ok(());
             }
             return Err(anyhow!(
@@ -245,44 +213,5 @@ impl BeadsTaskStore {
         let expected =
             fs::canonicalize(expected_path).unwrap_or_else(|_| expected_path.to_path_buf());
         Ok(actual == expected)
-    }
-
-    pub(crate) fn repair_repo_store(&self, repo_path: &Path) -> Result<()> {
-        self.run_bd(repo_path, &["doctor", "--fix", "--yes"])
-            .with_context(|| {
-                format!(
-                    "Failed to repair Beads store attachment for {}",
-                    repo_path.display()
-                )
-            })?;
-        Ok(())
-    }
-
-    pub(crate) fn ensure_custom_statuses(&self, repo_path: &Path) -> Result<()> {
-        self.run_bd(
-            repo_path,
-            &["config", "set", "status.custom", CUSTOM_STATUS_VALUES],
-        )
-        .with_context(|| {
-            format!(
-                "Failed to configure custom statuses in {}",
-                repo_path.display()
-            )
-        })?;
-        Ok(())
-    }
-
-    pub(crate) fn ensure_dolt_server_running(&self, repo_path: &Path) -> Result<()> {
-        if !self.command_runner.uses_real_processes() {
-            return Ok(());
-        }
-
-        ensure_shared_dolt_server_running(std::process::id()).with_context(|| {
-            format!(
-                "Failed to ensure shared Dolt server is running for {}",
-                repo_path.display()
-            )
-        })?;
-        Ok(())
     }
 }
