@@ -439,6 +439,29 @@ impl<'a> PullRequestProviderService<'a> {
             .map(Some)
     }
 
+    pub(super) fn fetch_pull_request_by_number(
+        &self,
+        repo_path: &str,
+        provider_id: &str,
+        number: u32,
+    ) -> Result<ResolvedPullRequest> {
+        let policy = self.sync_policy(repo_path)?;
+        if provider_id != policy.provider_id {
+            return Err(anyhow!(
+                "Unsupported pull request provider for this repository: {}",
+                provider_id
+            ));
+        }
+        let Some(context) = policy.context else {
+            return Err(anyhow!(
+                "Pull request provider {} is not configured and available for this repository.",
+                provider_id
+            ));
+        };
+
+        GithubPullRequestProviderPort.fetch_pull_request(Path::new(repo_path), &context, number)
+    }
+
     pub(super) fn store_linked_pull_request_metadata(
         &self,
         repo_path: &str,

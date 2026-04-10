@@ -255,8 +255,8 @@ describe("workflow-tool-selection", () => {
         toolIds: [
           "openducktor_odt_read_task",
           "openducktor_odt_read_task_documents",
-          "openducktor_create_task",
-          "functions.openducktor_search_tasks",
+          "openducktor_odt_create_task",
+          "functions.openducktor_odt_search_tasks",
         ],
       }),
       role: "spec",
@@ -266,22 +266,27 @@ describe("workflow-tool-selection", () => {
 
     expect(selection.openducktor_odt_read_task).toBe(true);
     expect(selection.openducktor_odt_read_task_documents).toBe(true);
-    expect(selection.openducktor_create_task).toBe(false);
-    expect(selection["functions.openducktor_search_tasks"]).toBe(false);
+    expect(selection.openducktor_odt_create_task).toBe(false);
+    expect(selection["functions.openducktor_odt_search_tasks"]).toBe(false);
   });
 
   test("denies canonical public tool ids when discovery exposes them without a server prefix", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
-        toolIds: ["create_task", "search_tasks", "odt_read_task", "odt_read_task_documents"],
+        toolIds: [
+          "odt_create_task",
+          "odt_search_tasks",
+          "odt_read_task",
+          "odt_read_task_documents",
+        ],
       }),
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     });
 
-    expect(selection.create_task).toBe(false);
-    expect(selection.search_tasks).toBe(false);
+    expect(selection.odt_create_task).toBe(false);
+    expect(selection.odt_search_tasks).toBe(false);
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_documents).toBe(true);
   });

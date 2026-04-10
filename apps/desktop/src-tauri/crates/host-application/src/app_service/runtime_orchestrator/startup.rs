@@ -1,11 +1,11 @@
 use super::super::{
-    spawn_opencode_server, wait_for_local_server_with_process, AppService,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    wait_for_local_server_with_process, AppService, OpencodeStartupReadinessPolicy,
+    OpencodeStartupWaitReport, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    STARTUP_CONFIG_INVALID_REASON,
 };
 use super::{RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Context, Result};
-use host_domain::{RuntimeRole, TASK_METADATA_NAMESPACE};
+use host_domain::RuntimeRole;
 use host_infra_system::pick_free_port;
 use std::path::Path;
 use uuid::Uuid;
@@ -55,10 +55,9 @@ impl AppService {
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let startup_policy = input.startup_policy;
-        let mut child = spawn_opencode_server(
+        let mut child = self.spawn_opencode_server(
             Path::new(input.working_directory.as_str()),
             Path::new(input.repo_path),
-            TASK_METADATA_NAMESPACE,
             port,
         )?;
         let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {

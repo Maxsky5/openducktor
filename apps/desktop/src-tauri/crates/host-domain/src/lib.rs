@@ -8,7 +8,8 @@ mod task;
 pub use document::{
     AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
     QaReportDocument, QaVerdict, QaWorkflowVerdict, SpecDocument, TaskDocumentPresence,
-    TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
+    TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, ODT_QA_APPROVED_SOURCE_TOOL,
+    ODT_QA_REJECTED_SOURCE_TOOL, ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
 pub use git::{
     DirectMergeRecord, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,

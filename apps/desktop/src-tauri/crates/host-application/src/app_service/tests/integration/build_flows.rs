@@ -27,10 +27,10 @@ use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, create_failing_opencode,
     create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
     install_fake_dolt, lock_env, make_emitter, make_session, make_task, prepend_path,
-    process_is_alive, set_env_var, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, write_private_file, EnvVarGuard, FakeTaskStore, GitCall,
-    TaskStoreState,
+    process_is_alive, set_env_var, set_fake_opencode_and_bridge_binaries, spawn_sleep_process,
+    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
+    wait_for_process_exit, write_executable_script, write_private_file, EnvVarGuard, FakeTaskStore,
+    GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -96,10 +96,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -214,10 +211,7 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let remote = root.join("remote.git");
     let remote_path = remote.to_string_lossy().to_string();
@@ -303,10 +297,7 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -461,10 +452,7 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let aborts_file = root.join("aborts.log");
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
     let _aborts_guard = set_env_var(
         "OPENDUCKTOR_TEST_ABORTS_FILE",
         aborts_file.to_string_lossy().as_ref(),
@@ -540,10 +528,7 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let aborts_file = root.join("aborts.log");
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
     let _aborts_guard = set_env_var(
         "OPENDUCKTOR_TEST_ABORTS_FILE",
         aborts_file.to_string_lossy().as_ref(),
@@ -629,10 +614,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -785,10 +767,7 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -870,10 +849,7 @@ fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
     let home = root.join("home");
     fs::create_dir_all(&home)?;
     let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -1119,10 +1095,7 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -1309,11 +1282,17 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let repo = root.join("repo");
     init_git_repo(&repo)?;
     let failing_opencode = root.join("opencode");
+    let fake_bridge = root.join("browser-backend");
     create_failing_opencode(&failing_opencode)?;
+    create_fake_opencode(&fake_bridge)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let _opencode_guard = set_env_var(
         "OPENDUCKTOR_OPENCODE_BINARY",
         failing_opencode.to_string_lossy().as_ref(),
+    );
+    let _bridge_guard = set_env_var(
+        "OPENDUCKTOR_MCP_BRIDGE_BINARY",
+        fake_bridge.to_string_lossy().as_ref(),
     );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
@@ -1440,10 +1419,7 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let pid_file = root.join("spawned-build.pid");
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
     let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
     let _pid_guard = set_env_var(
         "OPENDUCKTOR_TEST_PID_FILE",

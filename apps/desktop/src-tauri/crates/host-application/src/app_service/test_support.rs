@@ -236,6 +236,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: String::new(),
             updated_at: None,
+            revision: None,
         })
     }
 
@@ -247,6 +248,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: markdown.to_string(),
             updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            revision: Some(1),
         })
     }
 
@@ -256,6 +258,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: String::new(),
             updated_at: None,
+            revision: None,
         })
     }
 
@@ -267,6 +270,7 @@ impl TaskStore for FakeTaskStore {
         Ok(SpecDocument {
             markdown: markdown.to_string(),
             updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            revision: Some(1),
         })
     }
 
@@ -497,10 +501,12 @@ impl TaskStore for FakeTaskStore {
             spec: SpecDocument {
                 markdown: String::new(),
                 updated_at: None,
+                revision: None,
             },
             plan: SpecDocument {
                 markdown: String::new(),
                 updated_at: None,
+                revision: None,
             },
             qa_report,
             pull_request: state.pull_requests.get(_task_id).cloned(),
@@ -1368,7 +1374,8 @@ if [ "$1" = "--version" ]; then
   exit 0
 fi
 
-if [ "$1" = "serve" ]; then
+if [ "$1" = "serve" ] || [ "$1" = "--browser-backend" ]; then
+  MODE="$1"
   HOST="127.0.0.1"
   PORT="0"
   STARTS_FILE="${OPENDUCKTOR_TEST_STARTS_FILE:-}"
@@ -1387,28 +1394,29 @@ if [ "$1" = "serve" ]; then
         ;;
     esac
   done
-  if [ -n "$STARTS_FILE" ]; then
+  if [ "$MODE" = "serve" ] && [ -n "$STARTS_FILE" ]; then
     echo "$$" >> "$STARTS_FILE"
   fi
   echo "permission requested: git push"
   echo "tool execution heartbeat" >&2
-  exec python3 - "$HOST" "$PORT" <<'PY'
+  exec python3 - "$MODE" "$HOST" "$PORT" <<'PY'
 import os
 import signal
 import socket
 import sys
 import time
 
-host = sys.argv[1]
-port = int(sys.argv[2])
+mode = sys.argv[1]
+host = sys.argv[2]
+port = int(sys.argv[3])
 delay_ms = int(os.environ.get("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "0") or "0")
-pid_file = os.environ.get("OPENDUCKTOR_TEST_PID_FILE", "")
-termination_file = os.environ.get("OPENDUCKTOR_TEST_TERM_FILE", "")
-aborts_file = os.environ.get("OPENDUCKTOR_TEST_ABORTS_FILE", "")
+pid_file = os.environ.get("OPENDUCKTOR_TEST_PID_FILE", "") if mode == "serve" else ""
+termination_file = os.environ.get("OPENDUCKTOR_TEST_TERM_FILE", "") if mode == "serve" else ""
+aborts_file = os.environ.get("OPENDUCKTOR_TEST_ABORTS_FILE", "") if mode == "serve" else ""
 abort_status = int(os.environ.get("OPENDUCKTOR_TEST_ABORT_STATUS", "200") or "200")
 session_status_body = os.environ.get("OPENDUCKTOR_TEST_SESSION_STATUS_BODY", "{}")
 
-if pid_file:
+if mode == "serve" and pid_file:
     try:
         with open(pid_file, "w", encoding="utf-8") as file:
             file.write(str(os.getpid()))
@@ -1453,7 +1461,17 @@ while True:
 
         request_text = request.decode("utf-8", "ignore")
         request_line = request_text.splitlines()[0] if request_text else ""
-        if request_line.startswith("GET /session/status"):
+        if request_line.startswith("GET /health"):
+            body = b'{"ok":true}'
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                f"Content-Length: {len(body)}\r\n"
+                "Content-Type: application/json\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8")
+            conn.sendall(response + body)
+        elif mode == "serve" and request_line.startswith("GET /session/status"):
             body = session_status_body.encode("utf-8")
             response = (
                 "HTTP/1.1 200 OK\r\n"
@@ -1463,7 +1481,7 @@ while True:
                 "\r\n"
             ).encode("utf-8")
             conn.sendall(response + body)
-        elif request_line.startswith("POST /session/") and "/abort" in request_line:
+        elif mode == "serve" and request_line.startswith("POST /session/") and "/abort" in request_line:
             if aborts_file:
                 try:
                     with open(aborts_file, "a", encoding="utf-8") as file:
@@ -1491,6 +1509,13 @@ echo "unsupported opencode invocation" >&2
 exit 1
 "#;
     write_executable_script(path, script)
+}
+
+pub(crate) fn set_fake_opencode_and_bridge_binaries(path: &Path) -> (EnvVarGuard, EnvVarGuard) {
+    let value = path.to_string_lossy().to_string();
+    let opencode_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", value.as_str());
+    let bridge_guard = set_env_var("OPENDUCKTOR_MCP_BRIDGE_BINARY", value.as_str());
+    (opencode_guard, bridge_guard)
 }
 
 pub(crate) fn create_failing_opencode(path: &Path) -> Result<()> {

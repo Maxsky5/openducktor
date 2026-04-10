@@ -2,7 +2,8 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, DirectMergeRecord, PullRequestRecord,
     QaReportDocument, QaVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    UpdateTaskPatch, ODT_QA_APPROVED_SOURCE_TOOL, ODT_QA_REJECTED_SOURCE_TOOL,
+    ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
 use host_infra_system::{
     compute_beads_database_name, compute_repo_slug, resolve_repo_beads_attachment_dir,

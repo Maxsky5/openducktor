@@ -74,7 +74,7 @@ describe("TauriHostClient", () => {
   test("does not export a redundant runtime constructor alias", async () => {
     const module = await import("./index");
 
-    expect(Object.prototype.hasOwnProperty.call(module, "TauriHostClient")).toBe(false);
+    expect(Object.hasOwn(module, "TauriHostClient")).toBe(false);
   });
 
   test("exports a value and type-compatible host client", async () => {

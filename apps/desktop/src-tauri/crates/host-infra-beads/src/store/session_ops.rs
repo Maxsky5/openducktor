@@ -24,6 +24,7 @@ impl BeadsTaskStore {
                 .map(|entry| entry.markdown.clone())
                 .unwrap_or_default(),
             updated_at: spec_latest.map(|entry| entry.updated_at.clone()),
+            revision: spec_latest.map(|entry| entry.revision),
         };
 
         let plan_entries = namespace
@@ -36,6 +37,7 @@ impl BeadsTaskStore {
                 .map(|entry| entry.markdown.clone())
                 .unwrap_or_default(),
             updated_at: plan_latest.map(|entry| entry.updated_at.clone()),
+            revision: plan_latest.map(|entry| entry.revision),
         };
 
         let qa_entries = namespace

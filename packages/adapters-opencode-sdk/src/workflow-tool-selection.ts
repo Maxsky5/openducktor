@@ -9,7 +9,7 @@ import { isReadOnlyRole } from "./read-only-roles";
 const TRUSTED_ODT_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_SERVER_STATUSES = new Set(["connected"]);
 const TRUSTED_ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
-const TRUSTED_ODT_MCP_CANONICAL_TOOL_IDS = new Set(["create_task", "search_tasks"]);
+const TRUSTED_ODT_MCP_CANONICAL_TOOL_IDS = new Set(["odt_create_task", "odt_search_tasks"]);
 
 type ModelScopedToolInput = {
   providerId: string;

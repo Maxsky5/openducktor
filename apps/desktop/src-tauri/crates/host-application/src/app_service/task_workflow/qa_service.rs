@@ -11,10 +11,12 @@ impl AppService {
             .map(|entry| SpecDocument {
                 markdown: entry.markdown,
                 updated_at: Some(entry.updated_at),
+                revision: Some(entry.revision),
             })
             .unwrap_or_else(|| SpecDocument {
                 markdown: String::new(),
                 updated_at: None,
+                revision: None,
             });
         Ok(report)
     }

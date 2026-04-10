@@ -8,7 +8,8 @@ use anyhow::{anyhow, Result};
 use chrono::{Duration as ChronoDuration, Utc};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, IssueType, QaVerdict, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    UpdateTaskPatch, ODT_QA_APPROVED_SOURCE_TOOL, ODT_QA_REJECTED_SOURCE_TOOL,
+    ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
 use host_infra_system::{
     compute_beads_database_name, compute_repo_slug, read_shared_dolt_server_state,
@@ -586,7 +587,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "markdown": "# Spec",
             "updatedAt": "2026-02-17T12:34:56Z",
             "updatedBy": "planner-agent",
-            "sourceTool": "set_spec",
+            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
             "revision": 1
         },
         {
@@ -603,7 +604,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "verdict": "approved",
             "updatedAt": "2026-02-17T13:10:00Z",
             "updatedBy": "qa-agent",
-            "sourceTool": "odt_qa_approved",
+            "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
             "revision": 2
         },
         {
@@ -668,7 +669,7 @@ fn metadata_parsing_benchmark_scaffold() {
                     "markdown": format!("# Spec {index}\n\n{}", "detail ".repeat(32)),
                     "updatedAt": "2026-02-17T12:34:56Z",
                     "updatedBy": "planner-agent",
-                    "sourceTool": "set_spec",
+                    "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                     "revision": index + 1
                 })
             })
@@ -682,7 +683,11 @@ fn metadata_parsing_benchmark_scaffold() {
                     "verdict": if index % 2 == 0 { "approved" } else { "rejected" },
                     "updatedAt": "2026-02-17T13:10:00Z",
                     "updatedBy": "qa-agent",
-                    "sourceTool": if index % 2 == 0 { "odt_qa_approved" } else { "odt_qa_rejected" },
+                    "sourceTool": if index % 2 == 0 {
+                        ODT_QA_APPROVED_SOURCE_TOOL
+                    } else {
+                        ODT_QA_REJECTED_SOURCE_TOOL
+                    },
                     "revision": index + 1
                 })
             })
@@ -1019,7 +1024,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
                                 "markdown": "# Spec",
                                 "updatedAt": "2026-02-20T09:00:00Z",
                                 "updatedBy": "planner-agent",
-                                "sourceTool": "set_spec",
+                                "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                                 "revision": 1
                             }
                         ],
@@ -1029,7 +1034,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
                                 "verdict": "approved",
                                 "updatedAt": "2026-02-20T10:00:00Z",
                                 "updatedBy": "qa-agent",
-            "sourceTool": "odt_qa_approved",
+            "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
                                 "revision": 1
                             }
                         ]
@@ -1112,7 +1117,7 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T09:00:00Z",
                             "updatedBy": "qa-agent",
-            "sourceTool": "odt_qa_approved",
+                        "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
                             "revision": 1
                         },
                         {
@@ -1120,7 +1125,7 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-            "sourceTool": "odt_qa_rejected",
+                        "sourceTool": ODT_QA_REJECTED_SOURCE_TOOL,
                             "revision": 2
                         }
                     ]
@@ -1246,7 +1251,7 @@ fn list_tasks_cache_is_invalidated_after_metadata_mutation() -> Result<()> {
                             "markdown": "# Spec",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 1
                         }
                     ]
@@ -1554,7 +1559,7 @@ fn get_task_metadata_ignores_cached_task_list_metadata() -> Result<()> {
                             "markdown": "# Stale spec",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 1
                         }
                     ]
@@ -1576,7 +1581,7 @@ fn get_task_metadata_ignores_cached_task_list_metadata() -> Result<()> {
                             "markdown": "# Fresh spec",
                             "updatedAt": "2026-02-20T11:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 2
                         }
                     ]
@@ -1968,14 +1973,14 @@ fn get_spec_reads_latest_entry_and_falls_back_to_empty() -> Result<()> {
                             "markdown": "# Spec v1",
                             "updatedAt": "2026-02-20T11:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 1
                         },
                         {
                             "markdown": "# Spec v2",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 2
                         }
                     ]
@@ -2017,7 +2022,7 @@ fn set_spec_trims_markdown_and_increments_revision() -> Result<()> {
                             "markdown": "# Spec v2",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 2
                         }
                     ]
@@ -2044,7 +2049,10 @@ fn set_spec_trims_markdown_and_increments_revision() -> Result<()> {
         Value::String("## Updated Spec".to_string())
     );
     assert_eq!(entry["revision"], Value::Number(3.into()));
-    assert_eq!(entry["sourceTool"], Value::String("set_spec".to_string()));
+    assert_eq!(
+        entry["sourceTool"],
+        Value::String(ODT_SET_SPEC_SOURCE_TOOL.to_string())
+    );
     assert!(entry["updatedAt"].as_str().is_some());
     Ok(())
 }
@@ -2066,7 +2074,7 @@ fn get_and_set_plan_use_implementation_plan_metadata() -> Result<()> {
                             "markdown": "# Plan v4",
                             "updatedAt": "2026-02-20T12:30:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_plan",
+                            "sourceTool": ODT_SET_PLAN_SOURCE_TOOL,
                             "revision": 4
                         }
                     ]
@@ -2092,7 +2100,10 @@ fn get_and_set_plan_use_implementation_plan_metadata() -> Result<()> {
     let entry = &metadata_root["openducktor"]["documents"]["implementationPlan"][0];
     assert_eq!(entry["markdown"], Value::String("# Plan v5".to_string()));
     assert_eq!(entry["revision"], Value::Number(5.into()));
-    assert_eq!(entry["sourceTool"], Value::String("set_plan".to_string()));
+    assert_eq!(
+        entry["sourceTool"],
+        Value::String(ODT_SET_PLAN_SOURCE_TOOL.to_string())
+    );
     Ok(())
 }
 
@@ -2115,7 +2126,7 @@ fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "odt_qa_approved",
+                            "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
                             "revision": 1
                         }
                     ]
@@ -2153,7 +2164,7 @@ fn qa_reports_store_latest_entry_and_preserve_next_revision() -> Result<()> {
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
-        Value::String("odt_qa_rejected".to_string())
+        Value::String(ODT_QA_REJECTED_SOURCE_TOOL.to_string())
     );
     Ok(())
 }
@@ -2210,7 +2221,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "odt_qa_rejected",
+                            "sourceTool": ODT_QA_REJECTED_SOURCE_TOOL,
                             "revision": 1
                         }
                     ]
@@ -2233,7 +2244,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "odt_qa_approved",
+                            "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
                             "revision": 2
                         }
                     ]
@@ -2282,7 +2293,7 @@ fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<
     assert_eq!(newest["revision"], Value::Number(2.into()));
     assert_eq!(
         newest["sourceTool"],
-        Value::String("odt_qa_approved".to_string())
+        Value::String(ODT_QA_APPROVED_SOURCE_TOOL.to_string())
     );
     Ok(())
 }
@@ -2305,7 +2316,7 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
                             "verdict": "rejected",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "odt_qa_rejected",
+                            "sourceTool": ODT_QA_REJECTED_SOURCE_TOOL,
                             "revision": 1
                         },
                         {
@@ -2313,7 +2324,7 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T11:00:00Z",
                             "updatedBy": "qa-agent",
-                            "sourceTool": "odt_qa_approved",
+                            "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
                             "revision": 2
                         }
                     ]
@@ -2534,7 +2545,7 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                             "markdown": "# Spec content",
                             "updatedAt": "2026-02-20T10:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_spec",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
                             "revision": 1
                         }
                     ],
@@ -2543,7 +2554,7 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                             "markdown": "# Plan content",
                             "updatedAt": "2026-02-20T11:00:00Z",
                             "updatedBy": "planner-agent",
-                            "sourceTool": "set_plan",
+                            "sourceTool": ODT_SET_PLAN_SOURCE_TOOL,
                             "revision": 1
                         }
                     ],
@@ -2553,7 +2564,7 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                             "verdict": "approved",
                             "updatedAt": "2026-02-20T12:00:00Z",
                             "updatedBy": "qa-agent",
-            "sourceTool": "odt_qa_approved",
+                            "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL,
                             "revision": 1
                         }
                     ]

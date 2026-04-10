@@ -319,19 +319,298 @@ fn parse_origin_header(origin: &str) -> anyhow::Result<HeaderValue> {
 mod tests {
     use super::*;
     use crate::commands::workspace::stage_local_attachment_to_temp;
+    use anyhow::{anyhow, Result};
     use axum::body::{to_bytes, Body};
     use axum::extract::FromRequest;
     use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
     use axum::http::Request;
     use host_application::AppService;
-    use host_domain::TaskStore;
+    use host_domain::{
+        AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, IssueType,
+        PullRequestRecord, QaReportDocument, QaVerdict, SpecDocument, TaskCard,
+        TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    };
     use host_infra_beads::BeadsTaskStore;
-    use host_infra_system::AppConfigStore;
+    use host_infra_system::{AppConfigStore, RepoConfig};
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[derive(Debug, Default)]
+    struct TestTaskStoreState {
+        ensure_calls: Vec<String>,
+        created_inputs: Vec<CreateTaskInput>,
+        tasks: Vec<TaskCard>,
+    }
+
+    #[derive(Clone)]
+    struct TestTaskStore {
+        state: Arc<Mutex<TestTaskStoreState>>,
+    }
+
+    impl TestTaskStore {
+        fn new(state: Arc<Mutex<TestTaskStoreState>>) -> Self {
+            Self { state }
+        }
+    }
+
+    impl TaskStore for TestTaskStore {
+        fn ensure_repo_initialized(&self, repo_path: &std::path::Path) -> Result<()> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state
+                .ensure_calls
+                .push(repo_path.to_string_lossy().to_string());
+            Ok(())
+        }
+
+        fn list_tasks(&self, _repo_path: &std::path::Path) -> Result<Vec<TaskCard>> {
+            let state = self.state.lock().expect("task store lock poisoned");
+            Ok(state.tasks.clone())
+        }
+
+        fn get_task(&self, _repo_path: &std::path::Path, task_id: &str) -> Result<TaskCard> {
+            let state = self.state.lock().expect("task store lock poisoned");
+            state
+                .tasks
+                .iter()
+                .find(|task| task.id == task_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("Task not found: {task_id}"))
+        }
+
+        fn create_task(
+            &self,
+            _repo_path: &std::path::Path,
+            input: CreateTaskInput,
+        ) -> Result<TaskCard> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state.created_inputs.push(input.clone());
+            let task = TaskCard {
+                id: format!("generated-{}", state.tasks.len() + 1),
+                title: input.title,
+                description: input.description.unwrap_or_default(),
+                notes: String::new(),
+                status: TaskStatus::Open,
+                priority: input.priority,
+                issue_type: input.issue_type,
+                ai_review_enabled: input.ai_review_enabled.unwrap_or(true),
+                available_actions: Vec::new(),
+                labels: input.labels.unwrap_or_default(),
+                assignee: None,
+                parent_id: input.parent_id,
+                subtask_ids: Vec::new(),
+                agent_sessions: Vec::new(),
+                pull_request: None,
+                document_summary: TaskDocumentSummary::default(),
+                agent_workflows: AgentWorkflows::default(),
+                updated_at: "2026-04-09T00:00:00Z".to_string(),
+                created_at: "2026-04-09T00:00:00Z".to_string(),
+            };
+            state.tasks.push(task.clone());
+            Ok(task)
+        }
+
+        fn update_task(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _patch: UpdateTaskPatch,
+        ) -> Result<TaskCard> {
+            Err(anyhow!(
+                "update_task not implemented in headless test store"
+            ))
+        }
+
+        fn delete_task(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _delete_subtasks: bool,
+        ) -> Result<bool> {
+            Err(anyhow!(
+                "delete_task not implemented in headless test store"
+            ))
+        }
+
+        fn get_spec(&self, _repo_path: &std::path::Path, _task_id: &str) -> Result<SpecDocument> {
+            Err(anyhow!("get_spec not implemented in headless test store"))
+        }
+
+        fn set_spec(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _markdown: &str,
+        ) -> Result<SpecDocument> {
+            Err(anyhow!("set_spec not implemented in headless test store"))
+        }
+
+        fn get_plan(&self, _repo_path: &std::path::Path, _task_id: &str) -> Result<SpecDocument> {
+            Err(anyhow!("get_plan not implemented in headless test store"))
+        }
+
+        fn set_plan(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _markdown: &str,
+        ) -> Result<SpecDocument> {
+            Err(anyhow!("set_plan not implemented in headless test store"))
+        }
+
+        fn clear_workflow_documents(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+        ) -> Result<()> {
+            Err(anyhow!(
+                "clear_workflow_documents not implemented in headless test store"
+            ))
+        }
+
+        fn get_latest_qa_report(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+        ) -> Result<Option<QaReportDocument>> {
+            Err(anyhow!(
+                "get_latest_qa_report not implemented in headless test store"
+            ))
+        }
+
+        fn append_qa_report(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _markdown: &str,
+            _verdict: QaVerdict,
+        ) -> Result<QaReportDocument> {
+            Err(anyhow!(
+                "append_qa_report not implemented in headless test store"
+            ))
+        }
+
+        fn record_qa_outcome(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _target_status: TaskStatus,
+            _markdown: &str,
+            _verdict: QaVerdict,
+        ) -> Result<TaskCard> {
+            Err(anyhow!(
+                "record_qa_outcome not implemented in headless test store"
+            ))
+        }
+
+        fn list_agent_sessions(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+        ) -> Result<Vec<AgentSessionDocument>> {
+            Err(anyhow!(
+                "list_agent_sessions not implemented in headless test store"
+            ))
+        }
+
+        fn upsert_agent_session(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _session: AgentSessionDocument,
+        ) -> Result<()> {
+            Err(anyhow!(
+                "upsert_agent_session not implemented in headless test store"
+            ))
+        }
+
+        fn clear_agent_sessions_by_roles(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _roles: &[&str],
+        ) -> Result<()> {
+            Err(anyhow!(
+                "clear_agent_sessions_by_roles not implemented in headless test store"
+            ))
+        }
+
+        fn clear_qa_reports(&self, _repo_path: &std::path::Path, _task_id: &str) -> Result<()> {
+            Err(anyhow!(
+                "clear_qa_reports not implemented in headless test store"
+            ))
+        }
+
+        fn set_delivery_metadata(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _pull_request: Option<PullRequestRecord>,
+            _direct_merge: Option<DirectMergeRecord>,
+        ) -> Result<()> {
+            Err(anyhow!(
+                "set_delivery_metadata not implemented in headless test store"
+            ))
+        }
+
+        fn set_pull_request(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _pull_request: Option<PullRequestRecord>,
+        ) -> Result<()> {
+            Err(anyhow!(
+                "set_pull_request not implemented in headless test store"
+            ))
+        }
+
+        fn set_direct_merge_record(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+            _direct_merge: Option<DirectMergeRecord>,
+        ) -> Result<()> {
+            Err(anyhow!(
+                "set_direct_merge_record not implemented in headless test store"
+            ))
+        }
+
+        fn get_task_metadata(
+            &self,
+            _repo_path: &std::path::Path,
+            _task_id: &str,
+        ) -> Result<TaskMetadata> {
+            Err(anyhow!(
+                "get_task_metadata not implemented in headless test store"
+            ))
+        }
+    }
+
+    fn make_task(id: &str, title: &str, status: TaskStatus, labels: Vec<&str>) -> TaskCard {
+        TaskCard {
+            id: id.to_string(),
+            title: title.to_string(),
+            description: String::new(),
+            notes: String::new(),
+            status,
+            priority: 2,
+            issue_type: IssueType::Task,
+            ai_review_enabled: true,
+            available_actions: Vec::new(),
+            labels: labels.into_iter().map(str::to_string).collect(),
+            assignee: None,
+            parent_id: None,
+            subtask_ids: Vec::new(),
+            agent_sessions: Vec::new(),
+            pull_request: None,
+            document_summary: TaskDocumentSummary::default(),
+            agent_workflows: AgentWorkflows::default(),
+            updated_at: "2026-04-09T00:00:00Z".to_string(),
+            created_at: "2026-04-09T00:00:00Z".to_string(),
+        }
+    }
 
     #[test]
     fn classify_shutdown_request_starts_only_once() {
@@ -439,6 +718,48 @@ mod tests {
         }
     }
 
+    fn test_state_fixture_with_task_store(
+        tasks: Vec<TaskCard>,
+    ) -> (TestStateFixture, Arc<Mutex<TestTaskStoreState>>, PathBuf) {
+        let root = unique_temp_path("server-task-store");
+        fs::create_dir_all(&root).expect("test root should exist");
+        let repo_path = root.join("repo");
+        fs::create_dir_all(repo_path.join(".git")).expect("test repo should exist");
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        config_store
+            .add_workspace(repo_path.to_string_lossy().as_ref())
+            .expect("workspace should be registered");
+        config_store
+            .update_repo_config(repo_path.to_string_lossy().as_ref(), RepoConfig::default())
+            .expect("repo config should be saved");
+
+        let task_state = Arc::new(Mutex::new(TestTaskStoreState {
+            ensure_calls: Vec::new(),
+            created_inputs: Vec::new(),
+            tasks,
+        }));
+        let task_store: Arc<dyn TaskStore> = Arc::new(TestTaskStore::new(task_state.clone()));
+        let service = Arc::new(AppService::new(task_store, config_store));
+        let registry = Arc::new(build_registry().expect("registry should build"));
+
+        (
+            TestStateFixture {
+                state: HeadlessState {
+                    service,
+                    events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                    dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                    registry,
+                    shutdown_signal: Arc::new(Notify::new()),
+                    shutdown_started: Arc::new(AtomicBool::new(false)),
+                },
+                root,
+            },
+            task_state,
+            repo_path,
+        )
+    }
+
     #[tokio::test]
     async fn invoke_handler_returns_error_envelope_for_malformed_json_body() {
         let fixture = test_state_fixture();
@@ -466,6 +787,113 @@ mod tests {
         assert_eq!(
             payload,
             json!({ "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2" })
+        );
+    }
+
+    #[tokio::test]
+    async fn invoke_handler_creates_task_through_flat_odt_mcp_bridge_payload() {
+        let (fixture, task_state, repo_path) = test_state_fixture_with_task_store(Vec::new());
+
+        let response = invoke_handler(
+            Path("odt_create_task".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({
+                "repoPath": repo_path,
+                "title": "Bridge task",
+                "issueType": "task",
+                "priority": 2,
+                "description": "Created through invoke handler",
+                "labels": ["mcp"],
+                "aiReviewEnabled": true,
+            }))),
+        )
+        .await
+        .into_response();
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["task"]["title"], json!("Bridge task"));
+        assert_eq!(payload["task"]["qaVerdict"], json!("not_reviewed"));
+
+        let state = task_state.lock().expect("task store lock poisoned");
+        assert_eq!(state.created_inputs.len(), 1);
+        assert_eq!(state.created_inputs[0].title, "Bridge task");
+    }
+
+    #[tokio::test]
+    async fn invoke_handler_searches_tasks_through_flat_odt_mcp_bridge_payload() {
+        let tasks = vec![
+            make_task("task-1", "Bridge task", TaskStatus::Open, vec!["mcp"]),
+            make_task("task-2", "Closed task", TaskStatus::Closed, vec!["mcp"]),
+        ];
+        let (fixture, _task_state, repo_path) = test_state_fixture_with_task_store(tasks);
+
+        let response = invoke_handler(
+            Path("odt_search_tasks".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({
+                "repoPath": repo_path,
+                "status": "open",
+                "title": "Bridge",
+                "tags": ["mcp"],
+                "limit": 10,
+            }))),
+        )
+        .await
+        .into_response();
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload["totalCount"], json!(1));
+        assert_eq!(payload["results"][0]["task"]["id"], json!("task-1"));
+    }
+
+    #[tokio::test]
+    async fn invoke_handler_rejects_read_task_documents_without_include_flags() {
+        let tasks = vec![make_task(
+            "task-1",
+            "Bridge task",
+            TaskStatus::Open,
+            vec!["mcp"],
+        )];
+        let (fixture, _task_state, repo_path) = test_state_fixture_with_task_store(tasks);
+
+        let response = invoke_handler(
+            Path("odt_read_task_documents".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({
+                "repoPath": repo_path,
+                "taskId": "task-1",
+            }))),
+        )
+        .await
+        .into_response();
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload["error"],
+            json!(
+                "At least one document include flag must be true. Set includeSpec, includePlan, or includeQaReport."
+            )
         );
     }
 

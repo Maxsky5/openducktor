@@ -2,9 +2,14 @@
 
 OpenDucktor MCP server for local repository task workflows.
 
-When OpenDucktor launches this MCP from the desktop app it injects the Beads attachment dir and shared Dolt connection details automatically. For standalone use, you must provide the same contract yourself.
+The MCP package is a thin client of the running Rust host.
 
-For the full Beads attachment and shared Dolt lifecycle, including why these parameters exist, see `../../docs/beads-shared-dolt-lifecycle.md`.
+- Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
+- Standalone use auto-discovers a running host bridge from the local registry.
+- `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
+- Legacy direct `bd` / `dolt` startup parameters are rejected.
+
+For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
 
 ## Usage
 
@@ -15,11 +20,7 @@ For the full Beads attachment and shared Dolt lifecycle, including why these par
       "command": "bunx",
       "args": [
         "@openducktor/mcp",
-        "--repo", "/absolute/path/to/repo",
-        "--beads-attachment-dir", "/absolute/path/to/openducktor/beads/<repo-id>/.beads",
-        "--dolt-host", "127.0.0.1",
-        "--dolt-port", "3310",
-        "--database-name", "odt_repo_deadbeefcafe"
+        "--repo", "/absolute/path/to/repo"
       ]
     }
   }
@@ -28,22 +29,38 @@ For the full Beads attachment and shared Dolt lifecycle, including why these par
 
 Optional arguments:
 
-- `--beads-attachment-dir <path>`
-- `--dolt-host <host>`
-- `--dolt-port <port>`
-- `--database-name <name>`
-- `--metadata-namespace <name>`
+- `--host-url <url>`
+
+Equivalent environment variables:
+
+- `ODT_REPO_PATH`
+- `ODT_HOST_URL` optional override
+
+Automatic discovery:
+
+- The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
+- The default config directory is `~/.openducktor`.
+- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge-ports.json` instead.
+
+Startup behavior:
+
+- The MCP uses `ODT_HOST_URL` or `--host-url` first when provided.
+- Otherwise it discovers host ports from the local registry and tries them in registry order.
+- The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
+- It checks the host bridge `/health` endpoint.
+- It calls `odt_mcp_ready` before serving requests.
+- Startup fails if the host does not expose the full ODT tool surface.
 
 ## Public Tools
 
-- `create_task`
-- `search_tasks`
+- `odt_create_task`
+- `odt_search_tasks`
 - `odt_read_task`
 - `odt_read_task_documents`
 
 The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
-## `create_task`
+## `odt_create_task`
 
 Creates a new `task`, `feature`, or `bug`.
 
@@ -58,7 +75,7 @@ Input fields:
 
 `issueType=epic` is rejected by the MCP schema.
 
-## `search_tasks`
+## `odt_search_tasks`
 
 Searches active tasks only. Closed and deferred tasks are excluded.
 Active epics may appear in search results.
@@ -74,7 +91,7 @@ Optional filters:
 
 ## Output Model
 
-`create_task` and `odt_read_task` return the same lightweight public task summary model. `search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
+`odt_create_task` and `odt_read_task` return the same lightweight public task summary model. `odt_search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
 
 ```json
 {
@@ -102,6 +119,10 @@ Optional filters:
 Use `odt_read_task` first to discover the task summary object, including task state, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
 
 Use `odt_read_task_documents` only when you need document bodies:
+
+- Requested document keys are returned consistently even when no persisted body exists yet.
+- Missing spec and plan return empty markdown with `updatedAt: null`.
+- Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
 
 ```json
 {

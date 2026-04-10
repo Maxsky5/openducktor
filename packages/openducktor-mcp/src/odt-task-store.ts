@@ -1,205 +1,75 @@
-import { BeadsPersistence, type TaskPersistencePort } from "./beads-persistence";
-import { nowIso, type TimeProvider } from "./beads-runtime";
-import { BeadsRuntimeClient, type BeadsRuntimeClientDeps } from "./beads-runtime-client";
-import {
-  type CanonicalPullRequestResolverPort,
-  DefaultCanonicalPullRequestResolver,
-} from "./canonical-pull-request-resolver";
-import { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
-import { createSubtask, deleteTaskById } from "./epic-subtasks";
-import {
-  createOdtTaskStoreUseCases,
-  type OdtTaskStoreUseCase,
-  type OdtTaskStoreUseCases,
-} from "./odt-task-store-use-cases";
+import { ODT_TOOL_SCHEMAS, type OdtToolName } from "@openducktor/contracts";
+import type { z } from "zod";
+import { OdtHostBridgeClient, type OdtHostBridgeClientPort } from "./host-bridge-client";
 import type { OdtStoreOptions } from "./store-context";
-import { type TaskDocumentPort, TaskDocumentStore } from "./task-document-store";
-import { TaskIndexCache } from "./task-index-cache";
-import { createOdtTaskWorkflowRuntime } from "./task-workflow-runtime";
-import {
-  BuildBlockedInputSchema,
-  BuildCompletedInputSchema,
-  BuildResumedInputSchema,
-  CreateTaskInputSchema,
-  QaApprovedInputSchema,
-  QaRejectedInputSchema,
-  ReadTaskDocumentsInputSchema,
-  ReadTaskInputSchema,
-  SearchTasksInputSchema,
-  SetPlanInputSchema,
-  SetPullRequestInputSchema,
-  SetSpecInputSchema,
-} from "./tool-schemas";
 
 export type OdtTaskStoreDeps = {
-  runProcess?: BeadsRuntimeClientDeps["runProcess"];
-  resolveBeadsAttachmentDir?: BeadsRuntimeClientDeps["resolveBeadsAttachmentDir"];
-  readAttachmentMetadata?: BeadsRuntimeClientDeps["readAttachmentMetadata"];
-  now?: TimeProvider;
-  persistence?: TaskPersistencePort;
-  documentStore?: TaskDocumentPort;
-  taskIndexCache?: TaskIndexCache;
-  epicSubtaskReplacementService?: EpicSubtaskReplacementService;
-  pullRequestResolver?: CanonicalPullRequestResolverPort;
+  client?: OdtHostBridgeClientPort;
 };
+
+type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
 
 export class OdtTaskStore {
   readonly repoPath: string;
-  readonly metadataNamespace: string;
-  private readonly useCases: OdtTaskStoreUseCases;
+  private readonly client: OdtHostBridgeClientPort;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
-    const persistence = deps.persistence ?? this.createDefaultPersistence(options, deps);
-    const documentStore =
-      deps.documentStore ?? new TaskDocumentStore(persistence, deps.now ?? nowIso);
-    const taskIndexCache = deps.taskIndexCache ?? new TaskIndexCache(() => persistence.listTasks());
-    const epicSubtaskReplacementService =
-      deps.epicSubtaskReplacementService ??
-      new EpicSubtaskReplacementService({
-        listTasks: () => persistence.listTasks(),
-        createSubtask: async (parentTaskId, subtask) =>
-          createSubtask(
-            parentTaskId,
-            subtask,
-            (args) => persistence.runBdJson(args),
-            () => taskIndexCache.invalidate(),
-          ),
-        deleteTask: async (taskId) =>
-          deleteTaskById(
-            taskId,
-            (args) => persistence.runBdJson(args),
-            () => taskIndexCache.invalidate(),
-            false,
-          ),
-      });
-    const pullRequestResolver =
-      deps.pullRequestResolver ??
-      new DefaultCanonicalPullRequestResolver(this.repoPath, {
-        ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
-        ...(deps.now ? { now: deps.now } : {}),
-      });
-    this.metadataNamespace = persistence.metadataNamespace;
-    const workflow = createOdtTaskWorkflowRuntime({
-      persistence,
-      taskLookup: taskIndexCache,
-    });
-    this.useCases = createOdtTaskStoreUseCases({
-      persistence,
-      workflow,
-      documentStore,
-      epicSubtaskReplacementService,
-      pullRequestResolver,
-      invalidateTaskIndex: () => taskIndexCache.invalidate(),
-    });
+    this.client =
+      deps.client ??
+      new OdtHostBridgeClient({ baseUrl: options.hostUrl, repoPath: options.repoPath });
   }
 
-  private createDefaultPersistence(
-    options: OdtStoreOptions,
-    deps: OdtTaskStoreDeps,
-  ): BeadsPersistence {
-    const beadsClient = new BeadsRuntimeClient(
-      this.repoPath,
-      {
-        beadsAttachmentDir: options.beadsAttachmentDir ?? null,
-        doltHost: options.doltHost,
-        doltPort: options.doltPort,
-        databaseName: options.databaseName,
-      },
-      {
-        ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
-        ...(deps.resolveBeadsAttachmentDir
-          ? { resolveBeadsAttachmentDir: deps.resolveBeadsAttachmentDir }
-          : {}),
-        ...(deps.readAttachmentMetadata
-          ? { readAttachmentMetadata: deps.readAttachmentMetadata }
-          : {}),
-      },
-    );
-    return new BeadsPersistence(beadsClient, options.metadataNamespace);
+  private async execute<Name extends OdtToolName>(toolName: Name, rawInput: unknown) {
+    const parsed = ODT_TOOL_SCHEMAS[toolName].parse(rawInput) as ToolInput<Name>;
+    return this.client.call(toolName, parsed);
   }
 
-  private executeUseCase<Input, Output>(
-    rawInput: unknown,
-    schema: { parse: (input: unknown) => Input },
-    useCase: OdtTaskStoreUseCase<Input, Output>,
-  ): Promise<Output> {
-    return useCase.execute(schema.parse(rawInput));
+  async readTask(rawInput: unknown) {
+    return this.execute("odt_read_task", rawInput);
   }
 
-  async readTask(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTask"]["execute"]>>> {
-    return this.executeUseCase(rawInput, ReadTaskInputSchema, this.useCases.readTask);
+  async readTaskDocuments(rawInput: unknown) {
+    return this.execute("odt_read_task_documents", rawInput);
   }
 
-  async readTaskDocuments(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTaskDocuments"]["execute"]>>> {
-    return this.executeUseCase(
-      rawInput,
-      ReadTaskDocumentsInputSchema,
-      this.useCases.readTaskDocuments,
-    );
+  async createTask(rawInput: unknown) {
+    return this.execute("odt_create_task", rawInput);
   }
 
-  async createTask(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["createTask"]["execute"]>>> {
-    return this.executeUseCase(rawInput, CreateTaskInputSchema, this.useCases.createTask);
+  async searchTasks(rawInput: unknown) {
+    return this.execute("odt_search_tasks", rawInput);
   }
 
-  async searchTasks(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["searchTasks"]["execute"]>>> {
-    return this.executeUseCase(rawInput, SearchTasksInputSchema, this.useCases.searchTasks);
+  async setSpec(rawInput: unknown) {
+    return this.execute("odt_set_spec", rawInput);
   }
 
-  async setSpec(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setSpec"]["execute"]>>> {
-    return this.executeUseCase(rawInput, SetSpecInputSchema, this.useCases.setSpec);
+  async setPlan(rawInput: unknown) {
+    return this.execute("odt_set_plan", rawInput);
   }
 
-  async setPlan(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setPlan"]["execute"]>>> {
-    return this.executeUseCase(rawInput, SetPlanInputSchema, this.useCases.setPlan);
+  async buildBlocked(rawInput: unknown) {
+    return this.execute("odt_build_blocked", rawInput);
   }
 
-  async buildBlocked(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildBlocked"]["execute"]>>> {
-    return this.executeUseCase(rawInput, BuildBlockedInputSchema, this.useCases.buildBlocked);
+  async buildResumed(rawInput: unknown) {
+    return this.execute("odt_build_resumed", rawInput);
   }
 
-  async buildResumed(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildResumed"]["execute"]>>> {
-    return this.executeUseCase(rawInput, BuildResumedInputSchema, this.useCases.buildResumed);
+  async buildCompleted(rawInput: unknown) {
+    return this.execute("odt_build_completed", rawInput);
   }
 
-  async buildCompleted(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildCompleted"]["execute"]>>> {
-    return this.executeUseCase(rawInput, BuildCompletedInputSchema, this.useCases.buildCompleted);
+  async setPullRequest(rawInput: unknown) {
+    return this.execute("odt_set_pull_request", rawInput);
   }
 
-  async setPullRequest(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setPullRequest"]["execute"]>>> {
-    return this.executeUseCase(rawInput, SetPullRequestInputSchema, this.useCases.setPullRequest);
+  async qaApproved(rawInput: unknown) {
+    return this.execute("odt_qa_approved", rawInput);
   }
 
-  async qaApproved(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["qaApproved"]["execute"]>>> {
-    return this.executeUseCase(rawInput, QaApprovedInputSchema, this.useCases.qaApproved);
-  }
-
-  async qaRejected(
-    rawInput: unknown,
-  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["qaRejected"]["execute"]>>> {
-    return this.executeUseCase(rawInput, QaRejectedInputSchema, this.useCases.qaRejected);
+  async qaRejected(rawInput: unknown) {
+    return this.execute("odt_qa_rejected", rawInput);
   }
 }

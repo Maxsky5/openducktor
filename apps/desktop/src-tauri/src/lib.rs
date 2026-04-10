@@ -269,6 +269,16 @@ pub(crate) fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService
     Ok(service)
 }
 
+fn startup_phase_prepare_external_mcp_discovery<T>(
+    value: T,
+    ensure_ready: impl FnOnce(&T) -> anyhow::Result<()>,
+) -> anyhow::Result<T> {
+    ensure_ready(&value).context(
+        "failed to initialize the local MCP bridge used for external OpenDucktor discovery",
+    )?;
+    Ok(value)
+}
+
 fn install_shutdown_signal_handler(
     service: Arc<AppService>,
     shutdown_requested: Arc<AtomicBool>,
@@ -525,7 +535,10 @@ fn shutdown_exit_code(success: bool) -> i32 {
 
 pub fn run() -> anyhow::Result<()> {
     startup_phase_tracing();
-    let service = startup_phase_service_bootstrap()?;
+    let service = startup_phase_prepare_external_mcp_discovery(
+        startup_phase_service_bootstrap()?,
+        |service| service.ensure_external_mcp_discovery_ready(),
+    )?;
     let app_service = service.clone();
     startup_phase_shutdown_hooks(app_service.clone());
 
@@ -665,6 +678,30 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
         Ok(())
+    }
+
+    #[test]
+    fn startup_phase_prepare_external_mcp_discovery_returns_value_on_success() -> anyhow::Result<()>
+    {
+        let value = Arc::new("service".to_string());
+
+        let prepared = startup_phase_prepare_external_mcp_discovery(value.clone(), |_| Ok(()))?;
+
+        assert!(Arc::ptr_eq(&prepared, &value));
+        Ok(())
+    }
+
+    #[test]
+    fn startup_phase_prepare_external_mcp_discovery_adds_context_on_failure() {
+        let error = startup_phase_prepare_external_mcp_discovery(Arc::new(()), |_| {
+            Err(anyhow!("bridge unavailable"))
+        })
+        .expect_err("startup phase should fail");
+
+        assert!(error.to_string().contains(
+            "failed to initialize the local MCP bridge used for external OpenDucktor discovery",
+        ));
+        assert!(format!("{error:#}").contains("bridge unavailable"));
     }
     #[test]
     fn run_service_blocking_propagates_operation_error() {

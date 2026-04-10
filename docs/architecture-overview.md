@@ -24,7 +24,7 @@ Current scope note:
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore`, config/worktree/process integrations | UI workflow decisions |
-| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | public MCP task tools (`create_task`, `search_tasks`, `odt_read_task`, `odt_read_task_documents`) plus `odt_*` workflow execution and validation against Beads metadata/status | Frontend rendering/state |
+| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/host-bridge-client.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | MCP stdio transport, shared schema validation, host-bridge readiness checks, host-backed `odt_*` task/workflow calls | Frontend rendering/state |
 
 ## Platform-specific native lifecycle seams
 
@@ -61,7 +61,7 @@ Key boundary:
  - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
  - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
  - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
-6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this spawns the MCP server `openducktor` with host-owned Beads attachment and shared Dolt connection env (`ODT_REPO_PATH`, `ODT_BEADS_ATTACHMENT_DIR`, `ODT_DOLT_HOST`, `ODT_DOLT_PORT`, `ODT_DATABASE_NAME`, `ODT_METADATA_NAMESPACE`).
+6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_REPO_PATH` and `ODT_HOST_URL`.
 7. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
 8. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
 9. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
@@ -85,10 +85,11 @@ Human-triggered path:
 
 Agent-triggered path:
 1. Active OpenCode session calls `odt_*` tool through local MCP server `openducktor`.
-2. `packages/openducktor-mcp` validates input against `ODT_TOOL_SCHEMAS`.
-3. `OdtTaskStore` mutates Beads metadata/status and applies transition rules.
-4. Tool result is emitted in session stream.
-5. Frontend session-event handler detects completed ODT mutation tools and triggers task refresh.
+2. `packages/openducktor-mcp` validates input against shared `ODT_TOOL_SCHEMAS`.
+3. `OdtTaskStore` forwards the repo-scoped request to the running Rust host bridge.
+4. `AppService` validates workflow rules and persists Beads metadata/status through `TaskStore`.
+5. Tool result is emitted in session stream.
+6. Frontend session-event handler detects completed ODT mutation tools and triggers task refresh.
 
 ### 4) Generate a pull request
 1. The approval flow starts a Builder session with scenario `build_pull_request_generation`.
@@ -107,10 +108,10 @@ Key boundary:
 | Task statuses, issue types, action IDs | `packages/contracts/src/task-schemas.ts` | `@openducktor/contracts`, consumed by adapters/frontend/host |
 | Role, scenario, start mode, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
-| ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/openducktor-mcp/src/lib.ts` (defined in `src/tool-schemas.ts`) | `@openducktor/mcp` |
-| Transition legality and backend-derived actions/workflows | Rust host path: `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs`; MCP path: `packages/openducktor-mcp/src/workflow-policy.ts` + `packages/openducktor-mcp/src/task-transitions.ts` | Rust host application + MCP workflow service |
+| ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/contracts/src/odt-mcp-schemas.ts` and re-exported by `packages/openducktor-mcp/src/lib.ts` | `@openducktor/contracts`, consumed by MCP/host |
+| Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs` and `apps/desktop/src-tauri/crates/host-application/src/app_service/odt_mcp.rs` | Rust host application |
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
-| Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` + `openducktor-mcp` |
+| Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` via host application |
 
 ## Replaceable Boundaries
 - TS port: `AgentEnginePort` (`packages/core/src/ports/agent-engine.ts`)
@@ -123,7 +124,7 @@ Concrete adapters today:
 ## Cross-Layer Change Checklist
 1. If data shape changes, update `packages/contracts` first.
 2. If `odt_*` tool shape or names change, update MCP schemas, core tool normalization/policy, adapter behavior, and UI assumptions together.
-3. If public MCP tool shapes (`create_task`, `search_tasks`, `odt_read_task`, `odt_read_task_documents`) change, update package docs and public MCP schemas together.
+3. If public MCP tool shapes (`odt_create_task`, `odt_search_tasks`, `odt_read_task`, `odt_read_task_documents`) change, update package docs and public MCP schemas together.
 4. If workflow transitions/actions change, update Rust `workflow_rules`, then docs and frontend rendering expectations.
 5. Keep Tauri commands as transport/mapping layer; place policy in `AppService`/domain layers.
 6. Preserve Beads as lifecycle source of truth; do not move lifecycle authority into UI-local state.

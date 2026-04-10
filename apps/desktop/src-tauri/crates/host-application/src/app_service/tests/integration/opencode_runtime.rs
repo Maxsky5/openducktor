@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use crate::app_service::test_support::{
     build_service_with_store, create_fake_opencode, init_git_repo, install_fake_dolt, lock_env,
-    make_session, make_task, set_env_var, spawn_sleep_process, unique_temp_path,
-    wait_for_path_exists, wait_for_process_exit,
+    make_session, make_task, set_env_var, set_fake_opencode_and_bridge_binaries,
+    spawn_sleep_process, unique_temp_path, wait_for_path_exists, wait_for_process_exit,
 };
 use crate::app_service::{
     read_opencode_process_registry, AgentRuntimeProcess, RunProcess,
@@ -65,10 +65,7 @@ fn opencode_workspace_runtime_ensure_list_and_stop_flow() -> Result<()> {
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, _task_state, _git_state) = build_service_with_store(
@@ -109,10 +106,7 @@ fn opencode_workspace_runtime_ensure_deduplicates_parallel_startup() -> Result<(
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let starts_file = root.join("started-pids.log");
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
     let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "400");
     let _starts_guard = set_env_var(
         "OPENDUCKTOR_TEST_STARTS_FILE",
@@ -177,10 +171,7 @@ fn opencode_workspace_runtime_ensure_does_not_require_task_store_initialization(
     let fake_opencode = root.join("opencode");
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, task_state, _git_state) = build_service_with_store(
@@ -216,10 +207,7 @@ fn opencode_workspace_runtime_ensure_cleans_up_spawned_child_when_runtime_lock_i
     create_fake_opencode(&fake_opencode)?;
     let _dolt_guard = install_fake_dolt(&root)?;
     let pid_file = root.join("spawned-runtime.pid");
-    let _opencode_guard = set_env_var(
-        "OPENDUCKTOR_OPENCODE_BINARY",
-        fake_opencode.to_string_lossy().as_ref(),
-    );
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
     let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
     let _pid_guard = set_env_var(
         "OPENDUCKTOR_TEST_PID_FILE",

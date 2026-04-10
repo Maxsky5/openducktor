@@ -1,6 +1,11 @@
 use crate::git::{DirectMergeRecord, PullRequestRecord};
 use serde::{Deserialize, Serialize};
 
+pub const ODT_SET_SPEC_SOURCE_TOOL: &str = "odt_set_spec";
+pub const ODT_SET_PLAN_SOURCE_TOOL: &str = "odt_set_plan";
+pub const ODT_QA_APPROVED_SOURCE_TOOL: &str = "odt_qa_approved";
+pub const ODT_QA_REJECTED_SOURCE_TOOL: &str = "odt_qa_rejected";
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDocumentPresence {
@@ -93,6 +98,8 @@ impl Default for AgentWorkflows {
 pub struct SpecDocument {
     pub markdown: String,
     pub updated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
