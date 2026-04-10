@@ -11,6 +11,7 @@ use std::io::{Read, Write};
 use crate::model::{MarkdownEntry, QaEntry};
 
 pub(crate) const DOCUMENT_ENCODING_GZIP_BASE64_V1: &str = "gzip-base64-v1";
+pub(crate) const MAX_DECODED_MARKDOWN_BYTES: u64 = 2 * 1024 * 1024;
 
 pub(crate) fn encode_markdown_for_storage(markdown: &str) -> Result<String> {
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
@@ -25,12 +26,21 @@ fn decode_markdown_payload(payload: &str, encoding: &str, path: &str) -> Result<
             let compressed = STANDARD.decode(payload).map_err(|error| {
                 anyhow!("Failed to decode {path}: invalid base64 payload: {error}")
             })?;
-            let mut decoder = GzDecoder::new(compressed.as_slice());
-            let mut markdown = String::new();
-            decoder.read_to_string(&mut markdown).map_err(|error| {
-                anyhow!("Failed to decode {path}: invalid gzip payload: {error}")
-            })?;
-            Ok(markdown)
+            let decoder = GzDecoder::new(compressed.as_slice());
+            let mut bytes = Vec::new();
+            decoder
+                .take(MAX_DECODED_MARKDOWN_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|error| {
+                    anyhow!("Failed to decode {path}: invalid gzip payload: {error}")
+                })?;
+            if (bytes.len() as u64) > MAX_DECODED_MARKDOWN_BYTES {
+                return Err(anyhow!(
+                    "Failed to decode {path}: decoded payload exceeds size limit"
+                ));
+            }
+            String::from_utf8(bytes)
+                .map_err(|error| anyhow!("Failed to decode {path}: invalid utf-8 payload: {error}"))
         }
         other => Err(anyhow!(
             "Failed to decode {path}: unsupported encoding {other}"

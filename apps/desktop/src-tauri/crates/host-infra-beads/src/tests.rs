@@ -4,7 +4,7 @@ use super::{
     parse_agent_sessions, parse_issue_type, parse_markdown_entries, parse_metadata_root,
     parse_qa_entries, parse_task_status, read_latest_markdown_document, BeadsTaskStore,
     CommandRunner, ProcessCommandRunner, CUSTOM_STATUS_VALUES, DOCUMENT_ENCODING_GZIP_BASE64_V1,
-    TASK_LIST_CACHE_TTL_MS,
+    MAX_DECODED_MARKDOWN_BYTES, TASK_LIST_CACHE_TTL_MS,
 };
 use anyhow::{anyhow, Result};
 use chrono::{Duration as ChronoDuration, Utc};

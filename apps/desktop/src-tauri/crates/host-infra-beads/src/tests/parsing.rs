@@ -246,6 +246,33 @@ fn revision_zero_is_rejected_in_both_validation_paths() {
 }
 
 #[test]
+fn oversized_decoded_markdown_surfaces_size_limit_error() -> Result<()> {
+    let oversized = "a".repeat(MAX_DECODED_MARKDOWN_BYTES as usize + 1);
+    let encoded = encode_markdown_for_storage(&oversized)?;
+
+    let spec = read_latest_markdown_document(
+        Some(&json!([
+            {
+                "markdown": encoded,
+                "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
+                "updatedAt": "2026-02-20T12:00:00Z",
+                "revision": 1
+            }
+        ])),
+        "openducktor.documents.spec",
+    );
+
+    assert!(spec.markdown.is_empty());
+    assert_eq!(spec.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+    assert_eq!(spec.revision, Some(1));
+    let error = spec
+        .error
+        .expect("oversized payload should surface a decode error");
+    assert!(error.contains("decoded payload exceeds size limit"));
+    Ok(())
+}
+
+#[test]
 #[ignore = "manual benchmark scaffold; run with cargo test -p host-infra-beads metadata_parsing_benchmark_scaffold -- --ignored --nocapture"]
 fn metadata_parsing_benchmark_scaffold() {
     let markdown_payload = Value::Array(
