@@ -1,7 +1,7 @@
 {
   "$schema": "./gen/schemas/desktop-schema.json",
   "productName": "OpenDucktor",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "identifier": "dev.openducktor.desktop",
   "build": {
     "beforeDevCommand": "cd .. && bun run dev",
@@ -23,31 +23,93 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$TEMP/openducktor-local-attachments/**"]
+          "allow": [
+            "$TEMP/openducktor-local-attachments/**"
+          ]
         }
       },
       "csp": {
-        "default-src": ["'self'"],
-        "base-uri": ["'none'"],
-        "frame-ancestors": ["'none'"],
-        "object-src": ["'none'"],
-        "form-action": ["'self'"],
-        "script-src": ["'self'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
-        "media-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
-        "connect-src": ["ipc:", "http://ipc.localhost", "http://127.0.0.1:*"]
+        "default-src": [
+          "'self'"
+        ],
+        "base-uri": [
+          "'none'"
+        ],
+        "frame-ancestors": [
+          "'none'"
+        ],
+        "object-src": [
+          "'none'"
+        ],
+        "form-action": [
+          "'self'"
+        ],
+        "script-src": [
+          "'self'"
+        ],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'"
+        ],
+        "img-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "asset:",
+          "http://asset.localhost"
+        ],
+        "media-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "asset:",
+          "http://asset.localhost"
+        ],
+        "connect-src": [
+          "ipc:",
+          "http://ipc.localhost",
+          "http://127.0.0.1:*"
+        ]
       },
       "devCsp": {
-        "default-src": ["'self'"],
-        "base-uri": ["'none'"],
-        "frame-ancestors": ["'none'"],
-        "object-src": ["'none'"],
-        "form-action": ["'self'"],
-        "script-src": ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
-        "media-src": ["'self'", "data:", "blob:", "asset:", "http://asset.localhost"],
+        "default-src": [
+          "'self'"
+        ],
+        "base-uri": [
+          "'none'"
+        ],
+        "frame-ancestors": [
+          "'none'"
+        ],
+        "object-src": [
+          "'none'"
+        ],
+        "form-action": [
+          "'self'"
+        ],
+        "script-src": [
+          "'self'",
+          "'unsafe-eval'",
+          "'unsafe-inline'"
+        ],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'"
+        ],
+        "img-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "asset:",
+          "http://asset.localhost"
+        ],
+        "media-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "asset:",
+          "http://asset.localhost"
+        ],
         "connect-src": [
           "'self'",
           "ipc:",
@@ -58,7 +120,9 @@
           "ws://127.0.0.1:*"
         ]
       },
-      "capabilities": ["default"]
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "bundle": {

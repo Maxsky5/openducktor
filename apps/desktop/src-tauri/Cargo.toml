@@ -1,10 +1,13 @@
 [package]
 name = "openducktor-desktop"
-version = "0.0.1"
+version = "0.0.2"
 description = "OpenDucktor Desktop"
-authors = ["OpenDucktor"]
+authors = [ "OpenDucktor" ]
 edition = "2021"
 default-run = "openducktor-desktop"
+
+[package.metadata.cef.bundle]
+helper_name = "openducktor-desktop-helper"
 
 [workspace]
 members = [
@@ -12,17 +15,17 @@ members = [
   "crates/host-domain",
   "crates/host-infra-beads",
   "crates/host-infra-system",
-  "crates/host-test-support",
+  "crates/host-test-support"
 ]
 resolver = "2"
 
-[workspace.package]
-version = "0.0.1"
-edition = "2021"
+  [workspace.package]
+  version = "0.0.2"
+  edition = "2021"
 
 [lib]
 name = "openducktor_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = [ "staticlib", "cdylib", "rlib" ]
 
 [[bin]]
 name = "openducktor-desktop"
@@ -37,51 +40,102 @@ name = "browser_backend"
 path = "src/bin/browser_backend.rs"
 
 [features]
-default = ["wry"]
-wry = ["tauri/wry"]
-cef = ["tauri/cef"]
+default = [ "wry" ]
+wry = [ "tauri/wry" ]
+cef = [ "tauri/cef" ]
 
 [build-dependencies]
 serde_json = "1"
-tauri-build = { version = "2", features = [] }
+
+  [build-dependencies.tauri-build]
+  version = "2"
+  features = [ ]
 
 [dependencies]
 anyhow = "1"
-axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
-chrono = { version = "0.4", features = ["serde"] }
 mime_guess = "2"
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
-tauri = { version = "2", default-features = false, features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "process", "sync", "macros", "time"] }
-tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-util = { version = "0.7", features = ["io"] }
-tower-http = { version = "0.6", features = ["cors"] }
 thiserror = "2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
-uuid = { version = "1", features = ["serde", "v4"] }
 ctrlc = "3"
 
-host-domain = { path = "crates/host-domain" }
-host-application = { path = "crates/host-application" }
-host-infra-beads = { path = "crates/host-infra-beads" }
-host-infra-system = { path = "crates/host-infra-system" }
+  [dependencies.axum]
+  version = "0.8"
+  features = [ "json" ]
+
+  [dependencies.chrono]
+  version = "0.4"
+  features = [ "serde" ]
+
+  [dependencies.serde]
+  version = "1"
+  features = [ "derive" ]
+
+  [dependencies.reqwest]
+  version = "0.12"
+  default-features = false
+  features = [ "blocking", "rustls-tls" ]
+
+  [dependencies.tauri]
+  version = "2"
+  default-features = false
+  features = [ "protocol-asset" ]
+
+  [dependencies.tokio]
+  version = "1"
+  features = [ "rt-multi-thread", "process", "sync", "macros", "time" ]
+
+  [dependencies.tokio-stream]
+  version = "0.1"
+  features = [ "sync" ]
+
+  [dependencies.tokio-util]
+  version = "0.7"
+  features = [ "io" ]
+
+  [dependencies.tower-http]
+  version = "0.6"
+  features = [ "cors" ]
+
+  [dependencies.tracing-subscriber]
+  version = "0.3"
+  features = [ "env-filter", "fmt", "json" ]
+
+  [dependencies.uuid]
+  version = "1"
+  features = [ "serde", "v4" ]
+
+  [dependencies.host-domain]
+  path = "crates/host-domain"
+
+  [dependencies.host-application]
+  path = "crates/host-application"
+
+  [dependencies.host-infra-beads]
+  path = "crates/host-infra-beads"
+
+  [dependencies.host-infra-system]
+  path = "crates/host-infra-system"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSApplication"] }
 objc2-foundation = "0.3"
 
-[dev-dependencies]
-tauri = { version = "2", default-features = false, features = ["test"] }
+  [target."cfg(target_os = \"macos\")".dependencies.objc2-app-kit]
+  version = "0.3"
+  features = [ "NSApplication" ]
 
-[patch.crates-io]
-tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
-tauri-build = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+[dev-dependencies.tauri]
+version = "2"
+default-features = false
+features = [ "test" ]
 
-[package.metadata.cef.bundle]
-helper_name = "openducktor-desktop-helper"
+[patch.crates-io.tauri]
+git = "https://github.com/tauri-apps/tauri"
+branch = "feat/cef"
+
+[patch.crates-io.tauri-build]
+git = "https://github.com/tauri-apps/tauri"
+branch = "feat/cef"
