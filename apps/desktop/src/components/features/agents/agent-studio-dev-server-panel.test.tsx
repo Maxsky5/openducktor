@@ -193,6 +193,25 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).not.toContain("ready on http://localhost:5173");
   });
 
+  test("falls back to the first script terminal replay when selection state lags", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "active",
+          isExpanded: true,
+          scripts: [runningScript, backendScript],
+          selectedScriptId: null,
+          selectedScript: null,
+          selectedScriptTerminalBuffer: null,
+        }),
+      }),
+    );
+
+    expect(html).toContain("Frontend");
+    expect(html).toContain("bun run dev");
+    expect(html).not.toContain("agent-studio-dev-server-empty-log-state");
+  });
+
   test("renders failed dev server tabs with failed status styling", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {

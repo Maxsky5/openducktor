@@ -100,7 +100,15 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   const hasExpandedActions = model.isExpanded;
   const selectedTabsValue = model.selectedScriptId ?? model.scripts[0]?.scriptId ?? "__none__";
   const selectedScriptContent = selectedScript ?? model.scripts[0] ?? null;
-  const selectedScriptTerminalBuffer = model.selectedScriptTerminalBuffer;
+  const selectedScriptTerminalBuffer =
+    model.selectedScriptTerminalBuffer ??
+    (selectedScriptContent
+      ? {
+          entries: selectedScriptContent.bufferedTerminalChunks,
+          lastSequence: selectedScriptContent.bufferedTerminalChunks.at(-1)?.sequence ?? null,
+          resetToken: 0,
+        }
+      : null);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
 

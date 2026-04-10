@@ -172,6 +172,23 @@ describe("browser live SSE subscriptions", () => {
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
   });
 
+  test("does not emit dev-server control payloads for run-event subscribers", async () => {
+    const { subscribeBrowserLiveRunEvents } = await loadBrowserLiveClient();
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeBrowserLiveRunEvents(listener);
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit("stream-warning", "ignored");
+    FakeEventSource.instances[0]?.emit("message", JSON.stringify({ type: "run" }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ type: "run" });
+
+    unsubscribe();
+  });
+
   test("shares one EventSource for multiple dev-server subscribers", async () => {
     const { subscribeBrowserLiveDevServerEvents } = await loadBrowserLiveClient();
     const listenerA = mock(() => {});

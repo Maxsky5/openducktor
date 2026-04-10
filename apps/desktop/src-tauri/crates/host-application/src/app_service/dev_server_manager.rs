@@ -748,6 +748,9 @@ fn spawn_terminal_forwarder<R>(
                     }
                 }
                 Err(error) => {
+                    if error.kind() == std::io::ErrorKind::Interrupted {
+                        continue;
+                    }
                     emit_terminal_chunk(
                         &groups,
                         group_key.as_str(),
@@ -813,6 +816,21 @@ fn flush_pending_terminal_bytes(
                     return true;
                 }
 
+                if let Some(error_len) = error.error_len() {
+                    emit_terminal_chunk(
+                        groups,
+                        group_key,
+                        repo_path,
+                        task_id,
+                        script_id,
+                        format_terminal_system_message(
+                            "Dev server terminal output contained invalid UTF-8 bytes and could not be fully rendered.",
+                        ),
+                    );
+                    pending.drain(0..error_len);
+                    continue;
+                }
+
                 emit_terminal_chunk(
                     groups,
                     group_key,
@@ -824,7 +842,7 @@ fn flush_pending_terminal_bytes(
                     ),
                 );
                 pending.clear();
-                return false;
+                return true;
             }
         }
     }
@@ -1151,7 +1169,9 @@ mod tests {
     use crate::app_service::{HookTrustConfirmationPort, HookTrustConfirmationRequest};
     use host_domain::{GitCurrentBranch, TaskStatus};
     use host_infra_system::AppConfigStore;
+    use std::collections::VecDeque;
     use std::fs;
+    use std::io::{self, Read};
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
@@ -1169,6 +1189,82 @@ mod tests {
             dev_servers,
             ..Default::default()
         }
+    }
+
+    enum ScriptedReadStep {
+        Chunk(Vec<u8>),
+        Error(io::ErrorKind),
+        Eof,
+    }
+
+    struct ScriptedReader {
+        steps: VecDeque<ScriptedReadStep>,
+    }
+
+    impl ScriptedReader {
+        fn new(steps: Vec<ScriptedReadStep>) -> Self {
+            Self {
+                steps: steps.into(),
+            }
+        }
+    }
+
+    impl Read for ScriptedReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            match self.steps.pop_front().unwrap_or(ScriptedReadStep::Eof) {
+                ScriptedReadStep::Chunk(bytes) => {
+                    let read = bytes.len().min(buffer.len());
+                    buffer[..read].copy_from_slice(&bytes[..read]);
+                    Ok(read)
+                }
+                ScriptedReadStep::Error(kind) => Err(io::Error::from(kind)),
+                ScriptedReadStep::Eof => Ok(0),
+            }
+        }
+    }
+
+    fn build_runtime_groups_for_forwarder_test(
+    ) -> Arc<Mutex<HashMap<String, DevServerGroupRuntime>>> {
+        Arc::new(Mutex::new(HashMap::from([(
+            "repo::task-forwarder".to_string(),
+            DevServerGroupRuntime {
+                state: DevServerGroupState {
+                    repo_path: "repo".to_string(),
+                    task_id: "task-forwarder".to_string(),
+                    worktree_path: Some("/tmp/worktree".to_string()),
+                    scripts: vec![DevServerScriptState {
+                        script_id: "server-1".to_string(),
+                        name: "Server".to_string(),
+                        command: "bun run dev".to_string(),
+                        status: DevServerScriptStatus::Running,
+                        pid: Some(99),
+                        started_at: Some("2026-03-19T10:00:00Z".to_string()),
+                        exit_code: None,
+                        last_error: None,
+                        buffered_terminal_chunks: Vec::new(),
+                        next_terminal_sequence: 0,
+                    }],
+                    updated_at: "2026-03-19T10:00:00Z".to_string(),
+                },
+                emitter: None,
+            },
+        )])))
+    }
+
+    fn read_forwarder_output(
+        groups: &Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
+    ) -> String {
+        groups
+            .lock()
+            .expect("group lock poisoned")
+            .get("repo::task-forwarder")
+            .expect("runtime present")
+            .state
+            .scripts[0]
+            .buffered_terminal_chunks
+            .iter()
+            .map(|chunk| chunk.data.as_str())
+            .collect::<String>()
     }
 
     #[test]
@@ -1359,6 +1455,68 @@ mod tests {
         let buffered = &runtime.state.scripts[0].buffered_terminal_chunks;
         assert_eq!(buffered.len(), 1);
         assert!(buffered[0].data.starts_with('b'));
+    }
+
+    #[test]
+    fn spawn_terminal_forwarder_retries_interrupted_reads() {
+        let groups = build_runtime_groups_for_forwarder_test();
+
+        spawn_terminal_forwarder(
+            groups.clone(),
+            "repo::task-forwarder".to_string(),
+            "repo".to_string(),
+            "task-forwarder".to_string(),
+            "server-1".to_string(),
+            ScriptedReader::new(vec![
+                ScriptedReadStep::Error(io::ErrorKind::Interrupted),
+                ScriptedReadStep::Chunk(b"ready\r\n".to_vec()),
+                ScriptedReadStep::Eof,
+            ]),
+        );
+
+        let mut captured = String::new();
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(25));
+            captured = read_forwarder_output(&groups);
+            if captured.contains("ready\r\n") {
+                break;
+            }
+        }
+
+        assert!(captured.contains("ready\r\n"));
+        assert!(!captured.contains("terminal stream failed"));
+    }
+
+    #[test]
+    fn spawn_terminal_forwarder_skips_invalid_utf8_and_continues_streaming() {
+        let groups = build_runtime_groups_for_forwarder_test();
+
+        spawn_terminal_forwarder(
+            groups.clone(),
+            "repo::task-forwarder".to_string(),
+            "repo".to_string(),
+            "task-forwarder".to_string(),
+            "server-1".to_string(),
+            ScriptedReader::new(vec![
+                ScriptedReadStep::Chunk(vec![0xff]),
+                ScriptedReadStep::Chunk(b"ready\r\n".to_vec()),
+                ScriptedReadStep::Eof,
+            ]),
+        );
+
+        let mut captured = String::new();
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(25));
+            captured = read_forwarder_output(&groups);
+            if captured.contains("ready\r\n") {
+                break;
+            }
+        }
+
+        assert!(captured.contains(
+            "Dev server terminal output contained invalid UTF-8 bytes and could not be fully rendered."
+        ));
+        assert!(captured.contains("ready\r\n"));
     }
 
     #[test]

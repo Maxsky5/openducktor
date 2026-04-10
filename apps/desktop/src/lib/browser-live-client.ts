@@ -114,6 +114,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
   if (!channel) {
     const eventSource = new EventSource(`${baseUrl}/${path}`);
     const listeners = new Map<number, BrowserSseListener>();
+    const shouldEmitControlEvents = path === "dev-server-events";
     let hasOpened = false;
     const handleMessage = (event: MessageEvent<string>): void => {
       const payload = parseSsePayload(event.data);
@@ -122,6 +123,9 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
       }
     };
     const handleOpen = (): void => {
+      if (!shouldEmitControlEvents) {
+        return;
+      }
       if (!hasOpened) {
         hasOpened = true;
         return;
@@ -131,6 +135,9 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
       }
     };
     const handleStreamWarning = (event: MessageEvent<string>): void => {
+      if (!shouldEmitControlEvents) {
+        return;
+      }
       for (const currentListener of listeners.values()) {
         currentListener(browserLiveControlEvent("stream-warning", event.data));
       }
