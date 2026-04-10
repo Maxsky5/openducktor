@@ -95,6 +95,8 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             plan_get_calls: Vec::new(),
             plan_set_calls: Vec::new(),
             metadata_get_calls: Vec::new(),
+            metadata_spec: None,
+            metadata_plan: None,
             qa_append_calls: Vec::new(),
             qa_outcome_calls: Vec::new(),
             latest_qa_report: None,

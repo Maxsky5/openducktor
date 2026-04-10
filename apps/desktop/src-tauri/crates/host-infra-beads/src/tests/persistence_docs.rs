@@ -201,6 +201,38 @@ fn invalid_encoded_spec_returns_document_error_without_breaking_task_summary() -
 }
 
 #[test]
+fn malformed_plan_collection_surfaces_document_error() -> Result<()> {
+    let repo = RepoFixture::new("malformed-plan-collection");
+    let issue = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "implementationPlan": { "unexpected": true }
+                }
+            }
+        })),
+    );
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let plan = store.get_plan(repo.path(), "task-1")?;
+    assert!(plan.markdown.is_empty());
+    assert!(plan.updated_at.is_none());
+    assert!(plan.revision.is_none());
+    assert!(plan
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("expected an array")));
+    Ok(())
+}
+
+#[test]
 fn set_spec_trims_markdown_and_increments_revision() -> Result<()> {
     let repo = RepoFixture::new("set-spec");
     let current = issue_value(

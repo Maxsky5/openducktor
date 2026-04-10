@@ -173,6 +173,61 @@ fn malformed_collection_error(path: &str, value: &Value) -> Option<String> {
     Some(format!("Failed to read {path}: expected an array"))
 }
 
+struct BaseDocumentFields<'a> {
+    updated_at: Option<String>,
+    revision: Option<u32>,
+    payload: Option<&'a str>,
+    encoding: std::result::Result<Option<String>, String>,
+    errors: Vec<String>,
+}
+
+impl<'a> BaseDocumentFields<'a> {
+    fn from_object(object: &'a Map<String, Value>, path: &str) -> Self {
+        let updated_at = optional_string_field(object, "updatedAt");
+        let revision = optional_u32_field(object, "revision");
+        let payload = required_string_field(object, "markdown");
+        let encoding = encoding_field(object);
+        let mut errors = field_errors(object, path, &["updatedAt", "revision"]);
+
+        if payload.is_none() {
+            errors.push(format!("{path}.markdown must be a string"));
+        }
+        if let Some(error) = encoding.as_ref().err() {
+            errors.push(error.clone());
+        }
+
+        Self {
+            updated_at,
+            revision,
+            payload,
+            encoding,
+            errors,
+        }
+    }
+
+    fn with_additional_error(mut self, error: Option<String>) -> Self {
+        if let Some(error) = error {
+            self.errors.push(error);
+        }
+        self
+    }
+
+    fn decode_markdown(&self, path: &str) -> std::result::Result<String, String> {
+        if !self.errors.is_empty() {
+            return Err(format!("Failed to read {path}: {}", self.errors.join("; ")));
+        }
+
+        let payload = self.payload.expect("payload checked above");
+        match &self.encoding {
+            Ok(Some(encoding)) => {
+                decode_markdown_payload(payload, encoding, path).map_err(|error| error.to_string())
+            }
+            Ok(None) => Ok(payload.to_string()),
+            Err(_) => unreachable!("encoding error handled above"),
+        }
+    }
+}
+
 fn read_markdown_entry(entry: &Value, path: &str) -> SpecDocument {
     let Some(object) = entry.as_object() else {
         return SpecDocument {
@@ -183,43 +238,20 @@ fn read_markdown_entry(entry: &Value, path: &str) -> SpecDocument {
         };
     };
 
-    let updated_at = optional_string_field(object, "updatedAt");
-    let revision = optional_u32_field(object, "revision");
-    let payload = required_string_field(object, "markdown");
-    let encoding = encoding_field(object);
-    let mut errors = field_errors(object, path, &["updatedAt", "revision"]);
+    let fields = BaseDocumentFields::from_object(object, path);
+    let updated_at = fields.updated_at.clone();
+    let revision = fields.revision;
 
-    if payload.is_none() {
-        errors.push(format!("{path}.markdown must be a string"));
-    }
-    if let Some(error) = encoding.as_ref().err() {
-        errors.push(error.clone());
-    }
-
-    if !errors.is_empty() {
-        return SpecDocument {
-            markdown: String::new(),
-            updated_at,
-            revision,
-            error: Some(format!("Failed to read {path}: {}", errors.join("; "))),
-        };
-    }
-
-    let payload = payload.expect("payload checked above");
-    let markdown = match encoding {
-        Ok(Some(value)) => match decode_markdown_payload(payload, &value, path) {
-            Ok(markdown) => markdown,
-            Err(error) => {
-                return SpecDocument {
-                    markdown: String::new(),
-                    updated_at,
-                    revision,
-                    error: Some(error.to_string()),
-                };
-            }
-        },
-        Ok(None) => payload.to_string(),
-        Err(_) => unreachable!("encoding error handled above"),
+    let markdown = match fields.decode_markdown(path) {
+        Ok(markdown) => markdown,
+        Err(error) => {
+            return SpecDocument {
+                markdown: String::new(),
+                updated_at,
+                revision,
+                error: Some(error),
+            };
+        }
     };
 
     SpecDocument {
@@ -241,51 +273,26 @@ fn read_qa_entry(entry: &Value, path: &str) -> QaReportDocument {
         };
     };
 
-    let updated_at = optional_string_field(object, "updatedAt");
-    let revision = optional_u32_field(object, "revision");
-    let payload = required_string_field(object, "markdown");
-    let encoding = encoding_field(object);
     let verdict = parse_workflow_verdict(object.get("verdict"));
-    let mut errors = field_errors(object, path, &["updatedAt", "revision"]);
+    let fields = BaseDocumentFields::from_object(object, path).with_additional_error(
+        verdict
+            .is_none()
+            .then(|| format!("{path}.verdict must be one of approved or rejected")),
+    );
+    let updated_at = fields.updated_at.clone();
+    let revision = fields.revision;
 
-    if payload.is_none() {
-        errors.push(format!("{path}.markdown must be a string"));
-    }
-    if let Some(error) = encoding.as_ref().err() {
-        errors.push(error.clone());
-    }
-    if verdict.is_none() {
-        errors.push(format!(
-            "{path}.verdict must be one of approved or rejected"
-        ));
-    }
-
-    if !errors.is_empty() {
-        return QaReportDocument {
-            markdown: String::new(),
-            verdict: verdict.unwrap_or(QaWorkflowVerdict::NotReviewed),
-            updated_at,
-            revision,
-            error: Some(format!("Failed to read {path}: {}", errors.join("; "))),
-        };
-    }
-
-    let payload = payload.expect("payload checked above");
-    let markdown = match encoding {
-        Ok(Some(value)) => match decode_markdown_payload(payload, &value, path) {
-            Ok(markdown) => markdown,
-            Err(error) => {
-                return QaReportDocument {
-                    markdown: String::new(),
-                    verdict: verdict.expect("verdict checked above"),
-                    updated_at,
-                    revision,
-                    error: Some(error.to_string()),
-                };
-            }
-        },
-        Ok(None) => payload.to_string(),
-        Err(_) => unreachable!("encoding error handled above"),
+    let markdown = match fields.decode_markdown(path) {
+        Ok(markdown) => markdown,
+        Err(error) => {
+            return QaReportDocument {
+                markdown: String::new(),
+                verdict: verdict.unwrap_or(QaWorkflowVerdict::NotReviewed),
+                updated_at,
+                revision,
+                error: Some(error),
+            };
+        }
     };
 
     QaReportDocument {

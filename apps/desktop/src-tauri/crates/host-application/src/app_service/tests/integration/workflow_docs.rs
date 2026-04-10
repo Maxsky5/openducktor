@@ -1853,6 +1853,60 @@ fn qa_get_report_preserves_document_level_decode_errors() -> Result<()> {
 }
 
 #[test]
+fn spec_get_and_plan_get_preserve_document_level_decode_errors() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-doc-errors";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.metadata_spec = Some(host_domain::SpecDocument {
+            markdown: String::new(),
+            updated_at: Some("2026-02-20T10:00:00Z".to_string()),
+            revision: Some(1),
+            error: Some(
+                "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
+                    .to_string(),
+            ),
+        });
+        state.metadata_plan = Some(host_domain::SpecDocument {
+            markdown: String::new(),
+            updated_at: Some("2026-02-20T11:00:00Z".to_string()),
+            revision: Some(2),
+            error: Some(
+                "Failed to decode openducktor.documents.implementationPlan[0]: invalid gzip payload"
+                    .to_string(),
+            ),
+        });
+    }
+
+    let spec = service.spec_get(repo_path, "task-1")?;
+    assert!(spec.markdown.is_empty());
+    assert_eq!(spec.updated_at.as_deref(), Some("2026-02-20T10:00:00Z"));
+    assert_eq!(spec.revision, Some(1));
+    assert_eq!(
+        spec.error.as_deref(),
+        Some("Failed to decode openducktor.documents.spec[0]: invalid base64 payload"),
+    );
+
+    let plan = service.plan_get(repo_path, "task-1")?;
+    assert!(plan.markdown.is_empty());
+    assert_eq!(plan.updated_at.as_deref(), Some("2026-02-20T11:00:00Z"));
+    assert_eq!(plan.revision, Some(2));
+    assert_eq!(
+        plan.error.as_deref(),
+        Some("Failed to decode openducktor.documents.implementationPlan[0]: invalid gzip payload"),
+    );
+    Ok(())
+}
+
+#[test]
 fn spec_get_and_plan_get_use_consolidated_metadata_lookup() -> Result<()> {
     let repo_path = "/tmp/odt-repo-docs-read";
     let (service, task_state, _git_state) = build_service_with_git_state(

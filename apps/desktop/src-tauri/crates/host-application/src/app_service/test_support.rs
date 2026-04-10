@@ -98,6 +98,8 @@ pub(crate) struct TaskStoreState {
     pub(crate) plan_get_calls: Vec<String>,
     pub(crate) plan_set_calls: Vec<(String, String)>,
     pub(crate) metadata_get_calls: Vec<String>,
+    pub(crate) metadata_spec: Option<SpecDocument>,
+    pub(crate) metadata_plan: Option<SpecDocument>,
     pub(crate) qa_append_calls: Vec<(String, String, QaVerdict)>,
     pub(crate) qa_outcome_calls: Vec<(String, TaskStatus, String, QaVerdict)>,
     pub(crate) latest_qa_report: Option<QaReportDocument>,
@@ -507,21 +509,23 @@ impl TaskStore for FakeTaskStore {
     fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> Result<TaskMetadata> {
         let mut state = self.state.lock().expect("task store lock poisoned");
         state.metadata_get_calls.push(_task_id.to_string());
+        let spec = state.metadata_spec.clone().unwrap_or(SpecDocument {
+            markdown: String::new(),
+            updated_at: None,
+            revision: None,
+            error: None,
+        });
+        let plan = state.metadata_plan.clone().unwrap_or(SpecDocument {
+            markdown: String::new(),
+            updated_at: None,
+            revision: None,
+            error: None,
+        });
         let qa_report = state.latest_qa_report.clone();
         let agent_sessions = state.agent_sessions.clone();
         Ok(TaskMetadata {
-            spec: SpecDocument {
-                markdown: String::new(),
-                updated_at: None,
-                revision: None,
-                error: None,
-            },
-            plan: SpecDocument {
-                markdown: String::new(),
-                updated_at: None,
-                revision: None,
-                error: None,
-            },
+            spec,
+            plan,
             qa_report,
             pull_request: state.pull_requests.get(_task_id).cloned(),
             direct_merge: state.direct_merge_records.get(_task_id).cloned(),
@@ -1081,6 +1085,8 @@ pub(crate) fn build_service_with_git_state_enforced(
         plan_get_calls: Vec::new(),
         plan_set_calls: Vec::new(),
         metadata_get_calls: Vec::new(),
+        metadata_spec: None,
+        metadata_plan: None,
         qa_append_calls: Vec::new(),
         qa_outcome_calls: Vec::new(),
         latest_qa_report: None,
@@ -1170,6 +1176,8 @@ pub(crate) fn build_service_with_git_state(
         plan_get_calls: Vec::new(),
         plan_set_calls: Vec::new(),
         metadata_get_calls: Vec::new(),
+        metadata_spec: None,
+        metadata_plan: None,
         qa_append_calls: Vec::new(),
         qa_outcome_calls: Vec::new(),
         latest_qa_report: None,
@@ -1722,6 +1730,8 @@ pub(crate) fn build_service_with_store(
         plan_get_calls: Vec::new(),
         plan_set_calls: Vec::new(),
         metadata_get_calls: Vec::new(),
+        metadata_spec: None,
+        metadata_plan: None,
         qa_append_calls: Vec::new(),
         qa_outcome_calls: Vec::new(),
         latest_qa_report: None,
