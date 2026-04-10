@@ -2,7 +2,7 @@ use super::{
     read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck,
     WorkspaceSettingsSnapshotUpdate,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
     GitConflictAbortRequest, GitConflictAbortResult, GitCurrentBranch, GitFileDiff, GitFileStatus,
@@ -12,10 +12,10 @@ use host_domain::{
     WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, copy_configured_worktree_files, remove_worktree, repo_script_fingerprint,
-    resolve_repo_live_database_dir, run_command, run_command_allow_failure_with_env,
-    version_command, AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings,
-    PromptOverrides, RepoConfig,
+    command_exists, copy_configured_worktree_files, remove_worktree,
+    remove_worktree_path_if_present, repo_script_fingerprint, resolve_repo_live_database_dir,
+    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
+    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -457,6 +457,9 @@ impl AppService {
 
         self.git_port
             .remove_worktree(Path::new(&repo_path), Path::new(worktree), force)?;
+        remove_worktree_path_if_present(Path::new(worktree)).with_context(|| {
+            format!("git worktree removal left filesystem path cleanup incomplete for {worktree}")
+        })?;
         Ok(true)
     }
 

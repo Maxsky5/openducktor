@@ -40,6 +40,24 @@ pub fn pick_free_port() -> Result<u16> {
     Ok(port)
 }
 
+pub fn remove_worktree_path_if_present(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("Failed reading file metadata for {}", path.display()))?;
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)
+            .with_context(|| format!("Failed removing directory {}", path.display()))?;
+    } else {
+        fs::remove_file(path)
+            .with_context(|| format!("Failed removing file {}", path.display()))?;
+    }
+
+    Ok(())
+}
+
 pub fn copy_configured_worktree_files(
     repo_path: &Path,
     worktree_path: &Path,
@@ -217,6 +235,13 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
         ));
     }
 
+    remove_worktree_path_if_present(worktree_path).with_context(|| {
+        format!(
+            "git worktree removal left filesystem path cleanup incomplete for {}",
+            worktree_path.display()
+        )
+    })?;
+
     Ok(())
 }
 
@@ -224,7 +249,7 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 mod tests {
     use super::{
         build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
-        slugify_title,
+        remove_worktree_path_if_present, slugify_title,
     };
     use host_domain::DEFAULT_BRANCH_PREFIX;
     use std::fs;
@@ -462,6 +487,21 @@ mod tests {
             error.to_string().contains("git worktree remove failed for"),
             "unexpected remove_worktree error: {error}"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn remove_worktree_path_if_present_removes_leftover_directory() {
+        let root = unique_temp_path("worktree-leftover-directory");
+        let leftover = root.join("leftover");
+        fs::create_dir_all(leftover.join("nested")).expect("leftover directory should exist");
+        fs::write(leftover.join("nested").join("debug.log"), "log\n")
+            .expect("leftover file should exist");
+
+        remove_worktree_path_if_present(&leftover)
+            .expect("leftover worktree directory should be removed");
+
+        assert!(!leftover.exists(), "leftover directory should be removed");
         let _ = fs::remove_dir_all(root);
     }
 }

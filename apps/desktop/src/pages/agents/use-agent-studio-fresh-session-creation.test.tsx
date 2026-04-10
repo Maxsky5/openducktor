@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { markErrorToastShown } from "@/lib/errors";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
@@ -148,6 +149,34 @@ describe("useAgentStudioFreshSessionCreation", () => {
     expect(toastErrorMock).toHaveBeenCalledWith("Failed to start Planner session", {
       description: "start failed",
     });
+
+    await harness.unmount();
+  });
+
+  test("does not show a second toast when the start error was already surfaced", async () => {
+    const startAgentSession = mock(async () => {
+      throw markErrorToastShown(new Error("start failed"));
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        startAgentSession,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "planner:planner_initial:fresh",
+        role: "planner",
+        scenario: "planner_initial",
+        label: "Planner · Start Planner",
+        description: "Create a new planner session from scratch",
+        disabled: false,
+      });
+    });
+
+    await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
+    expect(toastErrorMock).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

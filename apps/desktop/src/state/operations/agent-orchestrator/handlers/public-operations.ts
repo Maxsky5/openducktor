@@ -15,7 +15,7 @@ import type {
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage, markErrorToastShown } from "@/lib/errors";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -82,7 +82,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
     toast.error(title, {
       description: errorMessage(error),
     });
-    throw error;
+    throw markErrorToastShown(error);
   }
 };
 

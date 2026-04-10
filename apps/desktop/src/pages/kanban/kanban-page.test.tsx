@@ -8,6 +8,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
 import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { markErrorToastShown } from "@/lib/errors";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -828,6 +829,32 @@ describe("KanbanPage session start modal flow", () => {
       description: "config unavailable",
     });
     expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("session start errors already surfaced elsewhere are not toasted again", async () => {
+    startAgentSessionMock.mockImplementationOnce(async () => {
+      throw markErrorToastShown(new Error("Worktree path already exists for task TASK-123"));
+    });
+
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await confirmSessionStartModal({
+      modelId: "openai/gpt-5",
+      profileId: "build-agent",
+      variant: "default",
+    });
+
+    await waitForMockCall(startAgentSessionMock);
+    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(latestLocation).toBe("/");
 
     await act(async () => {
       renderer.unmount();

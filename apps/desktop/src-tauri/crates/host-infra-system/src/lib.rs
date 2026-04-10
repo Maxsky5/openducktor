@@ -34,5 +34,5 @@ pub use process::{
 pub use user_paths::{normalize_user_path, parse_user_path, parse_user_path_os};
 pub use worktree::{
     build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
-    slugify_title,
+    remove_worktree_path_if_present, slugify_title,
 };

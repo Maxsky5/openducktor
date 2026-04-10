@@ -272,6 +272,49 @@ fn git_remove_worktree_rejects_repository_root() {
 }
 
 #[test]
+fn git_remove_worktree_removes_leftover_directory_after_git_cleanup() -> Result<()> {
+    let root = unique_temp_path("git-remove-worktree-leftover-directory");
+    let repo_path = root.join("repo");
+    let worktree_path = root.join("worktree");
+    fs::create_dir_all(worktree_path.join("nested"))?;
+    fs::write(
+        worktree_path.join("nested").join("leftover.txt"),
+        "leftover\n",
+    )?;
+
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    assert!(service.git_remove_worktree(
+        repo_path.to_string_lossy().as_ref(),
+        worktree_path.to_string_lossy().as_ref(),
+        true,
+    )?);
+
+    assert!(git_state.lock().expect("git lock poisoned").calls.contains(
+        &GitCall::RemoveWorktree {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            worktree_path: worktree_path.to_string_lossy().to_string(),
+            force: true,
+        }
+    ));
+    assert!(
+        !worktree_path.exists(),
+        "leftover directory should be removed"
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn git_create_worktree_copies_configured_files() -> Result<()> {
     let root = unique_temp_path("git-create-worktree-copies-files");
     let repo = root.join("repo");
