@@ -9,6 +9,8 @@ type BrowserLiveControlEvent = {
   message?: string;
 };
 
+const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
+
 type BrowserSseChannel = {
   eventSource: EventSource;
   listeners: Map<number, BrowserSseListener>;
@@ -93,6 +95,18 @@ const browserLiveControlEvent = (
   ...(message ? { message } : {}),
 });
 
+export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const record = payload as Record<string, unknown>;
+  return (
+    record.__openducktorBrowserLive === true &&
+    (record.kind === "reconnected" || record.kind === "stream-warning")
+  );
+};
+
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
@@ -114,7 +128,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
   if (!channel) {
     const eventSource = new EventSource(`${baseUrl}/${path}`);
     const listeners = new Map<number, BrowserSseListener>();
-    const shouldEmitControlEvents = path === "dev-server-events";
+    const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
     let hasOpened = false;
     const handleMessage = (event: MessageEvent<string>): void => {
       const payload = parseSsePayload(event.data);

@@ -480,6 +480,109 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("resyncs the active repo when the browser-live task stream reconnects", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData,
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+    await harness.mount();
+    try {
+      refreshTaskData.mockClear();
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
+
+      await harness.run(async () => {
+        subscribedTaskListener?.({
+          __openducktorBrowserLive: true,
+          kind: "reconnected",
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo");
+      expect(toastError).not.toHaveBeenCalledWith("Task sync stream degraded", expect.anything());
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces browser-live task stream warnings and triggers a resync", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData,
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+    await harness.mount();
+    try {
+      refreshTaskData.mockClear();
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
+
+      await harness.run(async () => {
+        subscribedTaskListener?.({
+          __openducktorBrowserLive: true,
+          kind: "stream-warning",
+          message: "Task stream skipped 2 events; reconnect will replay buffered events.",
+        });
+        await Promise.resolve();
+      });
+
+      expect(toastError).toHaveBeenCalledWith("Task sync stream degraded", {
+        description: "Task stream skipped 2 events; reconnect will replay buffered events.",
+      });
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads repo task and diagnostics checks when the active repo changes", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];

@@ -273,4 +273,32 @@ describe("browser live SSE subscriptions", () => {
     unsubscribeB();
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
   });
+
+  test("emits reconnect and stream-warning control payloads for task-event subscribers", async () => {
+    const { subscribeBrowserLiveTaskEvents } = await loadBrowserLiveClient();
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeBrowserLiveTaskEvents(listener);
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    expect(listener).not.toHaveBeenCalled();
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit(
+      "stream-warning",
+      "Task stream skipped 2 events; reconnect will replay buffered events.",
+    );
+
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "Task stream skipped 2 events; reconnect will replay buffered events.",
+    });
+
+    unsubscribe();
+  });
 });

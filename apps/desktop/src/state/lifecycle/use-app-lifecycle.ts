@@ -1,5 +1,6 @@
 import { externalTaskSyncEventSchema, type RunEvent, runEventSchema } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
+import { isBrowserLiveControlEvent } from "@/lib/browser-live-client";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
@@ -134,6 +135,28 @@ export function useAppLifecycle({
     let unsubscribe: (() => void) | null = null;
     hostBridge
       .subscribeTaskEvents((payload) => {
+        if (isBrowserLiveControlEvent(payload)) {
+          const activeRepo = activeRepoRef.current;
+          if (!activeRepo) {
+            return;
+          }
+
+          if (payload.kind === "stream-warning") {
+            toast.error("Task sync stream degraded", {
+              description:
+                payload.message ??
+                "The browser-live task event stream fell behind and is reconnecting.",
+            });
+          }
+
+          void refreshTaskDataRef.current(activeRepo).catch((error: unknown) => {
+            toast.error("Failed to resync tasks after task stream reconnect", {
+              description: summarizeTaskLoadError(error),
+            });
+          });
+          return;
+        }
+
         const parsed = externalTaskSyncEventSchema.safeParse(payload);
         if (!parsed.success) {
           toast.error("Task sync event invalid", {
