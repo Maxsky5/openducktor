@@ -6,3 +6,4 @@ mod verifier;
 
 pub(crate) use coordinator::BeadsLifecycle;
 pub(crate) use error::LifecycleError;
+pub(crate) use verifier::RepoReadiness;

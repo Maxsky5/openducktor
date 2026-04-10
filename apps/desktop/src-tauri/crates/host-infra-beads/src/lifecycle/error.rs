@@ -17,6 +17,18 @@ pub(crate) enum LifecycleError {
     InvalidServerPort { value: String },
 
     #[error(
+        "Beads attachment contract is invalid at {beads_dir}: {reason}",
+        beads_dir = .beads_dir.display()
+    )]
+    AttachmentContractInvalid { beads_dir: PathBuf, reason: String },
+
+    #[error(
+        "Shared Dolt readiness probe failed for {repo_path}: {reason}",
+        repo_path = .repo_path.display()
+    )]
+    SharedDoltUnavailable { repo_path: PathBuf, reason: String },
+
+    #[error(
         "Shared Dolt database is missing for {beads_dir} and no attachment backup exists at {backup_dir}",
         beads_dir = .beads_dir.display(),
         backup_dir = .backup_dir.display()

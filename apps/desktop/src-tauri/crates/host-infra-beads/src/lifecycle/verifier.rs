@@ -1,11 +1,35 @@
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::compute_beads_database_name;
 use serde::Deserialize;
-use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
 use super::{BeadsLifecycle, LifecycleError};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RepoReadiness {
+    Ready,
+    MissingAttachment,
+    BrokenAttachmentContract { reason: String },
+    SharedDoltUnavailable { reason: String },
+    MissingSharedDatabase { database_name: String },
+    AttachmentVerificationFailed { reason: String },
+}
+
+impl RepoReadiness {
+    pub(crate) fn description(&self) -> String {
+        match self {
+            Self::Ready => "ready".to_string(),
+            Self::MissingAttachment => "Beads attachment is missing".to_string(),
+            Self::BrokenAttachmentContract { reason } => reason.clone(),
+            Self::SharedDoltUnavailable { reason } => reason.clone(),
+            Self::MissingSharedDatabase { database_name } => {
+                format!("Shared Dolt database {database_name} is missing")
+            }
+            Self::AttachmentVerificationFailed { reason } => reason.clone(),
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct BeadsAttachmentMetadata {
@@ -23,23 +47,39 @@ struct BeadsWherePayload {
     error: Option<String>,
 }
 
-impl BeadsLifecycle {
-    pub(crate) fn reason_requires_shared_database_seed(reason: &str) -> bool {
-        let normalized = reason.to_ascii_lowercase();
-        normalized.contains("not found on dolt server")
-            || normalized.contains("error 1049")
-            || (normalized.contains("database ") && normalized.contains(" not found"))
-    }
+enum SharedDatabaseProbe {
+    Available,
+    Missing { database_name: String },
+    Unavailable { reason: String },
+}
 
+impl BeadsLifecycle {
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,
         beads_dir: &Path,
-    ) -> Result<(bool, String)> {
+    ) -> Result<RepoReadiness> {
+        if !attachment_dir_exists(beads_dir)? {
+            return Ok(RepoReadiness::MissingAttachment);
+        }
+
         let env = self.build_bd_env(repo_path)?;
         if let Err(error) = self.verify_repo_attachment_contract(repo_path, beads_dir, &env) {
-            return Ok((false, error.to_string()));
+            return Ok(RepoReadiness::BrokenAttachmentContract {
+                reason: error.to_string(),
+            });
         }
+
+        match self.probe_shared_database_presence(repo_path, &env)? {
+            SharedDatabaseProbe::Available => {}
+            SharedDatabaseProbe::Missing { database_name } => {
+                return Ok(RepoReadiness::MissingSharedDatabase { database_name });
+            }
+            SharedDatabaseProbe::Unavailable { reason } => {
+                return Ok(RepoReadiness::SharedDoltUnavailable { reason });
+            }
+        }
+
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -55,47 +95,41 @@ impl BeadsLifecycle {
         let json_payload = Self::extract_json_payload(&stdout, &stderr);
 
         if !json_payload.is_empty() {
-            let payload: Value = serde_json::from_str(json_payload)
-                .context("Failed to parse `bd where --json` output")?;
-            let where_payload: BeadsWherePayload = serde_json::from_value(payload.clone())
+            let where_payload: BeadsWherePayload = serde_json::from_str(json_payload)
                 .context("Failed to decode `bd where --json` payload")?;
             if let Some(path) = where_payload.path.as_deref() {
                 if self.attachment_paths_match(path, beads_dir)? {
-                    return Ok((true, String::new()));
+                    return Ok(RepoReadiness::Ready);
                 }
 
-                return Ok((
-                    false,
-                    format!(
+                return Ok(RepoReadiness::AttachmentVerificationFailed {
+                    reason: format!(
                         "Beads attachment resolves to {}, expected {}",
                         path,
                         beads_dir.display()
                     ),
-                ));
+                });
             }
             if let Some(error) = where_payload.error.as_deref() {
-                return Ok((false, error.trim().to_string()));
-            }
-            if payload.get("path").and_then(Value::as_str).is_some() {
-                return Ok((true, String::new()));
-            }
-            if let Some(error) = payload.get("error").and_then(Value::as_str) {
-                return Ok((false, error.trim().to_string()));
+                let reason = error.trim();
+                if reason.is_empty() {
+                    return Err(anyhow!("bd where returned empty error payload"));
+                }
+                return Ok(RepoReadiness::AttachmentVerificationFailed {
+                    reason: reason.to_string(),
+                });
             }
 
-            return Ok((false, "bd where returned malformed payload".to_string()));
+            return Err(anyhow!("bd where returned malformed payload"));
         }
 
         if !ok {
-            let error = if stderr.trim().is_empty() {
-                "bd where failed".to_string()
-            } else {
-                stderr.trim().to_string()
-            };
-            return Ok((false, error));
+            return Ok(RepoReadiness::AttachmentVerificationFailed {
+                reason: Self::command_failure_reason("bd where failed", &stdout, &stderr),
+            });
         }
 
-        Ok((false, "bd where returned empty payload".to_string()))
+        Err(anyhow!("bd where returned empty payload"))
     }
 
     fn extract_json_payload<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
@@ -119,6 +153,56 @@ impl BeadsLifecycle {
         ""
     }
 
+    fn probe_shared_database_presence(
+        &self,
+        repo_path: &Path,
+        env: &[(String, String)],
+    ) -> Result<SharedDatabaseProbe> {
+        let expected_database = compute_beads_database_name(repo_path)?;
+        let host = Self::required_env_value(env, "BEADS_DOLT_SERVER_HOST")?;
+        let port = Self::required_env_value(env, "BEADS_DOLT_SERVER_PORT")?;
+        let user = Self::required_env_value(env, "BEADS_DOLT_SERVER_USER")?;
+        let args = [
+            "--host",
+            host.as_str(),
+            "--port",
+            port.as_str(),
+            "--no-tls",
+            "-u",
+            user.as_str(),
+            "-p",
+            "",
+            "sql",
+            "-q",
+            "show databases",
+        ];
+        let (ok, stdout, stderr) =
+            self.command_runner()
+                .run_allow_failure_with_env("dolt", &args, None, &[])?;
+
+        if !ok {
+            return Ok(SharedDatabaseProbe::Unavailable {
+                reason: Self::command_failure_reason(
+                    "Shared Dolt database probe failed",
+                    &stdout,
+                    &stderr,
+                ),
+            });
+        }
+        if stdout.trim().is_empty() {
+            return Ok(SharedDatabaseProbe::Unavailable {
+                reason: "Shared Dolt database probe returned empty output".to_string(),
+            });
+        }
+        if Self::database_list_contains(&stdout, expected_database.as_str()) {
+            return Ok(SharedDatabaseProbe::Available);
+        }
+
+        Ok(SharedDatabaseProbe::Missing {
+            database_name: expected_database,
+        })
+    }
+
     fn verify_repo_attachment_contract(
         &self,
         repo_path: &Path,
@@ -127,9 +211,6 @@ impl BeadsLifecycle {
     ) -> Result<()> {
         let metadata_path = beads_dir.join("metadata.json");
         if !metadata_path.is_file() {
-            if !self.command_runner().uses_real_processes() {
-                return Ok(());
-            }
             return Err(anyhow!(
                 "Beads attachment metadata is missing at {}",
                 metadata_path.display()
@@ -223,5 +304,41 @@ impl BeadsLifecycle {
         let expected =
             fs::canonicalize(expected_path).unwrap_or_else(|_| expected_path.to_path_buf());
         Ok(actual == expected)
+    }
+
+    fn command_failure_reason(default_message: &str, stdout: &str, stderr: &str) -> String {
+        let stderr = stderr.trim();
+        if !stderr.is_empty() {
+            return stderr.to_string();
+        }
+
+        let stdout = stdout.trim();
+        if !stdout.is_empty() {
+            return stdout.to_string();
+        }
+
+        default_message.to_string()
+    }
+
+    fn database_list_contains(output: &str, expected_database: &str) -> bool {
+        output.lines().any(|line| {
+            line.split(|character: char| {
+                character.is_whitespace() || matches!(character, '|' | '+' | '-')
+            })
+            .any(|token| token == expected_database)
+        })
+    }
+}
+
+fn attachment_dir_exists(beads_dir: &Path) -> Result<bool> {
+    match fs::metadata(beads_dir) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "Failed to inspect Beads attachment path {}",
+                beads_dir.display()
+            )
+        }),
     }
 }

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::constants::CUSTOM_STATUS_VALUES;
 
-use super::{BeadsLifecycle, LifecycleError};
+use super::{BeadsLifecycle, LifecycleError, RepoReadiness};
 
 impl BeadsLifecycle {
     pub(crate) fn repair_repo_store(&self, repo_path: &Path) -> Result<()> {
@@ -114,7 +114,6 @@ impl BeadsLifecycle {
         &self,
         repo_path: &Path,
         beads_dir: &Path,
-        init_failure_reason: &str,
     ) -> Result<()> {
         let slug = compute_repo_slug(repo_path);
         let database_name = compute_beads_database_name(repo_path)?;
@@ -153,7 +152,7 @@ impl BeadsLifecycle {
 
         if !ok {
             let details = if stderr.trim().is_empty() {
-                init_failure_reason.to_string()
+                "Beads attachment is missing".to_string()
             } else {
                 stderr.trim().to_string()
             };
@@ -164,17 +163,29 @@ impl BeadsLifecycle {
             .into());
         }
 
-        let (is_ready_after_init, reason_after_init) =
-            self.verify_repo_initialized(repo_path, beads_dir)?;
-        if !is_ready_after_init {
-            return Err(LifecycleError::StoreStillNotReady {
-                beads_dir: beads_dir.to_path_buf(),
-                recovery_step: "init",
-                reason: reason_after_init,
-            }
-            .into());
-        }
+        self.ensure_repo_ready_after_recovery(repo_path, beads_dir, "init")
+    }
 
-        Ok(())
+    pub(crate) fn ensure_repo_ready_after_recovery(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        recovery_step: &'static str,
+    ) -> Result<()> {
+        match self.verify_repo_initialized(repo_path, beads_dir) {
+            Ok(RepoReadiness::Ready) => Ok(()),
+            Ok(readiness) => Err(LifecycleError::StoreStillNotReady {
+                beads_dir: beads_dir.to_path_buf(),
+                recovery_step,
+                reason: readiness.description(),
+            }
+            .into()),
+            Err(error) => Err(LifecycleError::StoreStillNotReady {
+                beads_dir: beads_dir.to_path_buf(),
+                recovery_step,
+                reason: error.to_string(),
+            }
+            .into()),
+        }
     }
 }

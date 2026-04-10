@@ -15,6 +15,10 @@ pub(super) enum CallKind {
 pub(super) enum MockStep {
     WithEnv(std::result::Result<String, String>),
     AllowFailureWithEnv(std::result::Result<(bool, String, String), String>),
+    AllowFailureWithEnvAndWrites {
+        result: std::result::Result<(bool, String, String), String>,
+        writes: Vec<(PathBuf, String)>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -63,11 +67,23 @@ impl MockCommandRunner {
             .expect("unexpected command invocation");
         match (&step, &expected_kind) {
             (MockStep::WithEnv(_), CallKind::WithEnv)
-            | (MockStep::AllowFailureWithEnv(_), CallKind::AllowFailureWithEnv) => step,
+            | (MockStep::AllowFailureWithEnv(_), CallKind::AllowFailureWithEnv)
+            | (MockStep::AllowFailureWithEnvAndWrites { .. }, CallKind::AllowFailureWithEnv) => {
+                step
+            }
             _ => panic!(
                 "unexpected command invocation kind, expected {:?}, got {:?}",
                 expected_kind, step
             ),
+        }
+    }
+
+    fn apply_writes(&self, writes: &[(PathBuf, String)]) {
+        for (path, contents) in writes {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("mock write parent should be writable");
+            }
+            fs::write(path, contents).expect("mock write target should be writable");
         }
     }
 
@@ -113,6 +129,9 @@ impl CommandRunner for MockCommandRunner {
         self.record_call(CallKind::WithEnv, program, args, cwd, env);
         match self.pop_step(CallKind::WithEnv) {
             MockStep::WithEnv(result) => result.map_err(|message| anyhow!(message)),
+            MockStep::AllowFailureWithEnvAndWrites { .. } => {
+                unreachable!("call kind already checked")
+            }
             MockStep::AllowFailureWithEnv(_) => unreachable!("call kind already checked"),
         }
     }
@@ -127,6 +146,10 @@ impl CommandRunner for MockCommandRunner {
         self.record_call(CallKind::AllowFailureWithEnv, program, args, cwd, env);
         match self.pop_step(CallKind::AllowFailureWithEnv) {
             MockStep::AllowFailureWithEnv(result) => result.map_err(|message| anyhow!(message)),
+            MockStep::AllowFailureWithEnvAndWrites { result, writes } => {
+                self.apply_writes(&writes);
+                result.map_err(|message| anyhow!(message))
+            }
             MockStep::WithEnv(_) => unreachable!("call kind already checked"),
         }
     }
