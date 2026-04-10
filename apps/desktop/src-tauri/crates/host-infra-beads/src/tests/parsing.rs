@@ -193,6 +193,23 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
 }
 
 #[test]
+fn next_document_revision_rejects_u32_overflow() {
+    let error = next_document_revision(
+        Some(&json!([
+            {
+                "revision": 4294967295u64
+            }
+        ])),
+        "openducktor.documents.spec",
+    )
+    .expect_err("u32::MAX revision should fail cleanly");
+
+    assert!(error.to_string().contains(
+        "Invalid existing openducktor.documents.spec metadata: revision exceeds supported range"
+    ));
+}
+
+#[test]
 #[ignore = "manual benchmark scaffold; run with cargo test -p host-infra-beads metadata_parsing_benchmark_scaffold -- --ignored --nocapture"]
 fn metadata_parsing_benchmark_scaffold() {
     let markdown_payload = Value::Array(

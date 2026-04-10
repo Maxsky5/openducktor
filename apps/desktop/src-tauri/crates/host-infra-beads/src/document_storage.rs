@@ -68,7 +68,9 @@ pub(crate) fn next_document_revision(value: Option<&Value>, path: &str) -> Resul
                 let revision = parse_required_u32_field(object, "revision", path, index)?;
                 max_revision = max_revision.max(revision);
             }
-            Ok(max_revision + 1)
+            max_revision.checked_add(1).ok_or_else(|| {
+                anyhow!("Invalid existing {path} metadata: revision exceeds supported range")
+            })
         }
         Some(_) => Err(anyhow!(
             "Invalid existing {path} metadata: expected an array"
@@ -171,7 +173,7 @@ pub(crate) fn latest_qa_verdict(value: Option<&Value>) -> QaWorkflowVerdict {
     parse_workflow_verdict(object.get("verdict")).unwrap_or(QaWorkflowVerdict::NotReviewed)
 }
 
-fn latest_entry<'a>(value: &'a Value) -> Option<(&'a Value, usize)> {
+fn latest_entry(value: &Value) -> Option<(&Value, usize)> {
     let entries = value.as_array()?;
     let index = entries.len().checked_sub(1)?;
     entries.get(index).map(|entry| (entry, index))
