@@ -2,8 +2,9 @@ use super::{
     default_ai_review_enabled, encode_markdown_for_storage, metadata_bool_qa_required,
     metadata_namespace, next_document_revision, normalize_labels, normalize_text_option,
     parse_agent_sessions, parse_issue_type, parse_markdown_entries, parse_metadata_root,
-    parse_qa_entries, parse_task_status, BeadsTaskStore, CommandRunner, ProcessCommandRunner,
-    CUSTOM_STATUS_VALUES, DOCUMENT_ENCODING_GZIP_BASE64_V1, TASK_LIST_CACHE_TTL_MS,
+    parse_qa_entries, parse_task_status, read_latest_markdown_document, BeadsTaskStore,
+    CommandRunner, ProcessCommandRunner, CUSTOM_STATUS_VALUES, DOCUMENT_ENCODING_GZIP_BASE64_V1,
+    TASK_LIST_CACHE_TTL_MS,
 };
 use anyhow::{anyhow, Result};
 use chrono::{Duration as ChronoDuration, Utc};

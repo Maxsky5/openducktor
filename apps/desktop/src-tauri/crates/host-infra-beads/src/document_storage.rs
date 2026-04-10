@@ -105,6 +105,9 @@ pub(crate) fn read_latest_qa_document(
     path: &str,
 ) -> Option<QaReportDocument> {
     let value = value?;
+    if matches!(value, Value::Array(entries) if entries.is_empty()) {
+        return None;
+    }
 
     let Some((entry, index)) = latest_entry(value) else {
         return Some(QaReportDocument {
@@ -328,6 +331,11 @@ fn parse_required_u32_field(
             "Invalid existing {path} metadata at index {index}: {field} must be a positive integer"
         )
     })?;
+    if value == 0 {
+        return Err(anyhow!(
+            "Invalid existing {path} metadata at index {index}: {field} must be a positive integer"
+        ));
+    }
     u32::try_from(value).map_err(|_| {
         anyhow!("Invalid existing {path} metadata at index {index}: {field} exceeds u32")
     })
@@ -337,6 +345,7 @@ fn optional_u32_field(object: &Map<String, Value>, field: &str) -> Option<u32> {
     object
         .get(field)
         .and_then(Value::as_u64)
+        .and_then(|value| (value > 0).then_some(value))
         .and_then(|value| u32::try_from(value).ok())
 }
 

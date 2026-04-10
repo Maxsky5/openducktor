@@ -417,6 +417,29 @@ fn malformed_qa_reports_surface_document_error_in_metadata_reads() -> Result<()>
 }
 
 #[test]
+fn empty_qa_reports_array_stays_absent_in_reads() -> Result<()> {
+    let repo = RepoFixture::new("qa-docs-empty-array");
+    let payload = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {"documents": {"qaReports": []}}})),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([payload.clone()]).to_string())),
+        MockStep::WithEnv(Ok(json!([payload]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    assert!(store.get_latest_qa_report(repo.path(), "task-1")?.is_none());
+    let metadata = store.get_task_metadata(repo.path(), "task-1")?;
+    assert!(metadata.qa_report.is_none());
+    Ok(())
+}
+
+#[test]
 fn invalid_encoded_qa_report_surfaces_document_error() -> Result<()> {
     let repo = RepoFixture::new("qa-docs-invalid-encoded");
     let payload = issue_value(

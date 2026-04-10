@@ -210,6 +210,42 @@ fn next_document_revision_rejects_u32_overflow() {
 }
 
 #[test]
+fn revision_zero_is_rejected_in_both_validation_paths() {
+    let revision_error = next_document_revision(
+        Some(&json!([
+            {
+                "revision": 0
+            }
+        ])),
+        "openducktor.documents.spec",
+    )
+    .expect_err("revision 0 should fail cleanly");
+
+    assert!(revision_error.to_string().contains(
+        "Invalid existing openducktor.documents.spec metadata at index 0: revision must be a positive integer"
+    ));
+
+    let plan = read_latest_markdown_document(
+        Some(&json!([
+            {
+                "markdown": "# Plan",
+                "updatedAt": "2026-02-20T12:00:00Z",
+                "revision": 0
+            }
+        ])),
+        "openducktor.documents.implementationPlan",
+    );
+
+    assert!(plan.markdown.is_empty());
+    assert_eq!(plan.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+    assert!(plan.revision.is_none());
+    let error = plan
+        .error
+        .expect("revision 0 should surface a document error");
+    assert!(error.contains("revision must be a positive integer"));
+}
+
+#[test]
 #[ignore = "manual benchmark scaffold; run with cargo test -p host-infra-beads metadata_parsing_benchmark_scaffold -- --ignored --nocapture"]
 fn metadata_parsing_benchmark_scaffold() {
     let markdown_payload = Value::Array(
