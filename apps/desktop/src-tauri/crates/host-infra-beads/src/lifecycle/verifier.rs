@@ -160,17 +160,13 @@ impl BeadsLifecycle {
         stderr: &'a str,
     ) -> BdWhereCommandOutput<'a> {
         let stderr_payload = Self::extract_stderr_json_payload(stderr);
-        if Self::payload_decodes_as_bd_where_payload(stderr_payload) {
+        if !stderr_payload.is_empty() {
             return BdWhereCommandOutput::Json(stderr_payload);
         }
 
         let stdout_payload = Self::extract_stdout_json_payload(stdout);
         if !stdout_payload.is_empty() {
             return BdWhereCommandOutput::Json(stdout_payload);
-        }
-
-        if !stderr_payload.is_empty() {
-            return BdWhereCommandOutput::Json(stderr_payload);
         }
 
         if ok {
@@ -227,11 +223,22 @@ impl BeadsLifecycle {
 
     fn extract_stdout_json_payload(stdout: &str) -> &str {
         let trimmed_stdout = stdout.trim();
-        if !trimmed_stdout.is_empty() {
+        if trimmed_stdout.is_empty() {
+            return "";
+        }
+
+        if Self::payload_decodes_as_bd_where_payload(trimmed_stdout) {
             return trimmed_stdout;
         }
 
-        ""
+        if let Some(payload_start) = Self::locate_json_payload_start(trimmed_stdout) {
+            let candidate = &trimmed_stdout[payload_start..];
+            if Self::payload_decodes_as_bd_where_payload(candidate) {
+                return candidate;
+            }
+        }
+
+        trimmed_stdout
     }
 
     fn extract_stderr_json_payload(stderr: &str) -> &str {
@@ -240,18 +247,42 @@ impl BeadsLifecycle {
             return "";
         }
 
-        let object_index = trimmed_stderr.find('{');
-        let array_index = trimmed_stderr.find('[');
-        let start_index = [object_index, array_index].into_iter().flatten().min();
-        if let Some(index) = start_index {
-            return &trimmed_stderr[index..];
+        if Self::payload_decodes_as_bd_where_payload(trimmed_stderr) {
+            return trimmed_stderr;
+        }
+
+        if let Some(payload_start) = Self::locate_json_payload_start(trimmed_stderr) {
+            let candidate = &trimmed_stderr[payload_start..];
+            if Self::payload_decodes_as_bd_where_payload(candidate) {
+                return candidate;
+            }
         }
 
         ""
     }
 
     fn payload_decodes_as_bd_where_payload(payload: &str) -> bool {
-        !payload.is_empty() && serde_json::from_str::<BeadsWherePayload>(payload).is_ok()
+        serde_json::from_str::<BeadsWherePayload>(payload)
+            .ok()
+            .map(|parsed| {
+                parsed
+                    .path
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|path| !path.is_empty())
+                    || parsed
+                        .error
+                        .as_deref()
+                        .map(str::trim)
+                        .is_some_and(|error| !error.is_empty())
+            })
+            .unwrap_or(false)
+    }
+
+    fn locate_json_payload_start(payload: &str) -> Option<usize> {
+        let object_index = payload.find('{');
+        let array_index = payload.find('[');
+        [object_index, array_index].into_iter().flatten().min()
     }
 
     fn probe_shared_database_presence(

@@ -88,6 +88,62 @@ fn verify_repo_initialized_prefers_decodable_stderr_json_over_noisy_stdout() -> 
 }
 
 #[test]
+fn verify_repo_initialized_accepts_noisy_stdout_before_json_payload() -> Result<()> {
+    let repo = RepoFixture::new("where-noisy-stdout-before-json");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            format!(
+                "warning before payload\n{}",
+                json!({
+                    "path": beads_dir,
+                    "prefix": "openducktor"
+                })
+            ),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let readiness = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)?;
+    assert_eq!(readiness, RepoReadiness::Ready);
+    Ok(())
+}
+
+#[test]
+fn verify_repo_initialized_does_not_let_unrelated_stderr_json_shadow_stdout() -> Result<()> {
+    let repo = RepoFixture::new("where-unrelated-stderr-json");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            "{\"level\":\"warn\"}".to_string(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let readiness = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)?;
+    assert_eq!(readiness, RepoReadiness::Ready);
+    Ok(())
+}
+
+#[test]
 fn verify_repo_initialized_rejects_where_payloads_with_path_and_error() -> Result<()> {
     let repo = RepoFixture::new("where-path-and-error");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
@@ -461,6 +517,36 @@ fn ensure_repo_initialized_fails_fast_for_non_json_where_failure_output() -> Res
         .iter()
         .any(|call| call.program == "dolt"
             && call.args.first().map(String::as_str) == Some("backup")));
+    Ok(())
+}
+
+#[test]
+fn ensure_repo_initialized_treats_bracket_prefixed_stderr_as_plain_text_failure() -> Result<()> {
+    let repo = RepoFixture::new("bracket-prefixed-stderr-failure");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            false,
+            String::new(),
+            "[warn] server unreachable".to_string(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let error = store
+        .ensure_repo_initialized(repo.path())
+        .expect_err("bracket-prefixed stderr should stay a plain-text failure");
+    assert!(error
+        .to_string()
+        .contains("bd where --json exited unsuccessfully without a decodable JSON payload"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].program, "dolt");
+    assert_eq!(calls[1].args, vec!["where", "--json"]);
     Ok(())
 }
 
