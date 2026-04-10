@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
 import {
-  appendDevServerLogLine,
-  createDevServerLogBufferStore,
-  getDevServerLogBuffer,
-  getDevServerLogEntryAt,
-  MAX_BUFFERED_DEV_SERVER_LOG_LINES,
-  replaceDevServerLogBuffer,
-  syncDevServerLogBufferStore,
-  trimDevServerLogLines,
+  appendDevServerTerminalChunk,
+  createDevServerTerminalBufferStore,
+  getDevServerTerminalBuffer,
+  MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
+  replaceDevServerTerminalBuffer,
+  syncDevServerTerminalBufferStore,
+  trimDevServerTerminalChunks,
 } from "./dev-server-log-buffer";
 
 const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => ({
@@ -20,7 +19,7 @@ const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerSc
   startedAt: null,
   exitCode: null,
   lastError: null,
-  bufferedLogLines: [],
+  bufferedTerminalChunks: [],
   ...overrides,
 });
 
@@ -35,110 +34,118 @@ const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGrou
 
 describe("dev-server-log-buffer", () => {
   test("trims snapshots to the configured maximum", () => {
-    const lines = Array.from({ length: MAX_BUFFERED_DEV_SERVER_LOG_LINES + 2 }, (_, index) => ({
-      scriptId: "frontend",
-      stream: "stdout" as const,
-      text: `line-${index}`,
-      timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
-    }));
+    const chunks = Array.from(
+      { length: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS + 2 },
+      (_, index) => ({
+        scriptId: "frontend",
+        sequence: index,
+        data: `line-${index}`,
+        timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
+      }),
+    );
 
-    const trimmed = trimDevServerLogLines(lines);
+    const trimmed = trimDevServerTerminalChunks(chunks);
 
-    expect(trimmed).toHaveLength(MAX_BUFFERED_DEV_SERVER_LOG_LINES);
-    expect(trimmed[0]?.text).toBe("line-2");
-    expect(trimmed.at(-1)?.text).toBe(`line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES + 1}`);
+    expect(trimmed).toHaveLength(MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS);
+    expect(trimmed[0]?.data).toBe("line-2");
+    expect(trimmed.at(-1)?.data).toBe(`line-${MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS + 1}`);
   });
 
-  test("stores sanitized log entries and rotates in ring order", () => {
-    const store = createDevServerLogBufferStore();
+  test("stores raw ANSI chunks and rotates in ring order", () => {
+    const store = createDevServerTerminalBufferStore();
 
-    appendDevServerLogLine(store, {
+    appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      stream: "stdout",
-      text: "\u001b[32mready\u001b[0m",
+      sequence: 0,
+      data: "\u001b[32mready\u001b[0m\r\n",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
 
-    const initialBuffer = getDevServerLogBuffer(store, "frontend");
-    expect(initialBuffer).not.toBeNull();
-    if (!initialBuffer) {
-      throw new Error("Expected initial frontend log buffer to exist.");
-    }
-    expect(getDevServerLogEntryAt(initialBuffer, 0)?.text).toBe("ready");
+    const initialBuffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(initialBuffer?.entries[0]?.data).toBe("\u001b[32mready\u001b[0m\r\n");
 
-    for (let index = 1; index <= MAX_BUFFERED_DEV_SERVER_LOG_LINES; index += 1) {
-      appendDevServerLogLine(store, {
+    for (let index = 1; index <= MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS; index += 1) {
+      appendDevServerTerminalChunk(store, {
         scriptId: "frontend",
-        stream: "stdout",
-        text: `line-${index}`,
+        sequence: index,
+        data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
       });
     }
 
-    const buffer = getDevServerLogBuffer(store, "frontend");
-    expect(buffer?.entries.length).toBe(MAX_BUFFERED_DEV_SERVER_LOG_LINES);
-    expect(buffer).not.toBeNull();
-    if (!buffer) {
-      throw new Error("Expected frontend log buffer to exist.");
-    }
+    const buffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(buffer?.entries.length).toBe(MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS);
+    expect(buffer?.entries[0]?.data).toBe("line-1");
+    expect(buffer?.entries.at(-1)?.data).toBe(`line-${MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS}`);
+  });
 
-    expect(getDevServerLogEntryAt(buffer, 0)?.text).toBe("line-1");
-    expect(getDevServerLogEntryAt(buffer, buffer.entries.length - 1)?.text).toBe(
-      `line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES}`,
-    );
+  test("ignores duplicate or out-of-order chunks by sequence", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 4,
+      data: "latest",
+      timestamp: "2026-03-25T10:00:00.000Z",
+    });
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 3,
+      data: "older",
+      timestamp: "2026-03-25T10:00:01.000Z",
+    });
+
+    const buffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(buffer?.entries).toHaveLength(1);
+    expect(buffer?.entries[0]?.data).toBe("latest");
   });
 
   test("returned buffer snapshots stay stable after later appends", () => {
-    const store = createDevServerLogBufferStore();
+    const store = createDevServerTerminalBufferStore();
 
-    for (let index = 0; index < MAX_BUFFERED_DEV_SERVER_LOG_LINES; index += 1) {
-      appendDevServerLogLine(store, {
+    for (let index = 0; index < MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS; index += 1) {
+      appendDevServerTerminalChunk(store, {
         scriptId: "frontend",
-        stream: "stdout",
-        text: `line-${index}`,
+        sequence: index,
+        data: `line-${index}`,
         timestamp: `2026-03-25T10:00:${String(index % 60).padStart(2, "0")}.000Z`,
       });
     }
 
-    const previousSnapshot = getDevServerLogBuffer(store, "frontend");
-    expect(previousSnapshot).not.toBeNull();
-    if (!previousSnapshot) {
-      throw new Error("Expected frontend snapshot before wrap.");
-    }
-
-    appendDevServerLogLine(store, {
+    const previousSnapshot = getDevServerTerminalBuffer(store, "frontend");
+    appendDevServerTerminalChunk(store, {
       scriptId: "frontend",
-      stream: "stdout",
-      text: "latest",
+      sequence: MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
+      data: "latest",
       timestamp: "2026-03-25T10:01:00.000Z",
     });
 
-    expect(getDevServerLogEntryAt(previousSnapshot, 0)?.text).toBe("line-0");
-    expect(
-      getDevServerLogEntryAt(previousSnapshot, previousSnapshot.entries.length - 1)?.text,
-    ).toBe(`line-${MAX_BUFFERED_DEV_SERVER_LOG_LINES - 1}`);
+    expect(previousSnapshot?.entries[0]?.data).toBe("line-0");
+    expect(previousSnapshot?.entries.at(-1)?.data).toBe(
+      `line-${MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS - 1}`,
+    );
   });
 
   test("replaces and prunes script buffers when syncing state", () => {
-    const store = createDevServerLogBufferStore();
-    appendDevServerLogLine(store, {
+    const store = createDevServerTerminalBufferStore();
+    appendDevServerTerminalChunk(store, {
       scriptId: "stale",
-      stream: "stdout",
-      text: "stale",
+      sequence: 0,
+      data: "stale",
       timestamp: "2026-03-25T10:00:00.000Z",
     });
 
-    syncDevServerLogBufferStore(
+    syncDevServerTerminalBufferStore(
       store,
       buildState({
         scripts: [
           buildScript({
             scriptId: "frontend",
-            bufferedLogLines: [
+            bufferedTerminalChunks: [
               {
                 scriptId: "frontend",
-                stream: "stderr",
-                text: "frontend failed",
+                sequence: 7,
+                data: "frontend failed\r\n",
                 timestamp: "2026-03-25T10:01:00.000Z",
               },
             ],
@@ -147,30 +154,22 @@ describe("dev-server-log-buffer", () => {
       }),
     );
 
-    expect(getDevServerLogBuffer(store, "stale")).toBeNull();
-    const syncedBuffer = getDevServerLogBuffer(store, "frontend");
-    expect(syncedBuffer).not.toBeNull();
-    if (!syncedBuffer) {
-      throw new Error("Expected frontend log buffer after sync.");
-    }
+    expect(getDevServerTerminalBuffer(store, "stale")).toBeNull();
+    const syncedBuffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(syncedBuffer?.entries[0]?.data).toBe("frontend failed\r\n");
+    expect(syncedBuffer?.resetToken).toBe(1);
 
-    expect(getDevServerLogEntryAt(syncedBuffer, 0)?.text).toBe("frontend failed");
-
-    replaceDevServerLogBuffer(store, "frontend", [
+    replaceDevServerTerminalBuffer(store, "frontend", [
       {
         scriptId: "frontend",
-        stream: "system",
-        text: "restarted",
+        sequence: 8,
+        data: "restarted\r\n",
         timestamp: "2026-03-25T10:02:00.000Z",
       },
     ]);
 
-    const replacedBuffer = getDevServerLogBuffer(store, "frontend");
-    expect(replacedBuffer).not.toBeNull();
-    if (!replacedBuffer) {
-      throw new Error("Expected frontend log buffer after replace.");
-    }
-
-    expect(getDevServerLogEntryAt(replacedBuffer, 0)?.text).toBe("restarted");
+    const replacedBuffer = getDevServerTerminalBuffer(store, "frontend");
+    expect(replacedBuffer?.entries[0]?.data).toBe("restarted\r\n");
+    expect(replacedBuffer?.resetToken).toBe(2);
   });
 });

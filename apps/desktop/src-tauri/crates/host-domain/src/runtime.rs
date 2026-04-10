@@ -403,19 +403,11 @@ pub enum DevServerScriptStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DevServerLogStream {
-    Stdout,
-    Stderr,
-    System,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct DevServerLogLine {
+pub struct DevServerTerminalChunk {
     pub script_id: String,
-    pub stream: DevServerLogStream,
-    pub text: String,
+    pub sequence: u64,
+    pub data: String,
     pub timestamp: String,
 }
 
@@ -431,7 +423,9 @@ pub struct DevServerScriptState {
     pub exit_code: Option<i32>,
     pub last_error: Option<String>,
     #[serde(default)]
-    pub buffered_log_lines: Vec<DevServerLogLine>,
+    pub buffered_terminal_chunks: Vec<DevServerTerminalChunk>,
+    #[serde(skip)]
+    pub next_terminal_sequence: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -459,10 +453,10 @@ pub enum DevServerEvent {
         script: DevServerScriptState,
         updated_at: String,
     },
-    LogLine {
+    TerminalChunk {
         repo_path: String,
         task_id: String,
-        log_line: DevServerLogLine,
+        terminal_chunk: DevServerTerminalChunk,
     },
 }
 
@@ -522,9 +516,9 @@ pub enum RunEvent {
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentRuntimeKind, DevServerEvent, DevServerGroupState, DevServerLogLine,
-        DevServerLogStream, DevServerScriptState, DevServerScriptStatus, RuntimeCapabilities,
-        RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRoute, RuntimeSupportedScope,
+        AgentRuntimeKind, DevServerEvent, DevServerGroupState, DevServerScriptState,
+        DevServerScriptStatus, DevServerTerminalChunk, RuntimeCapabilities, RuntimeDescriptor,
+        RuntimeProvisioningMode, RuntimeRoute, RuntimeSupportedScope,
         REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
 
@@ -624,26 +618,30 @@ mod tests {
 
     #[test]
     fn dev_server_event_serializes_with_expected_shape() {
-        let event = DevServerEvent::LogLine {
+        let event = DevServerEvent::TerminalChunk {
             repo_path: "/repo".to_string(),
             task_id: "task-1".to_string(),
-            log_line: DevServerLogLine {
+            terminal_chunk: DevServerTerminalChunk {
                 script_id: "server-1".to_string(),
-                stream: DevServerLogStream::Stdout,
-                text: "ready".to_string(),
+                sequence: 3,
+                data: "\u{1b}[32mready\u{1b}[0m\r\n".to_string(),
                 timestamp: "2026-03-19T00:00:00Z".to_string(),
             },
         };
 
         let json = serde_json::to_value(event).expect("event should serialize");
-        assert_eq!(json["type"], "log_line");
+        assert_eq!(json["type"], "terminal_chunk");
         assert_eq!(json["repoPath"], "/repo");
         assert_eq!(json["taskId"], "task-1");
-        assert_eq!(json["logLine"]["stream"], "stdout");
+        assert_eq!(json["terminalChunk"]["sequence"], 3);
+        assert_eq!(
+            json["terminalChunk"]["data"],
+            "\u{1b}[32mready\u{1b}[0m\r\n"
+        );
     }
 
     #[test]
-    fn dev_server_group_state_supports_buffered_logs() {
+    fn dev_server_group_state_supports_buffered_terminal_chunks() {
         let state = DevServerGroupState {
             repo_path: "/repo".to_string(),
             task_id: "task-1".to_string(),
@@ -657,18 +655,22 @@ mod tests {
                 started_at: Some("2026-03-19T00:00:00Z".to_string()),
                 exit_code: None,
                 last_error: None,
-                buffered_log_lines: vec![DevServerLogLine {
+                buffered_terminal_chunks: vec![DevServerTerminalChunk {
                     script_id: "server-1".to_string(),
-                    stream: DevServerLogStream::System,
-                    text: "started".to_string(),
+                    sequence: 1,
+                    data: "started\r\n".to_string(),
                     timestamp: "2026-03-19T00:00:00Z".to_string(),
                 }],
+                next_terminal_sequence: 2,
             }],
             updated_at: "2026-03-19T00:00:00Z".to_string(),
         };
 
         let json = serde_json::to_value(state).expect("state should serialize");
-        assert_eq!(json["scripts"][0]["bufferedLogLines"][0]["text"], "started");
+        assert_eq!(
+            json["scripts"][0]["bufferedTerminalChunks"][0]["data"],
+            "started\r\n"
+        );
     }
 
     #[test]

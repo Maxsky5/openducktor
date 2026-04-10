@@ -3,10 +3,18 @@ import { getBrowserBackendUrl } from "@/lib/browser-mode";
 
 type BrowserSseListener = (payload: unknown) => void;
 
+type BrowserLiveControlEvent = {
+  __openducktorBrowserLive: true;
+  kind: "reconnected" | "stream-warning";
+  message?: string;
+};
+
 type BrowserSseChannel = {
   eventSource: EventSource;
   listeners: Map<number, BrowserSseListener>;
   handleMessage: (event: MessageEvent<string>) => void;
+  handleOpen: () => void;
+  handleStreamWarning: (event: MessageEvent<string>) => void;
 };
 
 const sseChannels = new Map<string, BrowserSseChannel>();
@@ -76,11 +84,25 @@ const parseSsePayload = (raw: string): unknown => {
   }
 };
 
+const browserLiveControlEvent = (
+  kind: BrowserLiveControlEvent["kind"],
+  message?: string,
+): BrowserLiveControlEvent => ({
+  __openducktorBrowserLive: true,
+  kind,
+  ...(message ? { message } : {}),
+});
+
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
   }
   channel.eventSource.removeEventListener("message", channel.handleMessage as EventListener);
+  channel.eventSource.removeEventListener("open", channel.handleOpen as EventListener);
+  channel.eventSource.removeEventListener(
+    "stream-warning",
+    channel.handleStreamWarning as EventListener,
+  );
   channel.eventSource.close();
   sseChannels.delete(path);
 };
@@ -92,18 +114,44 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
   if (!channel) {
     const eventSource = new EventSource(`${baseUrl}/${path}`);
     const listeners = new Map<number, BrowserSseListener>();
+    const shouldEmitControlEvents = path === "dev-server-events";
+    let hasOpened = false;
     const handleMessage = (event: MessageEvent<string>): void => {
       const payload = parseSsePayload(event.data);
       for (const currentListener of listeners.values()) {
         currentListener(payload);
       }
     };
+    const handleOpen = (): void => {
+      if (!shouldEmitControlEvents) {
+        return;
+      }
+      if (!hasOpened) {
+        hasOpened = true;
+        return;
+      }
+      for (const currentListener of listeners.values()) {
+        currentListener(browserLiveControlEvent("reconnected"));
+      }
+    };
+    const handleStreamWarning = (event: MessageEvent<string>): void => {
+      if (!shouldEmitControlEvents) {
+        return;
+      }
+      for (const currentListener of listeners.values()) {
+        currentListener(browserLiveControlEvent("stream-warning", event.data));
+      }
+    };
 
     eventSource.addEventListener("message", handleMessage as EventListener);
+    eventSource.addEventListener("open", handleOpen as EventListener);
+    eventSource.addEventListener("stream-warning", handleStreamWarning as EventListener);
     channel = {
       eventSource,
       listeners,
       handleMessage,
+      handleOpen,
+      handleStreamWarning,
     };
     sseChannels.set(path, channel);
   }

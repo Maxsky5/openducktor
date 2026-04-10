@@ -172,6 +172,23 @@ describe("browser live SSE subscriptions", () => {
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
   });
 
+  test("does not emit dev-server control payloads for run-event subscribers", async () => {
+    const { subscribeBrowserLiveRunEvents } = await loadBrowserLiveClient();
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeBrowserLiveRunEvents(listener);
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit("stream-warning", "ignored");
+    FakeEventSource.instances[0]?.emit("message", JSON.stringify({ type: "run" }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ type: "run" });
+
+    unsubscribe();
+  });
+
   test("shares one EventSource for multiple dev-server subscribers", async () => {
     const { subscribeBrowserLiveDevServerEvents } = await loadBrowserLiveClient();
     const listenerA = mock(() => {});
@@ -193,5 +210,33 @@ describe("browser live SSE subscriptions", () => {
 
     unsubscribeB();
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
+  });
+
+  test("emits reconnect and stream-warning control payloads for dev-server subscribers", async () => {
+    const { subscribeBrowserLiveDevServerEvents } = await loadBrowserLiveClient();
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeBrowserLiveDevServerEvents(listener);
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    expect(listener).not.toHaveBeenCalled();
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit(
+      "stream-warning",
+      "Dev server stream skipped 4 events; reconnect will replay buffered events.",
+    );
+
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "Dev server stream skipped 4 events; reconnect will replay buffered events.",
+    });
+
+    unsubscribe();
   });
 });
