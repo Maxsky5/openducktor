@@ -28,6 +28,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [mcp-runtime-security.md](mcp-runtime-security.md): current MCP transport and threat assumptions.
 - [desktop-csp-hardening.md](desktop-csp-hardening.md): current desktop CSP baseline and hardening plan.
 - [dependency-hygiene.md](dependency-hygiene.md): dependency update and audit policy.
+- [release-process.md](release-process.md): desktop release workflow, required secrets, version sync, and draft publishing steps.
 
 ## Notes On Scope
 

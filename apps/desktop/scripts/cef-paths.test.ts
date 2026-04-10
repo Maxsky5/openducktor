@@ -6,8 +6,10 @@ import { join, resolve } from "node:path";
 import {
   readCefVersion,
   readTauriCefRevision,
+  resolveCargoTauriToolsRoot,
   resolveCargoToolsRoot,
   resolveCefPath,
+  resolveExportCefToolsRoot,
 } from "./cef-paths";
 
 const ENV_KEYS = [
@@ -79,6 +81,19 @@ describe("cef-paths", () => {
           "1234567890ab",
         ),
       );
+      expect(resolveCargoTauriToolsRoot(tauriRoot)).toBe(
+        resolve(
+          homedir(),
+          ".openducktor-dev",
+          "cache",
+          "cargo-tools",
+          "tauri-feat-cef",
+          "1234567890ab",
+        ),
+      );
+      expect(resolveExportCefToolsRoot(tauriRoot)).toBe(
+        resolve(homedir(), ".openducktor-dev", "cache", "cargo-tools", "export-cef-dir", "136.2.1"),
+      );
       expect(resolveCefPath(tauriRoot)).toBe(
         resolve(homedir(), ".openducktor-dev", "cache", "cef", "136.2.1"),
       );
@@ -97,6 +112,8 @@ describe("cef-paths", () => {
 
     try {
       expect(resolveCargoToolsRoot(tauriRoot)).toBe(resolve(homedir(), "custom-tools"));
+      expect(resolveCargoTauriToolsRoot(tauriRoot)).toBe(resolve(homedir(), "custom-tools"));
+      expect(resolveExportCefToolsRoot(tauriRoot)).toBe(resolve(homedir(), "custom-tools"));
       expect(resolveCefPath(tauriRoot)).toBe(resolve(homedir(), "custom-cef"));
     } finally {
       rmSync(tauriRoot, { force: true, recursive: true });

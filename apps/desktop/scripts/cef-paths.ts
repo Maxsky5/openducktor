@@ -7,6 +7,10 @@ const OPENDUCKTOR_CARGO_TOOLS_ROOT_ENV = "OPENDUCKTOR_CARGO_TOOLS_ROOT";
 const OPENDUCKTOR_CEF_PATH_ENV = "OPENDUCKTOR_CEF_PATH";
 const UPSTREAM_CEF_PATH_ENV = "CEF_PATH";
 
+function readTauriRevisionPrefix(tauriRoot: string): string {
+  return readTauriCefRevision(tauriRoot).slice(0, 12);
+}
+
 function expandHome(path: string): string {
   if (path === "~") {
     return homedir();
@@ -105,6 +109,10 @@ export function resolveOpenducktorDataRoot(): string {
 }
 
 export function resolveCargoToolsRoot(tauriRoot: string): string {
+  return resolveCargoTauriToolsRoot(tauriRoot);
+}
+
+export function resolveCargoTauriToolsRoot(tauriRoot: string): string {
   return (
     resolveConfiguredPath(OPENDUCKTOR_CARGO_TOOLS_ROOT_ENV) ??
     resolve(
@@ -112,7 +120,20 @@ export function resolveCargoToolsRoot(tauriRoot: string): string {
       "cache",
       "cargo-tools",
       "tauri-feat-cef",
-      readTauriCefRevision(tauriRoot).slice(0, 12),
+      readTauriRevisionPrefix(tauriRoot),
+    )
+  );
+}
+
+export function resolveExportCefToolsRoot(tauriRoot: string): string {
+  return (
+    resolveConfiguredPath(OPENDUCKTOR_CARGO_TOOLS_ROOT_ENV) ??
+    resolve(
+      resolveOpenducktorDataRoot(),
+      "cache",
+      "cargo-tools",
+      "export-cef-dir",
+      readCefVersion(tauriRoot),
     )
   );
 }
