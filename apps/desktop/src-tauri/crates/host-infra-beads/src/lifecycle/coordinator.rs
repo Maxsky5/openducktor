@@ -102,7 +102,8 @@ impl BeadsLifecycle {
         beads_dir: &Path,
         reason: &str,
     ) -> Result<()> {
-        if Self::reason_requires_shared_database_seed(reason) {
+        let attempted_restore = Self::reason_requires_shared_database_seed(reason);
+        if attempted_restore {
             self.materialize_shared_database_from_attachment(repo_path, beads_dir)?;
         } else {
             self.repair_repo_store(repo_path)?;
@@ -111,7 +112,16 @@ impl BeadsLifecycle {
         let (is_ready_after_repair, reason_after_repair) =
             self.verify_repo_initialized(repo_path, beads_dir)?;
         if !is_ready_after_repair {
-            self.ensure_new_store_is_ready(repo_path, beads_dir, &reason_after_repair)?;
+            let recovery_step = if attempted_restore {
+                "shared database restore"
+            } else {
+                "repair"
+            };
+            return Err(anyhow!(
+                "Beads {recovery_step} completed but store is still not ready at {}: {}",
+                beads_dir.display(),
+                reason_after_repair
+            ));
         }
         Ok(())
     }

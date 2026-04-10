@@ -26,10 +26,7 @@ struct BeadsWherePayload {
 impl BeadsLifecycle {
     pub(crate) fn reason_requires_shared_database_seed(reason: &str) -> bool {
         let normalized = reason.to_ascii_lowercase();
-        normalized.contains("not found on dolt server")
-            || normalized.contains("server not reachable")
-            || normalized.contains("dolt server unreachable")
-            || normalized.contains("error 1049")
+        normalized.contains("not found on dolt server") || normalized.contains("error 1049")
     }
 
     pub(crate) fn verify_repo_initialized(
