@@ -157,4 +157,39 @@ mod tests {
         assert_eq!(qa.updated_at, None);
         assert_eq!(qa.verdict, host_domain::QaWorkflowVerdict::NotReviewed);
     }
+
+    #[test]
+    fn odt_read_task_documents_preserves_qa_decode_errors() {
+        let (service, task_state, _) =
+            build_service_with_state(vec![task("fairnest-4y3", "Fairnest")]);
+        {
+            let mut state = task_state.lock().expect("task state lock poisoned");
+            state.latest_qa_report = Some(host_domain::QaReportDocument {
+                markdown: String::new(),
+                verdict: host_domain::QaWorkflowVerdict::Approved,
+                updated_at: Some("2026-02-20T12:00:00Z".to_string()),
+                revision: Some(2),
+                error: Some(
+                    "Failed to decode openducktor.documents.qaReports[0]: invalid base64 payload"
+                        .to_string(),
+                ),
+            });
+        }
+
+        let result = service
+            .odt_read_task_documents("/repo", "fairnest-4y3", false, false, true)
+            .expect("read task documents should succeed");
+
+        let qa = result
+            .documents
+            .latest_qa_report
+            .expect("qa report should be present when requested");
+        assert_eq!(qa.markdown, "");
+        assert_eq!(qa.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+        assert_eq!(qa.verdict, host_domain::QaWorkflowVerdict::Approved);
+        assert_eq!(
+            qa.error.as_deref(),
+            Some("Failed to decode openducktor.documents.qaReports[0]: invalid base64 payload"),
+        );
+    }
 }

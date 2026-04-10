@@ -1816,6 +1816,43 @@ fn qa_get_report_returns_empty_when_not_present() -> Result<()> {
 }
 
 #[test]
+fn qa_get_report_preserves_document_level_decode_errors() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-qa-error";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.latest_qa_report = Some(QaReportDocument {
+            markdown: String::new(),
+            verdict: QaWorkflowVerdict::Approved,
+            updated_at: Some("2026-02-20T12:00:00Z".to_string()),
+            revision: Some(2),
+            error: Some(
+                "Failed to decode openducktor.documents.qaReports[0]: invalid base64 payload"
+                    .to_string(),
+            ),
+        });
+    }
+
+    let report = service.qa_get_report(repo_path, "task-1")?;
+    assert!(report.markdown.is_empty());
+    assert_eq!(report.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+    assert_eq!(report.revision, Some(2));
+    assert_eq!(
+        report.error.as_deref(),
+        Some("Failed to decode openducktor.documents.qaReports[0]: invalid base64 payload"),
+    );
+    Ok(())
+}
+
+#[test]
 fn spec_get_and_plan_get_use_consolidated_metadata_lookup() -> Result<()> {
     let repo_path = "/tmp/odt-repo-docs-read";
     let (service, task_state, _git_state) = build_service_with_git_state(
