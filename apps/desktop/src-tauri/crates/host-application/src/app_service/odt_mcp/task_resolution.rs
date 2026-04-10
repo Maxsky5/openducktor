@@ -75,7 +75,9 @@ pub(super) fn resolve_task_reference(
     }
 
     if !requested_slug.is_empty() {
-        let by_id_suffix = tasks
+        // ID matching intentionally accepts any dash-separated segment so users can paste
+        // short memorable fragments from generated task ids, not only trailing suffixes.
+        let by_id_segment = tasks
             .iter()
             .filter(|task| {
                 let normalized_id = normalize_title_key(&task.id);
@@ -86,11 +88,11 @@ pub(super) fn resolve_task_reference(
             })
             .cloned()
             .collect::<Vec<_>>();
-        if by_id_suffix.len() == 1 {
-            return Ok(by_id_suffix[0].clone());
+        if by_id_segment.len() == 1 {
+            return Ok(by_id_segment[0].clone());
         }
-        if by_id_suffix.len() > 1 {
-            return throw_ambiguous_task_identifier(requested_task_id, &by_id_suffix);
+        if by_id_segment.len() > 1 {
+            return throw_ambiguous_task_identifier(requested_task_id, &by_id_segment);
         }
     }
 

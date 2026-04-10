@@ -861,6 +861,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invoke_handler_rejects_read_task_documents_without_include_flags() {
+        let tasks = vec![make_task(
+            "task-1",
+            "Bridge task",
+            TaskStatus::Open,
+            vec!["mcp"],
+        )];
+        let (fixture, _task_state, repo_path) = test_state_fixture_with_task_store(tasks);
+
+        let response = invoke_handler(
+            Path("odt_read_task_documents".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({
+                "repoPath": repo_path,
+                "taskId": "task-1",
+            }))),
+        )
+        .await
+        .into_response();
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload["error"],
+            json!(
+                "At least one document include flag must be true. Set includeSpec, includePlan, or includeQaReport."
+            )
+        );
+    }
+
+    #[tokio::test]
     async fn local_attachment_preview_handler_returns_file_bytes() {
         let _fixture = test_state_fixture();
         let preview_path = stage_local_attachment_to_temp("preview.png", "cHJldmlldy1ieXRlcw==")

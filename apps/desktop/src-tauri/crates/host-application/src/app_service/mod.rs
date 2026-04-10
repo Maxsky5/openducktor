@@ -42,8 +42,6 @@ mod workspace_policy;
 
 pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
-#[cfg(test)]
-pub(crate) use mcp_bridge_registry::{read_mcp_bridge_registry, MCP_BRIDGE_REGISTRY_RELATIVE_PATH};
 pub use odt_mcp::{
     OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,

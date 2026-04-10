@@ -1,5 +1,6 @@
 use super::*;
 use anyhow::Context;
+use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
@@ -24,27 +25,96 @@ pub(super) fn health_check(port: u16) -> Result<bool> {
         Ok(stream) => stream,
         Err(_) => return Ok(false),
     };
-    stream
+    if stream
         .set_read_timeout(Some(Duration::from_millis(200)))
-        .context("Failed setting MCP bridge read timeout")?;
-    stream
+        .is_err()
+    {
+        return Ok(false);
+    }
+    if stream
         .set_write_timeout(Some(Duration::from_millis(200)))
-        .context("Failed setting MCP bridge write timeout")?;
-    stream
+        .is_err()
+    {
+        return Ok(false);
+    }
+    if stream
         .write_all(
             format!(
                 "GET {MCP_BRIDGE_HEALTH_PATH} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
             )
             .as_bytes(),
         )
-        .context("Failed writing MCP bridge health request")?;
+        .is_err()
+    {
+        return Ok(false);
+    }
 
     let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .context("Failed reading MCP bridge health response")?;
+    if stream.read_to_string(&mut response).is_err() {
+        return Ok(false);
+    }
 
     Ok(response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200"))
+}
+
+fn registry_lock_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("mcp-bridge-ports.json");
+    path.with_file_name(format!(".{file_name}.lock"))
+}
+
+fn registry_temp_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("mcp-bridge-ports.json");
+    path.with_file_name(format!(".{file_name}.{}.tmp", std::process::id()))
+}
+
+fn write_registry_payload_atomically(path: &Path, payload: &str) -> Result<()> {
+    let temp_path = registry_temp_path(path);
+    let mut temp_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp_path)
+        .with_context(|| {
+            format!(
+                "Failed opening temporary MCP bridge registry {}",
+                temp_path.display()
+            )
+        })?;
+    temp_file.write_all(payload.as_bytes()).with_context(|| {
+        format!(
+            "Failed writing temporary MCP bridge registry {}",
+            temp_path.display()
+        )
+    })?;
+    temp_file.flush().with_context(|| {
+        format!(
+            "Failed flushing temporary MCP bridge registry {}",
+            temp_path.display()
+        )
+    })?;
+    temp_file.sync_all().with_context(|| {
+        format!(
+            "Failed syncing temporary MCP bridge registry {}",
+            temp_path.display()
+        )
+    })?;
+    drop(temp_file);
+
+    fs::rename(&temp_path, path).with_context(|| {
+        format!(
+            "Failed replacing MCP bridge registry {} with {}",
+            path.display(),
+            temp_path.display()
+        )
+    })?;
+
+    Ok(())
 }
 
 fn normalize_bridge_ports(ports: &mut Vec<u16>) {
@@ -65,23 +135,34 @@ fn with_locked_mcp_bridge_registry<T>(
         })?;
     }
 
-    let mut file = OpenOptions::new()
+    let lock_path = registry_lock_path(path);
+    let lock_file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(path)
-        .with_context(|| format!("Failed opening MCP bridge registry {}", path.display()))?;
-    file.lock_exclusive().with_context(|| {
+        .open(&lock_path)
+        .with_context(|| {
+            format!(
+                "Failed opening MCP bridge registry lock {}",
+                lock_path.display()
+            )
+        })?;
+    lock_file.lock_exclusive().with_context(|| {
         format!(
             "Failed acquiring lock for MCP bridge registry {}",
-            path.display()
+            lock_path.display()
         )
     })?;
 
-    let mut data = String::new();
-    file.read_to_string(&mut data)
-        .with_context(|| format!("Failed reading MCP bridge registry {}", path.display()))?;
+    let data = match fs::read_to_string(path) {
+        Ok(data) => data,
+        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Failed reading MCP bridge registry {}", path.display()));
+        }
+    };
 
     let mut parsed = if data.trim().is_empty() {
         McpBridgeRegistryFile::default()
@@ -100,14 +181,7 @@ fn with_locked_mcp_bridge_registry<T>(
 
     let payload = serde_json::to_string_pretty(&parsed)
         .context("Failed serializing MCP bridge registry payload")?;
-    file.set_len(0)
-        .with_context(|| format!("Failed truncating MCP bridge registry {}", path.display()))?;
-    file.seek(SeekFrom::Start(0))
-        .with_context(|| format!("Failed seeking MCP bridge registry {}", path.display()))?;
-    file.write_all(payload.as_bytes())
-        .with_context(|| format!("Failed writing MCP bridge registry {}", path.display()))?;
-    file.flush()
-        .with_context(|| format!("Failed flushing MCP bridge registry {}", path.display()))?;
+    write_registry_payload_atomically(path, &payload)?;
 
     Ok(output)
 }

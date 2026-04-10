@@ -148,6 +148,7 @@ mod tests {
         assert!(registry.contains("workspace_list"));
         assert!(registry.contains("git_get_status"));
         assert!(registry.contains("task_create"));
+        assert!(registry.contains("odt_read_task"));
         assert!(registry.contains("runtime_ensure"));
     }
 

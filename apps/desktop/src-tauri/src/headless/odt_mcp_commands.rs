@@ -342,6 +342,31 @@ mod tests {
     }
 
     #[test]
+    fn read_task_documents_args_require_at_least_one_include_flag() {
+        let parsed: ReadTaskDocumentsArgs = serde_json::from_value(serde_json::json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+        }))
+        .expect("args should parse");
+
+        let error = if !parsed.include_spec.unwrap_or(false)
+            && !parsed.include_plan.unwrap_or(false)
+            && !parsed.include_qa_report.unwrap_or(false)
+        {
+            request_error(
+                "At least one document include flag must be true. Set includeSpec, includePlan, or includeQaReport.",
+            )
+        } else {
+            panic!("missing include flags should fail validation");
+        };
+
+        assert_eq!(
+            error.message,
+            "At least one document include flag must be true. Set includeSpec, includePlan, or includeQaReport."
+        );
+    }
+
+    #[test]
     fn set_pull_request_args_keep_provider_and_number() {
         let parsed: SetPullRequestArgs = serde_json::from_value(serde_json::json!({
             "repoPath": "/repo",
@@ -390,5 +415,18 @@ mod tests {
         assert_eq!(parsed.input.limit, 10);
         assert_eq!(parsed.input.title.as_deref(), Some("bridge"));
         assert_eq!(parsed.input.tags, Some(vec!["mcp".to_string()]));
+    }
+
+    #[test]
+    fn search_tasks_args_default_limit_when_omitted() {
+        let parsed: RepoScopedInputArgs<OdtSearchTasksInput> =
+            serde_json::from_value(serde_json::json!({
+                "repoPath": "/repo",
+                "status": "open",
+            }))
+            .expect("args should parse");
+
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.input.limit, 50);
     }
 }

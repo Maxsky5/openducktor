@@ -1,6 +1,10 @@
 use host_domain::{IssueType, PullRequestRecord, QaWorkflowVerdict, TaskStatus};
 use serde::{Deserialize, Serialize};
 
+const fn default_search_limit() -> usize {
+    50
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OdtPublicTask {
@@ -130,6 +134,7 @@ pub struct OdtSearchTasksInput {
     pub status: Option<TaskStatus>,
     pub title: Option<String>,
     pub tags: Option<Vec<String>>,
+    #[serde(default = "default_search_limit")]
     pub limit: usize,
 }
 

@@ -58,7 +58,7 @@ fn spawn_parent_death_watcher(parent_pid: u32, child_pid: u32) -> Result<()> {
         r#"P={parent_pid}; C={child_pid}; while kill -0 "$P" 2>/dev/null && kill -0 "$C" 2>/dev/null; do sleep 1; done; if ! kill -0 "$P" 2>/dev/null && kill -0 "$C" 2>/dev/null; then kill -TERM "$C" 2>/dev/null || true; sleep 1; kill -KILL "$C" 2>/dev/null || true; fi"#
     );
     Command::new("/bin/sh")
-        .arg("-lc")
+        .arg("-c")
         .arg(watcher_script)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -147,6 +147,11 @@ impl AppService {
             .map_err(|_| anyhow!("MCP bridge process state lock poisoned"))?;
         if let Some(mut process) = bridge.take() {
             let port = process.port;
+            tracing::debug!(
+                target: "openducktor.mcp-bridge",
+                port,
+                "Stopping MCP host bridge process"
+            );
             terminate_child_process(&mut process.child);
             self.unregister_mcp_bridge_port(port)?;
         }

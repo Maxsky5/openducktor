@@ -89,12 +89,19 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
   }
 
   const ports = (parsed as { ports: unknown[] }).ports.map((port) => {
-    if (!Number.isInteger(port) || typeof port !== "number" || port < 1 || port > 65535) {
+    if (!Number.isInteger(port)) {
       throw new Error(
         `Invalid OpenDucktor MCP discovery registry at ${registryPath}: ports must be integers between 1 and 65535.`,
       );
     }
-    return port;
+
+    const numericPort = port as number;
+    if (numericPort < 1 || numericPort > 65535) {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery registry at ${registryPath}: ports must be integers between 1 and 65535.`,
+      );
+    }
+    return numericPort;
   });
 
   const discoveredPorts: number[] = [];
