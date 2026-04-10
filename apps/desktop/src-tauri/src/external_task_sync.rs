@@ -171,16 +171,17 @@ fn relay_task_event_reader(
             return Ok(());
         };
 
-        if let Some(message_id) = message.id {
-            *last_event_id = Some(message_id);
-        }
-
         if message.data.is_empty() {
             continue;
         }
 
         match serde_json::from_str::<ExternalTaskSyncEvent>(&message.data) {
-            Ok(event) => emit(event),
+            Ok(event) => {
+                if let Some(message_id) = message.id {
+                    *last_event_id = Some(message_id);
+                }
+                emit(event)
+            }
             Err(error) => {
                 tracing::error!(
                     target: "openducktor.task-sync",
@@ -205,7 +206,7 @@ fn read_next_sse_message(reader: &mut impl BufRead) -> Result<Option<SseMessage>
         let bytes_read = reader.read_line(&mut line)?;
 
         if bytes_read == 0 {
-            if payload_lines.is_empty() && message.id.is_none() {
+            if payload_lines.is_empty() {
                 return Ok(None);
             }
 
@@ -375,6 +376,37 @@ mod tests {
         assert_eq!(
             emitted_task_ids,
             vec!["task-1".to_string(), "task-2".to_string()]
+        );
+    }
+
+    #[test]
+    fn relay_task_event_reader_does_not_advance_resume_cursor_for_partial_id_only_eof() {
+        let stop_requested = AtomicBool::new(false);
+        let mut last_event_id = Some(5);
+        let mut emitted_task_ids = Vec::new();
+
+        let partial_stream = Cursor::new(b"id: 6\n".to_vec());
+        relay_task_event_reader(
+            partial_stream,
+            &stop_requested,
+            &mut last_event_id,
+            |event| emitted_task_ids.push(event.task_id),
+        )
+        .expect("partial stream should be ignored without failing");
+
+        assert_eq!(last_event_id, Some(5));
+        assert!(emitted_task_ids.is_empty());
+
+        let request = build_task_event_stream_request(
+            &Client::builder().build().expect("client should build"),
+            "http://127.0.0.1:1234/task-events",
+            last_event_id,
+        )
+        .build()
+        .expect("request should build");
+        assert_eq!(
+            request.headers().get(LAST_EVENT_ID_HEADER.clone()),
+            Some(&HeaderValue::from_static("5"))
         );
     }
 }
