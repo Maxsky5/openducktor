@@ -419,7 +419,7 @@ fn is_managed_task_worktree_session(
         .get_current_branch(Path::new(working_directory))
     {
         Ok(current_branch) => current_branch,
-        Err(error) if is_task_named_path => return Ok(true),
+        Err(_error) if is_task_named_path => return Ok(true),
         Err(error) => {
             return Err(error).with_context(|| {
                 format!("Failed to inspect implementation worktree branch for {working_directory}")

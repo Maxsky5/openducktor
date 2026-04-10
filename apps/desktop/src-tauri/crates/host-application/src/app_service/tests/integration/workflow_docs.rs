@@ -804,7 +804,7 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
         .task_delete(repo_path, "parent-1", false)
         .expect_err("first delete should fail on branch cleanup");
     assert!(format!("{first_error:#}").contains("branch blocked"));
-    fs::remove_dir_all(worktree_path)?;
+    assert!(!Path::new(worktree_path).exists());
 
     git_state
         .lock()
