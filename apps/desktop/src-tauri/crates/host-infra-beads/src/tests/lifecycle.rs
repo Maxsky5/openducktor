@@ -60,6 +60,64 @@ fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
 }
 
 #[test]
+fn verify_repo_initialized_prefers_decodable_stderr_json_over_noisy_stdout() -> Result<()> {
+    let repo = RepoFixture::new("where-stderr-json-wins");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            false,
+            "bd debug log line".to_string(),
+            "warning before json\n{\"error\":\"database \\\"beads\\\" not found\"}".to_string(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let readiness = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)?;
+    assert_eq!(
+        readiness,
+        RepoReadiness::AttachmentVerificationFailed {
+            reason: "database \"beads\" not found".to_string(),
+        }
+    );
+    Ok(())
+}
+
+#[test]
+fn verify_repo_initialized_rejects_where_payloads_with_path_and_error() -> Result<()> {
+    let repo = RepoFixture::new("where-path-and-error");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "error": "unexpected-error"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)
+        .expect_err("payloads with both path and error should fail fast");
+    assert!(error
+        .to_string()
+        .contains("bd where --json returned both path and error"));
+    Ok(())
+}
+
+#[test]
 fn lifecycle_repo_init_caches_success_only_after_custom_status_configuration() -> Result<()> {
     let repo = RepoFixture::new("lifecycle-config-before-cache");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;

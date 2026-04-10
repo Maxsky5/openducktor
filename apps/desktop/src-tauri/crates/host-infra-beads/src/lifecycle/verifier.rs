@@ -159,9 +159,18 @@ impl BeadsLifecycle {
         stdout: &'a str,
         stderr: &'a str,
     ) -> BdWhereCommandOutput<'a> {
-        let json_payload = Self::extract_json_payload(stdout, stderr);
-        if !json_payload.is_empty() {
-            return BdWhereCommandOutput::Json(json_payload);
+        let stderr_payload = Self::extract_stderr_json_payload(stderr);
+        if Self::payload_decodes_as_bd_where_payload(stderr_payload) {
+            return BdWhereCommandOutput::Json(stderr_payload);
+        }
+
+        let stdout_payload = Self::extract_stdout_json_payload(stdout);
+        if !stdout_payload.is_empty() {
+            return BdWhereCommandOutput::Json(stdout_payload);
+        }
+
+        if !stderr_payload.is_empty() {
+            return BdWhereCommandOutput::Json(stderr_payload);
         }
 
         if ok {
@@ -178,7 +187,18 @@ impl BeadsLifecycle {
     ) -> Result<RepoReadiness> {
         let where_payload: BeadsWherePayload = serde_json::from_str(json_payload)
             .context("Failed to decode `bd where --json` payload")?;
-        if let Some(path) = where_payload.path.as_deref() {
+        let path = where_payload.path.as_deref().map(str::trim);
+        let error = where_payload.error.as_deref().map(str::trim);
+
+        if path.is_some() && error.is_some() {
+            return Err(anyhow!("bd where --json returned both path and error"));
+        }
+
+        if let Some(path) = path {
+            if path.is_empty() {
+                return Err(anyhow!("bd where --json returned an empty path field"));
+            }
+
             if self.attachment_paths_match(path, beads_dir)? {
                 return Ok(RepoReadiness::Ready);
             }
@@ -191,8 +211,7 @@ impl BeadsLifecycle {
                 ),
             });
         }
-        if let Some(error) = where_payload.error.as_deref() {
-            let reason = error.trim();
+        if let Some(reason) = error {
             if reason.is_empty() {
                 return Err(anyhow!("bd where --json returned an empty error field"));
             }
@@ -206,12 +225,16 @@ impl BeadsLifecycle {
         ))
     }
 
-    fn extract_json_payload<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
+    fn extract_stdout_json_payload(stdout: &str) -> &str {
         let trimmed_stdout = stdout.trim();
         if !trimmed_stdout.is_empty() {
             return trimmed_stdout;
         }
 
+        ""
+    }
+
+    fn extract_stderr_json_payload(stderr: &str) -> &str {
         let trimmed_stderr = stderr.trim();
         if trimmed_stderr.is_empty() {
             return "";
@@ -225,6 +248,10 @@ impl BeadsLifecycle {
         }
 
         ""
+    }
+
+    fn payload_decodes_as_bd_where_payload(payload: &str) -> bool {
+        !payload.is_empty() && serde_json::from_str::<BeadsWherePayload>(payload).is_ok()
     }
 
     fn probe_shared_database_presence(
