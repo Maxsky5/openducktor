@@ -3,10 +3,12 @@ use super::{terminate_child_process, AppService, McpBridgeProcess};
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::pick_free_port;
 use std::io::Read;
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const MCP_BRIDGE_READY_TIMEOUT: Duration = Duration::from_secs(5);
+const MCP_BRIDGE_BINARY_ENV: &str = "OPENDUCKTOR_MCP_BRIDGE_BINARY";
 
 fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
     let Some(mut reader) = pipe.take() else {
@@ -74,9 +76,8 @@ fn spawn_parent_death_watcher(_parent_pid: u32, _child_pid: u32) -> Result<()> {
 }
 
 fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
-    let current_exe =
-        std::env::current_exe().context("Failed to resolve current executable for MCP bridge")?;
-    let mut command = Command::new(current_exe);
+    let bridge_binary = resolve_mcp_bridge_binary_path()?;
+    let mut command = Command::new(bridge_binary);
     command
         .arg("--browser-backend")
         .arg("--port")
@@ -94,6 +95,20 @@ fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
         );
     }
     Ok(child)
+}
+
+fn resolve_mcp_bridge_binary_path() -> Result<PathBuf> {
+    if let Ok(raw) = std::env::var(MCP_BRIDGE_BINARY_ENV) {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(anyhow!(
+                "{MCP_BRIDGE_BINARY_ENV} is set but empty. Provide a browser-backend-capable executable path."
+            ));
+        }
+        return Ok(PathBuf::from(trimmed));
+    }
+
+    std::env::current_exe().context("Failed to resolve current executable for MCP bridge")
 }
 
 impl AppService {
