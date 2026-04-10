@@ -291,6 +291,46 @@ fn ensure_repo_initialized_fails_fast_for_malformed_where_output() -> Result<()>
 }
 
 #[test]
+fn ensure_repo_initialized_fails_fast_for_non_json_where_failure_output() -> Result<()> {
+    let repo = RepoFixture::new("non-json-where-failure-output");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            false,
+            String::new(),
+            "plain text failure output".to_string(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let error = store
+        .ensure_repo_initialized(repo.path())
+        .expect_err("non-JSON where failure output should fail without fallback recovery");
+    assert!(error
+        .to_string()
+        .contains("bd where failed without a decodable JSON payload"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].program, "dolt");
+    assert_eq!(calls[1].args, vec!["where", "--json"]);
+    assert!(!calls
+        .iter()
+        .any(|call| call.args == vec!["doctor", "--fix", "--yes"]));
+    assert!(!calls
+        .iter()
+        .any(|call| call.args.first().map(String::as_str) == Some("init")));
+    assert!(!calls
+        .iter()
+        .any(|call| call.program == "dolt"
+            && call.args.first().map(String::as_str) == Some("backup")));
+    Ok(())
+}
+
+#[test]
 fn ensure_repo_initialized_fails_fast_when_shared_dolt_probe_fails() -> Result<()> {
     let repo = RepoFixture::new("shared-dolt-unavailable");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;

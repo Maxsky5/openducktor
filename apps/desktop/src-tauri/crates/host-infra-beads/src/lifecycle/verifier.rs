@@ -124,9 +124,7 @@ impl BeadsLifecycle {
         }
 
         if !ok {
-            return Ok(RepoReadiness::AttachmentVerificationFailed {
-                reason: Self::command_failure_reason("bd where failed", &stdout, &stderr),
-            });
+            return Err(anyhow!("bd where failed without a decodable JSON payload"));
         }
 
         Err(anyhow!("bd where returned empty payload"))
