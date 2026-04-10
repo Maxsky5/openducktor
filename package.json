@@ -10,6 +10,9 @@
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
     "browser:dev": "bun run scripts/browser-dev.ts",
+    "release:version:set": "bun run scripts/release-version.ts set",
+    "release:version:check": "bun run scripts/release-version.ts check",
+    "release:cef:env": "bun run --cwd apps/desktop scripts/resolve-cef-release-env.ts",
     "tauri": "cd apps/desktop && bun run tauri",
     "tauri:dev": "cd apps/desktop && bun run tauri:dev",
     "tauri:build": "cd apps/desktop && bun run tauri:build",
