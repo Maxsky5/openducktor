@@ -57,6 +57,41 @@ describe("host-client", () => {
     );
   });
 
+  test("fails fast when task-event subscriptions are unavailable in the current runtime", async () => {
+    const { createHostBridge } = await import("./host-client");
+
+    await expect(createHostBridge().subscribeTaskEvents(() => {})).rejects.toThrow(
+      "Task-event subscriptions require the desktop shell or browser live mode.",
+    );
+  });
+
+  test("subscribes to the Tauri task-event channel", async () => {
+    isTauriRuntime = true;
+    const listener = mock(() => {});
+    let listenedEventName = "";
+    let registeredHandler: ((event: { payload: unknown }) => void) | undefined;
+
+    listenImpl = async (event, handler) => {
+      listenedEventName = event;
+      registeredHandler = handler;
+      return () => {};
+    };
+
+    const { createHostBridge } = await import("./host-client");
+    const unsubscribe = await createHostBridge().subscribeTaskEvents(listener);
+
+    if (!registeredHandler) {
+      throw new Error("Expected the Tauri task-event handler to be registered");
+    }
+
+    registeredHandler({ payload: { kind: "external_task_created", taskId: "task-1" } });
+
+    expect(listenedEventName).toBe("openducktor://task-event");
+    expect(listener).toHaveBeenCalledWith({ kind: "external_task_created", taskId: "task-1" });
+
+    unsubscribe();
+  });
+
   test("normalizes Tauri event cleanup into an idempotent callback", async () => {
     isTauriRuntime = true;
     let cleanupCalls = 0;

@@ -239,4 +239,38 @@ describe("browser live SSE subscriptions", () => {
 
     unsubscribe();
   });
+
+  test("shares one EventSource for multiple task-event subscribers", async () => {
+    const { subscribeBrowserLiveTaskEvents } = await loadBrowserLiveClient();
+    const listenerA = mock(() => {});
+    const listenerB = mock(() => {});
+
+    const unsubscribeA = await subscribeBrowserLiveTaskEvents(listenerA);
+    const unsubscribeB = await subscribeBrowserLiveTaskEvents(listenerB);
+
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/task-events");
+
+    FakeEventSource.instances[0]?.emit(
+      "message",
+      JSON.stringify({ kind: "external_task_created", repoPath: "/repo", taskId: "task-1" }),
+    );
+
+    expect(listenerA).toHaveBeenCalledWith({
+      kind: "external_task_created",
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+    expect(listenerB).toHaveBeenCalledWith({
+      kind: "external_task_created",
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+
+    unsubscribeA();
+    expect(FakeEventSource.instances[0]?.closed).toBe(false);
+
+    unsubscribeB();
+    expect(FakeEventSource.instances[0]?.closed).toBe(true);
+  });
 });

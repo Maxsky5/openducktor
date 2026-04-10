@@ -1,4 +1,4 @@
-import { type RunEvent, runEventSchema } from "@openducktor/contracts";
+import { externalTaskSyncEventSchema, type RunEvent, runEventSchema } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -9,6 +9,28 @@ import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
 const PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
+const MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS = 256;
+
+const rememberProcessedExternalTaskEvent = (
+  eventIds: Set<string>,
+  order: string[],
+  eventId: string,
+): boolean => {
+  if (eventIds.has(eventId)) {
+    return false;
+  }
+
+  eventIds.add(eventId);
+  order.push(eventId);
+  if (order.length > MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS) {
+    const oldestEventId = order.shift();
+    if (oldestEventId) {
+      eventIds.delete(oldestEventId);
+    }
+  }
+
+  return true;
+};
 
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
@@ -49,6 +71,8 @@ export function useAppLifecycle({
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
   const refreshTasksWithOptionsRef = useRef(refreshTasksWithOptions);
+  const processedTaskEventIdsRef = useRef(new Set<string>());
+  const processedTaskEventOrderRef = useRef<string[]>([]);
 
   useLayoutEffect(() => {
     activeRepoRef.current = activeRepo;
@@ -105,6 +129,54 @@ export function useAppLifecycle({
       unsubscribe?.();
     };
   }, [refreshRuntimeCheck, refreshWorkspaces, setEvents, setRunCompletionSignal]);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    hostBridge
+      .subscribeTaskEvents((payload) => {
+        const parsed = externalTaskSyncEventSchema.safeParse(payload);
+        if (!parsed.success) {
+          toast.error("Task sync event invalid", {
+            description: "Received an invalid external task sync payload from the host bridge.",
+          });
+          return;
+        }
+
+        if (
+          !rememberProcessedExternalTaskEvent(
+            processedTaskEventIdsRef.current,
+            processedTaskEventOrderRef.current,
+            parsed.data.eventId,
+          )
+        ) {
+          return;
+        }
+
+        if (activeRepoRef.current !== parsed.data.repoPath) {
+          return;
+        }
+
+        void refreshTaskDataRef
+          .current(parsed.data.repoPath, parsed.data.taskId)
+          .catch((error: unknown) => {
+            toast.error("Failed to sync external task changes", {
+              description: summarizeTaskLoadError(error),
+            });
+          });
+      })
+      .then((cleanup) => {
+        unsubscribe = cleanup;
+      })
+      .catch((error: unknown) => {
+        toast.error("Task event subscription failed", {
+          description: errorMessage(error),
+        });
+      });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeRepo) {

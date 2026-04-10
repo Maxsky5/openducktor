@@ -181,3 +181,9 @@ export const subscribeBrowserLiveDevServerEvents = async (
 ): Promise<() => void> => {
   return subscribeSseChannel("dev-server-events", listener);
 };
+
+export const subscribeBrowserLiveTaskEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  return subscribeSseChannel("task-events", listener);
+};

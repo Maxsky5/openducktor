@@ -19,6 +19,7 @@ pub(super) struct HeadlessState {
     pub(super) service: Arc<AppService>,
     pub(super) events: HeadlessEventBus,
     pub(super) dev_server_events: HeadlessEventBus,
+    pub(super) task_events: HeadlessEventBus,
     pub(super) registry: Arc<CommandRegistry>,
     pub(super) shutdown_signal: Arc<Notify>,
     pub(super) shutdown_started: Arc<AtomicBool>,

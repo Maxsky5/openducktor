@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context};
+use external_task_sync::{start_task_event_relay, TaskEventRelayState};
 use host_application::{AppService, DevServerEmitter, RunEmitter};
 #[cfg(test)]
 use host_domain::TaskStatus;
@@ -16,6 +17,7 @@ use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, Manager, RunEvent as TauriRunEvent};
 
 mod commands;
+mod external_task_sync;
 mod headless;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod macos_cef_quit;
@@ -427,6 +429,7 @@ fn startup_phase_build_tauri_app(
     service: Arc<AppService>,
 ) -> anyhow::Result<tauri::App<TauriRuntime>> {
     let builder = tauri::Builder::<TauriRuntime>::default();
+    let setup_service = service.clone();
 
     #[cfg(all(feature = "cef", target_os = "macos"))]
     let builder = builder.command_line_args([
@@ -436,17 +439,20 @@ fn startup_phase_build_tauri_app(
     ]);
 
     let builder = builder
-        .setup(|_app| {
-            #[cfg(all(feature = "cef", target_os = "macos"))]
-            macos_cef_quit::install(_app)?;
-            Ok(())
-        })
-        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             service,
             #[cfg(test)]
             hook_trust_dialog_test_response: Mutex::new(None),
-        });
+        })
+        .setup(move |app| {
+            #[cfg(all(feature = "cef", target_os = "macos"))]
+            macos_cef_quit::install(app)?;
+
+            let stop_requested = start_task_event_relay(setup_service.clone(), app.handle().clone());
+            app.manage(TaskEventRelayState { stop_requested });
+            Ok(())
+        })
+        .plugin(tauri_plugin_dialog::init());
 
     startup_phase_command_registration(builder)
         .build(tauri::generate_context!())
@@ -473,6 +479,11 @@ fn startup_phase_exit_shutdown_handler(
             {
                 return;
             }
+
+            handle
+                .state::<TaskEventRelayState>()
+                .stop_requested
+                .store(true, Ordering::SeqCst);
 
             for window in handle.webview_windows().into_values() {
                 let _ = window.hide();

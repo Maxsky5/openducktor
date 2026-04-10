@@ -123,6 +123,7 @@ mod tests {
                 service,
                 events: HeadlessEventBus::new(1),
                 dev_server_events: HeadlessEventBus::new(1),
+                task_events: HeadlessEventBus::new(1),
                 registry: Arc::new(registry),
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),

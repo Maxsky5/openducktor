@@ -74,6 +74,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         Arc::new(build_registry().context("failed to build browser backend command registry")?);
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let task_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let shutdown_signal = Arc::new(Notify::new());
     let shutdown_started = Arc::new(AtomicBool::new(false));
     startup_phase_shutdown_hooks_with_gate(
@@ -86,6 +87,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         .route("/shutdown", post(shutdown_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
+        .route("/task-events", get(task_events_handler))
         .route(
             "/local-attachment-preview",
             get(local_attachment_preview_handler),
@@ -96,6 +98,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             service,
             events,
             dev_server_events,
+            task_events,
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
@@ -186,6 +189,19 @@ async fn dev_server_events_handler(
         state.dev_server_events,
         last_event_id,
         "Browser dev server event stream",
+    ))
+}
+
+async fn task_events_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HeadlessCommandError> {
+    reject_when_shutting_down(&state)?;
+    let last_event_id = parse_last_event_id(&headers)?;
+    Ok(build_sse_response(
+        state.task_events,
+        last_event_id,
+        "Browser task event stream",
     ))
 }
 
@@ -710,6 +726,7 @@ mod tests {
                 service,
                 events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 registry,
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
@@ -749,6 +766,7 @@ mod tests {
                     service,
                     events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                     dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                    task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                     registry,
                     shutdown_signal: Arc::new(Notify::new()),
                     shutdown_started: Arc::new(AtomicBool::new(false)),
@@ -824,6 +842,19 @@ mod tests {
         let state = task_state.lock().expect("task store lock poisoned");
         assert_eq!(state.created_inputs.len(), 1);
         assert_eq!(state.created_inputs[0].title, "Bridge task");
+
+        let (_receiver, replayed) = fixture.state.task_events.subscribe_with_replay(Some(0));
+        assert_eq!(replayed.len(), 1);
+
+        let task_event: Value =
+            serde_json::from_str(&replayed[0].payload).expect("task event should deserialize");
+        let expected_repo_path = std::fs::canonicalize(&repo_path)
+            .unwrap_or(repo_path.clone())
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(task_event["kind"], json!("external_task_created"));
+        assert_eq!(task_event["repoPath"], json!(expected_repo_path));
+        assert_eq!(task_event["taskId"], json!("generated-1"));
     }
 
     #[tokio::test]
