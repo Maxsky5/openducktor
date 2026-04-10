@@ -459,7 +459,7 @@ export const AgentChatComposer = forwardRef<
       scheduleComposerFocus();
     }
   }, [onComposerEditorInput, scheduleComposerFocus]);
-  let composerPlaceholder = "@ for files; / for commands; ! for shell";
+  let composerPlaceholder = "@ for files; / for commands";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }
