@@ -30,6 +30,7 @@ const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
     "http://[::1]:1420",
 ];
 const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
+const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -301,21 +302,28 @@ fn browser_backend_cors_layer() -> anyhow::Result<CorsLayer> {
             CorsLayer::new()
                 .allow_origin(parse_default_frontend_origins()?)
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([header::CONTENT_TYPE])
+                .allow_headers(browser_backend_allowed_headers())
         } else {
             CorsLayer::new()
                 .allow_origin(parse_origin_header(origin)?)
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([header::CONTENT_TYPE])
+                .allow_headers(browser_backend_allowed_headers())
         }
     } else {
         CorsLayer::new()
             .allow_origin(parse_default_frontend_origins()?)
             .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers([header::CONTENT_TYPE])
+            .allow_headers(browser_backend_allowed_headers())
     };
 
     Ok(layer)
+}
+
+fn browser_backend_allowed_headers() -> [header::HeaderName; 2] {
+    [
+        header::CONTENT_TYPE,
+        header::HeaderName::from_static(LAST_EVENT_ID_HEADER),
+    ]
 }
 
 fn parse_default_frontend_origins() -> anyhow::Result<Vec<HeaderValue>> {
@@ -806,6 +814,15 @@ mod tests {
             payload,
             json!({ "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2" })
         );
+    }
+
+    #[test]
+    fn browser_backend_allowed_headers_include_last_event_id_for_sse_replay() {
+        let headers = browser_backend_allowed_headers();
+
+        assert_eq!(headers.len(), 2);
+        assert!(headers.contains(&header::CONTENT_TYPE));
+        assert!(headers.contains(&header::HeaderName::from_static(LAST_EVENT_ID_HEADER)));
     }
 
     #[tokio::test]
