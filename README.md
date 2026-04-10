@@ -52,12 +52,20 @@ OpenDucktor currently targets local macOS development.
 - Bun `1.3.11`
 - Rust stable toolchain
 - Xcode Command Line Tools
+- `cmake`
+- `ninja`
 - `git`
 - `gh`
 - `bd` (Beads CLI)
 - `opencode` (OpenCode CLI/runtime)
 
 OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`. You can also override the binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
+
+On macOS, you can install the native CEF build helpers with Homebrew:
+
+```sh
+brew install cmake ninja
+```
 
 ### Install Dependencies
 
@@ -81,13 +89,15 @@ bun run tauri:setup:cef
 
 That command:
 
+- requires `cmake` and `ninja` to already be available on `PATH`
 - installs the CEF toolchain into a shared OpenDucktor cache directory
 - exports CEF into a shared OpenDucktor cache directory that is versioned by the resolved `cef` crate version
 - clears the macOS quarantine attribute from the downloaded CEF bundle
 
 By default, worktrees share the same contributor-local cache under `~/.openducktor/cache/`, so you do not need to rerun the full CEF bootstrap for every git worktree.
 
-- CEF tools default to `~/.openducktor/cache/cargo-tools/tauri-feat-cef/<tauri-revision>/`
+- `cargo-tauri` defaults to `~/.openducktor/cache/cargo-tools/tauri-feat-cef/<tauri-revision>/`
+- `export-cef-dir` defaults to `~/.openducktor/cache/cargo-tools/export-cef-dir/<cef-version>/`
 - Exported CEF bundles default to `~/.openducktor/cache/cef/<cef-version>/`
 
 The setup script installs `cargo-tauri` from the exact Tauri git revision locked in `apps/desktop/src-tauri/Cargo.lock`, so the CEF CLI matches the app runtime instead of following the moving `feat/cef` branch head.
@@ -182,6 +192,7 @@ Key references:
 
 - [docs/architecture-overview.md](docs/architecture-overview.md)
 - [docs/runtime-integration-guide.md](docs/runtime-integration-guide.md)
+- [docs/release-process.md](docs/release-process.md)
 - [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
 - [docs/task-workflow-actions.md](docs/task-workflow-actions.md)
 - [docs/task-workflow-transition-matrix.md](docs/task-workflow-transition-matrix.md)

@@ -2,13 +2,13 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { resolveCargoToolsRoot, resolveCefPath } from "./cef-paths";
+import { resolveCargoTauriToolsRoot, resolveCefPath } from "./cef-paths";
 
 const desktopRoot = process.cwd();
 const tauriRoot = resolve(desktopRoot, "src-tauri");
 const macosCefDevConfigPath = resolve(tauriRoot, "tauri.cef-dev.conf.json");
 const cargoTauriPath = resolve(
-  resolveCargoToolsRoot(tauriRoot),
+  resolveCargoTauriToolsRoot(tauriRoot),
   "bin",
   process.platform === "win32" ? "cargo-tauri.exe" : "cargo-tauri",
 );

@@ -6,18 +6,22 @@ import { delimiter, join, resolve } from "node:path";
 import {
   readCefVersion,
   readTauriCefRevision,
-  resolveCargoToolsRoot,
+  resolveCargoTauriToolsRoot,
   resolveCefPath,
+  resolveExportCefToolsRoot,
 } from "./cef-paths";
 
 const desktopRoot = process.cwd();
 const tauriRoot = resolve(desktopRoot, "src-tauri");
-const toolRoot = resolveCargoToolsRoot(tauriRoot);
-const toolBinRoot = resolve(toolRoot, "bin");
+const cargoTauriRoot = resolveCargoTauriToolsRoot(tauriRoot);
+const cargoTauriBinRoot = resolve(cargoTauriRoot, "bin");
+const exportCefToolRoot = resolveExportCefToolsRoot(tauriRoot);
+const exportCefToolBinRoot = resolve(exportCefToolRoot, "bin");
 const cefPath = resolveCefPath(tauriRoot);
 const tauriRevision = readTauriCefRevision(tauriRoot);
 const binaryExtension = process.platform === "win32" ? ".exe" : "";
-const exportCefDirPath = resolve(toolBinRoot, `export-cef-dir${binaryExtension}`);
+const cargoTauriPath = resolve(cargoTauriBinRoot, `cargo-tauri${binaryExtension}`);
+const exportCefDirPath = resolve(exportCefToolBinRoot, `export-cef-dir${binaryExtension}`);
 
 function cargoHomeBinPath(): string {
   return resolve(process.env.CARGO_HOME ?? join(homedir(), ".cargo"), "bin");
@@ -27,7 +31,9 @@ function commandEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...extra,
-    PATH: [toolBinRoot, cargoHomeBinPath(), process.env.PATH].filter(Boolean).join(delimiter),
+    PATH: [cargoTauriBinRoot, exportCefToolBinRoot, cargoHomeBinPath(), process.env.PATH]
+      .filter(Boolean)
+      .join(delimiter),
   };
 }
 
@@ -70,41 +76,45 @@ await (async () => {
     await run("rustup", ["target", "add", "x86_64-apple-darwin"]);
   }
 
-  await run("rustup", [
-    "run",
-    "stable",
-    "cargo",
-    "install",
-    "--locked",
-    "--root",
-    toolRoot,
-    "tauri-cli",
-    "--git",
-    "https://github.com/tauri-apps/tauri",
-    "--rev",
-    tauriRevision,
-    "--force",
-  ]);
+  if (!existsSync(cargoTauriPath)) {
+    await run("rustup", [
+      "run",
+      "stable",
+      "cargo",
+      "install",
+      "--locked",
+      "--root",
+      cargoTauriRoot,
+      "tauri-cli",
+      "--git",
+      "https://github.com/tauri-apps/tauri",
+      "--rev",
+      tauriRevision,
+    ]);
+  }
 
-  await run("rustup", [
-    "run",
-    "stable",
-    "cargo",
-    "install",
-    "--locked",
-    "--root",
-    toolRoot,
-    "export-cef-dir",
-    "--version",
-    readCefVersion(tauriRoot),
-    "--force",
-  ]);
+  if (!existsSync(exportCefDirPath)) {
+    await run("rustup", [
+      "run",
+      "stable",
+      "cargo",
+      "install",
+      "--locked",
+      "--root",
+      exportCefToolRoot,
+      "export-cef-dir",
+      "--version",
+      readCefVersion(tauriRoot),
+    ]);
+  }
 
   if (!existsSync(exportCefDirPath)) {
     throw new Error(`Missing export-cef-dir at ${exportCefDirPath}`);
   }
 
-  await run(exportCefDirPath, ["--force", cefPath]);
+  if (!existsSync(cefPath)) {
+    await run(exportCefDirPath, [cefPath]);
+  }
 
   if (process.platform === "darwin") {
     await run("xattr", ["-dr", "com.apple.quarantine", cefPath]);
