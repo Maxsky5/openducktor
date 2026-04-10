@@ -9,7 +9,7 @@ import {
   type SessionStartWorkflowResult,
   startSessionWorkflow,
 } from "@/features/session-start";
-import { errorMessage, hasErrorToastShown } from "@/lib/errors";
+import { errorMessage } from "@/lib/errors";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -126,11 +126,9 @@ export function useAgentStudioFreshSessionCreation({
               });
             } catch (error) {
               const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
-              if (!hasErrorToastShown(error)) {
-                toast.error(`Failed to start ${roleLabel} session`, {
-                  description: errorMessage(error),
-                });
-              }
+              toast.error(`Failed to start ${roleLabel} session`, {
+                description: errorMessage(error),
+              });
               return undefined;
             }
             if (
@@ -188,11 +186,9 @@ export function useAgentStudioFreshSessionCreation({
             });
           } catch (error) {
             const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
-            if (!hasErrorToastShown(error)) {
-              toast.error(`Failed to start ${roleLabel} session`, {
-                description: errorMessage(error),
-              });
-            }
+            toast.error(`Failed to start ${roleLabel} session`, {
+              description: errorMessage(error),
+            });
             return undefined;
           }
           if (!workflow) {

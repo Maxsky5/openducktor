@@ -2,7 +2,7 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { errorMessage, hasErrorToastShown } from "@/lib/errors";
+import { errorMessage } from "@/lib/errors";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
@@ -189,11 +189,9 @@ export function useSessionStartModalRunner({
         });
         resolvePendingRun(value);
       } catch (error) {
-        if (!hasErrorToastShown(error)) {
-          toast.error("Failed to start the session.", {
-            description: errorMessage(error),
-          });
-        }
+        toast.error("Failed to start the session.", {
+          description: errorMessage(error),
+        });
       } finally {
         setIsStarting(false);
       }

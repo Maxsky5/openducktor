@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { markErrorToastShown } from "@/lib/errors";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
@@ -153,9 +152,9 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.unmount();
   });
 
-  test("does not show a second toast when the start error was already surfaced", async () => {
+  test("shows a single role-specific toast when fresh session start fails", async () => {
     const startAgentSession = mock(async () => {
-      throw markErrorToastShown(new Error("start failed"));
+      throw new Error("start failed");
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -176,7 +175,10 @@ describe("useAgentStudioFreshSessionCreation", () => {
     });
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
-    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start Planner session", {
+      description: "start failed",
+    });
 
     await harness.unmount();
   });

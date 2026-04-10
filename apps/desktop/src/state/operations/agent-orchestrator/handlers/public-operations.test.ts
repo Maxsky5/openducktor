@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import { toast } from "sonner";
-import { hasErrorToastShown } from "@/lib/errors";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
 const BUILD_SELECTION = {
@@ -62,7 +61,7 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("shows toast and rethrows start errors", async () => {
+  test("rethrows start errors without adding a toast", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
@@ -99,57 +98,7 @@ describe("agent-orchestrator-public-operations", () => {
           selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow("start failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to start agent session", {
-        description: "start failed",
-      });
-    } finally {
-      toast.error = originalToastError;
-    }
-  });
-
-  test("marks surfaced start errors so outer flows can avoid duplicate toasts", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
-
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      removeAgentSessions: () => {},
-      sessionActions: createSessionActions({
-        startAgentSession: async () => {
-          throw new Error("start failed");
-        },
-      }),
-    });
-
-    try {
-      let thrown: unknown = null;
-      try {
-        await operations.startAgentSession({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        });
-      } catch (error) {
-        thrown = error;
-      }
-
-      expect(thrown).toBeInstanceOf(Error);
-      expect(hasErrorToastShown(thrown)).toBe(true);
+      expect(toastError).not.toHaveBeenCalled();
     } finally {
       toast.error = originalToastError;
     }

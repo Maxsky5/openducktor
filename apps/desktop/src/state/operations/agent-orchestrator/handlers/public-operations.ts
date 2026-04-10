@@ -15,7 +15,7 @@ import type {
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import { toast } from "sonner";
-import { errorMessage, markErrorToastShown } from "@/lib/errors";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -82,7 +82,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
     toast.error(title, {
       description: errorMessage(error),
     });
-    throw markErrorToastShown(error);
+    throw error;
   }
 };
 
@@ -116,7 +116,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionFileSearch,
   removeAgentSessions,
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
-    withErrorToast("Failed to start agent session", () => sessionActions.startAgentSession(input)),
+    sessionActions.startAgentSession(input),
   sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
     withErrorToast("Failed to send message", () =>
       sessionActions.sendAgentMessage(sessionId, parts),

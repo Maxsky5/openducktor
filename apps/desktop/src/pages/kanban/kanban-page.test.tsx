@@ -8,7 +8,6 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
 import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { markErrorToastShown } from "@/lib/errors";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -835,9 +834,9 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("session start errors already surfaced elsewhere are not toasted again", async () => {
+  test("session start failure shows a single modal-level error toast", async () => {
     startAgentSessionMock.mockImplementationOnce(async () => {
-      throw markErrorToastShown(new Error("Worktree path already exists for task TASK-123"));
+      throw new Error("Worktree path already exists for task TASK-123");
     });
 
     const renderer = await renderPage();
@@ -853,7 +852,10 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     await waitForMockCall(startAgentSessionMock);
-    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
+      description: "Worktree path already exists for task TASK-123",
+    });
     expect(latestLocation).toBe("/");
 
     await act(async () => {

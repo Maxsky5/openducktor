@@ -20,7 +20,6 @@ import {
   startSessionWorkflow,
 } from "@/features/session-start";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
-import { hasErrorToastShown } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -287,11 +286,9 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         toast.error("Changes requested, but feedback message failed.");
       }
     } catch (error) {
-      if (!hasErrorToastShown(error)) {
-        toast.error("Failed to prepare the Builder session.", {
-          description: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
+      toast.error("Failed to prepare the Builder session.", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     } finally {
       setIsSubmittingHumanReviewFeedback(false);
     }
