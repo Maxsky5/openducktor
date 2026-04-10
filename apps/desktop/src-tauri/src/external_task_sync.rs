@@ -4,6 +4,7 @@ use host_application::AppService;
 use host_domain::now_rfc3339;
 use reqwest::blocking::{Client, Response};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -15,6 +16,16 @@ const TASK_EVENT_STREAM_PATH: &str = "task-events";
 const TASK_EVENT_RELAY_RETRY_DELAY: Duration = Duration::from_secs(1);
 const TASK_EVENT_RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) const TASK_EVENT_NAME: &str = "openducktor://task-event";
+const STREAM_WARNING_EVENT_NAME: &str = "stream-warning";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct TaskEventControlPayload {
+    #[serde(rename = "__openducktorBrowserLive")]
+    browser_live: bool,
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -156,12 +167,17 @@ fn relay_task_event_reader(
     mut reader: impl BufRead,
     stop_requested: &AtomicBool,
     last_event_id: &mut Option<SseEventId>,
-    mut emit: impl FnMut(ExternalTaskSyncEvent),
+    mut emit: impl FnMut(Value),
 ) -> Result<()> {
     while !stop_requested.load(Ordering::SeqCst) {
         let Some(message) = read_next_sse_message(&mut reader)? else {
             return Ok(());
         };
+
+        if message.event.as_deref() == Some(STREAM_WARNING_EVENT_NAME) {
+            emit(task_stream_warning_payload(message.data));
+            continue;
+        }
 
         if message.data.is_empty() {
             continue;
@@ -172,11 +188,12 @@ fn relay_task_event_reader(
                 if let Some(message_id) = message.id {
                     *last_event_id = Some(message_id);
                 }
-                emit(event)
+                emit(serde_json::to_value(event).expect("task sync event should serialize"))
             }
             Err(error) => {
                 tracing::error!(
                     target: "openducktor.task-sync",
+                    event_type = message.event.as_deref().unwrap_or("message"),
                     raw_payload = message.data,
                     error = %error,
                     "Task event relay received an invalid task sync payload"
@@ -186,6 +203,15 @@ fn relay_task_event_reader(
     }
 
     Ok(())
+}
+
+fn task_stream_warning_payload(message: String) -> Value {
+    serde_json::to_value(TaskEventControlPayload {
+        browser_live: true,
+        kind: STREAM_WARNING_EVENT_NAME,
+        message: Some(message),
+    })
+    .expect("task stream warning payload should serialize")
 }
 
 fn sleep_before_retry(stop_requested: &AtomicBool) {
@@ -199,6 +225,7 @@ fn sleep_before_retry(stop_requested: &AtomicBool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::io::Cursor;
 
     #[test]
@@ -227,12 +254,15 @@ mod tests {
 
         let stop_requested = AtomicBool::new(false);
         let mut last_event_id = None;
-        let mut emitted_task_ids = Vec::new();
+        let mut emitted_payloads = Vec::new();
 
         let first_stream = Cursor::new(format!("id: 5\ndata: {first_event}\n\n").into_bytes());
-        relay_task_event_reader(first_stream, &stop_requested, &mut last_event_id, |event| {
-            emitted_task_ids.push(event.task_id)
-        })
+        relay_task_event_reader(
+            first_stream,
+            &stop_requested,
+            &mut last_event_id,
+            |payload| emitted_payloads.push(payload),
+        )
         .expect("first stream should relay");
 
         assert_eq!(last_event_id, Some(5));
@@ -254,14 +284,33 @@ mod tests {
             replay_stream,
             &stop_requested,
             &mut last_event_id,
-            |event| emitted_task_ids.push(event.task_id),
+            |payload| emitted_payloads.push(payload),
         )
         .expect("replay stream should relay");
 
         assert_eq!(last_event_id, Some(6));
         assert_eq!(
-            emitted_task_ids,
-            vec!["task-1".to_string(), "task-2".to_string()]
+            emitted_payloads,
+            vec![
+                json!({
+                    "eventId": serde_json::from_str::<Value>(&first_event)
+                        .expect("first event should deserialize")["eventId"],
+                    "kind": "external_task_created",
+                    "repoPath": "/repo",
+                    "taskId": "task-1",
+                    "emittedAt": serde_json::from_str::<Value>(&first_event)
+                        .expect("first event should deserialize")["emittedAt"],
+                }),
+                json!({
+                    "eventId": serde_json::from_str::<Value>(&second_event)
+                        .expect("second event should deserialize")["eventId"],
+                    "kind": "external_task_created",
+                    "repoPath": "/repo",
+                    "taskId": "task-2",
+                    "emittedAt": serde_json::from_str::<Value>(&second_event)
+                        .expect("second event should deserialize")["emittedAt"],
+                })
+            ]
         );
     }
 
@@ -269,19 +318,19 @@ mod tests {
     fn relay_task_event_reader_does_not_advance_resume_cursor_for_partial_id_only_eof() {
         let stop_requested = AtomicBool::new(false);
         let mut last_event_id = Some(5);
-        let mut emitted_task_ids = Vec::new();
+        let mut emitted_payloads = Vec::new();
 
         let partial_stream = Cursor::new(b"id: 6\n".to_vec());
         relay_task_event_reader(
             partial_stream,
             &stop_requested,
             &mut last_event_id,
-            |event| emitted_task_ids.push(event.task_id),
+            |payload| emitted_payloads.push(payload),
         )
         .expect("partial stream should be ignored without failing");
 
         assert_eq!(last_event_id, Some(5));
-        assert!(emitted_task_ids.is_empty());
+        assert!(emitted_payloads.is_empty());
 
         let request = build_sse_stream_request(
             &Client::builder().build().expect("client should build"),
@@ -293,6 +342,35 @@ mod tests {
         assert_eq!(
             request.headers().get("last-event-id"),
             Some(&"5".parse().expect("header should parse"))
+        );
+    }
+
+    #[test]
+    fn relay_task_event_reader_emits_stream_warning_control_payload() {
+        let stop_requested = AtomicBool::new(false);
+        let mut last_event_id = Some(5);
+        let mut emitted_payloads = Vec::new();
+
+        let warning_stream = Cursor::new(
+            b"event: stream-warning\ndata: task-events skipped 2 events; reconnect will replay buffered events.\n\n"
+                .to_vec(),
+        );
+        relay_task_event_reader(
+            warning_stream,
+            &stop_requested,
+            &mut last_event_id,
+            |payload| emitted_payloads.push(payload),
+        )
+        .expect("warning stream should relay");
+
+        assert_eq!(last_event_id, Some(5));
+        assert_eq!(
+            emitted_payloads,
+            vec![json!({
+                "__openducktorBrowserLive": true,
+                "kind": "stream-warning",
+                "message": "task-events skipped 2 events; reconnect will replay buffered events.",
+            })]
         );
     }
 }

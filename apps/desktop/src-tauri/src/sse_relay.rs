@@ -10,6 +10,7 @@ pub(crate) type SseEventId = u64;
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct SseMessage {
     pub(crate) id: Option<SseEventId>,
+    pub(crate) event: Option<String>,
     pub(crate) data: String,
 }
 
@@ -68,6 +69,11 @@ pub(crate) fn read_next_sse_message(reader: &mut impl BufRead) -> Result<Option<
             continue;
         }
 
+        if let Some(event) = trimmed.strip_prefix("event:") {
+            message.event = Some(event.trim().to_string());
+            continue;
+        }
+
         if let Some(payload) = trimmed.strip_prefix("data:") {
             payload_lines.push(payload.trim_start().to_string());
         }
@@ -90,6 +96,7 @@ mod tests {
             .expect("payload should be present");
 
         assert_eq!(message.id, Some(7));
+        assert_eq!(message.event.as_deref(), Some("message"));
         assert_eq!(message.data, "{\"one\":1}\n{\"two\":2}");
     }
 
@@ -102,7 +109,22 @@ mod tests {
             .expect("payload should be present");
 
         assert_eq!(message.id, None);
+        assert_eq!(message.event, None);
         assert_eq!(message.data, "{\"ok\":true}");
+    }
+
+    #[test]
+    fn read_next_sse_message_preserves_named_event_type() {
+        let mut reader =
+            Cursor::new(b"event: stream-warning\ndata: task-events skipped 2 events\n\n".to_vec());
+
+        let message = read_next_sse_message(&mut reader)
+            .expect("payload should parse")
+            .expect("payload should be present");
+
+        assert_eq!(message.id, None);
+        assert_eq!(message.event.as_deref(), Some("stream-warning"));
+        assert_eq!(message.data, "task-events skipped 2 events");
     }
 
     #[test]
