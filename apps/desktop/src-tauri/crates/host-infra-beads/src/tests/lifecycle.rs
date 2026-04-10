@@ -271,7 +271,7 @@ fn ensure_repo_initialized_fails_fast_for_malformed_where_output() -> Result<()>
         .expect_err("malformed where output should fail without fallback recovery");
     assert!(error
         .to_string()
-        .contains("bd where returned empty payload"));
+        .contains("bd where --json exited successfully but returned no JSON payload"));
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 2);
@@ -311,7 +311,7 @@ fn ensure_repo_initialized_fails_fast_for_non_json_where_failure_output() -> Res
         .expect_err("non-JSON where failure output should fail without fallback recovery");
     assert!(error
         .to_string()
-        .contains("bd where failed without a decodable JSON payload"));
+        .contains("bd where --json exited unsuccessfully without a decodable JSON payload"));
 
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 2);

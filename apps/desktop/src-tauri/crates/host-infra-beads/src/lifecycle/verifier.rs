@@ -47,10 +47,49 @@ struct BeadsWherePayload {
     error: Option<String>,
 }
 
+#[derive(Debug)]
+struct SharedDoltConnection {
+    host: String,
+    port: String,
+    user: String,
+}
+
+impl SharedDoltConnection {
+    fn from_env(env: &[(String, String)]) -> Result<Self> {
+        Ok(Self {
+            host: BeadsLifecycle::required_env_value(env, "BEADS_DOLT_SERVER_HOST")?,
+            port: BeadsLifecycle::required_env_value(env, "BEADS_DOLT_SERVER_PORT")?,
+            user: BeadsLifecycle::required_env_value(env, "BEADS_DOLT_SERVER_USER")?,
+        })
+    }
+
+    fn show_databases_args(&self) -> [&str; 11] {
+        [
+            "--host",
+            self.host.as_str(),
+            "--port",
+            self.port.as_str(),
+            "--no-tls",
+            "-u",
+            self.user.as_str(),
+            "-p",
+            "",
+            "sql",
+            "-q",
+        ]
+    }
+}
+
 enum SharedDatabaseProbe {
     Available,
     Missing { database_name: String },
     Unavailable { reason: String },
+}
+
+enum BdWhereCommandOutput<'a> {
+    Json(&'a str),
+    EmptySuccess,
+    MissingJsonFailure,
 }
 
 impl BeadsLifecycle {
@@ -70,7 +109,8 @@ impl BeadsLifecycle {
             });
         }
 
-        match self.probe_shared_database_presence(repo_path, &env)? {
+        let shared_dolt_connection = SharedDoltConnection::from_env(&env)?;
+        match self.probe_shared_database_presence(repo_path, &shared_dolt_connection)? {
             SharedDatabaseProbe::Available => {}
             SharedDatabaseProbe::Missing { database_name } => {
                 return Ok(RepoReadiness::MissingSharedDatabase { database_name });
@@ -80,6 +120,15 @@ impl BeadsLifecycle {
             }
         }
 
+        self.probe_beads_where(repo_path, beads_dir, &env)
+    }
+
+    fn probe_beads_where(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        env: &[(String, String)],
+    ) -> Result<RepoReadiness> {
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -92,42 +141,69 @@ impl BeadsLifecycle {
             &env_refs,
         )?;
 
-        let json_payload = Self::extract_json_payload(&stdout, &stderr);
+        match Self::classify_bd_where_command_output(ok, &stdout, &stderr) {
+            BdWhereCommandOutput::Json(json_payload) => {
+                self.parse_bd_where_payload(json_payload, beads_dir)
+            }
+            BdWhereCommandOutput::EmptySuccess => Err(anyhow!(
+                "bd where --json exited successfully but returned no JSON payload"
+            )),
+            BdWhereCommandOutput::MissingJsonFailure => Err(anyhow!(
+                "bd where --json exited unsuccessfully without a decodable JSON payload"
+            )),
+        }
+    }
 
+    fn classify_bd_where_command_output<'a>(
+        ok: bool,
+        stdout: &'a str,
+        stderr: &'a str,
+    ) -> BdWhereCommandOutput<'a> {
+        let json_payload = Self::extract_json_payload(stdout, stderr);
         if !json_payload.is_empty() {
-            let where_payload: BeadsWherePayload = serde_json::from_str(json_payload)
-                .context("Failed to decode `bd where --json` payload")?;
-            if let Some(path) = where_payload.path.as_deref() {
-                if self.attachment_paths_match(path, beads_dir)? {
-                    return Ok(RepoReadiness::Ready);
-                }
-
-                return Ok(RepoReadiness::AttachmentVerificationFailed {
-                    reason: format!(
-                        "Beads attachment resolves to {}, expected {}",
-                        path,
-                        beads_dir.display()
-                    ),
-                });
-            }
-            if let Some(error) = where_payload.error.as_deref() {
-                let reason = error.trim();
-                if reason.is_empty() {
-                    return Err(anyhow!("bd where returned empty error payload"));
-                }
-                return Ok(RepoReadiness::AttachmentVerificationFailed {
-                    reason: reason.to_string(),
-                });
-            }
-
-            return Err(anyhow!("bd where returned malformed payload"));
+            return BdWhereCommandOutput::Json(json_payload);
         }
 
-        if !ok {
-            return Err(anyhow!("bd where failed without a decodable JSON payload"));
+        if ok {
+            return BdWhereCommandOutput::EmptySuccess;
         }
 
-        Err(anyhow!("bd where returned empty payload"))
+        BdWhereCommandOutput::MissingJsonFailure
+    }
+
+    fn parse_bd_where_payload(
+        &self,
+        json_payload: &str,
+        beads_dir: &Path,
+    ) -> Result<RepoReadiness> {
+        let where_payload: BeadsWherePayload = serde_json::from_str(json_payload)
+            .context("Failed to decode `bd where --json` payload")?;
+        if let Some(path) = where_payload.path.as_deref() {
+            if self.attachment_paths_match(path, beads_dir)? {
+                return Ok(RepoReadiness::Ready);
+            }
+
+            return Ok(RepoReadiness::AttachmentVerificationFailed {
+                reason: format!(
+                    "Beads attachment resolves to {}, expected {}",
+                    path,
+                    beads_dir.display()
+                ),
+            });
+        }
+        if let Some(error) = where_payload.error.as_deref() {
+            let reason = error.trim();
+            if reason.is_empty() {
+                return Err(anyhow!("bd where --json returned an empty error field"));
+            }
+            return Ok(RepoReadiness::AttachmentVerificationFailed {
+                reason: reason.to_string(),
+            });
+        }
+
+        Err(anyhow!(
+            "bd where --json returned a JSON payload without path or error"
+        ))
     }
 
     fn extract_json_payload<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
@@ -154,26 +230,11 @@ impl BeadsLifecycle {
     fn probe_shared_database_presence(
         &self,
         repo_path: &Path,
-        env: &[(String, String)],
+        shared_dolt_connection: &SharedDoltConnection,
     ) -> Result<SharedDatabaseProbe> {
         let expected_database = compute_beads_database_name(repo_path)?;
-        let host = Self::required_env_value(env, "BEADS_DOLT_SERVER_HOST")?;
-        let port = Self::required_env_value(env, "BEADS_DOLT_SERVER_PORT")?;
-        let user = Self::required_env_value(env, "BEADS_DOLT_SERVER_USER")?;
-        let args = [
-            "--host",
-            host.as_str(),
-            "--port",
-            port.as_str(),
-            "--no-tls",
-            "-u",
-            user.as_str(),
-            "-p",
-            "",
-            "sql",
-            "-q",
-            "show databases",
-        ];
+        let mut args = shared_dolt_connection.show_databases_args().to_vec();
+        args.push("show databases");
         let (ok, stdout, stderr) =
             self.command_runner()
                 .run_allow_failure_with_env("dolt", &args, None, &[])?;
