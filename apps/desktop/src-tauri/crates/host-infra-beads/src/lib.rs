@@ -1,7 +1,7 @@
 mod command_runner;
 mod constants;
 mod execution;
-mod initialization;
+mod lifecycle;
 mod metadata;
 mod metadata_ops;
 mod model;

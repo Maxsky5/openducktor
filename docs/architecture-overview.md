@@ -23,7 +23,7 @@ Current scope note:
 | Frontend adapters (TS) | `packages/adapters-tauri-host/src/*`, `packages/adapters-opencode-sdk/src/*` | Concrete host IPC adapter and OpenCode `AgentEnginePort` adapter | Business workflow policy ownership |
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
-| Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore`, config/worktree/process integrations | UI workflow decisions |
+| Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore` persistence gateway, Beads lifecycle coordination, config/worktree/process integrations | UI workflow decisions |
 | MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/host-bridge-client.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | MCP stdio transport, shared schema validation, host-bridge readiness checks, host-backed `odt_*` task/workflow calls | Frontend rendering/state |
 
 ## Platform-specific native lifecycle seams
@@ -43,11 +43,12 @@ Current scope note:
 4. `packages/adapters-tauri-host/src/task-client.ts` maps `tasksList` to `tasks_list`.
 5. `apps/desktop/src-tauri/src/commands/tasks.rs::tasks_list` calls `AppService::tasks_list`.
 6. `AppService::tasks_list` ensures repo init, calls `TaskStore::list_tasks`, then enriches each task with backend-derived `available_actions` and `agent_workflows`.
-7. `BeadsTaskStore` (`host-infra-beads`) reads from Beads via `bd`, parses metadata, and returns `TaskCard` data.
+7. `BeadsTaskStore` (`host-infra-beads`) ensures repo readiness through its private lifecycle subsystem, then reads from Beads via `bd`, parses metadata, and returns `TaskCard` data.
 8. Frontend receives typed payloads (Zod-validated in adapter), stores them in state, and renders columns/actions.
 
 Key boundary:
 - UI must render actions from backend `availableActions`; it must not infer transition authority from status heuristics.
+- `host-infra-beads/src/lifecycle/*` owns attachment verification, init/repair/restore, and custom-status provisioning; `host-infra-beads/src/store/*` owns task/document/session persistence and cache invalidation.
 
 ### 2) Start an agent session
 1. Agent Studio triggers `startAgentSession` in `use-agent-orchestrator-operations.ts`.
@@ -111,6 +112,7 @@ Key boundary:
 | ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/contracts/src/odt-mcp-schemas.ts` and re-exported by `packages/openducktor-mcp/src/lib.ts` | `@openducktor/contracts`, consumed by MCP/host |
 | Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs` and `apps/desktop/src-tauri/crates/host-application/src/app_service/odt_mcp.rs` | Rust host application |
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
+| Repo attachment identity and shared Dolt runtime | Managed attachment root under the config dir plus shared Dolt server state under `beads/shared-server/` | `host-infra-system` + `host-infra-beads/src/lifecycle/*` |
 | Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` via host application |
 
 ## Replaceable Boundaries

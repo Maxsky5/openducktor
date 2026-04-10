@@ -210,8 +210,21 @@ At a high level, OpenDucktor does this:
 4. if it exists, verify that it points at the expected shared Dolt database
 5. if it does not exist, create it
 6. if the attachment exists but the shared Dolt database is missing, recreate that database from the attachment backup
+7. configure OpenDucktor's custom workflow statuses before marking the repo ready
 
 That is the normal lifecycle.
+
+## Current Host Ownership Boundaries
+
+The Rust host now keeps this lifecycle split explicit instead of embedding it across task CRUD code.
+
+- `host-infra-system` owns the repo attachment locator and identity resolver: repo id, attachment root, attachment dir, and shared Dolt database name/path derivation.
+- `host-infra-system` also owns the shared Dolt server manager: state locking, health checks, startup, reuse, adoption, shutdown, and restore-time restart coordination.
+- `host-infra-beads/src/lifecycle/context.rs` owns Beads CLI working-directory and `BEADS_*` environment resolution from the managed attachment root.
+- `host-infra-beads/src/lifecycle/verifier.rs` owns attachment metadata verification and `bd where --json` readiness parsing.
+- `host-infra-beads/src/lifecycle/provisioner.rs` owns `bd init`, `bd doctor --fix`, backup restore, and custom-status provisioning.
+- `host-infra-beads/src/lifecycle/coordinator.rs` owns the repo-init lock, readiness cache, and the verify -> restore/repair/init -> reverify -> configure-statuses algorithm.
+- `host-infra-beads/src/store/*` is the persistence gateway for task CRUD, documents, sessions, and delivery metadata.
 
 ## Verification For An Existing Attachment
 
@@ -307,7 +320,7 @@ Examples of commands OpenDucktor runs during normal operation:
 - `bd delete --force [--cascade] -- <task-id>`
 - `bd config set status.custom spec_ready,ready_for_dev,ai_review,human_review`
 
-The custom status command is needed because OpenDucktor adds workflow states on top of Beads' built-in statuses.
+The custom status command is needed because OpenDucktor adds workflow states on top of Beads' built-in statuses. The host now provisions those statuses during repo-readiness lifecycle work so task/document mutation code stays persistence-focused.
 
 ## How MCP Fits In
 

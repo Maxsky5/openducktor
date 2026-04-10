@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 
 fn parse_pull_request_record(value: &Value) -> Option<PullRequestRecord> {
     serde_json::from_value(value.clone()).ok()
@@ -195,7 +196,11 @@ impl BeadsTaskStore {
         task_id: &str,
         roles: &[&str],
     ) -> Result<()> {
-        let role_set = roles.iter().map(|role| role.trim()).collect::<HashSet<_>>();
+        let role_set = roles
+            .iter()
+            .map(|role| role.trim())
+            .filter(|role| !role.is_empty())
+            .collect::<HashSet<_>>();
         if role_set.is_empty() {
             return Ok(());
         }

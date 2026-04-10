@@ -5,12 +5,8 @@ use host_domain::{
     UpdateTaskPatch, ODT_QA_APPROVED_SOURCE_TOOL, ODT_QA_REJECTED_SOURCE_TOOL,
     ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
-use host_infra_system::{
-    compute_beads_database_name, compute_repo_slug, resolve_repo_beads_attachment_dir,
-    resolve_shared_dolt_root, restore_shared_dolt_database_from_backup,
-};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -18,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use crate::command_runner::{CommandRunner, ProcessCommandRunner};
 use crate::constants::{DEFAULT_METADATA_NAMESPACE, TASK_LIST_CACHE_TTL_MS};
+use crate::lifecycle::BeadsLifecycle;
 use crate::metadata::{
     metadata_namespace, parse_agent_sessions, parse_markdown_entries, parse_metadata_root,
     parse_qa_entries,
@@ -34,10 +31,8 @@ mod task_ops;
 use cache::{KanbanTaskListCacheState, TaskListCacheState};
 
 pub struct BeadsTaskStore {
-    pub(crate) command_runner: Arc<dyn CommandRunner>,
     pub(crate) metadata_namespace: Mutex<String>,
-    pub(crate) init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    pub(crate) initialized_repos: Mutex<HashSet<String>>,
+    pub(crate) lifecycle: BeadsLifecycle,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
     kanban_task_list_cache: Mutex<HashMap<String, KanbanTaskListCacheState>>,
 }
@@ -73,10 +68,8 @@ impl BeadsTaskStore {
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
         Self {
-            command_runner,
             metadata_namespace: Mutex::new(Self::normalize_metadata_namespace(namespace)),
-            init_locks: Mutex::new(HashMap::new()),
-            initialized_repos: Mutex::new(HashSet::new()),
+            lifecycle: BeadsLifecycle::new(command_runner),
             task_list_cache: Mutex::new(HashMap::new()),
             kanban_task_list_cache: Mutex::new(HashMap::new()),
         }
@@ -88,6 +81,10 @@ impl BeadsTaskStore {
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
         Self::with_metadata_namespace_and_runner(namespace, command_runner)
+    }
+
+    pub(crate) fn repo_key(repo_path: &Path) -> String {
+        BeadsLifecycle::repo_key(repo_path)
     }
 }
 
