@@ -1,13 +1,14 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
+import {
+  BROWSER_LIVE_RECONNECTED_EVENT_KIND,
+  BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+} from "@/lib/browser-live/constants";
+import { browserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { getBrowserBackendUrl } from "@/lib/browser-mode";
 
 type BrowserSseListener = (payload: unknown) => void;
 
-type BrowserLiveControlEvent = {
-  __openducktorBrowserLive: true;
-  kind: "reconnected" | "stream-warning";
-  message?: string;
-};
+const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
 
 type BrowserSseChannel = {
   eventSource: EventSource;
@@ -84,15 +85,6 @@ const parseSsePayload = (raw: string): unknown => {
   }
 };
 
-const browserLiveControlEvent = (
-  kind: BrowserLiveControlEvent["kind"],
-  message?: string,
-): BrowserLiveControlEvent => ({
-  __openducktorBrowserLive: true,
-  kind,
-  ...(message ? { message } : {}),
-});
-
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
@@ -114,7 +106,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
   if (!channel) {
     const eventSource = new EventSource(`${baseUrl}/${path}`);
     const listeners = new Map<number, BrowserSseListener>();
-    const shouldEmitControlEvents = path === "dev-server-events";
+    const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
     let hasOpened = false;
     const handleMessage = (event: MessageEvent<string>): void => {
       const payload = parseSsePayload(event.data);
@@ -131,7 +123,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
         return;
       }
       for (const currentListener of listeners.values()) {
-        currentListener(browserLiveControlEvent("reconnected"));
+        currentListener(browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND));
       }
     };
     const handleStreamWarning = (event: MessageEvent<string>): void => {
@@ -139,7 +131,9 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
         return;
       }
       for (const currentListener of listeners.values()) {
-        currentListener(browserLiveControlEvent("stream-warning", event.data));
+        currentListener(
+          browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, event.data),
+        );
       }
     };
 
@@ -180,4 +174,10 @@ export const subscribeBrowserLiveDevServerEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
   return subscribeSseChannel("dev-server-events", listener);
+};
+
+export const subscribeBrowserLiveTaskEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  return subscribeSseChannel("task-events", listener);
 };

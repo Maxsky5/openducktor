@@ -1,8 +1,9 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
-    deserialize_args, handle_repo_scoped_input_operation_blocking, request_error, serialize_value,
-    CommandResult, HeadlessState,
+    deserialize_args, request_error, serialize_value, CommandResult, HeadlessState,
 };
+use crate::external_task_sync::build_external_task_created_event;
+use host_application::{OdtCreateTaskInput, OdtSearchTasksInput, OdtTaskSummary};
 use host_domain::PlanSubtaskInput;
 use serde::Deserialize;
 use serde_json::Value;
@@ -177,23 +178,57 @@ async fn handle_odt_read_task_documents(state: &HeadlessState, args: Value) -> C
 }
 
 async fn handle_create_task(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_scoped_input_operation_blocking(
+    let super::command_support::RepoScopedInputArgs { repo_path, input } =
+        deserialize_args::<super::command_support::RepoScopedInputArgs<OdtCreateTaskInput>>(args)?;
+    let repo_path_for_create = repo_path.clone();
+    let service = state.service.clone();
+    let created: OdtTaskSummary =
+        super::command_support::run_headless_blocking("odt_create_task", move || {
+            service.odt_create_task(&repo_path_for_create, input)
+        })
+        .await?;
+
+    emit_task_created_event(state, &repo_path, &created);
+
+    serialize_value(created)
+}
+
+async fn handle_search_tasks(state: &HeadlessState, args: Value) -> CommandResult {
+    super::command_support::handle_repo_scoped_input_operation_blocking(
         state,
         args,
-        "odt_create_task",
-        |service, repo_path, input| service.odt_create_task(&repo_path, input),
+        "odt_search_tasks",
+        |service, repo_path, input: OdtSearchTasksInput| service.odt_search_tasks(&repo_path, input),
     )
     .await
 }
 
-async fn handle_search_tasks(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_scoped_input_operation_blocking(
-        state,
-        args,
-        "odt_search_tasks",
-        |service, repo_path, input| service.odt_search_tasks(&repo_path, input),
-    )
-    .await
+fn emit_task_created_event(state: &HeadlessState, repo_path: &str, created: &OdtTaskSummary) {
+    let canonical_repo_path = match state.service.resolve_authorized_repo_path(repo_path) {
+        Ok(repo_path) => repo_path,
+        Err(error) => {
+            tracing::error!(
+                target: "openducktor.task-sync",
+                repo_path,
+                error = %format!("{error:#}"),
+                "External task create succeeded but canonical repo-path resolution for task sync failed"
+            );
+            return;
+        }
+    };
+
+    let task_id = created.task.task.id.clone();
+    let event = build_external_task_created_event(canonical_repo_path, task_id);
+    match serde_json::to_string(&event) {
+        Ok(payload) => state.task_events.emit(payload),
+        Err(error) => {
+            tracing::error!(
+                target: "openducktor.task-sync",
+                error = %error,
+                "External task create succeeded but task sync event serialization failed"
+            );
+        }
+    }
 }
 
 async fn handle_odt_set_spec(state: &HeadlessState, args: Value) -> CommandResult {

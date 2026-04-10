@@ -239,4 +239,76 @@ describe("browser live SSE subscriptions", () => {
 
     unsubscribe();
   });
+
+  test("shares one EventSource for multiple task-event subscribers", async () => {
+    const { subscribeBrowserLiveTaskEvents } = await loadBrowserLiveClient();
+    const listenerA = mock(() => {});
+    const listenerB = mock(() => {});
+
+    const unsubscribeA = await subscribeBrowserLiveTaskEvents(listenerA);
+    const unsubscribeB = await subscribeBrowserLiveTaskEvents(listenerB);
+
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/task-events");
+
+    FakeEventSource.instances[0]?.emit(
+      "message",
+      JSON.stringify({
+        eventId: "event-1",
+        kind: "external_task_created",
+        repoPath: "/repo",
+        taskId: "task-1",
+        emittedAt: "2026-04-10T13:00:00.000Z",
+      }),
+    );
+
+    expect(listenerA).toHaveBeenCalledWith({
+      eventId: "event-1",
+      kind: "external_task_created",
+      repoPath: "/repo",
+      taskId: "task-1",
+      emittedAt: "2026-04-10T13:00:00.000Z",
+    });
+    expect(listenerB).toHaveBeenCalledWith({
+      eventId: "event-1",
+      kind: "external_task_created",
+      repoPath: "/repo",
+      taskId: "task-1",
+      emittedAt: "2026-04-10T13:00:00.000Z",
+    });
+
+    unsubscribeA();
+    expect(FakeEventSource.instances[0]?.closed).toBe(false);
+
+    unsubscribeB();
+    expect(FakeEventSource.instances[0]?.closed).toBe(true);
+  });
+
+  test("emits reconnect and stream-warning control payloads for task-event subscribers", async () => {
+    const { subscribeBrowserLiveTaskEvents } = await loadBrowserLiveClient();
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeBrowserLiveTaskEvents(listener);
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    expect(listener).not.toHaveBeenCalled();
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit(
+      "stream-warning",
+      "Task stream skipped 2 events; reconnect will replay buffered events.",
+    );
+
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      __openducktorBrowserLive: true,
+      kind: "stream-warning",
+      message: "Task stream skipped 2 events; reconnect will replay buffered events.",
+    });
+
+    unsubscribe();
+  });
 });

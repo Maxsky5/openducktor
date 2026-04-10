@@ -23,6 +23,8 @@ import type {
   BuildContinuationTargetSource,
   ChatSettings,
   CommitsAheadBehind,
+  ExternalTaskSyncEvent,
+  ExternalTaskSyncEventKind,
   FailureKind,
   FileDiff,
   FileStatus,
@@ -161,6 +163,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "devServerTerminalChunkSchema",
   "devServerScriptStateSchema",
   "devServerScriptStatusSchema",
+  "externalTaskSyncEventKindSchema",
+  "externalTaskSyncEventSchema",
   "DEFAULT_BRANCH_PREFIX",
   "failureKindSchema",
   "gitCommitAllRequestSchema",
@@ -346,6 +350,8 @@ type ExportedTypeContract = {
   BeadsCheck: BeadsCheck;
   ChatSettings: ChatSettings;
   CommitsAheadBehind: CommitsAheadBehind;
+  ExternalTaskSyncEvent: ExternalTaskSyncEvent;
+  ExternalTaskSyncEventKind: ExternalTaskSyncEventKind;
   GitCommitAllRequest: GitCommitAllRequest;
   GitCommitAllResult: GitCommitAllResult;
   GitConflict: GitConflict;

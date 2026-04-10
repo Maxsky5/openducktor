@@ -30,6 +30,7 @@ const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
     "http://[::1]:1420",
 ];
 const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
+const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +75,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         Arc::new(build_registry().context("failed to build browser backend command registry")?);
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let task_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let shutdown_signal = Arc::new(Notify::new());
     let shutdown_started = Arc::new(AtomicBool::new(false));
     startup_phase_shutdown_hooks_with_gate(
@@ -86,6 +88,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         .route("/shutdown", post(shutdown_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
+        .route("/task-events", get(task_events_handler))
         .route(
             "/local-attachment-preview",
             get(local_attachment_preview_handler),
@@ -96,6 +99,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             service,
             events,
             dev_server_events,
+            task_events,
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
@@ -186,6 +190,19 @@ async fn dev_server_events_handler(
         state.dev_server_events,
         last_event_id,
         "Browser dev server event stream",
+    ))
+}
+
+async fn task_events_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HeadlessCommandError> {
+    reject_when_shutting_down(&state)?;
+    let last_event_id = parse_last_event_id(&headers)?;
+    Ok(build_sse_response(
+        state.task_events,
+        last_event_id,
+        "Browser task event stream",
     ))
 }
 
@@ -285,21 +302,28 @@ fn browser_backend_cors_layer() -> anyhow::Result<CorsLayer> {
             CorsLayer::new()
                 .allow_origin(parse_default_frontend_origins()?)
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([header::CONTENT_TYPE])
+                .allow_headers(browser_backend_allowed_headers())
         } else {
             CorsLayer::new()
                 .allow_origin(parse_origin_header(origin)?)
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([header::CONTENT_TYPE])
+                .allow_headers(browser_backend_allowed_headers())
         }
     } else {
         CorsLayer::new()
             .allow_origin(parse_default_frontend_origins()?)
             .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers([header::CONTENT_TYPE])
+            .allow_headers(browser_backend_allowed_headers())
     };
 
     Ok(layer)
+}
+
+fn browser_backend_allowed_headers() -> [header::HeaderName; 2] {
+    [
+        header::CONTENT_TYPE,
+        header::HeaderName::from_static(LAST_EVENT_ID_HEADER),
+    ]
 }
 
 fn parse_default_frontend_origins() -> anyhow::Result<Vec<HeaderValue>> {
@@ -710,6 +734,7 @@ mod tests {
                 service,
                 events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 registry,
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
@@ -749,6 +774,7 @@ mod tests {
                     service,
                     events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                     dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                    task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                     registry,
                     shutdown_signal: Arc::new(Notify::new()),
                     shutdown_started: Arc::new(AtomicBool::new(false)),
@@ -790,6 +816,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn browser_backend_allowed_headers_include_last_event_id_for_sse_replay() {
+        let headers = browser_backend_allowed_headers();
+
+        assert_eq!(headers.len(), 2);
+        assert!(headers.contains(&header::CONTENT_TYPE));
+        assert!(headers.contains(&header::HeaderName::from_static(LAST_EVENT_ID_HEADER)));
+    }
+
     #[tokio::test]
     async fn invoke_handler_creates_task_through_flat_odt_mcp_bridge_payload() {
         let (fixture, task_state, repo_path) = test_state_fixture_with_task_store(Vec::new());
@@ -824,6 +859,19 @@ mod tests {
         let state = task_state.lock().expect("task store lock poisoned");
         assert_eq!(state.created_inputs.len(), 1);
         assert_eq!(state.created_inputs[0].title, "Bridge task");
+
+        let (_receiver, replayed) = fixture.state.task_events.subscribe_with_replay(Some(0));
+        assert_eq!(replayed.len(), 1);
+
+        let task_event: Value =
+            serde_json::from_str(&replayed[0].payload).expect("task event should deserialize");
+        let expected_repo_path = std::fs::canonicalize(&repo_path)
+            .unwrap_or(repo_path.clone())
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(task_event["kind"], json!("external_task_created"));
+        assert_eq!(task_event["repoPath"], json!(expected_repo_path));
+        assert_eq!(task_event["taskId"], json!("generated-1"));
     }
 
     #[tokio::test]

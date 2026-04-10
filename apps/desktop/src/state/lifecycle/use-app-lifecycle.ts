@@ -1,6 +1,8 @@
-import { type RunEvent, runEventSchema } from "@openducktor/contracts";
+import { externalTaskSyncEventSchema, type RunEvent, runEventSchema } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
+import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
+import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
@@ -9,6 +11,28 @@ import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
 const PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
+const MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS = 256;
+
+const rememberProcessedExternalTaskEvent = (
+  eventIds: Set<string>,
+  order: string[],
+  eventId: string,
+): boolean => {
+  if (eventIds.has(eventId)) {
+    return false;
+  }
+
+  eventIds.add(eventId);
+  order.push(eventId);
+  if (order.length > MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS) {
+    const oldestEventId = order.shift();
+    if (oldestEventId) {
+      eventIds.delete(oldestEventId);
+    }
+  }
+
+  return true;
+};
 
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
@@ -49,6 +73,8 @@ export function useAppLifecycle({
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
   const refreshTasksWithOptionsRef = useRef(refreshTasksWithOptions);
+  const processedTaskEventIdsRef = useRef(new Set<string>());
+  const processedTaskEventOrderRef = useRef<string[]>([]);
 
   useLayoutEffect(() => {
     activeRepoRef.current = activeRepo;
@@ -57,6 +83,9 @@ export function useAppLifecycle({
   }, [activeRepo, refreshTaskData, refreshTasksWithOptions]);
 
   useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | null = null;
+
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
       ([workspaceResult]) => {
         if (workspaceResult.status === "rejected") {
@@ -67,7 +96,6 @@ export function useAppLifecycle({
       },
     );
 
-    let unsubscribe: (() => void) | null = null;
     hostBridge
       .subscribeRunEvents((payload) => {
         const parsed = runEventSchema.safeParse(payload);
@@ -93,18 +121,105 @@ export function useAppLifecycle({
         }
       })
       .then((cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
         unsubscribe = cleanup;
       })
       .catch((error: unknown) => {
+        if (disposed) {
+          return;
+        }
         toast.error("Run event subscription failed", {
           description: errorMessage(error),
         });
       });
 
     return () => {
+      disposed = true;
       unsubscribe?.();
     };
   }, [refreshRuntimeCheck, refreshWorkspaces, setEvents, setRunCompletionSignal]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | null = null;
+    hostBridge
+      .subscribeTaskEvents((payload) => {
+        if (isBrowserLiveControlEvent(payload)) {
+          const activeRepo = activeRepoRef.current;
+          if (!activeRepo) {
+            return;
+          }
+
+          if (payload.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND) {
+            toast.error("Task sync stream degraded", {
+              description:
+                payload.message ??
+                "The browser-live task event stream fell behind and is reconnecting.",
+            });
+          }
+
+          void refreshTaskDataRef.current(activeRepo).catch((error: unknown) => {
+            toast.error("Failed to resync tasks after task stream reconnect", {
+              description: summarizeTaskLoadError(error),
+            });
+          });
+          return;
+        }
+
+        const parsed = externalTaskSyncEventSchema.safeParse(payload);
+        if (!parsed.success) {
+          toast.error("Task sync event invalid", {
+            description: "Received an invalid external task sync payload from the host bridge.",
+          });
+          return;
+        }
+
+        if (
+          !rememberProcessedExternalTaskEvent(
+            processedTaskEventIdsRef.current,
+            processedTaskEventOrderRef.current,
+            parsed.data.eventId,
+          )
+        ) {
+          return;
+        }
+
+        if (activeRepoRef.current !== parsed.data.repoPath) {
+          return;
+        }
+
+        void refreshTaskDataRef
+          .current(parsed.data.repoPath, parsed.data.taskId)
+          .catch((error: unknown) => {
+            toast.error("Failed to sync external task changes", {
+              description: summarizeTaskLoadError(error),
+            });
+          });
+      })
+      .then((cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
+        unsubscribe = cleanup;
+      })
+      .catch((error: unknown) => {
+        if (disposed) {
+          return;
+        }
+        toast.error("Task event subscription failed", {
+          description: errorMessage(error),
+        });
+      });
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeRepo) {

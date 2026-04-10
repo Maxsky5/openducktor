@@ -116,6 +116,10 @@ impl AppService {
         self.ensure_mcp_bridge_url().map(|_| ())
     }
 
+    pub fn mcp_bridge_base_url(&self) -> Result<String> {
+        self.ensure_mcp_bridge_url()
+    }
+
     pub(crate) fn ensure_mcp_bridge_url(&self) -> Result<String> {
         let mut bridge = self
             .mcp_bridge_process
