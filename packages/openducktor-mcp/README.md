@@ -144,12 +144,12 @@ It returns only the requested sections:
 {
   "documents": {
     "spec": {
-      "markdown": "# Spec",
+      "markdown": "",
       "updatedAt": "<ISO 8601 timestamp>",
       "error": "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
     },
     "latestQaReport": {
-      "markdown": "## QA",
+      "markdown": "",
       "updatedAt": "<ISO 8601 timestamp>",
       "verdict": "approved",
       "error": "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload"

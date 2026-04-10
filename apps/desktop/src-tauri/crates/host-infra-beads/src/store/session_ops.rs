@@ -15,18 +15,21 @@ impl BeadsTaskStore {
         let namespace_key = self.current_metadata_namespace();
         let namespace = metadata_namespace(&metadata_root, &namespace_key);
         let documents = namespace.and_then(|ns| ns.get("documents"));
+        let spec_path = format!("{namespace_key}.documents.spec");
+        let plan_path = format!("{namespace_key}.documents.implementationPlan");
+        let qa_path = format!("{namespace_key}.documents.qaReports");
 
         let spec = crate::document_storage::read_latest_markdown_document(
             documents.and_then(|docs| docs.get("spec")),
-            "openducktor.documents.spec",
+            &spec_path,
         );
         let plan = crate::document_storage::read_latest_markdown_document(
             documents.and_then(|docs| docs.get("implementationPlan")),
-            "openducktor.documents.implementationPlan",
+            &plan_path,
         );
         let qa_report = crate::document_storage::read_latest_qa_document(
             documents.and_then(|docs| docs.get("qaReports")),
-            "openducktor.documents.qaReports",
+            &qa_path,
         );
 
         let mut agent_sessions = namespace

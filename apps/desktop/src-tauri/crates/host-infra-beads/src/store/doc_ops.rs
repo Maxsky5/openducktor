@@ -4,10 +4,11 @@ fn write_latest_qa_report(
     documents_map: &mut serde_json::Map<String, Value>,
     markdown: &str,
     verdict: QaVerdict,
+    qa_reports_path: &str,
 ) -> Result<QaEntry> {
     let next_revision = crate::document_storage::next_document_revision(
         documents_map.get("qaReports"),
-        "openducktor.documents.qaReports",
+        qa_reports_path,
     )?;
     let encoded_markdown = crate::document_storage::encode_markdown_for_storage(markdown.trim())?;
 
@@ -38,11 +39,12 @@ impl BeadsTaskStore {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
+        let spec_path = format!("{namespace_key}.documents.spec");
         Ok(crate::document_storage::read_latest_markdown_document(
             metadata_namespace(&metadata_root, &namespace_key)
                 .and_then(|ns| ns.get("documents"))
                 .and_then(|docs| docs.get("spec")),
-            "openducktor.documents.spec",
+            &spec_path,
         ))
     }
 
@@ -54,16 +56,15 @@ impl BeadsTaskStore {
     ) -> Result<SpecDocument> {
         let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
+        let spec_path = format!("{namespace_key}.documents.spec");
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
 
-        let next_revision = crate::document_storage::next_document_revision(
-            documents_map.get("spec"),
-            "openducktor.documents.spec",
-        )?;
+        let next_revision =
+            crate::document_storage::next_document_revision(documents_map.get("spec"), &spec_path)?;
 
         let timestamp = now_rfc3339();
         let encoded_markdown =
@@ -97,11 +98,12 @@ impl BeadsTaskStore {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
+        let plan_path = format!("{namespace_key}.documents.implementationPlan");
         Ok(crate::document_storage::read_latest_markdown_document(
             metadata_namespace(&metadata_root, &namespace_key)
                 .and_then(|ns| ns.get("documents"))
                 .and_then(|docs| docs.get("implementationPlan")),
-            "openducktor.documents.implementationPlan",
+            &plan_path,
         ))
     }
 
@@ -113,6 +115,7 @@ impl BeadsTaskStore {
     ) -> Result<SpecDocument> {
         let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
+        let plan_path = format!("{namespace_key}.documents.implementationPlan");
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
@@ -121,7 +124,7 @@ impl BeadsTaskStore {
 
         let next_revision = crate::document_storage::next_document_revision(
             documents_map.get("implementationPlan"),
-            "openducktor.documents.implementationPlan",
+            &plan_path,
         )?;
 
         let timestamp = now_rfc3339();
@@ -160,12 +163,13 @@ impl BeadsTaskStore {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
+        let qa_path = format!("{namespace_key}.documents.qaReports");
         let namespace = metadata_namespace(&metadata_root, &namespace_key);
         let report = crate::document_storage::read_latest_qa_document(
             namespace
                 .and_then(|ns| ns.get("documents"))
                 .and_then(|docs| docs.get("qaReports")),
-            "openducktor.documents.qaReports",
+            &qa_path,
         );
 
         Ok(report)
@@ -180,12 +184,13 @@ impl BeadsTaskStore {
     ) -> Result<QaReportDocument> {
         let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
+        let qa_path = format!("{namespace_key}.documents.qaReports");
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        let entry = write_latest_qa_report(&mut documents_map, markdown, verdict)?;
+        let entry = write_latest_qa_report(&mut documents_map, markdown, verdict, &qa_path)?;
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
 
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
@@ -211,12 +216,13 @@ impl BeadsTaskStore {
     ) -> Result<TaskCard> {
         let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
+        let qa_path = format!("{namespace_key}.documents.qaReports");
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        write_latest_qa_report(&mut documents_map, markdown, verdict)?;
+        write_latest_qa_report(&mut documents_map, markdown, verdict, &qa_path)?;
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
         root.insert(namespace_key, Value::Object(namespace_map));
 

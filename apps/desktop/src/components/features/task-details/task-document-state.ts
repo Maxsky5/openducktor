@@ -30,7 +30,6 @@ export const resolveLoadedDocumentState = <TState extends TaskDocumentStateLike>
     return {
       ...current,
       isLoading: false,
-      error: null,
       loaded: true,
     };
   }

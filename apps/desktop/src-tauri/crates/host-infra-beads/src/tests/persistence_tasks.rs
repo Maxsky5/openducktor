@@ -219,6 +219,62 @@ fn list_tasks_keeps_qa_verdict_but_marks_missing_content_when_latest_markdown_is
 }
 
 #[test]
+fn list_tasks_treats_encoded_empty_documents_as_missing_content() -> Result<()> {
+    let repo = RepoFixture::new("list-encoded-empty-markdown");
+    let encoded_empty = encode_markdown_for_storage("")?;
+    let payload = json!([issue_value(
+        "task-encoded-empty",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "qaRequired": true,
+                "documents": {
+                    "spec": [
+                        {
+                            "markdown": encoded_empty,
+                            "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
+                            "updatedAt": "2026-02-20T09:00:00Z",
+                            "updatedBy": "planner-agent",
+                            "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
+                            "revision": 1
+                        }
+                    ],
+                    "qaReports": [
+                        {
+                            "markdown": encode_markdown_for_storage("   ")?,
+                            "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
+                            "verdict": "rejected",
+                            "updatedAt": "2026-02-20T10:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": ODT_QA_REJECTED_SOURCE_TOOL,
+                            "revision": 2
+                        }
+                    ]
+                }
+            }
+        })),
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let tasks = store.list_tasks(repo.path())?;
+    assert_eq!(tasks.len(), 1);
+    let task = &tasks[0];
+    assert!(!task.document_summary.spec.has);
+    assert!(task.document_summary.spec.updated_at.is_none());
+    assert!(!task.document_summary.qa_report.has);
+    assert!(task.document_summary.qa_report.updated_at.is_none());
+    assert_eq!(
+        task.document_summary.qa_report.verdict,
+        host_domain::QaWorkflowVerdict::Rejected
+    );
+    Ok(())
+}
+
+#[test]
 fn list_tasks_uses_short_lived_repo_cache() -> Result<()> {
     let repo = RepoFixture::new("list-cache-hit");
     let payload = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);

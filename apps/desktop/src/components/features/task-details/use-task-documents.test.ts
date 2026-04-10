@@ -47,7 +47,7 @@ describe("resolveLoadedDocumentState", () => {
     });
   });
 
-  test("preserves the current document when the incoming timestamp is older", () => {
+  test("preserves the current document and its error when the incoming timestamp is older", () => {
     const current = createDocumentState({
       markdown: "# Updated spec",
       updatedAt: "2026-02-22T09:00:00.000Z",
@@ -68,7 +68,7 @@ describe("resolveLoadedDocumentState", () => {
       markdown: "# Updated spec",
       updatedAt: "2026-02-22T09:00:00.000Z",
       isLoading: false,
-      error: null,
+      error: "temporary",
       loaded: true,
     });
   });

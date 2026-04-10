@@ -124,10 +124,21 @@ pub(crate) fn document_presence(value: Option<&Value>) -> bool {
                 return false;
             };
             match entry.as_object() {
-                Some(object) => match object.get("markdown").and_then(Value::as_str) {
-                    Some(markdown) => !markdown.trim().is_empty(),
-                    None => true,
-                },
+                Some(object) => {
+                    let Some(payload) = object.get("markdown").and_then(Value::as_str) else {
+                        return true;
+                    };
+
+                    match object.get("encoding").and_then(Value::as_str) {
+                        Some(encoding) => {
+                            decode_markdown_payload(payload, encoding, "document presence")
+                                .map(|markdown| !markdown.trim().is_empty())
+                                .unwrap_or(true)
+                        }
+                        None if object.contains_key("encoding") => true,
+                        None => !payload.trim().is_empty(),
+                    }
+                }
                 None => true,
             }
         }

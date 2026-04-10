@@ -950,6 +950,8 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
     assert_eq!(reset.status, TaskStatus::Open);
     let state = task_state.lock().expect("task store lock poisoned");
     assert_eq!(state.cleared_workflow_documents, vec!["task-1".to_string()]);
+    assert!(state.metadata_spec.is_none());
+    assert!(state.metadata_plan.is_none());
     assert_eq!(
         state.cleared_session_roles,
         vec![(

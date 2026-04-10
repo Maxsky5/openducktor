@@ -412,6 +412,8 @@ impl TaskStore for FakeTaskStore {
         if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
             task.document_summary = TaskDocumentSummary::default();
         }
+        state.metadata_spec = None;
+        state.metadata_plan = None;
         state.latest_qa_report = None;
         Ok(())
     }
