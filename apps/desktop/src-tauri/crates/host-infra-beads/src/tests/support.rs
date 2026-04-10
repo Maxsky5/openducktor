@@ -19,11 +19,8 @@ pub(super) enum MockStep {
 
 #[derive(Debug, Clone)]
 pub(super) struct RecordedCall {
-    pub(super) kind: CallKind,
     pub(super) program: String,
     pub(super) args: Vec<String>,
-    pub(super) cwd: Option<String>,
-    pub(super) env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Default)]
@@ -48,10 +45,6 @@ impl MockCommandRunner {
             .collect()
     }
 
-    pub(super) fn remaining_steps(&self) -> usize {
-        self.steps.lock().expect("steps lock poisoned").len()
-    }
-
     fn pop_step(&self, expected_kind: CallKind) -> MockStep {
         let step = self
             .steps
@@ -71,24 +64,18 @@ impl MockCommandRunner {
 
     fn record_call(
         &self,
-        kind: CallKind,
+        _kind: CallKind,
         program: &str,
         args: &[&str],
-        cwd: Option<&Path>,
-        env: &[(&str, &str)],
+        _cwd: Option<&Path>,
+        _env: &[(&str, &str)],
     ) {
         self.calls
             .lock()
             .expect("calls lock poisoned")
             .push(RecordedCall {
-                kind,
                 program: program.to_string(),
                 args: args.iter().map(|entry| (*entry).to_string()).collect(),
-                cwd: cwd.map(|path| path.display().to_string()),
-                env: env
-                    .iter()
-                    .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
-                    .collect(),
             });
     }
 }
@@ -202,97 +189,6 @@ pub(super) fn metadata_from_call(call: &RecordedCall) -> Value {
             .expect("expected metadata payload after --metadata"),
     )
     .expect("metadata payload must be valid JSON")
-}
-
-pub(super) fn assert_attachment_root_cwd(call: &RecordedCall, repo_path: &Path) {
-    let expected = resolve_repo_beads_attachment_root(repo_path)
-        .expect("expected attachment root")
-        .display()
-        .to_string();
-    assert_eq!(call.cwd.as_deref(), Some(expected.as_str()));
-}
-
-pub(super) fn assert_beads_env(call: &RecordedCall) {
-    let beads_dir_entry = call
-        .env
-        .iter()
-        .find(|(key, _)| key == "BEADS_DIR")
-        .expect("expected BEADS_DIR env entry");
-    assert!(
-        !beads_dir_entry.1.trim().is_empty(),
-        "BEADS_DIR must be set"
-    );
-    assert!(call
-        .env
-        .iter()
-        .any(|(key, value)| key == "BEADS_DOLT_SERVER_MODE" && value == "1"));
-    assert!(call
-        .env
-        .iter()
-        .any(|(key, value)| key == "BEADS_DOLT_SERVER_HOST" && value == "127.0.0.1"));
-    assert!(call
-        .env
-        .iter()
-        .any(|(key, value)| key == "BEADS_DOLT_SERVER_PORT" && !value.trim().is_empty()));
-    assert!(call
-        .env
-        .iter()
-        .any(|(key, value)| key == "BEADS_DOLT_SERVER_USER" && value == "root"));
-}
-
-pub(super) fn assert_init_args(call: &RecordedCall, repo_path: &Path, beads_dir: &Path) {
-    let expected_slug = compute_repo_slug(repo_path);
-    let expected_database = compute_beads_database_name(repo_path).expect("expected database name");
-    let port = call
-        .env
-        .iter()
-        .find(|(key, _)| key == "BEADS_DOLT_SERVER_PORT")
-        .map(|(_, value)| value.clone())
-        .expect("expected BEADS_DOLT_SERVER_PORT");
-    assert_eq!(
-        call.args,
-        vec![
-            "init".to_string(),
-            "--server".to_string(),
-            "--server-host".to_string(),
-            "127.0.0.1".to_string(),
-            "--server-port".to_string(),
-            port,
-            "--server-user".to_string(),
-            "root".to_string(),
-            "--quiet".to_string(),
-            "--skip-hooks".to_string(),
-            "--skip-agents".to_string(),
-            "--prefix".to_string(),
-            expected_slug,
-            "--database".to_string(),
-            expected_database,
-        ]
-    );
-    assert!(beads_dir.ends_with(".beads"));
-}
-
-pub(super) fn assert_dolt_backup_restore_args(
-    call: &RecordedCall,
-    repo_path: &Path,
-    beads_dir: &Path,
-) {
-    let database_name = compute_beads_database_name(repo_path).expect("expected database name");
-    assert_eq!(
-        call.args,
-        vec![
-            "backup".to_string(),
-            "restore".to_string(),
-            format!("file://{}/backup", beads_dir.display()),
-            database_name,
-        ]
-    );
-    let expected_cwd = resolve_shared_dolt_root()
-        .expect("expected shared dolt root")
-        .display()
-        .to_string();
-    assert_eq!(call.cwd.as_deref(), Some(expected_cwd.as_str()));
-    assert!(call.env.is_empty());
 }
 
 pub(super) fn write_attachment_metadata(beads_dir: &Path, repo_path: &Path, port: u16) {

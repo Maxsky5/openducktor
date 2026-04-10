@@ -106,6 +106,9 @@ fn lifecycle_verifier_only_restores_for_missing_shared_database_reasons() {
         "database \"odt_demo_deadbeef\" not found on Dolt server"
     ));
     assert!(BeadsLifecycle::reason_requires_shared_database_seed(
+        "database \"beads\" not found"
+    ));
+    assert!(BeadsLifecycle::reason_requires_shared_database_seed(
         "Error 1049: unknown database"
     ));
     assert!(!BeadsLifecycle::reason_requires_shared_database_seed(
@@ -117,6 +120,39 @@ fn lifecycle_verifier_only_restores_for_missing_shared_database_reasons() {
     assert!(!BeadsLifecycle::reason_requires_shared_database_seed(
         "attachment metadata is malformed"
     ));
+}
+
+#[test]
+fn ensure_repo_initialized_treats_existing_beads_directory_as_existing_attachment() -> Result<()> {
+    let repo = RepoFixture::new("existing-beads-dir");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    fs::create_dir_all(&beads_dir).expect("beads dir should be writable");
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((false, String::new(), "bd where failed".to_string()))),
+        MockStep::WithEnv(Ok("doctor fixed".to_string())),
+        MockStep::AllowFailureWithEnv(Ok((
+            false,
+            String::new(),
+            "attachment still points at the wrong database".to_string(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let error = store
+        .ensure_repo_initialized(repo.path())
+        .expect_err("existing beads dir should use repair path and fail fast");
+    assert!(error
+        .to_string()
+        .contains("Beads repair completed but store is still not ready"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[0].args, vec!["where", "--json"]);
+    assert_eq!(calls[1].args, vec!["doctor", "--fix", "--yes"]);
+    assert!(!calls
+        .iter()
+        .any(|call| call.args.first().map(String::as_str) == Some("init")));
+    Ok(())
 }
 
 #[test]

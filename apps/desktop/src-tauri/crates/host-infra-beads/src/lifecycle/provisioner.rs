@@ -93,7 +93,7 @@ impl BeadsLifecycle {
             )?;
         } else {
             let shared_dolt_root = resolve_shared_dolt_root()?;
-            let backup_url = format!("file://{}/backup", beads_dir.display());
+            let backup_url = format!("file://{}", backup_dir.display());
             self.command_runner().run_with_env(
                 "dolt",
                 &[

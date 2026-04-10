@@ -12,9 +12,7 @@ use host_domain::{
     ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
 use host_infra_system::{
-    compute_beads_database_name, compute_repo_slug, read_shared_dolt_server_state,
-    resolve_repo_beads_attachment_dir, resolve_repo_beads_attachment_root,
-    resolve_shared_dolt_root,
+    compute_beads_database_name, read_shared_dolt_server_state, resolve_repo_beads_attachment_dir,
 };
 use serde_json::{json, Value};
 use std::fs;

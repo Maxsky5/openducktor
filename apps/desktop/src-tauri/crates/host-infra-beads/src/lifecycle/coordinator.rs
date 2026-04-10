@@ -130,5 +130,7 @@ impl BeadsLifecycle {
 }
 
 fn beads_store_footprint_exists(beads_dir: &Path) -> bool {
-    beads_dir.join("metadata.json").exists() || beads_dir.join("beads.db").exists()
+    beads_dir.exists()
+        || beads_dir.join("metadata.json").exists()
+        || beads_dir.join("beads.db").exists()
 }

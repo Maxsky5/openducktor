@@ -196,7 +196,11 @@ impl BeadsTaskStore {
         task_id: &str,
         roles: &[&str],
     ) -> Result<()> {
-        let role_set = roles.iter().map(|role| role.trim()).collect::<HashSet<_>>();
+        let role_set = roles
+            .iter()
+            .map(|role| role.trim())
+            .filter(|role| !role.is_empty())
+            .collect::<HashSet<_>>();
         if role_set.is_empty() {
             return Ok(());
         }

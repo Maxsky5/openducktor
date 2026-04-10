@@ -260,7 +260,7 @@ fn write_server_state(path: &Path, state: &SharedDoltServerState) -> Result<()> 
     ));
     fs::write(&temp_file, payload)
         .with_context(|| format!("Failed writing temp shared state {}", temp_file.display()))?;
-    fs::rename(&temp_file, path).with_context(|| {
+    replace_file(&temp_file, path).with_context(|| {
         format!(
             "Failed replacing shared Dolt server state {} with {}",
             path.display(),
@@ -375,7 +375,7 @@ pub(crate) fn write_dolt_config_file(port: u16) -> Result<()> {
             temp_file.display()
         )
     })?;
-    fs::rename(&temp_file, &config_file).with_context(|| {
+    replace_file(&temp_file, &config_file).with_context(|| {
         format!(
             "Failed replacing Dolt config {} from {}",
             config_file.display(),
@@ -400,12 +400,14 @@ fn spawn_shared_dolt_server(
     let stdout_log = shared_server_root.join("server.stdout.log");
     let stdout = OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(&stdout_log)
         .with_context(|| format!("Failed opening {}", stdout_log.display()))?;
     let stderr = OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(&stderr_log)
         .with_context(|| format!("Failed opening {}", stderr_log.display()))?;
     let dolt_binary = resolve_command_path("dolt")?.ok_or_else(|| {
@@ -434,7 +436,8 @@ fn spawn_shared_dolt_server(
         )
     })?;
 
-    if wait_for_server_ready(port)? {
+    let ready = wait_for_server_ready(port);
+    if matches!(&ready, Ok(true)) {
         return Ok(SharedDoltServerState {
             pid: child.id(),
             owner_pid,
@@ -447,13 +450,8 @@ fn spawn_shared_dolt_server(
         });
     }
 
-    let status = child
-        .try_wait()
-        .context("Failed checking shared Dolt server process state")?;
-    if status.is_none() {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    cleanup_spawned_child(&mut child)?;
+    ready?;
 
     let stderr_output = fs::read_to_string(&stderr_log).unwrap_or_default();
     let stderr_output = stderr_output.trim();
@@ -510,6 +508,32 @@ fn error_should_continue_to_next_port(error: &anyhow::Error) -> bool {
     message.contains("address already in use")
         || message.contains("bind")
         || message.contains("listen tcp")
+}
+
+fn replace_file(temp_file: &Path, destination: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        remove_if_exists(destination)?;
+        fs::rename(temp_file, destination)?;
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        fs::rename(temp_file, destination)?;
+        Ok(())
+    }
+}
+
+fn cleanup_spawned_child(child: &mut std::process::Child) -> Result<()> {
+    let status = child
+        .try_wait()
+        .context("Failed checking shared Dolt server process state")?;
+    if status.is_none() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    Ok(())
 }
 
 fn remove_if_exists(path: &Path) -> Result<()> {

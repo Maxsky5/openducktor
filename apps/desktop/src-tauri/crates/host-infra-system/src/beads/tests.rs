@@ -246,6 +246,26 @@ fn shared_dolt_config_quotes_paths_with_spaces() {
 }
 
 #[test]
+fn shared_dolt_config_write_replaces_existing_file_contents() {
+    let _env_lock = lock_env();
+    let config_root = temp_config_root("config-rewrite");
+    let _override_guard = EnvVarGuard::set(
+        "OPENDUCKTOR_CONFIG_DIR",
+        config_root.to_string_lossy().as_ref(),
+    );
+
+    write_dolt_config_file(39280).expect("first config file should be written");
+    write_dolt_config_file(39281).expect("second config file should replace the first");
+    let config_file = resolve_dolt_config_file().expect("config file path should resolve");
+    let contents = fs::read_to_string(config_file).expect("config file should be readable");
+
+    assert!(contents.contains("port: 39281"));
+    assert!(!contents.contains("port: 39280"));
+
+    let _ = fs::remove_dir_all(config_root);
+}
+
+#[test]
 fn default_worktree_base_dir_uses_expected_layout() {
     let _env_lock = lock_env();
     let _override_guard = EnvVarGuard::remove("OPENDUCKTOR_CONFIG_DIR");
