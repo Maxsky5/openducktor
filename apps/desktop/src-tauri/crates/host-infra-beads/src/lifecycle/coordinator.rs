@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::command_runner::CommandRunner;
 
+use super::LifecycleError;
+
 pub(crate) struct BeadsLifecycle {
     command_runner: Arc<dyn CommandRunner>,
     init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
@@ -112,16 +114,16 @@ impl BeadsLifecycle {
         let (is_ready_after_repair, reason_after_repair) =
             self.verify_repo_initialized(repo_path, beads_dir)?;
         if !is_ready_after_repair {
-            let recovery_step = if attempted_restore {
-                "shared database restore"
-            } else {
-                "repair"
-            };
-            return Err(anyhow!(
-                "Beads {recovery_step} completed but store is still not ready at {}: {}",
-                beads_dir.display(),
-                reason_after_repair
-            ));
+            return Err(LifecycleError::StoreStillNotReady {
+                beads_dir: beads_dir.to_path_buf(),
+                recovery_step: if attempted_restore {
+                    "shared database restore"
+                } else {
+                    "repair"
+                },
+                reason: reason_after_repair,
+            }
+            .into());
         }
         Ok(())
     }

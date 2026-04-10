@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::constants::CUSTOM_STATUS_VALUES;
 
-use super::BeadsLifecycle;
+use super::{BeadsLifecycle, LifecycleError};
 
 impl BeadsLifecycle {
     pub(crate) fn repair_repo_store(&self, repo_path: &Path) -> Result<()> {
@@ -77,11 +77,11 @@ impl BeadsLifecycle {
     ) -> Result<()> {
         let backup_dir = beads_dir.join("backup");
         if !backup_dir.is_dir() {
-            return Err(anyhow!(
-                "Shared Dolt database is missing for {} and no attachment backup exists at {}",
-                beads_dir.display(),
-                backup_dir.display()
-            ));
+            return Err(LifecycleError::MissingAttachmentBackup {
+                beads_dir: beads_dir.to_path_buf(),
+                backup_dir,
+            }
+            .into());
         }
 
         let database_name = compute_beads_database_name(repo_path)?;
@@ -157,21 +157,22 @@ impl BeadsLifecycle {
             } else {
                 stderr.trim().to_string()
             };
-            return Err(anyhow!(
-                "Failed to initialize Beads at {}: {}",
-                beads_dir.display(),
-                details
-            ));
+            return Err(LifecycleError::InitFailed {
+                beads_dir: beads_dir.to_path_buf(),
+                details,
+            }
+            .into());
         }
 
         let (is_ready_after_init, reason_after_init) =
             self.verify_repo_initialized(repo_path, beads_dir)?;
         if !is_ready_after_init {
-            return Err(anyhow!(
-                "Beads init completed but store is not ready at {}: {}",
-                beads_dir.display(),
-                reason_after_init
-            ));
+            return Err(LifecycleError::StoreStillNotReady {
+                beads_dir: beads_dir.to_path_buf(),
+                recovery_step: "init",
+                reason: reason_after_init,
+            }
+            .into());
         }
 
         Ok(())

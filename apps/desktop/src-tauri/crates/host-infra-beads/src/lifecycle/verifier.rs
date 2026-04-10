@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
-use super::BeadsLifecycle;
+use super::{BeadsLifecycle, LifecycleError};
 
 #[derive(Debug, Deserialize)]
 struct BeadsAttachmentMetadata {
@@ -150,9 +150,13 @@ impl BeadsLifecycle {
 
         let expected_database = compute_beads_database_name(repo_path)?;
         let expected_host = Self::required_env_value(env, "BEADS_DOLT_SERVER_HOST")?;
-        let expected_port = Self::required_env_value(env, "BEADS_DOLT_SERVER_PORT")?
-            .parse::<u16>()
-            .context("BEADS_DOLT_SERVER_PORT is not a valid port")?;
+        let expected_port_value = Self::required_env_value(env, "BEADS_DOLT_SERVER_PORT")?;
+        let expected_port =
+            expected_port_value
+                .parse::<u16>()
+                .map_err(|_| LifecycleError::InvalidServerPort {
+                    value: expected_port_value.clone(),
+                })?;
         let expected_user = Self::required_env_value(env, "BEADS_DOLT_SERVER_USER")?;
 
         if metadata.backend.as_deref() != Some("dolt") {
@@ -200,9 +204,16 @@ impl BeadsLifecycle {
     }
 
     fn required_env_value(env: &[(String, String)], key: &str) -> Result<String> {
-        env.iter()
+        match env
+            .iter()
             .find_map(|(env_key, value)| (env_key == key).then_some(value.clone()))
-            .ok_or_else(|| anyhow!("Missing required environment value: {key}"))
+        {
+            Some(value) => Ok(value),
+            None => Err(LifecycleError::MissingRequiredEnv {
+                key: key.to_string(),
+            }
+            .into()),
+        }
     }
 
     fn attachment_paths_match(&self, actual_path: &str, expected_path: &Path) -> Result<bool> {

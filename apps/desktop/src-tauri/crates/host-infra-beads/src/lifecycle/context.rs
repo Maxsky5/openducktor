@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use host_infra_system::{
     read_shared_dolt_server_state, resolve_repo_beads_attachment_dir,
     resolve_repo_beads_attachment_root, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
@@ -6,7 +6,7 @@ use host_infra_system::{
 use std::fs;
 use std::path::Path;
 
-use super::BeadsLifecycle;
+use super::{BeadsLifecycle, LifecycleError};
 
 impl BeadsLifecycle {
     pub(crate) fn beads_working_dir(&self, repo_path: &Path) -> Result<std::path::PathBuf> {
@@ -61,10 +61,10 @@ impl BeadsLifecycle {
                 ));
             }
             None => {
-                return Err(anyhow!(
-                    "Shared Dolt server state is missing for {}; reinitialize the repo store",
-                    repo_path.display()
-                ));
+                return Err(LifecycleError::SharedDoltStateMissing {
+                    repo_path: repo_path.to_path_buf(),
+                }
+                .into());
             }
         }
 
