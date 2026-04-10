@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import TOML from "@iarna/toml";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const workspaceRoot = process.cwd();
@@ -9,6 +10,11 @@ const tauriConfigPath = "apps/desktop/src-tauri/tauri.conf.json";
 const cargoTomlPath = "apps/desktop/src-tauri/Cargo.toml";
 
 type Mode = "check" | "set";
+
+type CargoManifest = {
+  package?: { version?: string };
+  workspace?: { package?: { version?: string } };
+};
 
 function usage(): never {
   console.error("Usage: bun run scripts/release-version.ts <check|set> <version>");
@@ -54,6 +60,11 @@ function expandWorkspacePattern(pattern: string): string[] {
       return [];
     }
 
+    const packageJsonPath = resolve(childAbsolutePath, "package.json");
+    if (!existsSync(packageJsonPath)) {
+      return [];
+    }
+
     return [`${childRelativePath}/package.json`];
   });
 }
@@ -77,6 +88,11 @@ function readJsonVersion(relativePath: string): string {
 function writeJsonVersion(relativePath: string, version: string): void {
   const absolutePath = resolve(workspaceRoot, relativePath);
   const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, unknown>;
+
+  if (parsed.version === version) {
+    return;
+  }
+
   parsed.version = version;
   writeFileSync(absolutePath, `${JSON.stringify(parsed, null, 2)}\n`);
 }
@@ -93,51 +109,54 @@ function readTauriConfigVersion(): string {
 function writeTauriConfigVersion(version: string): void {
   const absolutePath = resolve(workspaceRoot, tauriConfigPath);
   const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, unknown>;
+
+  if (parsed.version === version) {
+    return;
+  }
+
   parsed.version = version;
   writeFileSync(absolutePath, `${JSON.stringify(parsed, null, 2)}\n`);
 }
 
-function replaceCargoVersion(source: string, sectionName: string, version: string): string {
-  const sectionHeader = `[${sectionName}]`;
-  const sectionIndex = source.indexOf(sectionHeader);
-  if (sectionIndex === -1) {
-    throw new Error(`Missing ${sectionHeader} in ${cargoTomlPath}`);
-  }
-
-  const nextSectionIndex = source.indexOf("\n[", sectionIndex + sectionHeader.length);
-  const sectionEnd = nextSectionIndex === -1 ? source.length : nextSectionIndex + 1;
-  const section = source.slice(sectionIndex, sectionEnd);
-  const updatedSection = section.replace(/^version\s*=\s*"[^"]+"$/m, `version = "${version}"`);
-
-  if (updatedSection === section) {
-    throw new Error(`Missing version entry in [${sectionName}] inside ${cargoTomlPath}`);
-  }
-
-  return `${source.slice(0, sectionIndex)}${updatedSection}${source.slice(sectionEnd)}`;
+function readCargoManifest(): CargoManifest {
+  const absolutePath = resolve(workspaceRoot, cargoTomlPath);
+  return TOML.parse(readFileSync(absolutePath, "utf8")) as CargoManifest;
 }
 
 function readCargoVersions(): { packageVersion: string; workspaceVersion: string } {
-  const absolutePath = resolve(workspaceRoot, cargoTomlPath);
-  const source = readFileSync(absolutePath, "utf8");
-  const packageMatch = source.match(/\[package\][\s\S]*?^version\s*=\s*"([^"]+)"$/m);
-  const workspaceMatch = source.match(/\[workspace\.package\][\s\S]*?^version\s*=\s*"([^"]+)"$/m);
+  const manifest = readCargoManifest();
+  const packageVersion = manifest.package?.version;
+  const workspaceVersion = manifest.workspace?.package?.version;
 
-  if (!packageMatch?.[1] || !workspaceMatch?.[1]) {
+  if (!packageVersion || !workspaceVersion) {
     throw new Error(`Could not resolve Cargo versions from ${cargoTomlPath}`);
   }
 
   return {
-    packageVersion: packageMatch[1],
-    workspaceVersion: workspaceMatch[1],
+    packageVersion,
+    workspaceVersion,
   };
 }
 
 function writeCargoVersions(version: string): void {
   const absolutePath = resolve(workspaceRoot, cargoTomlPath);
-  const source = readFileSync(absolutePath, "utf8");
-  const updatedPackage = replaceCargoVersion(source, "package", version);
-  const updatedWorkspace = replaceCargoVersion(updatedPackage, "workspace.package", version);
-  writeFileSync(absolutePath, updatedWorkspace);
+  const manifest = readCargoManifest();
+
+  if (!manifest.package) {
+    throw new Error(`Missing [package] in ${cargoTomlPath}`);
+  }
+
+  if (!manifest.workspace?.package) {
+    throw new Error(`Missing [workspace.package] in ${cargoTomlPath}`);
+  }
+
+  if (manifest.package.version === version && manifest.workspace.package.version === version) {
+    return;
+  }
+
+  manifest.package.version = version;
+  manifest.workspace.package.version = version;
+  writeFileSync(absolutePath, TOML.stringify(manifest));
 }
 
 function collectCurrentVersions(): Array<{ file: string; version: string }> {

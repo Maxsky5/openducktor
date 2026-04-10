@@ -96,7 +96,7 @@ That command:
 
 By default, worktrees share the same contributor-local cache under `~/.openducktor/cache/`, so you do not need to rerun the full CEF bootstrap for every git worktree.
 
-- `cargo-tauri` defaults to `~/.openducktor/cache/cargo-tools/tauri-feat-cef/<tauri-revision>/`
+- `cargo-tauri` defaults to `~/.openducktor/cache/cargo-tools/tauri-feat-cef/<tauri-revision-prefix>/` (12-character prefix)
 - `export-cef-dir` defaults to `~/.openducktor/cache/cargo-tools/export-cef-dir/<cef-version>/`
 - Exported CEF bundles default to `~/.openducktor/cache/cef/<cef-version>/`
 

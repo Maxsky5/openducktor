@@ -143,18 +143,24 @@ jobs:
         with:
           path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-
 
       - name: Cache export-cef-dir tool
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.cef_cache.outputs.export_cef_tool_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-export-cef-dir-${{ steps.cef_cache.outputs.cef_version }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-export-cef-dir-
 
       - name: Cache exported CEF bundle
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.cef_cache.outputs.cef_path }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cef-runtime-${{ steps.cef_cache.outputs.cef_version }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cef-runtime-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -194,7 +200,7 @@ jobs:
 
       - name: Install Apple signing certificate
         if: env.APPLE_SIGNING_ENABLED == 'true'
-        uses: apple-actions/import-codesign-certs@v3
+        uses: apple-actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}

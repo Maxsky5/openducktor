@@ -100,11 +100,11 @@ Notes:
 
 - `NPM_TOKEN`
 
-### Optional release automation token
+### Release automation secret
 
 - `RELEASE_AUTOMATION_TOKEN`
 
-This is only needed when repository settings or branch protection rules prevent the default GitHub Actions token from pushing the release commit and tags.
+`Prepare Release` requires this token and refuses to push with the default GitHub Actions token. That keeps release automation aligned with normal repository protection and review expectations.
 
 ## How versioning works
 
