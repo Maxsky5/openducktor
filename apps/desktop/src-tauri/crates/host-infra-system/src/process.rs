@@ -433,6 +433,7 @@ fn login_shell_path() -> Option<OsString> {
 fn process_path_with_order(
     path_override: Option<&str>,
     bundled_dir_first: bool,
+    login_shell_before_inherited: bool,
 ) -> Option<OsString> {
     let explicit_override_directories = explicit_command_override_directories();
     let bundled_dir = current_executable_directory();
@@ -460,6 +461,15 @@ fn process_path_with_order(
                 .chain(login_shell_entries)
                 .chain(standard_entries),
         )
+    } else if login_shell_before_inherited {
+        unique_path_entries(
+            explicit_override_directories
+                .into_iter()
+                .chain(login_shell_entries)
+                .chain(inherited_entries)
+                .chain(standard_entries)
+                .chain(bundled_dir),
+        )
     } else {
         unique_path_entries(
             explicit_override_directories
@@ -474,7 +484,7 @@ fn process_path_with_order(
 }
 
 fn augmented_process_path(path_override: Option<&str>) -> Option<OsString> {
-    process_path_with_order(path_override, true)
+    process_path_with_order(path_override, true, false)
 }
 
 fn resolve_command_path_with_path_override(
@@ -502,7 +512,10 @@ pub fn resolve_command_path(program: &str) -> Result<Option<String>> {
 }
 
 pub fn subprocess_path_env() -> Option<OsString> {
-    process_path_with_order(None, false)
+    // Prefer login-shell PATH entries for spawned subprocesses so runtimes that are
+    // initialized in shell startup files (for example SDKMAN in ~/.zshrc) win over
+    // inherited GUI launcher stubs such as macOS /usr/bin/java.
+    process_path_with_order(None, false, true)
 }
 
 fn configured_command(
@@ -630,9 +643,10 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 mod tests {
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
-        command_path, explicit_command_override, resolve_command_path, run_command,
-        run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
-        subprocess_path_env, version_command,
+        command_path, command_path_from_directories, explicit_command_override,
+        resolve_command_path, run_command, run_command_allow_failure,
+        run_command_allow_failure_with_env, run_command_with_env, subprocess_path_env,
+        version_command,
     };
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
@@ -996,13 +1010,52 @@ mod tests {
             .position(|entry| entry == &bundled_dir)
             .expect("bundled directory should be included");
 
-        assert!(override_index < inherited_index);
-        assert!(inherited_index < login_index);
+        assert!(override_index < login_index);
+        assert!(login_index < inherited_index);
         assert!(inherited_index < standard_local_index);
         assert!(standard_local_index <= standard_cargo_index);
         assert!(standard_cargo_index <= standard_bun_index);
         assert!(inherited_index < bundled_index);
         assert!(standard_bun_index < bundled_index);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_path_env_prefers_login_shell_runtime_over_inherited_stub() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-subprocess-login-precedence");
+        let login_dir = root.join("login-bin");
+        let inherited_dir = root.join("inherited-bin");
+        fs::create_dir_all(&login_dir).expect("login dir should exist");
+        fs::create_dir_all(&inherited_dir).expect("inherited dir should exist");
+
+        write_executable(&login_dir.join("java"), "#!/bin/sh\nprintf 'sdkman-java'\n");
+        write_executable(
+            &inherited_dir.join("java"),
+            "#!/bin/sh\nprintf 'apple-stub-java'\n",
+        );
+
+        let shell = root.join("fake-shell");
+        write_fake_login_shell(&shell, &login_dir);
+
+        let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
+        let inherited_path = format!("{}:/usr/bin:/bin", inherited_dir.display());
+        let _path_guard = EnvVarGuard::set("PATH", inherited_path.as_str());
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
+
+        let path = subprocess_path_env().expect("subprocess PATH should be assembled");
+        let entries = std::env::split_paths(&path).collect::<Vec<_>>();
+        let resolved_java = command_path_from_directories("java", &entries)
+            .expect("java should resolve from subprocess PATH");
+
+        assert_eq!(
+            resolved_java,
+            login_dir.join("java").to_string_lossy().to_string()
+        );
 
         let _ = fs::remove_dir_all(root);
     }

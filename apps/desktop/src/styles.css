@@ -121,6 +121,8 @@
   --dev-server-terminal-foreground: oklch(0.95 0.004 260);
   --dev-server-terminal-muted: oklch(0.62 0.02 260);
   --dev-server-terminal-subtle: oklch(0.5 0.015 260);
+  --dev-server-terminal-selection: rgba(125, 180, 255, 0.35);
+  --dev-server-terminal-selection-inactive: rgba(148, 163, 184, 0.24);
   --dev-server-terminal-system: oklch(0.78 0.08 236);
   --dev-server-terminal-stderr: oklch(0.76 0.12 18);
   --dev-server-terminal-dot-stopped: oklch(0.35 0.012 260);
@@ -216,6 +218,9 @@
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
+
+  --dev-server-terminal-selection: rgba(96, 165, 250, 0.34);
+  --dev-server-terminal-selection-inactive: rgba(148, 163, 184, 0.24);
 
   /*--dev-server-terminal-surface: oklch(0.17 0.018 260);
   --dev-server-terminal-chrome: oklch(0.145 0.016 260);

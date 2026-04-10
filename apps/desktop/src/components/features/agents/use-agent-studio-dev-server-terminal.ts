@@ -5,6 +5,9 @@ import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio
 
 export type TerminalBinding = {
   terminal: Pick<Terminal, "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
+    attachCustomKeyEventHandler?(handler: (event: KeyboardEvent) => boolean): void;
+    getSelection?(): string;
+    hasSelection?(): boolean;
     write(data: string, callback?: () => void): void;
   };
   fitAddon: Pick<FitAddon, "dispose" | "fit">;
@@ -49,8 +52,11 @@ const buildTerminalTheme = (container: HTMLElement): ITheme => ({
   foreground: readCssVariable(container, "--dev-server-terminal-foreground"),
   cursor: readCssVariable(container, "--dev-server-terminal-foreground"),
   cursorAccent: readCssVariable(container, "--dev-server-terminal-panel"),
-  selectionBackground: readCssVariable(container, "--dev-server-terminal-tab-active"),
-  selectionInactiveBackground: readCssVariable(container, "--dev-server-terminal-chrome"),
+  selectionBackground: readCssVariable(container, "--dev-server-terminal-selection"),
+  selectionInactiveBackground: readCssVariable(
+    container,
+    "--dev-server-terminal-selection-inactive",
+  ),
 });
 
 export const defaultCreateTerminalBinding: CreateTerminalBinding = (container, options) => {
@@ -90,6 +96,32 @@ const writeTerminalOutput = (
 const readTerminalErrorMessage = (action: "initialize" | "render", error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
   return `Failed to ${action} dev server terminal: ${message}`;
+};
+
+const isCopyKeyEvent = (event: KeyboardEvent): boolean => {
+  return (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "c";
+};
+
+const wireTerminalSelectionCopy = (binding: TerminalBinding): void => {
+  if (!binding.terminal.attachCustomKeyEventHandler) {
+    return;
+  }
+
+  binding.terminal.attachCustomKeyEventHandler((event) => {
+    if (!isCopyKeyEvent(event) || !binding.terminal.hasSelection?.()) {
+      return true;
+    }
+
+    const selection = binding.terminal.getSelection?.() ?? "";
+    if (selection.length === 0 || !navigator.clipboard?.writeText) {
+      return true;
+    }
+
+    void navigator.clipboard.writeText(selection).catch((error) => {
+      console.error("[AgentStudioDevServerTerminal] Clipboard write failed:", error);
+    });
+    return false;
+  });
 };
 
 const resetRenderedTerminalState = (renderedStateRef: { current: RenderedTerminalState }): void => {
@@ -247,6 +279,7 @@ export const useDevServerTerminalBinding = ({
 
     try {
       const binding = createTerminalBinding(container, terminalOptions(container));
+      wireTerminalSelectionCopy(binding);
       bindingRef.current = binding;
       onRendererError(null);
       const cleanupObservers = createTerminalObserversCleanup(container, binding);

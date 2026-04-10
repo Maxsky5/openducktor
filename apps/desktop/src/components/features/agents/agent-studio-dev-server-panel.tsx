@@ -1,11 +1,11 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
-import { memo, type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
@@ -29,23 +29,6 @@ export type AgentStudioDevServerPanelModel = {
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
-};
-
-const getClipboardErrorMessage = (error: unknown): string => {
-  if (!(error instanceof DOMException)) {
-    return "Copy failed";
-  }
-
-  switch (error.name) {
-    case "NotAllowedError":
-      return "Permission denied: clipboard access not allowed";
-    case "NotFoundError":
-      return "No clipboard available in this environment";
-    case "AbortError":
-      return "Copy operation was cancelled";
-    default:
-      return `Copy failed: ${error.message}`;
-  }
 };
 
 const statusIndicatorClassName = (status: DevServerScriptState["status"]): string => {
@@ -82,10 +65,10 @@ const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   }
 
   if (script.status === "failed") {
-    return script.lastError ?? "This dev server exited before producing terminal output.";
+    return `${script.lastError ?? "This dev server exited before producing terminal output."} Drag to select logs, then press Cmd/Ctrl+C to copy.`;
   }
 
-  return "Terminal output will appear here once this dev server writes output.";
+  return "Terminal output will appear here once this dev server writes output. Drag to select logs, then press Cmd/Ctrl+C to copy.";
 };
 
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
@@ -93,7 +76,6 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 }: {
   model: AgentStudioDevServerPanelModel;
 }): ReactElement {
-  const [copiedWorktreePath, setCopiedWorktreePath] = useState(false);
   const [rendererError, setRendererError] = useState<string | null>(null);
   const selectedScript = model.selectedScript;
   const isActionPending = model.isStartPending || model.isStopPending || model.isRestartPending;
@@ -111,15 +93,10 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       : null);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
-
-  useEffect(() => {
-    if (!copiedWorktreePath) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => setCopiedWorktreePath(false), 2000);
-    return () => clearTimeout(timeoutId);
-  }, [copiedWorktreePath]);
+  const { copied: copiedWorktreePath, copyToClipboard: copyWorktreePath } = useCopyToClipboard({
+    getSuccessDescription: (value) => value,
+    errorLogContext: "AgentStudioDevServerPanel",
+  });
 
   const headerSummary = useMemo(() => {
     if (model.mode === "empty") {
@@ -148,17 +125,8 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       return;
     }
 
-    navigator.clipboard
-      .writeText(model.worktreePath)
-      .then(() => {
-        setCopiedWorktreePath(true);
-        toast.success("Copied!", { description: model.worktreePath });
-      })
-      .catch((error: unknown) => {
-        console.error("[AgentStudioDevServerPanel] Clipboard write failed:", error);
-        toast.error(getClipboardErrorMessage(error));
-      });
-  }, [model.worktreePath]);
+    void copyWorktreePath(model.worktreePath);
+  }, [copyWorktreePath, model.worktreePath]);
 
   if (!hasExpandedActions) {
     const isEmpty = model.mode === "empty";

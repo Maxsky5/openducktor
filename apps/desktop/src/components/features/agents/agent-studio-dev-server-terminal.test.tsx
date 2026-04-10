@@ -343,4 +343,93 @@ describe("AgentStudioDevServerTerminal", () => {
       );
     });
   });
+
+  test("copies terminal selection on keyboard copy shortcut", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    const reset = mock(() => {});
+    const write = mock((_data: string, callback?: () => void) => {
+      callback?.();
+    });
+    const dispose = mock(() => {});
+    const onRendererError = mock(() => {});
+    const clipboardWriteText = mock(async (_value: string) => {});
+    const originalClipboard = navigator.clipboard;
+    let keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
+    const createTerminalBinding = (container: HTMLElement) => {
+      open(container);
+      loadAddon({});
+      return {
+        terminal: {
+          attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {
+            keyHandler = handler;
+          },
+          dispose,
+          getSelection: () => "copied terminal text",
+          hasSelection: () => true,
+          loadAddon,
+          open,
+          options: {},
+          reset,
+          write,
+        },
+        fitAddon: { dispose, fit },
+      };
+    };
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWriteText },
+    });
+
+    try {
+      render(
+        <AgentStudioDevServerTerminal
+          scriptId="frontend"
+          terminalBuffer={{
+            entries: [
+              {
+                scriptId: "frontend",
+                sequence: 0,
+                data: "ready\r\n",
+                timestamp: "2026-03-19T15:30:00.000Z",
+              },
+            ],
+            lastSequence: 0,
+            resetToken: 0,
+          }}
+          onRendererError={onRendererError}
+          createTerminalBinding={createTerminalBinding}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(open).toHaveBeenCalled();
+      });
+      if (!keyHandler) {
+        throw new Error("Expected terminal key handler to be registered");
+      }
+      const terminalKeyHandler: (event: KeyboardEvent) => boolean = keyHandler;
+
+      const handled = terminalKeyHandler(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key: "c",
+        }),
+      );
+
+      expect(handled).toBe(false);
+      await waitFor(() => {
+        expect(clipboardWriteText).toHaveBeenCalledWith("copied terminal text");
+      });
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: originalClipboard,
+      });
+    }
+  });
 });
