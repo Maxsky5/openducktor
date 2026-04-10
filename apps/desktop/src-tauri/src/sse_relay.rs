@@ -54,21 +54,25 @@ pub(crate) fn read_next_sse_message(reader: &mut impl BufRead) -> Result<Option<
         }
 
         if let Some(id) = trimmed.strip_prefix("id:") {
-            if let Ok(parsed_id) = id.trim().parse::<SseEventId>() {
+            if let Ok(parsed_id) = trim_single_optional_leading_space(id).parse::<SseEventId>() {
                 message.id = Some(parsed_id);
             }
             continue;
         }
 
         if let Some(event) = trimmed.strip_prefix("event:") {
-            message.event = Some(event.trim().to_string());
+            message.event = Some(trim_single_optional_leading_space(event).to_string());
             continue;
         }
 
         if let Some(payload) = trimmed.strip_prefix("data:") {
-            payload_lines.push(payload.trim_start().to_string());
+            payload_lines.push(trim_single_optional_leading_space(payload).to_string());
         }
     }
+}
+
+fn trim_single_optional_leading_space(value: &str) -> &str {
+    value.strip_prefix(' ').unwrap_or(value)
 }
 
 #[cfg(test)]
@@ -155,5 +159,24 @@ mod tests {
 
         assert_eq!(message.id, None);
         assert_eq!(message.data, "{\"ok\":true}");
+    }
+
+    #[test]
+    fn read_next_sse_message_trims_only_one_optional_space_per_field() {
+        let mut reader = Cursor::new(
+            b"id: 7\nevent:  stream-warning\ndata:  leading space kept\ndata:   two leading spaces keep one extra\n\n"
+                .to_vec(),
+        );
+
+        let message = read_next_sse_message(&mut reader)
+            .expect("payload should parse")
+            .expect("payload should be present");
+
+        assert_eq!(message.id, Some(7));
+        assert_eq!(message.event.as_deref(), Some(" stream-warning"));
+        assert_eq!(
+            message.data,
+            " leading space kept\n  two leading spaces keep one extra"
+        );
     }
 }
