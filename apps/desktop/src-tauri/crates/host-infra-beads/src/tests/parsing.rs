@@ -116,10 +116,11 @@ fn strict_issue_type_and_status_parsers_return_actionable_errors() {
 }
 
 #[test]
-fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
-    let markdown_entries = parse_markdown_entries(&json!([
+fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
+    assert!(parse_markdown_entries(&json!([
         {
             "markdown": "# Spec",
+            "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
             "updatedAt": "2026-02-17T12:34:56Z",
             "updatedBy": "planner-agent",
             "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
@@ -129,13 +130,12 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "markdown": 42
         }
     ]))
-    .expect("markdown entries");
-    assert_eq!(markdown_entries.len(), 1);
-    assert_eq!(markdown_entries[0].revision, 1);
+    .is_none());
 
-    let qa_entries = parse_qa_entries(&json!([
+    assert!(parse_qa_entries(&json!([
         {
             "markdown": "# QA",
+            "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
             "verdict": "approved",
             "updatedAt": "2026-02-17T13:10:00Z",
             "updatedBy": "qa-agent",
@@ -146,9 +146,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "verdict": "rejected"
         }
     ]))
-    .expect("qa entries");
-    assert_eq!(qa_entries.len(), 1);
-    assert_eq!(qa_entries[0].revision, 2);
+    .is_none());
 
     let sessions = parse_agent_sessions(&json!([
         {
@@ -192,6 +190,86 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
     .expect("legacy agent sessions");
     assert_eq!(legacy_sessions.len(), 1);
     assert_eq!(legacy_sessions[0].scenario, "planner_initial");
+}
+
+#[test]
+fn next_document_revision_rejects_u32_overflow() {
+    let error = next_document_revision(
+        Some(&json!([
+            {
+                "revision": 4294967295u64
+            }
+        ])),
+        "openducktor.documents.spec",
+    )
+    .expect_err("u32::MAX revision should fail cleanly");
+
+    assert!(error.to_string().contains(
+        "Invalid existing openducktor.documents.spec metadata: revision exceeds supported range"
+    ));
+}
+
+#[test]
+fn revision_zero_is_rejected_in_both_validation_paths() {
+    let revision_error = next_document_revision(
+        Some(&json!([
+            {
+                "revision": 0
+            }
+        ])),
+        "openducktor.documents.spec",
+    )
+    .expect_err("revision 0 should fail cleanly");
+
+    assert!(revision_error.to_string().contains(
+        "Invalid existing openducktor.documents.spec metadata at index 0: revision must be a positive integer"
+    ));
+
+    let plan = read_latest_markdown_document(
+        Some(&json!([
+            {
+                "markdown": "# Plan",
+                "updatedAt": "2026-02-20T12:00:00Z",
+                "revision": 0
+            }
+        ])),
+        "openducktor.documents.implementationPlan",
+    );
+
+    assert!(plan.markdown.is_empty());
+    assert_eq!(plan.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+    assert!(plan.revision.is_none());
+    let error = plan
+        .error
+        .expect("revision 0 should surface a document error");
+    assert!(error.contains("revision must be a positive integer"));
+}
+
+#[test]
+fn oversized_decoded_markdown_surfaces_size_limit_error() -> Result<()> {
+    let oversized = "a".repeat(MAX_DECODED_MARKDOWN_BYTES as usize + 1);
+    let encoded = encode_markdown_for_storage(&oversized)?;
+
+    let spec = read_latest_markdown_document(
+        Some(&json!([
+            {
+                "markdown": encoded,
+                "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
+                "updatedAt": "2026-02-20T12:00:00Z",
+                "revision": 1
+            }
+        ])),
+        "openducktor.documents.spec",
+    );
+
+    assert!(spec.markdown.is_empty());
+    assert_eq!(spec.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+    assert_eq!(spec.revision, Some(1));
+    let error = spec
+        .error
+        .expect("oversized payload should surface a decode error");
+    assert!(error.contains("decoded payload exceeds size limit"));
+    Ok(())
 }
 
 #[test]

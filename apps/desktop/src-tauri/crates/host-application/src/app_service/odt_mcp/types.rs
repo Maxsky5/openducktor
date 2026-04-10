@@ -65,6 +65,8 @@ pub struct OdtTaskDocumentsRead {
 pub struct OdtMarkdownDocument {
     pub markdown: String,
     pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +75,8 @@ pub struct OdtQaReportDocument {
     pub markdown: String,
     pub updated_at: Option<String>,
     pub verdict: QaWorkflowVerdict,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

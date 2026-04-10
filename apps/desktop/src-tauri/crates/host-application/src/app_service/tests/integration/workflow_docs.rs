@@ -1783,9 +1783,10 @@ fn qa_get_report_returns_latest_markdown_when_present() -> Result<()> {
         let mut state = task_state.lock().expect("task lock poisoned");
         state.latest_qa_report = Some(QaReportDocument {
             markdown: "QA body".to_string(),
-            verdict: QaVerdict::Approved,
-            updated_at: "2026-02-20T12:00:00Z".to_string(),
-            revision: 2,
+            verdict: QaWorkflowVerdict::Approved,
+            updated_at: Some("2026-02-20T12:00:00Z".to_string()),
+            revision: Some(2),
+            error: None,
         });
     }
 
@@ -1811,6 +1812,97 @@ fn qa_get_report_returns_empty_when_not_present() -> Result<()> {
     let report = service.qa_get_report(repo_path, "task-1")?;
     assert!(report.markdown.is_empty());
     assert!(report.updated_at.is_none());
+    Ok(())
+}
+
+#[test]
+fn qa_get_report_preserves_document_level_decode_errors() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-qa-error";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.latest_qa_report = Some(QaReportDocument {
+            markdown: String::new(),
+            verdict: QaWorkflowVerdict::Approved,
+            updated_at: Some("2026-02-20T12:00:00Z".to_string()),
+            revision: Some(2),
+            error: Some(
+                "Failed to decode openducktor.documents.qaReports[0]: invalid base64 payload"
+                    .to_string(),
+            ),
+        });
+    }
+
+    let report = service.qa_get_report(repo_path, "task-1")?;
+    assert!(report.markdown.is_empty());
+    assert_eq!(report.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+    assert_eq!(report.revision, Some(2));
+    assert_eq!(
+        report.error.as_deref(),
+        Some("Failed to decode openducktor.documents.qaReports[0]: invalid base64 payload"),
+    );
+    Ok(())
+}
+
+#[test]
+fn spec_get_and_plan_get_preserve_document_level_decode_errors() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-doc-errors";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    {
+        let mut state = task_state.lock().expect("task lock poisoned");
+        state.metadata_spec = Some(host_domain::SpecDocument {
+            markdown: String::new(),
+            updated_at: Some("2026-02-20T10:00:00Z".to_string()),
+            revision: Some(1),
+            error: Some(
+                "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
+                    .to_string(),
+            ),
+        });
+        state.metadata_plan = Some(host_domain::SpecDocument {
+            markdown: String::new(),
+            updated_at: Some("2026-02-20T11:00:00Z".to_string()),
+            revision: Some(2),
+            error: Some(
+                "Failed to decode openducktor.documents.implementationPlan[0]: invalid gzip payload"
+                    .to_string(),
+            ),
+        });
+    }
+
+    let spec = service.spec_get(repo_path, "task-1")?;
+    assert!(spec.markdown.is_empty());
+    assert_eq!(spec.updated_at.as_deref(), Some("2026-02-20T10:00:00Z"));
+    assert_eq!(spec.revision, Some(1));
+    assert_eq!(
+        spec.error.as_deref(),
+        Some("Failed to decode openducktor.documents.spec[0]: invalid base64 payload"),
+    );
+
+    let plan = service.plan_get(repo_path, "task-1")?;
+    assert!(plan.markdown.is_empty());
+    assert_eq!(plan.updated_at.as_deref(), Some("2026-02-20T11:00:00Z"));
+    assert_eq!(plan.revision, Some(2));
+    assert_eq!(
+        plan.error.as_deref(),
+        Some("Failed to decode openducktor.documents.implementationPlan[0]: invalid gzip payload"),
+    );
     Ok(())
 }
 

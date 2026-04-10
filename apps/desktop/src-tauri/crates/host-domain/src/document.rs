@@ -100,6 +100,8 @@ pub struct SpecDocument {
     pub updated_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -113,9 +115,12 @@ pub enum QaVerdict {
 #[serde(rename_all = "camelCase")]
 pub struct QaReportDocument {
     pub markdown: String,
-    pub verdict: QaVerdict,
-    pub updated_at: String,
-    pub revision: u32,
+    pub verdict: QaWorkflowVerdict,
+    pub updated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -193,6 +193,30 @@ describe("useTaskDocumentEditorState", () => {
     await harness.unmount();
   });
 
+  test("keeps document-level payload errors without treating the load as failed", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        loadSpecDocument: async () => ({
+          markdown: "",
+          updatedAt: "2026-02-20T12:00:00Z",
+          error: "Failed to decode openducktor.documents.spec[0]: invalid gzip payload",
+        }),
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.documents.spec.loaded);
+
+    const state = harness.getLatest();
+    expect(state.documents.spec.loaded).toBe(true);
+    expect(state.documents.spec.isLoading).toBe(false);
+    expect(state.documents.spec.error).toBe(
+      "Failed to decode openducktor.documents.spec[0]: invalid gzip payload",
+    );
+
+    await harness.unmount();
+  });
+
   test("persists editor view per section and resets on task change", async () => {
     const harness = createHookHarness(createBaseProps({ activeSection: null }));
     await harness.mount();

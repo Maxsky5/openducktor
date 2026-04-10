@@ -1,11 +1,10 @@
 use host_domain::{
-    AgentSessionDocument, QaVerdict, QaWorkflowVerdict, TaskDocumentPresence, TaskDocumentSummary,
-    TaskQaDocumentPresence,
+    AgentSessionDocument, TaskDocumentPresence, TaskDocumentSummary, TaskQaDocumentPresence,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::model::{MarkdownEntry, QaEntry};
+use crate::document_storage::{document_presence, latest_qa_verdict, latest_updated_at};
 
 const LEGACY_AGENT_SESSION_SCENARIO_ALIASES: &[(&str, &str)] = &[
     ("spec_revision", "spec_initial"),
@@ -30,41 +29,31 @@ pub(crate) fn metadata_bool_qa_required(namespace: &Map<String, Value>) -> Optio
     namespace.get("qaRequired").and_then(Value::as_bool)
 }
 
-pub(crate) fn markdown_document_presence(
-    entries: Option<Vec<MarkdownEntry>>,
-) -> TaskDocumentPresence {
-    let latest = entries.as_ref().and_then(|list| list.last());
-    match latest {
-        Some(entry) if !entry.markdown.trim().is_empty() => TaskDocumentPresence {
-            has: true,
-            updated_at: Some(entry.updated_at.clone()),
-        },
-        _ => TaskDocumentPresence::default(),
+pub(crate) fn markdown_document_presence(value: Option<&Value>) -> TaskDocumentPresence {
+    if !document_presence(value) {
+        return TaskDocumentPresence::default();
+    }
+
+    TaskDocumentPresence {
+        has: true,
+        updated_at: latest_updated_at(value),
     }
 }
 
-fn qa_workflow_verdict_from_entry(verdict: &QaVerdict) -> QaWorkflowVerdict {
-    match verdict {
-        QaVerdict::Approved => QaWorkflowVerdict::Approved,
-        QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
-    }
-}
-
-pub(crate) fn qa_document_presence(entries: Option<Vec<QaEntry>>) -> TaskQaDocumentPresence {
-    let Some(latest) = entries.as_ref().and_then(|list| list.last()) else {
+pub(crate) fn qa_document_presence(value: Option<&Value>) -> TaskQaDocumentPresence {
+    let Some(value) = value else {
         return TaskQaDocumentPresence::default();
     };
-
-    let has_content = !latest.markdown.trim().is_empty();
+    let has = document_presence(Some(value));
 
     TaskQaDocumentPresence {
-        has: has_content,
-        updated_at: if has_content {
-            Some(latest.updated_at.clone())
+        has,
+        updated_at: if has {
+            latest_updated_at(Some(value))
         } else {
             None
         },
-        verdict: qa_workflow_verdict_from_entry(&latest.verdict),
+        verdict: latest_qa_verdict(Some(value)),
     }
 }
 
@@ -75,45 +64,16 @@ pub(crate) fn metadata_document_summary(
         .and_then(|entry| entry.get("documents"))
         .and_then(Value::as_object);
 
-    let spec = markdown_document_presence(
-        documents
-            .and_then(|docs| docs.get("spec"))
-            .and_then(parse_markdown_entries),
-    );
-    let plan = markdown_document_presence(
-        documents
-            .and_then(|docs| docs.get("implementationPlan"))
-            .and_then(parse_markdown_entries),
-    );
-    let qa_report = qa_document_presence(
-        documents
-            .and_then(|docs| docs.get("qaReports"))
-            .and_then(parse_qa_entries),
-    );
+    let spec = markdown_document_presence(documents.and_then(|docs| docs.get("spec")));
+    let plan =
+        markdown_document_presence(documents.and_then(|docs| docs.get("implementationPlan")));
+    let qa_report = qa_document_presence(documents.and_then(|docs| docs.get("qaReports")));
 
     TaskDocumentSummary {
         spec,
         plan,
         qa_report,
     }
-}
-
-pub(crate) fn parse_markdown_entries(value: &Value) -> Option<Vec<MarkdownEntry>> {
-    let entries = value
-        .as_array()?
-        .iter()
-        .filter_map(|entry| MarkdownEntry::deserialize(entry).ok())
-        .collect::<Vec<_>>();
-    Some(entries)
-}
-
-pub(crate) fn parse_qa_entries(value: &Value) -> Option<Vec<QaEntry>> {
-    let entries = value
-        .as_array()?
-        .iter()
-        .filter_map(|entry| QaEntry::deserialize(entry).ok())
-        .collect::<Vec<_>>();
-    Some(entries)
 }
 
 fn normalize_agent_session_entry(entry: &Value) -> Value {

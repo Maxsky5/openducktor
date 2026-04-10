@@ -18,6 +18,7 @@ type TaskDocumentViewState = Record<TaskDocumentSection, DocumentEditorView>;
 type TaskDocumentPayload = {
   markdown: string;
   updatedAt: string | null;
+  error?: string | null;
 };
 
 type UseTaskDocumentEditorStateArgs = {
@@ -180,7 +181,7 @@ export function useTaskDocumentEditorState({
             updatedAt: payload.updatedAt,
             isLoading: false,
             loaded: true,
-            error: null,
+            error: payload.error ?? null,
           },
         };
         documentsRef.current = successSnapshot;

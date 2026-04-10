@@ -14,46 +14,23 @@ impl BeadsTaskStore {
         let metadata_root = parse_metadata_root(issue.metadata.clone());
         let namespace_key = self.current_metadata_namespace();
         let namespace = metadata_namespace(&metadata_root, &namespace_key);
+        let documents = namespace.and_then(|ns| ns.get("documents"));
+        let spec_path = format!("{namespace_key}.documents.spec");
+        let plan_path = format!("{namespace_key}.documents.implementationPlan");
+        let qa_path = format!("{namespace_key}.documents.qaReports");
 
-        let spec_entries = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("spec"))
-            .and_then(parse_markdown_entries);
-        let spec_latest = spec_entries.as_ref().and_then(|list| list.last());
-        let spec = SpecDocument {
-            markdown: spec_latest
-                .map(|entry| entry.markdown.clone())
-                .unwrap_or_default(),
-            updated_at: spec_latest.map(|entry| entry.updated_at.clone()),
-            revision: spec_latest.map(|entry| entry.revision),
-        };
-
-        let plan_entries = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("implementationPlan"))
-            .and_then(parse_markdown_entries);
-        let plan_latest = plan_entries.as_ref().and_then(|list| list.last());
-        let plan = SpecDocument {
-            markdown: plan_latest
-                .map(|entry| entry.markdown.clone())
-                .unwrap_or_default(),
-            updated_at: plan_latest.map(|entry| entry.updated_at.clone()),
-            revision: plan_latest.map(|entry| entry.revision),
-        };
-
-        let qa_entries = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("qaReports"))
-            .and_then(parse_qa_entries);
-        let qa_report = qa_entries
-            .as_ref()
-            .and_then(|entries| entries.last())
-            .map(|entry| QaReportDocument {
-                markdown: entry.markdown.clone(),
-                verdict: entry.verdict.clone(),
-                updated_at: entry.updated_at.clone(),
-                revision: entry.revision,
-            });
+        let spec = crate::document_storage::read_latest_markdown_document(
+            documents.and_then(|docs| docs.get("spec")),
+            &spec_path,
+        );
+        let plan = crate::document_storage::read_latest_markdown_document(
+            documents.and_then(|docs| docs.get("implementationPlan")),
+            &plan_path,
+        );
+        let qa_report = crate::document_storage::read_latest_qa_document(
+            documents.and_then(|docs| docs.get("qaReports")),
+            &qa_path,
+        );
 
         let mut agent_sessions = namespace
             .and_then(|ns| ns.get("agentSessions"))

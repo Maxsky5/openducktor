@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, DirectMergeRecord, PullRequestRecord,
-    QaReportDocument, QaVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore,
-    UpdateTaskPatch, ODT_QA_APPROVED_SOURCE_TOOL, ODT_QA_REJECTED_SOURCE_TOOL,
-    ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
+    QaReportDocument, QaVerdict, QaWorkflowVerdict, SpecDocument, TaskCard, TaskMetadata,
+    TaskStatus, TaskStore, UpdateTaskPatch, ODT_QA_APPROVED_SOURCE_TOOL,
+    ODT_QA_REJECTED_SOURCE_TOOL, ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -15,10 +15,7 @@ use std::time::{Duration, Instant};
 use crate::command_runner::{CommandRunner, ProcessCommandRunner};
 use crate::constants::{DEFAULT_METADATA_NAMESPACE, TASK_LIST_CACHE_TTL_MS};
 use crate::lifecycle::BeadsLifecycle;
-use crate::metadata::{
-    metadata_namespace, parse_agent_sessions, parse_markdown_entries, parse_metadata_root,
-    parse_qa_entries,
-};
+use crate::metadata::{metadata_namespace, parse_agent_sessions, parse_metadata_root};
 use crate::model::{MarkdownEntry, QaEntry, RawIssue};
 use crate::normalize::{normalize_labels, normalize_text_option};
 

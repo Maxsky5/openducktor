@@ -95,6 +95,8 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             plan_get_calls: Vec::new(),
             plan_set_calls: Vec::new(),
             metadata_get_calls: Vec::new(),
+            metadata_spec: None,
+            metadata_plan: None,
             qa_append_calls: Vec::new(),
             qa_outcome_calls: Vec::new(),
             latest_qa_report: None,
@@ -948,6 +950,8 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
     assert_eq!(reset.status, TaskStatus::Open);
     let state = task_state.lock().expect("task store lock poisoned");
     assert_eq!(state.cleared_workflow_documents, vec!["task-1".to_string()]);
+    assert!(state.metadata_spec.is_none());
+    assert!(state.metadata_plan.is_none());
     assert_eq!(
         state.cleared_session_roles,
         vec![(

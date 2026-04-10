@@ -47,7 +47,7 @@ describe("resolveLoadedDocumentState", () => {
     });
   });
 
-  test("preserves the current document when the incoming timestamp is older", () => {
+  test("preserves the current document and its error when the incoming timestamp is older", () => {
     const current = createDocumentState({
       markdown: "# Updated spec",
       updatedAt: "2026-02-22T09:00:00.000Z",
@@ -68,7 +68,7 @@ describe("resolveLoadedDocumentState", () => {
       markdown: "# Updated spec",
       updatedAt: "2026-02-22T09:00:00.000Z",
       isLoading: false,
-      error: null,
+      error: "temporary",
       loaded: true,
     });
   });
@@ -116,6 +116,32 @@ describe("resolveLoadedDocumentState", () => {
       updatedAt: null,
       isLoading: false,
       error: null,
+      loaded: true,
+    });
+  });
+
+  test("preserves document-level payload errors on the loaded state", () => {
+    const current = createDocumentState({
+      markdown: "# Previous spec",
+      updatedAt: "2026-02-22T09:00:00.000Z",
+      isLoading: true,
+      loaded: true,
+    });
+
+    const resolved = resolveLoadedDocumentState(
+      current,
+      createDocumentPayload({
+        markdown: "",
+        updatedAt: "2026-02-22T09:15:00.000Z",
+        error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
+      }),
+    );
+
+    expect(resolved).toEqual({
+      markdown: "",
+      updatedAt: "2026-02-22T09:15:00.000Z",
+      isLoading: false,
+      error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
       loaded: true,
     });
   });

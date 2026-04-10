@@ -8,6 +8,7 @@ export const TASK_DOCUMENT_STALE_TIME_MS = 60_000;
 export type TaskDocument = {
   markdown: string;
   updatedAt: string | null;
+  error?: string | null;
 };
 
 export type TaskDocumentSection = "spec" | "plan" | "qa";

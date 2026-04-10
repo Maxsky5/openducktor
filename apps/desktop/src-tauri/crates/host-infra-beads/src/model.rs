@@ -43,6 +43,8 @@ pub(crate) struct RawDependency {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct MarkdownEntry {
     pub(crate) markdown: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) encoding: Option<String>,
     pub(crate) updated_at: String,
     pub(crate) updated_by: String,
     pub(crate) source_tool: String,
@@ -53,6 +55,8 @@ pub(crate) struct MarkdownEntry {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct QaEntry {
     pub(crate) markdown: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) encoding: Option<String>,
     pub(crate) verdict: QaVerdict,
     pub(crate) updated_at: String,
     pub(crate) updated_by: String,
