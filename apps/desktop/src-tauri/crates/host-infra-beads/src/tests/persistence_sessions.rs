@@ -208,15 +208,18 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
         metadata.spec.updated_at.as_deref(),
         Some("2026-02-20T10:00:00Z")
     );
+    assert!(metadata.spec.error.is_none());
     assert_eq!(metadata.plan.markdown, "# Plan content");
     assert_eq!(
         metadata.plan.updated_at.as_deref(),
         Some("2026-02-20T11:00:00Z")
     );
+    assert!(metadata.plan.error.is_none());
     let qa = metadata.qa_report.expect("qa_report should be present");
     assert_eq!(qa.markdown, "# QA Report");
-    assert_eq!(qa.verdict, QaVerdict::Approved);
-    assert_eq!(qa.revision, 1);
+    assert_eq!(qa.verdict, QaWorkflowVerdict::Approved);
+    assert_eq!(qa.revision, Some(1));
+    assert!(qa.error.is_none());
     assert_eq!(metadata.agent_sessions.len(), 1);
     assert_eq!(metadata.agent_sessions[0].session_id, "session-1");
     assert_eq!(metadata.agent_sessions[0].role, "build");
@@ -239,8 +242,10 @@ fn get_task_metadata_handles_empty_metadata() -> Result<()> {
     let metadata = store.get_task_metadata(repo.path(), "task-1")?;
     assert!(metadata.spec.markdown.is_empty());
     assert!(metadata.spec.updated_at.is_none());
+    assert!(metadata.spec.error.is_none());
     assert!(metadata.plan.markdown.is_empty());
     assert!(metadata.plan.updated_at.is_none());
+    assert!(metadata.plan.error.is_none());
     assert!(metadata.qa_report.is_none());
     assert!(metadata.agent_sessions.is_empty());
     Ok(())

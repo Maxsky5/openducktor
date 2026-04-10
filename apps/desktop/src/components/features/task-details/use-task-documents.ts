@@ -46,7 +46,9 @@ const createTaskDocumentState = (input?: {
 const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Unable to load document.";
 
-const createHostDocumentLoader = <TResult extends { markdown: string; updatedAt: string | null }>(
+const createHostDocumentLoader = <
+  TResult extends { markdown: string; updatedAt: string | null; error?: string | null },
+>(
   cacheScope: string,
   readDocument: (repoPath: string, taskId: string) => Promise<TResult>,
 ): ((taskId: string) => Promise<TaskDocumentPayload>) => {
@@ -59,6 +61,7 @@ const createHostDocumentLoader = <TResult extends { markdown: string; updatedAt:
     return {
       markdown: document.markdown,
       updatedAt: document.updatedAt,
+      error: document.error ?? null,
     };
   };
 };
@@ -126,7 +129,7 @@ const toTaskDocumentState = (
     markdown: query.data?.markdown ?? "",
     updatedAt: query.data?.updatedAt ?? null,
     isLoading: enabled && query.isFetching && query.data === undefined,
-    error: query.error ? toErrorMessage(query.error) : null,
+    error: query.error ? toErrorMessage(query.error) : (query.data?.error ?? null),
     loaded: hasResolved,
   });
 };

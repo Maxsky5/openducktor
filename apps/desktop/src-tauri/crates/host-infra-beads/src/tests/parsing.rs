@@ -116,10 +116,11 @@ fn strict_issue_type_and_status_parsers_return_actionable_errors() {
 }
 
 #[test]
-fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
-    let markdown_entries = parse_markdown_entries(&json!([
+fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
+    assert!(parse_markdown_entries(&json!([
         {
             "markdown": "# Spec",
+            "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
             "updatedAt": "2026-02-17T12:34:56Z",
             "updatedBy": "planner-agent",
             "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
@@ -129,13 +130,12 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "markdown": 42
         }
     ]))
-    .expect("markdown entries");
-    assert_eq!(markdown_entries.len(), 1);
-    assert_eq!(markdown_entries[0].revision, 1);
+    .is_none());
 
-    let qa_entries = parse_qa_entries(&json!([
+    assert!(parse_qa_entries(&json!([
         {
             "markdown": "# QA",
+            "encoding": DOCUMENT_ENCODING_GZIP_BASE64_V1,
             "verdict": "approved",
             "updatedAt": "2026-02-17T13:10:00Z",
             "updatedBy": "qa-agent",
@@ -146,9 +146,7 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
             "verdict": "rejected"
         }
     ]))
-    .expect("qa entries");
-    assert_eq!(qa_entries.len(), 1);
-    assert_eq!(qa_entries[0].revision, 2);
+    .is_none());
 
     let sessions = parse_agent_sessions(&json!([
         {

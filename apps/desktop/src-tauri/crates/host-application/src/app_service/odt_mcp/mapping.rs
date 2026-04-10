@@ -5,8 +5,7 @@ use super::types::{
 };
 use anyhow::{anyhow, Result};
 use host_domain::{
-    QaReportDocument, QaVerdict, QaWorkflowVerdict, SpecDocument, TaskCard, TaskMetadata,
-    TaskStatus,
+    QaReportDocument, QaWorkflowVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus,
 };
 use std::collections::HashSet;
 
@@ -47,6 +46,7 @@ fn map_markdown_document(document: SpecDocument) -> OdtMarkdownDocument {
     OdtMarkdownDocument {
         markdown: document.markdown,
         updated_at: document.updated_at,
+        error: document.error,
     }
 }
 
@@ -54,16 +54,15 @@ fn map_qa_report_document(report: Option<QaReportDocument>) -> OdtQaReportDocume
     match report {
         Some(report) => OdtQaReportDocument {
             markdown: report.markdown,
-            updated_at: Some(report.updated_at),
-            verdict: match report.verdict {
-                QaVerdict::Approved => QaWorkflowVerdict::Approved,
-                QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
-            },
+            updated_at: report.updated_at,
+            verdict: report.verdict,
+            error: report.error,
         },
         None => OdtQaReportDocument {
             markdown: String::new(),
             updated_at: None,
             verdict: QaWorkflowVerdict::NotReviewed,
+            error: None,
         },
     }
 }

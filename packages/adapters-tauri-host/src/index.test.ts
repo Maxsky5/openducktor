@@ -1620,6 +1620,28 @@ describe("TauriHostClient", () => {
     ]);
   });
 
+  test("document reads preserve document-level decode errors from task metadata", async () => {
+    const { client } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        return {
+          ...makeTaskMetadataPayload(),
+          spec: {
+            markdown: "",
+            updatedAt: "2026-02-20T09:00:00Z",
+            error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.specGet("/repo", "task-1")).resolves.toEqual({
+      markdown: "",
+      updatedAt: "2026-02-20T09:00:00Z",
+      error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
+    });
+  });
+
   test("forceFresh metadata reads bypass stale cache and repopulate steady-state reads", async () => {
     let metadataReadCount = 0;
     const { client, calls } = createClient((command) => {

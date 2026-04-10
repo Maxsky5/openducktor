@@ -56,6 +56,7 @@ const markdownTaskDocumentSchema = z
   .object({
     markdown: z.string(),
     updatedAt: z.string().nullable(),
+    error: z.string().optional(),
   })
   .strict();
 
@@ -64,6 +65,7 @@ const latestQaReportSchema = z
     markdown: z.string(),
     updatedAt: z.string().nullable(),
     verdict: qaWorkflowVerdictSchema,
+    error: z.string().optional(),
   })
   .strict();
 

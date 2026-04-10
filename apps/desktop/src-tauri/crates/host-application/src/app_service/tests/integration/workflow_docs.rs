@@ -1783,9 +1783,10 @@ fn qa_get_report_returns_latest_markdown_when_present() -> Result<()> {
         let mut state = task_state.lock().expect("task lock poisoned");
         state.latest_qa_report = Some(QaReportDocument {
             markdown: "QA body".to_string(),
-            verdict: QaVerdict::Approved,
-            updated_at: "2026-02-20T12:00:00Z".to_string(),
-            revision: 2,
+            verdict: QaWorkflowVerdict::Approved,
+            updated_at: Some("2026-02-20T12:00:00Z".to_string()),
+            revision: Some(2),
+            error: None,
         });
     }
 

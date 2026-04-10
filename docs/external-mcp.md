@@ -257,25 +257,38 @@ Constraints:
 - Requested document keys are returned consistently even when no persisted body exists yet.
 - Missing spec and plan return `{ "markdown": "", "updatedAt": null }`.
 - Missing latest QA report returns `{ "markdown": "", "updatedAt": null, "verdict": "not_reviewed" }`.
+- Legacy markdown-only metadata remains readable.
+- New or updated workflow documents are stored as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
+- The Rust host owns that encode/decode translation. Successful MCP reads still return plain markdown.
+- When the latest stored document cannot be decoded, the returned document includes an optional `error` field with an actionable host-supplied message.
+- There is no automatic migration of older markdown-only metadata.
 
 Output:
 
 ```json
 {
   "documents": {
-    "spec": { "markdown": "# Spec", "updatedAt": "<ISO 8601 timestamp>" },
+    "spec": {
+      "markdown": "# Spec",
+      "updatedAt": "<ISO 8601 timestamp>",
+      "error": "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
+    },
     "implementationPlan": { "markdown": "## Plan", "updatedAt": "<ISO 8601 timestamp>" },
     "latestQaReport": {
       "markdown": "## QA",
       "updatedAt": "<ISO 8601 timestamp>",
-      "verdict": "approved"
+      "verdict": "approved",
+      "error": "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload"
     }
   }
 }
 ```
 
+`error` is optional. It is omitted for healthy documents and for documents that do not exist yet.
+
 ## Architecture Notes
 
 - `packages/openducktor-mcp` owns MCP transport, request validation, response validation, and packaging.
 - The Rust host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
+- The Rust host also owns document compression and decompression for Beads metadata.
 - The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.

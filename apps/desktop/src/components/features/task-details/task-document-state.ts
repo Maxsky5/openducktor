@@ -40,7 +40,7 @@ export const resolveLoadedDocumentState = <TState extends TaskDocumentStateLike>
     markdown: incoming.markdown,
     updatedAt: incoming.updatedAt,
     isLoading: false,
-    error: null,
+    error: incoming.error ?? null,
     loaded: true,
   };
 };

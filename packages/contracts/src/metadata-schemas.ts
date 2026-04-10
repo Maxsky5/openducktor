@@ -1,18 +1,23 @@
 import { z } from "zod";
 import { directMergeRecordSchema, pullRequestSchema } from "./git-schemas";
-import { qaReportVerdictSchema } from "./task-schemas";
+import { qaWorkflowVerdictSchema } from "./task-schemas";
 
 export const taskMetadataDocumentSchema = z.object({
   markdown: z.string().default(""),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  error: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
 export type TaskMetadataDocument = z.infer<typeof taskMetadataDocumentSchema>;
 
 export const taskMetadataQaReportSchema = z.object({
   markdown: z.string(),
-  verdict: qaReportVerdictSchema,
-  updatedAt: z.string(),
-  revision: z.number().int().nonnegative(),
+  verdict: qaWorkflowVerdictSchema,
+  updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  revision: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.number().int().nonnegative().optional(),
+  ),
+  error: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 

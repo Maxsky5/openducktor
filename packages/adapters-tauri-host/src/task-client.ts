@@ -46,7 +46,11 @@ export type SavePlanDocumentInput = {
 };
 
 export type TaskDocumentSection = "spec" | "plan" | "qa";
-export type TaskDocumentReadResult = { markdown: string; updatedAt: string | null };
+export type TaskDocumentReadResult = {
+  markdown: string;
+  updatedAt: string | null;
+  error?: string | null;
+};
 
 export class TauriTaskClient {
   constructor(
@@ -74,6 +78,7 @@ export class TauriTaskClient {
       return {
         markdown: payload.spec.markdown,
         updatedAt: payload.spec.updatedAt ?? null,
+        error: payload.spec.error ?? null,
       };
     }
 
@@ -81,12 +86,14 @@ export class TauriTaskClient {
       return {
         markdown: payload.plan.markdown,
         updatedAt: payload.plan.updatedAt ?? null,
+        error: payload.plan.error ?? null,
       };
     }
 
     return {
       markdown: payload.qaReport?.markdown ?? "",
       updatedAt: payload.qaReport?.updatedAt ?? null,
+      error: payload.qaReport?.error ?? null,
     };
   }
 

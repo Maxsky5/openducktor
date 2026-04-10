@@ -1,7 +1,8 @@
 use anyhow::anyhow;
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, DirectMergeRecord, PullRequestRecord, QaReportDocument,
-    QaVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    QaVerdict, QaWorkflowVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use std::path::Path;
 
@@ -12,6 +13,7 @@ fn empty_spec_document() -> SpecDocument {
         markdown: String::new(),
         updated_at: None,
         revision: None,
+        error: None,
     }
 }
 
@@ -72,6 +74,7 @@ impl TaskStore for CommandTaskStore {
             markdown: markdown.to_string(),
             updated_at: None,
             revision: None,
+            error: None,
         })
     }
 
@@ -89,6 +92,7 @@ impl TaskStore for CommandTaskStore {
             markdown: markdown.to_string(),
             updated_at: None,
             revision: None,
+            error: None,
         })
     }
 
@@ -109,9 +113,13 @@ impl TaskStore for CommandTaskStore {
     ) -> anyhow::Result<QaReportDocument> {
         Ok(QaReportDocument {
             markdown: markdown.to_string(),
-            verdict,
-            updated_at: String::new(),
-            revision: 0,
+            verdict: match verdict {
+                QaVerdict::Approved => QaWorkflowVerdict::Approved,
+                QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+            },
+            updated_at: Some(String::new()),
+            revision: Some(0),
+            error: None,
         })
     }
 

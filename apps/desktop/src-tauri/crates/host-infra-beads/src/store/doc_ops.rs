@@ -5,39 +5,19 @@ fn write_latest_qa_report(
     markdown: &str,
     verdict: QaVerdict,
 ) -> Result<QaEntry> {
-    let next_revision = match documents_map.get("qaReports") {
-        None => 1,
-        Some(raw_reports) => {
-            let raw_entries = raw_reports.as_array().ok_or_else(|| {
-                anyhow::Error::msg("Invalid existing qaReports metadata: expected an array")
-            })?;
-            let entries = raw_entries
-                .iter()
-                .enumerate()
-                .map(|(index, entry)| {
-                    serde_json::from_value::<QaEntry>(entry.clone()).map_err(|error| {
-                        anyhow::Error::msg(format!(
-                            "Invalid existing qaReports metadata at index {index}: {error}"
-                        ))
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            entries
-                .iter()
-                .map(|entry| entry.revision)
-                .max()
-                .unwrap_or(0)
-                + 1
-        }
-    };
+    let next_revision = crate::document_storage::next_document_revision(
+        documents_map.get("qaReports"),
+        "openducktor.documents.qaReports",
+    )?;
+    let encoded_markdown = crate::document_storage::encode_markdown_for_storage(markdown.trim())?;
 
     let source_tool = match verdict {
         QaVerdict::Approved => ODT_QA_APPROVED_SOURCE_TOOL,
         QaVerdict::Rejected => ODT_QA_REJECTED_SOURCE_TOOL,
     };
     let entry = QaEntry {
-        markdown: markdown.trim().to_string(),
+        markdown: encoded_markdown,
+        encoding: Some(crate::document_storage::DOCUMENT_ENCODING_GZIP_BASE64_V1.to_string()),
         verdict,
         updated_at: now_rfc3339(),
         updated_by: "qa-agent".to_string(),
@@ -58,19 +38,12 @@ impl BeadsTaskStore {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
-        let entries = metadata_namespace(&metadata_root, &namespace_key)
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("spec"))
-            .and_then(parse_markdown_entries);
-        let latest = entries.as_ref().and_then(|list| list.last());
-
-        Ok(SpecDocument {
-            markdown: latest
-                .map(|entry| entry.markdown.clone())
-                .unwrap_or_default(),
-            updated_at: latest.map(|entry| entry.updated_at.clone()),
-            revision: latest.map(|entry| entry.revision),
-        })
+        Ok(crate::document_storage::read_latest_markdown_document(
+            metadata_namespace(&metadata_root, &namespace_key)
+                .and_then(|ns| ns.get("documents"))
+                .and_then(|docs| docs.get("spec")),
+            "openducktor.documents.spec",
+        ))
     }
 
     pub(super) fn set_spec_impl(
@@ -87,15 +60,17 @@ impl BeadsTaskStore {
             .cloned()
             .unwrap_or_default();
 
-        let next_revision = documents_map
-            .get("spec")
-            .and_then(parse_markdown_entries)
-            .and_then(|entries| entries.last().map(|entry| entry.revision + 1))
-            .unwrap_or(1);
+        let next_revision = crate::document_storage::next_document_revision(
+            documents_map.get("spec"),
+            "openducktor.documents.spec",
+        )?;
 
         let timestamp = now_rfc3339();
+        let encoded_markdown =
+            crate::document_storage::encode_markdown_for_storage(markdown.trim())?;
         let entry = MarkdownEntry {
-            markdown: markdown.trim().to_string(),
+            markdown: encoded_markdown,
+            encoding: Some(crate::document_storage::DOCUMENT_ENCODING_GZIP_BASE64_V1.to_string()),
             updated_at: timestamp.clone(),
             updated_by: "planner-agent".to_string(),
             source_tool: ODT_SET_SPEC_SOURCE_TOOL.to_string(),
@@ -111,9 +86,10 @@ impl BeadsTaskStore {
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
 
         Ok(SpecDocument {
-            markdown: entry.markdown,
+            markdown: markdown.trim().to_string(),
             updated_at: Some(timestamp),
             revision: Some(entry.revision),
+            error: None,
         })
     }
 
@@ -121,19 +97,12 @@ impl BeadsTaskStore {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
-        let entries = metadata_namespace(&metadata_root, &namespace_key)
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("implementationPlan"))
-            .and_then(parse_markdown_entries);
-        let latest = entries.as_ref().and_then(|list| list.last());
-
-        Ok(SpecDocument {
-            markdown: latest
-                .map(|entry| entry.markdown.clone())
-                .unwrap_or_default(),
-            updated_at: latest.map(|entry| entry.updated_at.clone()),
-            revision: latest.map(|entry| entry.revision),
-        })
+        Ok(crate::document_storage::read_latest_markdown_document(
+            metadata_namespace(&metadata_root, &namespace_key)
+                .and_then(|ns| ns.get("documents"))
+                .and_then(|docs| docs.get("implementationPlan")),
+            "openducktor.documents.implementationPlan",
+        ))
     }
 
     pub(super) fn set_plan_impl(
@@ -150,15 +119,17 @@ impl BeadsTaskStore {
             .cloned()
             .unwrap_or_default();
 
-        let next_revision = documents_map
-            .get("implementationPlan")
-            .and_then(parse_markdown_entries)
-            .and_then(|entries| entries.last().map(|entry| entry.revision + 1))
-            .unwrap_or(1);
+        let next_revision = crate::document_storage::next_document_revision(
+            documents_map.get("implementationPlan"),
+            "openducktor.documents.implementationPlan",
+        )?;
 
         let timestamp = now_rfc3339();
+        let encoded_markdown =
+            crate::document_storage::encode_markdown_for_storage(markdown.trim())?;
         let entry = MarkdownEntry {
-            markdown: markdown.trim().to_string(),
+            markdown: encoded_markdown,
+            encoding: Some(crate::document_storage::DOCUMENT_ENCODING_GZIP_BASE64_V1.to_string()),
             updated_at: timestamp.clone(),
             updated_by: "planner-agent".to_string(),
             source_tool: ODT_SET_PLAN_SOURCE_TOOL.to_string(),
@@ -174,9 +145,10 @@ impl BeadsTaskStore {
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
 
         Ok(SpecDocument {
-            markdown: entry.markdown,
+            markdown: markdown.trim().to_string(),
             updated_at: Some(timestamp),
             revision: Some(entry.revision),
+            error: None,
         })
     }
 
@@ -189,20 +161,14 @@ impl BeadsTaskStore {
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
         let namespace = metadata_namespace(&metadata_root, &namespace_key);
-        let Some(entries) = namespace
-            .and_then(|ns| ns.get("documents"))
-            .and_then(|docs| docs.get("qaReports"))
-            .and_then(parse_qa_entries)
-        else {
-            return Ok(None);
-        };
+        let report = crate::document_storage::read_latest_qa_document(
+            namespace
+                .and_then(|ns| ns.get("documents"))
+                .and_then(|docs| docs.get("qaReports")),
+            "openducktor.documents.qaReports",
+        );
 
-        Ok(entries.last().map(|entry| QaReportDocument {
-            markdown: entry.markdown.clone(),
-            verdict: entry.verdict.clone(),
-            updated_at: entry.updated_at.clone(),
-            revision: entry.revision,
-        }))
+        Ok(report)
     }
 
     pub(super) fn append_qa_report_impl(
@@ -224,10 +190,14 @@ impl BeadsTaskStore {
 
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         Ok(QaReportDocument {
-            markdown: entry.markdown,
-            verdict: entry.verdict,
-            updated_at: entry.updated_at,
-            revision: entry.revision,
+            markdown: markdown.trim().to_string(),
+            verdict: match entry.verdict {
+                QaVerdict::Approved => QaWorkflowVerdict::Approved,
+                QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+            },
+            updated_at: Some(entry.updated_at),
+            revision: Some(entry.revision),
+            error: None,
         })
     }
 

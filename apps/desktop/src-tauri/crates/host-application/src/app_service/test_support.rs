@@ -237,6 +237,7 @@ impl TaskStore for FakeTaskStore {
             markdown: String::new(),
             updated_at: None,
             revision: None,
+            error: None,
         })
     }
 
@@ -249,6 +250,7 @@ impl TaskStore for FakeTaskStore {
             markdown: markdown.to_string(),
             updated_at: Some("2026-01-01T00:00:00Z".to_string()),
             revision: Some(1),
+            error: None,
         })
     }
 
@@ -259,6 +261,7 @@ impl TaskStore for FakeTaskStore {
             markdown: String::new(),
             updated_at: None,
             revision: None,
+            error: None,
         })
     }
 
@@ -271,6 +274,7 @@ impl TaskStore for FakeTaskStore {
             markdown: markdown.to_string(),
             updated_at: Some("2026-01-01T00:00:00Z".to_string()),
             revision: Some(1),
+            error: None,
         })
     }
 
@@ -296,9 +300,13 @@ impl TaskStore for FakeTaskStore {
             .push((_task_id.to_string(), markdown.to_string(), verdict.clone()));
         Ok(QaReportDocument {
             markdown: markdown.to_string(),
-            verdict,
-            updated_at: "2026-01-01T00:00:00Z".to_string(),
-            revision: 1,
+            verdict: match verdict {
+                QaVerdict::Approved => QaWorkflowVerdict::Approved,
+                QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+            },
+            updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            revision: Some(1),
+            error: None,
         })
     }
 
@@ -319,9 +327,13 @@ impl TaskStore for FakeTaskStore {
         ));
         state.latest_qa_report = Some(QaReportDocument {
             markdown: markdown.to_string(),
-            verdict: verdict.clone(),
-            updated_at: "2026-01-01T00:00:00Z".to_string(),
-            revision: 1,
+            verdict: match verdict.clone() {
+                QaVerdict::Approved => QaWorkflowVerdict::Approved,
+                QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+            },
+            updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            revision: Some(1),
+            error: None,
         });
 
         let index = state
@@ -502,11 +514,13 @@ impl TaskStore for FakeTaskStore {
                 markdown: String::new(),
                 updated_at: None,
                 revision: None,
+                error: None,
             },
             plan: SpecDocument {
                 markdown: String::new(),
                 updated_at: None,
                 revision: None,
+                error: None,
             },
             qa_report,
             pull_request: state.pull_requests.get(_task_id).cloned(),

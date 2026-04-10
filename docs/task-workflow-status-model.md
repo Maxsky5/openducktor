@@ -99,7 +99,8 @@ Root namespace key is fixed to `openducktor`.
     "documents": {
       "spec": [
         {
-          "markdown": "## Spec",
+          "markdown": "<base64-gzip-payload>",
+          "encoding": "gzip-base64-v1",
           "updatedAt": "2026-02-17T12:34:56Z",
           "updatedBy": "planner-agent",
           "sourceTool": "odt_set_spec",
@@ -108,7 +109,8 @@ Root namespace key is fixed to `openducktor`.
       ],
       "implementationPlan": [
         {
-          "markdown": "## Plan",
+          "markdown": "<base64-gzip-payload>",
+          "encoding": "gzip-base64-v1",
           "updatedAt": "2026-02-17T12:40:10Z",
           "updatedBy": "planner-agent",
           "sourceTool": "odt_set_plan",
@@ -117,7 +119,8 @@ Root namespace key is fixed to `openducktor`.
       ],
       "qaReports": [
         {
-          "markdown": "## QA",
+          "markdown": "<base64-gzip-payload>",
+          "encoding": "gzip-base64-v1",
           "verdict": "approved",
           "updatedAt": "2026-02-17T13:02:00Z",
           "updatedBy": "qa-agent",
@@ -129,6 +132,13 @@ Root namespace key is fixed to `openducktor`.
   }
 }
 ```
+
+Notes:
+- Legacy entries without `encoding` remain readable. In those entries, `markdown` is stored as literal markdown.
+- New or updated spec, plan, and QA documents are stored with `encoding: "gzip-base64-v1"` and a base64-encoded gzip payload in `markdown`.
+- Encode and decode translation is owned by the Rust host. Frontend and MCP callers continue to receive plain markdown on successful reads.
+- When the latest stored document cannot be decoded, host-backed read APIs return an empty markdown string plus a document-level `error` field instead of silently treating the document as missing.
+- There is no automatic backfill migration for older markdown-only entries.
 
 ## Document History Policy
 - `qaReports`: list structure, but V1 retains only the latest entry in the list (list length = 1).

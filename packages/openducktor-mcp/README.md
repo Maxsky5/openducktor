@@ -123,6 +123,11 @@ Use `odt_read_task_documents` only when you need document bodies:
 - Requested document keys are returned consistently even when no persisted body exists yet.
 - Missing spec and plan return empty markdown with `updatedAt: null`.
 - Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
+- Legacy markdown-only metadata remains readable.
+- New or updated workflow documents are stored by the Rust host as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
+- Successful MCP reads still return plain markdown because the Rust host owns the encode/decode translation.
+- When the latest stored document cannot be decoded, the returned document includes an optional `error` field with the host-supplied decode failure.
+- There is no automatic backfill migration for older markdown-only entries.
 
 ```json
 {
@@ -138,12 +143,19 @@ It returns only the requested sections:
 ```json
 {
   "documents": {
-    "spec": { "markdown": "# Spec", "updatedAt": "<ISO 8601 timestamp>" },
+    "spec": {
+      "markdown": "# Spec",
+      "updatedAt": "<ISO 8601 timestamp>",
+      "error": "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
+    },
     "latestQaReport": {
       "markdown": "## QA",
       "updatedAt": "<ISO 8601 timestamp>",
-      "verdict": "approved"
+      "verdict": "approved",
+      "error": "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload"
     }
   }
 }
 ```
+
+`error` is optional. It is omitted for healthy documents and for documents that do not exist yet.
