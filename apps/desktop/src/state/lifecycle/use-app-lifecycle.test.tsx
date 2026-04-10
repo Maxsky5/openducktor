@@ -6,6 +6,11 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
+let subscribeRunEventsImpl: ((listener: (payload: unknown) => void) => Promise<() => void>) | null =
+  null;
+let subscribeTaskEventsImpl:
+  | ((listener: (payload: unknown) => void) => Promise<() => void>)
+  | null = null;
 const toastError = mock((_message: string, _options?: { description?: string }) => "");
 const toastLoading = mock((_message: string, _options?: { description?: string }) => "toast-id");
 const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
@@ -126,22 +131,34 @@ let visibilityStateController: ReturnType<typeof createVisibilityStateController
 
 beforeEach(() => {
   visibilityStateController = createVisibilityStateController();
+  subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
+    subscribedRunListener = listener;
+    return () => {
+      subscribedRunListener = null;
+    };
+  };
+  subscribeTaskEventsImpl = async (listener: (payload: unknown) => void) => {
+    subscribedTaskListener = listener;
+    return () => {
+      subscribedTaskListener = null;
+    };
+  };
   mock.module("@/lib/host-client", () => ({
     createHostBridge: () => ({
       client: createTauriHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
       subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-        subscribedRunListener = listener;
-        return () => {
-          subscribedRunListener = null;
-        };
+        if (!subscribeRunEventsImpl) {
+          throw new Error("Expected subscribeRunEventsImpl to be configured");
+        }
+        return subscribeRunEventsImpl(listener);
       },
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
-        subscribedTaskListener = listener;
-        return () => {
-          subscribedTaskListener = null;
-        };
+        if (!subscribeTaskEventsImpl) {
+          throw new Error("Expected subscribeTaskEventsImpl to be configured");
+        }
+        return subscribeTaskEventsImpl(listener);
       },
     }),
     createHostClient: () =>
@@ -153,32 +170,32 @@ beforeEach(() => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
       subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-        subscribedRunListener = listener;
-        return () => {
-          subscribedRunListener = null;
-        };
+        if (!subscribeRunEventsImpl) {
+          throw new Error("Expected subscribeRunEventsImpl to be configured");
+        }
+        return subscribeRunEventsImpl(listener);
       },
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
-        subscribedTaskListener = listener;
-        return () => {
-          subscribedTaskListener = null;
-        };
+        if (!subscribeTaskEventsImpl) {
+          throw new Error("Expected subscribeTaskEventsImpl to be configured");
+        }
+        return subscribeTaskEventsImpl(listener);
       },
     },
     hostClient: createTauriHostClient(async () => {
       throw new Error("Tauri runtime not available. Run inside the desktop shell.");
     }),
     subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-      subscribedRunListener = listener;
-      return () => {
-        subscribedRunListener = null;
-      };
+      if (!subscribeRunEventsImpl) {
+        throw new Error("Expected subscribeRunEventsImpl to be configured");
+      }
+      return subscribeRunEventsImpl(listener);
     },
     subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
-      subscribedTaskListener = listener;
-      return () => {
-        subscribedTaskListener = null;
-      };
+      if (!subscribeTaskEventsImpl) {
+        throw new Error("Expected subscribeTaskEventsImpl to be configured");
+      }
+      return subscribeTaskEventsImpl(listener);
     },
   }));
   mock.module("sonner", () => ({
@@ -262,6 +279,55 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("cleans up a run-event subscription that resolves after unmount", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const deferred = createDeferred<() => void>();
+    let cleanupCalls = 0;
+    subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
+      subscribedRunListener = listener;
+      return deferred.promise;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData: mock(async () => {}),
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+    await harness.unmount();
+
+    deferred.resolve(() => {
+      cleanupCalls += 1;
+      subscribedRunListener = null;
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(cleanupCalls).toBe(1);
+    expect(subscribedRunListener).toBeNull();
+  });
+
   test("refreshes active repo task data when an external task event arrives", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
@@ -311,6 +377,55 @@ describe("useAppLifecycle", () => {
     } finally {
       await harness.unmount();
     }
+  });
+
+  test("cleans up a task-event subscription that resolves after unmount", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const deferred = createDeferred<() => void>();
+    let cleanupCalls = 0;
+    subscribeTaskEventsImpl = async (listener: (payload: unknown) => void) => {
+      subscribedTaskListener = listener;
+      return deferred.promise;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData: mock(async () => {}),
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+    await harness.unmount();
+
+    deferred.resolve(() => {
+      cleanupCalls += 1;
+      subscribedTaskListener = null;
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(cleanupCalls).toBe(1);
+    expect(subscribedTaskListener).toBeNull();
   });
 
   test("ignores external task events for a different repo", async () => {

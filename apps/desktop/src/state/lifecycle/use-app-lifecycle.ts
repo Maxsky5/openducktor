@@ -1,5 +1,5 @@
 import { externalTaskSyncEventSchema, type RunEvent, runEventSchema } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-client";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -75,13 +75,14 @@ export function useAppLifecycle({
   const processedTaskEventIdsRef = useRef(new Set<string>());
   const processedTaskEventOrderRef = useRef<string[]>([]);
 
-  useLayoutEffect(() => {
-    activeRepoRef.current = activeRepo;
-    refreshTaskDataRef.current = refreshTaskData;
-    refreshTasksWithOptionsRef.current = refreshTasksWithOptions;
-  }, [activeRepo, refreshTaskData, refreshTasksWithOptions]);
+  activeRepoRef.current = activeRepo;
+  refreshTaskDataRef.current = refreshTaskData;
+  refreshTasksWithOptionsRef.current = refreshTasksWithOptions;
 
   useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | null = null;
+
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
       ([workspaceResult]) => {
         if (workspaceResult.status === "rejected") {
@@ -92,7 +93,6 @@ export function useAppLifecycle({
       },
     );
 
-    let unsubscribe: (() => void) | null = null;
     hostBridge
       .subscribeRunEvents((payload) => {
         const parsed = runEventSchema.safeParse(payload);
@@ -118,20 +118,29 @@ export function useAppLifecycle({
         }
       })
       .then((cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
         unsubscribe = cleanup;
       })
       .catch((error: unknown) => {
+        if (disposed) {
+          return;
+        }
         toast.error("Run event subscription failed", {
           description: errorMessage(error),
         });
       });
 
     return () => {
+      disposed = true;
       unsubscribe?.();
     };
   }, [refreshRuntimeCheck, refreshWorkspaces, setEvents, setRunCompletionSignal]);
 
   useEffect(() => {
+    let disposed = false;
     let unsubscribe: (() => void) | null = null;
     hostBridge
       .subscribeTaskEvents((payload) => {
@@ -188,15 +197,23 @@ export function useAppLifecycle({
           });
       })
       .then((cleanup) => {
+        if (disposed) {
+          cleanup();
+          return;
+        }
         unsubscribe = cleanup;
       })
       .catch((error: unknown) => {
+        if (disposed) {
+          return;
+        }
         toast.error("Task event subscription failed", {
           description: errorMessage(error),
         });
       });
 
     return () => {
+      disposed = true;
       unsubscribe?.();
     };
   }, []);
