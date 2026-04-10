@@ -1,8 +1,9 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import {
-  browserLiveControlEvent,
-  isBrowserLiveControlEvent,
-} from "@/lib/browser-live-control-events";
+  BROWSER_LIVE_RECONNECTED_EVENT_KIND,
+  BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+} from "@/lib/browser-live/constants";
+import { browserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { getBrowserBackendUrl } from "@/lib/browser-mode";
 
 type BrowserSseListener = (payload: unknown) => void;
@@ -84,8 +85,6 @@ const parseSsePayload = (raw: string): unknown => {
   }
 };
 
-export { isBrowserLiveControlEvent };
-
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
@@ -124,7 +123,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
         return;
       }
       for (const currentListener of listeners.values()) {
-        currentListener(browserLiveControlEvent("reconnected"));
+        currentListener(browserLiveControlEvent(BROWSER_LIVE_RECONNECTED_EVENT_KIND));
       }
     };
     const handleStreamWarning = (event: MessageEvent<string>): void => {
@@ -132,7 +131,9 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
         return;
       }
       for (const currentListener of listeners.values()) {
-        currentListener(browserLiveControlEvent("stream-warning", event.data));
+        currentListener(
+          browserLiveControlEvent(BROWSER_LIVE_STREAM_WARNING_EVENT_KIND, event.data),
+        );
       }
     };
 

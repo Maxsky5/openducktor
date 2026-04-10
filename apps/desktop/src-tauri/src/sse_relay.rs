@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT};
 use std::io::BufRead;
@@ -40,12 +40,7 @@ pub(crate) fn read_next_sse_message(reader: &mut impl BufRead) -> Result<Option<
         let bytes_read = reader.read_line(&mut line)?;
 
         if bytes_read == 0 {
-            if payload_lines.is_empty() {
-                return Ok(None);
-            }
-
-            message.data = payload_lines.join("\n");
-            return Ok(Some(message));
+            return Ok(None);
         }
 
         let trimmed = line.trim_end_matches(['\r', '\n']);
@@ -59,13 +54,9 @@ pub(crate) fn read_next_sse_message(reader: &mut impl BufRead) -> Result<Option<
         }
 
         if let Some(id) = trimmed.strip_prefix("id:") {
-            let parsed_id = id.trim().parse::<SseEventId>().with_context(|| {
-                format!(
-                    "invalid SSE event id received from relay stream: {}",
-                    id.trim()
-                )
-            })?;
-            message.id = Some(parsed_id);
+            if let Ok(parsed_id) = id.trim().parse::<SseEventId>() {
+                message.id = Some(parsed_id);
+            }
             continue;
         }
 
@@ -143,5 +134,26 @@ mod tests {
             request.headers().get(ACCEPT),
             Some(&HeaderValue::from_static("text/event-stream"))
         );
+    }
+
+    #[test]
+    fn read_next_sse_message_discards_unterminated_eof_payloads() {
+        let mut reader = Cursor::new(b"id: 7\ndata: {\"one\":1}\n".to_vec());
+
+        let message = read_next_sse_message(&mut reader).expect("payload should parse");
+
+        assert_eq!(message, None);
+    }
+
+    #[test]
+    fn read_next_sse_message_ignores_non_numeric_event_ids() {
+        let mut reader = Cursor::new(b"id: reset\ndata: {\"ok\":true}\n\n".to_vec());
+
+        let message = read_next_sse_message(&mut reader)
+            .expect("payload should parse")
+            .expect("payload should be present");
+
+        assert_eq!(message.id, None);
+        assert_eq!(message.data, "{\"ok\":true}");
     }
 }

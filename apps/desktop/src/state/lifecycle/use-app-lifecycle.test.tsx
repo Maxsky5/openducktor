@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import { act } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -216,9 +216,11 @@ beforeEach(() => {
 
 afterEach(() => {
   visibilityStateController.restore();
+  subscribeRunEventsImpl = null;
+  subscribeTaskEventsImpl = null;
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([
     ["@/lib/host-client", () => import("@/lib/host-client")],
     ["sonner", () => import("sonner")],

@@ -1,10 +1,8 @@
-export type BrowserLiveControlEventKind = "reconnected" | "stream-warning";
-
-export type BrowserLiveControlEvent = {
-  __openducktorBrowserLive: true;
-  kind: BrowserLiveControlEventKind;
-  message?: string;
-};
+import {
+  BROWSER_LIVE_RECONNECTED_EVENT_KIND,
+  BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
+} from "@/lib/browser-live/constants";
+import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "@/types";
 
 export const browserLiveControlEvent = (
   kind: BrowserLiveControlEventKind,
@@ -12,7 +10,7 @@ export const browserLiveControlEvent = (
 ): BrowserLiveControlEvent => ({
   __openducktorBrowserLive: true,
   kind,
-  ...(message ? { message } : {}),
+  ...(message !== undefined ? { message } : {}),
 });
 
 export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
@@ -23,6 +21,8 @@ export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserL
   const record = payload as Record<string, unknown>;
   return (
     record.__openducktorBrowserLive === true &&
-    (record.kind === "reconnected" || record.kind === "stream-warning")
+    (record.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND ||
+      record.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND) &&
+    (record.message === undefined || typeof record.message === "string")
   );
 };

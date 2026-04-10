@@ -253,18 +253,28 @@ describe("browser live SSE subscriptions", () => {
 
     FakeEventSource.instances[0]?.emit(
       "message",
-      JSON.stringify({ kind: "external_task_created", repoPath: "/repo", taskId: "task-1" }),
+      JSON.stringify({
+        eventId: "event-1",
+        kind: "external_task_created",
+        repoPath: "/repo",
+        taskId: "task-1",
+        emittedAt: "2026-04-10T13:00:00.000Z",
+      }),
     );
 
     expect(listenerA).toHaveBeenCalledWith({
+      eventId: "event-1",
       kind: "external_task_created",
       repoPath: "/repo",
       taskId: "task-1",
+      emittedAt: "2026-04-10T13:00:00.000Z",
     });
     expect(listenerB).toHaveBeenCalledWith({
+      eventId: "event-1",
       kind: "external_task_created",
       repoPath: "/repo",
       taskId: "task-1",
+      emittedAt: "2026-04-10T13:00:00.000Z",
     });
 
     unsubscribeA();

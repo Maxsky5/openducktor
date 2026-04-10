@@ -1,7 +1,8 @@
 import { externalTaskSyncEventSchema, type RunEvent, runEventSchema } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
-import { isBrowserLiveControlEvent } from "@/lib/browser-live-client";
+import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
+import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
+import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
@@ -75,9 +76,11 @@ export function useAppLifecycle({
   const processedTaskEventIdsRef = useRef(new Set<string>());
   const processedTaskEventOrderRef = useRef<string[]>([]);
 
-  activeRepoRef.current = activeRepo;
-  refreshTaskDataRef.current = refreshTaskData;
-  refreshTasksWithOptionsRef.current = refreshTasksWithOptions;
+  useLayoutEffect(() => {
+    activeRepoRef.current = activeRepo;
+    refreshTaskDataRef.current = refreshTaskData;
+    refreshTasksWithOptionsRef.current = refreshTasksWithOptions;
+  }, [activeRepo, refreshTaskData, refreshTasksWithOptions]);
 
   useEffect(() => {
     let disposed = false;
@@ -150,7 +153,7 @@ export function useAppLifecycle({
             return;
           }
 
-          if (payload.kind === "stream-warning") {
+          if (payload.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND) {
             toast.error("Task sync stream degraded", {
               description:
                 payload.message ??

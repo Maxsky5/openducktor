@@ -4,10 +4,9 @@ import type {
   DevServerScriptState,
 } from "@openducktor/contracts";
 import { trimDevServerTerminalChunks } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import {
-  isBrowserLiveControlEvent,
-  type BrowserLiveControlEvent as DevServerSubscriptionControlEvent,
-} from "@/lib/browser-live-control-events";
+import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
+
+export type { BrowserLiveControlEvent as DevServerSubscriptionControlEvent } from "@/types";
 
 export const buildTaskMemoryKey = (repoPath: string, taskId: string): string => {
   return `${repoPath}::${taskId}`;
