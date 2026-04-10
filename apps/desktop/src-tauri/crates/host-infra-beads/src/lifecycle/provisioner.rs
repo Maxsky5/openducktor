@@ -127,7 +127,7 @@ impl BeadsLifecycle {
             .find_map(|(key, value)| (key == "BEADS_DOLT_SERVER_PORT").then_some(value.as_str()))
             .ok_or_else(|| anyhow!("Missing BEADS_DOLT_SERVER_PORT while initializing repo"))?;
         let working_dir = self.ensure_beads_working_dir(repo_path)?;
-        let (ok, _stdout, stderr) = self.command_runner().run_allow_failure_with_env(
+        let (ok, stdout, stderr) = self.command_runner().run_allow_failure_with_env(
             "bd",
             &[
                 "init",
@@ -151,11 +151,8 @@ impl BeadsLifecycle {
         )?;
 
         if !ok {
-            let details = if stderr.trim().is_empty() {
-                "Beads attachment is missing".to_string()
-            } else {
-                stderr.trim().to_string()
-            };
+            let details =
+                Self::command_failure_reason("Beads attachment is missing", &stdout, &stderr);
             return Err(LifecycleError::InitFailed {
                 beads_dir: beads_dir.to_path_buf(),
                 details,

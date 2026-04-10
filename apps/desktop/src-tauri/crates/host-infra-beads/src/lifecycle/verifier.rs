@@ -359,13 +359,25 @@ impl BeadsLifecycle {
     }
 
     fn attachment_paths_match(&self, actual_path: &str, expected_path: &Path) -> Result<bool> {
-        let actual = fs::canonicalize(actual_path).unwrap_or_else(|_| actual_path.into());
-        let expected =
-            fs::canonicalize(expected_path).unwrap_or_else(|_| expected_path.to_path_buf());
+        let actual = fs::canonicalize(actual_path).with_context(|| {
+            format!(
+                "Failed to canonicalize Beads attachment path reported by `bd where --json`: {actual_path}"
+            )
+        })?;
+        let expected = fs::canonicalize(expected_path).with_context(|| {
+            format!(
+                "Failed to canonicalize expected Beads attachment path {}",
+                expected_path.display()
+            )
+        })?;
         Ok(actual == expected)
     }
 
-    fn command_failure_reason(default_message: &str, stdout: &str, stderr: &str) -> String {
+    pub(super) fn command_failure_reason(
+        default_message: &str,
+        stdout: &str,
+        stderr: &str,
+    ) -> String {
         let stderr = stderr.trim();
         if !stderr.is_empty() {
             return stderr.to_string();
@@ -381,17 +393,19 @@ impl BeadsLifecycle {
 
     fn database_list_contains(output: &str, expected_database: &str) -> bool {
         output.lines().any(|line| {
-            line.split(|character: char| {
-                character.is_whitespace() || matches!(character, '|' | '+' | '-')
-            })
-            .any(|token| token == expected_database)
+            let trimmed = line.trim();
+            trimmed == expected_database
+                || trimmed
+                    .split('|')
+                    .map(str::trim)
+                    .any(|cell| cell == expected_database)
         })
     }
 }
 
 fn attachment_dir_exists(beads_dir: &Path) -> Result<bool> {
     match fs::metadata(beads_dir) {
-        Ok(_) => Ok(true),
+        Ok(metadata) => Ok(metadata.is_dir()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error).with_context(|| {
             format!(
@@ -399,5 +413,20 @@ fn attachment_dir_exists(beads_dir: &Path) -> Result<bool> {
                 beads_dir.display()
             )
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BeadsLifecycle;
+
+    #[test]
+    fn database_list_contains_matches_hyphenated_database_names() {
+        let output = "+------------------+\n| Database         |\n+------------------+\n| repo-my-feature  |\n+------------------+";
+
+        assert!(BeadsLifecycle::database_list_contains(
+            output,
+            "repo-my-feature"
+        ));
     }
 }

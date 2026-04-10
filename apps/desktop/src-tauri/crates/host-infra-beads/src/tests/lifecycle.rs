@@ -189,6 +189,27 @@ fn ensure_repo_initialized_uses_init_for_missing_attachment() -> Result<()> {
 }
 
 #[test]
+fn ensure_repo_initialized_surfaces_stdout_when_init_fails() -> Result<()> {
+    let repo = RepoFixture::new("init-failure-stdout");
+    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
+        false,
+        "init failed from stdout".to_string(),
+        String::new(),
+    )))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let error = store
+        .ensure_repo_initialized(repo.path())
+        .expect_err("stdout diagnostics should be preserved for bd init failures");
+    assert!(error.to_string().contains("init failed from stdout"));
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].args.first().expect("expected subcommand"), "init");
+    Ok(())
+}
+
+#[test]
 fn ensure_repo_initialized_restores_when_shared_database_is_missing() -> Result<()> {
     let repo = RepoFixture::new("missing-shared-database");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
@@ -234,6 +255,30 @@ fn ensure_repo_initialized_restores_when_shared_database_is_missing() -> Result<
 }
 
 #[test]
+fn verify_repo_initialized_treats_file_attachment_path_as_missing_attachment() -> Result<()> {
+    let repo = RepoFixture::new("attachment-path-is-file");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    fs::create_dir_all(
+        beads_dir
+            .parent()
+            .expect("beads dir should have a parent attachment root"),
+    )
+    .expect("attachment root should be writable");
+    fs::write(&beads_dir, "not-a-directory").expect("attachment path file should be writable");
+    let runner = MockCommandRunner::with_steps(vec![]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let readiness = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)?;
+    assert_eq!(readiness, RepoReadiness::MissingAttachment);
+
+    let calls = runner.take_calls();
+    assert!(calls.is_empty());
+    Ok(())
+}
+
+#[test]
 fn ensure_repo_initialized_fails_fast_for_broken_metadata() -> Result<()> {
     let repo = RepoFixture::new("broken-metadata");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
@@ -251,6 +296,37 @@ fn ensure_repo_initialized_fails_fast_for_broken_metadata() -> Result<()> {
 
     let calls = runner.take_calls();
     assert!(calls.is_empty());
+    Ok(())
+}
+
+#[test]
+fn verify_repo_initialized_fails_when_where_path_cannot_be_canonicalized() -> Result<()> {
+    let repo = RepoFixture::new("uncanonicalizable-where-path");
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    write_attachment_metadata(&beads_dir, repo.path(), 3307);
+    let missing_path = beads_dir.join("missing-reported-path");
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": missing_path,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .lifecycle
+        .verify_repo_initialized(repo.path(), &beads_dir)
+        .expect_err("non-canonicalizable reported paths should fail fast");
+    assert!(error
+        .to_string()
+        .contains("Failed to canonicalize Beads attachment path reported by `bd where --json`"));
     Ok(())
 }
 
