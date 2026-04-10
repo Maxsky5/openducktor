@@ -21,6 +21,7 @@ mod external_task_sync;
 mod headless;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod macos_cef_quit;
+mod sse_relay;
 
 #[cfg(feature = "cef")]
 type TauriRuntime = tauri::Cef;

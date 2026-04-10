@@ -1,13 +1,11 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
+import {
+  browserLiveControlEvent,
+  isBrowserLiveControlEvent,
+} from "@/lib/browser-live-control-events";
 import { getBrowserBackendUrl } from "@/lib/browser-mode";
 
 type BrowserSseListener = (payload: unknown) => void;
-
-type BrowserLiveControlEvent = {
-  __openducktorBrowserLive: true;
-  kind: "reconnected" | "stream-warning";
-  message?: string;
-};
 
 const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
 
@@ -86,26 +84,7 @@ const parseSsePayload = (raw: string): unknown => {
   }
 };
 
-const browserLiveControlEvent = (
-  kind: BrowserLiveControlEvent["kind"],
-  message?: string,
-): BrowserLiveControlEvent => ({
-  __openducktorBrowserLive: true,
-  kind,
-  ...(message ? { message } : {}),
-});
-
-export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  return (
-    record.__openducktorBrowserLive === true &&
-    (record.kind === "reconnected" || record.kind === "stream-warning")
-  );
-};
+export { isBrowserLiveControlEvent };
 
 const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {

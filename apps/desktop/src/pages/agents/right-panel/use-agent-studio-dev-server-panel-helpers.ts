@@ -4,12 +4,10 @@ import type {
   DevServerScriptState,
 } from "@openducktor/contracts";
 import { trimDevServerTerminalChunks } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-
-export type DevServerSubscriptionControlEvent = {
-  __openducktorBrowserLive: true;
-  kind: "reconnected" | "stream-warning";
-  message?: string;
-};
+import {
+  isBrowserLiveControlEvent,
+  type BrowserLiveControlEvent as DevServerSubscriptionControlEvent,
+} from "@/lib/browser-live-control-events";
 
 export const buildTaskMemoryKey = (repoPath: string, taskId: string): string => {
   return `${repoPath}::${taskId}`;
@@ -41,19 +39,7 @@ export const buildOptimisticStartingState = (state: DevServerGroupState): DevSer
   })),
 });
 
-export const isDevServerSubscriptionControlEvent = (
-  payload: unknown,
-): payload is DevServerSubscriptionControlEvent => {
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-
-  const record = payload as Record<string, unknown>;
-  return (
-    record.__openducktorBrowserLive === true &&
-    (record.kind === "reconnected" || record.kind === "stream-warning")
-  );
-};
+export const isDevServerSubscriptionControlEvent = isBrowserLiveControlEvent;
 
 export const applyDevServerEventToState = (
   state: DevServerGroupState | null,
