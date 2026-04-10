@@ -644,6 +644,7 @@ pub(crate) struct GitState {
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
     pub(crate) current_branches_by_path: HashMap<String, GitCurrentBranch>,
+    pub(crate) current_branch_error_by_path: HashMap<String, String>,
     pub(crate) worktrees: Vec<GitWorktreeSummary>,
     pub(crate) remove_worktree_error: Option<String>,
     pub(crate) delete_local_branch_error: Option<String>,
@@ -682,6 +683,9 @@ impl GitPort for FakeGitPort {
         state.calls.push(GitCall::GetCurrentBranch {
             repo_path: repo_path.clone(),
         });
+        if let Some(message) = state.current_branch_error_by_path.get(repo_path.as_str()) {
+            return Err(anyhow!(message.clone()));
+        }
         Ok(state
             .current_branches_by_path
             .get(repo_path.as_str())
@@ -1107,6 +1111,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         branches,
         current_branch,
         current_branches_by_path: HashMap::new(),
+        current_branch_error_by_path: HashMap::new(),
         worktrees: Vec::new(),
         remove_worktree_error: None,
         delete_local_branch_error: None,
@@ -1198,6 +1203,7 @@ pub(crate) fn build_service_with_git_state(
         branches,
         current_branch,
         current_branches_by_path: HashMap::new(),
+        current_branch_error_by_path: HashMap::new(),
         worktrees: Vec::new(),
         remove_worktree_error: None,
         delete_local_branch_error: None,
@@ -1752,6 +1758,7 @@ pub(crate) fn build_service_with_store(
         branches,
         current_branch,
         current_branches_by_path: HashMap::new(),
+        current_branch_error_by_path: HashMap::new(),
         worktrees: Vec::new(),
         remove_worktree_error: None,
         delete_local_branch_error: None,

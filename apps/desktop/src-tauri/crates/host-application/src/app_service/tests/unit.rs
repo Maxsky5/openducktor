@@ -1264,6 +1264,90 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
 }
 
 #[test]
+fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fails() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-stranded-managed-worktrees-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let spec_worktree = worktree_base.join("task-1-spec");
+    let planner_worktree = worktree_base.join("task-1-plan");
+    fs::create_dir_all(&spec_worktree)?;
+    fs::create_dir_all(&planner_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::ReadyForDev);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        workspace.path.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.current_branch_error_by_path.insert(
+            spec_worktree.to_string_lossy().to_string(),
+            "not a git worktree".to_string(),
+        );
+        state.current_branch_error_by_path.insert(
+            planner_worktree.to_string_lossy().to_string(),
+            "not a git worktree".to_string(),
+        );
+    }
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![
+        AgentSessionDocument {
+            session_id: "spec-session".to_string(),
+            external_session_id: None,
+            role: "spec".to_string(),
+            scenario: "spec_authoring".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: spec_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+        AgentSessionDocument {
+            session_id: "planner-session".to_string(),
+            external_session_id: None,
+            role: "planner".to_string(),
+            scenario: "plan_authoring".to_string(),
+            started_at: "2026-03-17T12:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: planner_worktree.to_string_lossy().to_string(),
+            selected_model: None,
+        },
+    ];
+
+    let _ = service.task_reset(workspace.path.as_str(), "task-1")?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &spec_worktree.to_string_lossy() && *force
+    )));
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &planner_worktree.to_string_lossy() && *force
+    )));
+
+    Ok(())
+}
+
+#[test]
 fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whitespace() -> Result<()>
 {
     let repo_path = unique_temp_path("task-delete-live-qa-trimmed-role-repo");
@@ -2348,6 +2432,73 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
         call,
         crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, .. }
             if worktree_path == &unrelated_worktree.to_string_lossy()
+    )));
+
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_removes_stranded_managed_worktree_when_branch_inspection_fails(
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-stranded-worktree-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let managed_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&managed_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branch_error_by_path
+        .insert(
+            managed_worktree.to_string_lossy().to_string(),
+            "not a git worktree".to_string(),
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: managed_worktree.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let _ = service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &managed_worktree.to_string_lossy() && *force
     )));
 
     Ok(())

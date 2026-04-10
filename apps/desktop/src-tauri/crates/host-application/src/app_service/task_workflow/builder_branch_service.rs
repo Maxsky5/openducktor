@@ -1,4 +1,8 @@
 use super::approval_support::normalize_approval_target_branch;
+use super::cleanup_plans::{
+    is_task_named_managed_worktree_path, normalize_path_for_comparison,
+    resolve_effective_worktree_base_path,
+};
 use crate::app_service::service_core::AppService;
 use crate::app_service::task_workflow::session_service::BuildContinuationTargetLookup;
 use anyhow::{anyhow, Result};
@@ -99,10 +103,25 @@ impl<'a> BuilderBranchService<'a> {
             }
         };
         let working_directory = target.working_directory;
-        let current_branch = self
+        let current_branch = match self
             .service
             .git_port
-            .get_current_branch(Path::new(&working_directory))?;
+            .get_current_branch(Path::new(&working_directory))
+        {
+            Ok(current_branch) => current_branch,
+            Err(_error)
+                if self.is_stranded_managed_task_worktree(
+                    repo_path,
+                    task_id,
+                    working_directory.as_str(),
+                )? =>
+            {
+                return Ok(BuilderBranchContextLoadResult::MissingWorktree(
+                    MissingBuilderWorktree::new(task_id, operation_label),
+                ));
+            }
+            Err(error) => return Err(error),
+        };
         if current_branch.detached {
             return Err(anyhow!(
                 "{operation_label} requires a builder branch, but the latest builder workspace is detached."
@@ -137,6 +156,8 @@ impl<'a> BuilderBranchService<'a> {
         {
             if matches!(target.source, BuildContinuationTargetSource::ActiveBuildRun) {
                 if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
+                    repo_path,
+                    task_id,
                     target.working_directory,
                     preferred_source_branch,
                 )? {
@@ -161,6 +182,8 @@ impl<'a> BuilderBranchService<'a> {
 
         for session in builder_sessions {
             if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
+                repo_path,
+                task_id,
                 session.working_directory,
                 preferred_source_branch,
             )? {
@@ -173,6 +196,8 @@ impl<'a> BuilderBranchService<'a> {
 
     fn cleanup_target_for_working_directory(
         &self,
+        repo_path: &str,
+        task_id: &str,
         working_directory: String,
         preferred_source_branch: Option<&str>,
     ) -> Result<Option<BuilderCleanupTarget>> {
@@ -183,10 +208,23 @@ impl<'a> BuilderBranchService<'a> {
         if !Path::new(working_directory.as_str()).exists() {
             return Ok(None);
         }
-        let current_branch = self
+        let current_branch = match self
             .service
             .git_port
-            .get_current_branch(Path::new(working_directory.as_str()))?;
+            .get_current_branch(Path::new(working_directory.as_str()))
+        {
+            Ok(current_branch) => current_branch,
+            Err(_error)
+                if self.is_stranded_managed_task_worktree(
+                    repo_path,
+                    task_id,
+                    working_directory.as_str(),
+                )? =>
+            {
+                return Ok(Some(BuilderCleanupTarget { working_directory }));
+            }
+            Err(error) => return Err(error),
+        };
         let current_branch_name = match current_branch.name {
             Some(name) => {
                 let trimmed = name.trim().to_string();
@@ -205,6 +243,37 @@ impl<'a> BuilderBranchService<'a> {
         }
 
         Ok(Some(BuilderCleanupTarget { working_directory }))
+    }
+
+    fn is_stranded_managed_task_worktree(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        working_directory: &str,
+    ) -> Result<bool> {
+        if !Path::new(working_directory).exists() {
+            return Ok(false);
+        }
+
+        let Some(managed_worktree_base) =
+            resolve_effective_worktree_base_path(self.service, repo_path)?
+        else {
+            return Ok(false);
+        };
+
+        let normalized_worktree = normalize_path_for_comparison(working_directory);
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        if normalized_worktree == normalized_repo {
+            return Ok(false);
+        }
+
+        let normalized_worktree_base =
+            normalize_path_for_comparison(managed_worktree_base.as_str());
+        Ok(is_task_named_managed_worktree_path(
+            normalized_worktree_base.as_path(),
+            normalized_worktree.as_path(),
+            task_id,
+        ))
     }
 }
 
@@ -521,6 +590,129 @@ mod tests {
             .expect("expected active run cleanup target");
 
         assert_eq!(target.working_directory, active_worktree.to_string_lossy());
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn load_builder_branch_context_treats_stranded_managed_worktree_as_missing() -> Result<()> {
+        let root = unique_temp_path("builder-branch-stranded-managed-worktree");
+        let repo = root.join("repo");
+        let worktree_base = root.join("worktrees");
+        let stranded_worktree = worktree_base.join("task-1");
+        init_git_repo(&repo)?;
+        fs::create_dir_all(&stranded_worktree)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            host_infra_system::RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )?;
+
+        let mut session = make_session("task-1", "session-build");
+        session.working_directory = stranded_worktree.to_string_lossy().to_string();
+        task_state
+            .lock()
+            .expect("task state lock poisoned")
+            .agent_sessions
+            .push(session);
+        git_state
+            .lock()
+            .expect("git state lock poisoned")
+            .current_branch_error_by_path
+            .insert(
+                stranded_worktree.to_string_lossy().to_string(),
+                "not a git worktree".to_string(),
+            );
+
+        let result = BuilderBranchService::new(&service).load_builder_branch_context_result(
+            repo_path.as_str(),
+            "task-1",
+            "Pull request detection",
+        )?;
+        assert_eq!(
+            result,
+            super::BuilderBranchContextLoadResult::MissingWorktree(
+                super::MissingBuilderWorktree::new("task-1", "Pull request detection")
+            )
+        );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn latest_cleanup_target_uses_stranded_managed_worktree_when_branch_inspection_fails(
+    ) -> Result<()> {
+        let root = unique_temp_path("builder-branch-stranded-cleanup-target");
+        let repo = root.join("repo");
+        let worktree_base = root.join("worktrees");
+        let stranded_worktree = worktree_base.join("task-1");
+        init_git_repo(&repo)?;
+        fs::create_dir_all(&stranded_worktree)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            host_infra_system::RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )?;
+
+        let mut session = make_session("task-1", "session-build");
+        session.started_at = "2026-03-11T11:00:00Z".to_string();
+        session.working_directory = stranded_worktree.to_string_lossy().to_string();
+        task_state
+            .lock()
+            .expect("task state lock poisoned")
+            .agent_sessions
+            .push(session);
+        git_state
+            .lock()
+            .expect("git state lock poisoned")
+            .current_branch_error_by_path
+            .insert(
+                stranded_worktree.to_string_lossy().to_string(),
+                "not a git worktree".to_string(),
+            );
+
+        let target = BuilderBranchService::new(&service)
+            .latest_cleanup_target(repo_path.as_str(), "task-1", Some("odt/task-1"))?
+            .expect("expected stranded cleanup target");
+
+        assert_eq!(
+            target.working_directory,
+            stranded_worktree.to_string_lossy()
+        );
 
         let _ = fs::remove_dir_all(root);
         Ok(())

@@ -10,6 +10,34 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+fn task_named_managed_worktree_dir_name_matches(dir_name: &str, task_id: &str) -> bool {
+    dir_name == task_id || dir_name.starts_with(&format!("{task_id}-"))
+}
+
+pub(crate) fn is_task_named_managed_worktree_path(
+    managed_worktree_base: &Path,
+    candidate_path: &Path,
+    task_id: &str,
+) -> bool {
+    let Ok(relative_path) = candidate_path.strip_prefix(managed_worktree_base) else {
+        return false;
+    };
+
+    let mut components = relative_path.components();
+    let Some(Component::Normal(first_component)) = components.next() else {
+        return false;
+    };
+    if components.next().is_some() {
+        return false;
+    }
+
+    let Some(dir_name) = first_component.to_str() else {
+        return false;
+    };
+
+    task_named_managed_worktree_dir_name_matches(dir_name, task_id)
+}
+
 #[derive(Clone, Debug, Default)]
 pub(super) struct WorktreeCleanupPlan {
     paths: Vec<String>,
@@ -380,12 +408,24 @@ fn is_managed_task_worktree_session(
         return Ok(false);
     }
 
-    let current_branch = service
+    let is_task_named_path = is_task_named_managed_worktree_path(
+        scope.managed_worktree_base,
+        normalized_worktree.as_path(),
+        scope.task_id,
+    );
+
+    let current_branch = match service
         .git_port
         .get_current_branch(Path::new(working_directory))
-        .with_context(|| {
-            format!("Failed to inspect implementation worktree branch for {working_directory}")
-        })?;
+    {
+        Ok(current_branch) => current_branch,
+        Err(error) if is_task_named_path => return Ok(true),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("Failed to inspect implementation worktree branch for {working_directory}")
+            });
+        }
+    };
     let branch_name = current_branch
         .name
         .as_deref()
@@ -454,7 +494,7 @@ fn collect_related_task_branches(
         .collect())
 }
 
-fn resolve_effective_worktree_base_path(
+pub(crate) fn resolve_effective_worktree_base_path(
     service: &AppService,
     repo_path: &str,
 ) -> Result<Option<String>> {
