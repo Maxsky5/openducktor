@@ -1,5 +1,7 @@
 use crate::parse_user_path_os;
 use anyhow::{anyhow, Context, Result};
+#[cfg(unix)]
+use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 #[cfg(unix)]
@@ -9,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::process::{Command, Output, Stdio};
 #[cfg(unix)]
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 #[cfg(windows)]
 const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS: [&str; 4] = [".exe", ".cmd", ".bat", ".com"];
@@ -18,22 +20,16 @@ const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS: [&str; 4] = [".exe", ".cmd", ".bat"
 const LOGIN_SHELL_ENV_MARKER: &[u8] = b"__OPENDUCKTOR_ENV_START__\0";
 
 #[cfg(unix)]
-static LOGIN_SHELL_PATH_CACHE: Mutex<Option<LoginShellPathCacheEntry>> = Mutex::new(None);
+static LOGIN_SHELL_PATH_CACHE: LazyLock<Mutex<HashMap<LoginShellPathCacheKey, Option<OsString>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(unix)]
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 struct LoginShellPathCacheKey {
     shell: Option<OsString>,
     home: Option<OsString>,
     user: Option<OsString>,
     logname: Option<OsString>,
-}
-
-#[cfg(unix)]
-#[derive(Clone)]
-struct LoginShellPathCacheEntry {
-    key: LoginShellPathCacheKey,
-    path: Option<OsString>,
 }
 
 #[cfg(unix)]
@@ -406,20 +402,15 @@ fn login_shell_path() -> Option<OsString> {
     let key = login_shell_path_cache_key();
 
     if let Ok(cache) = LOGIN_SHELL_PATH_CACHE.lock() {
-        if let Some(entry) = cache.as_ref() {
-            if entry.key == key {
-                return entry.path.clone();
-            }
+        if let Some(path) = cache.get(&key) {
+            return path.clone();
         }
     }
 
     let path = read_login_shell_path();
 
     if let Ok(mut cache) = LOGIN_SHELL_PATH_CACHE.lock() {
-        *cache = Some(LoginShellPathCacheEntry {
-            key,
-            path: path.clone(),
-        });
+        cache.insert(key, path.clone());
     }
 
     path
@@ -650,7 +641,7 @@ mod tests {
     };
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
-        fs,
+        env, fs,
         path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -907,6 +898,62 @@ mod tests {
 
         assert_eq!(cached_output, "login-shell-ok");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn login_shell_path_cache_keeps_entries_for_multiple_shell_keys() {
+        let _env_lock = lock_env();
+
+        let first_root = unique_temp_path("odt-login-shell-cache-first");
+        let first_login_bin = first_root.join("login-bin");
+        fs::create_dir_all(&first_login_bin).expect("first login path should exist");
+        let first_shell = first_root.join("fake-shell");
+        let first_program = "odt-login-cache-first-cli";
+        write_executable(
+            &first_login_bin.join(first_program),
+            "#!/bin/sh\nprintf 'first-cache-ok'",
+        );
+        write_fake_login_shell(&first_shell, &first_login_bin);
+
+        let second_root = unique_temp_path("odt-login-shell-cache-second");
+        let second_login_bin = second_root.join("login-bin");
+        fs::create_dir_all(&second_login_bin).expect("second login path should exist");
+        let second_shell = second_root.join("fake-shell");
+        let second_program = "odt-login-cache-second-cli";
+        write_executable(
+            &second_login_bin.join(second_program),
+            "#!/bin/sh\nprintf 'second-cache-ok'",
+        );
+        write_fake_login_shell(&second_shell, &second_login_bin);
+
+        let original_path = env::var_os("PATH").unwrap_or_default();
+
+        env::set_var("SHELL", &first_shell);
+        env::set_var("PATH", "/usr/bin:/bin");
+        env::set_var("HOME", &first_root);
+        env::set_var("USER", "odt-test");
+        env::set_var("LOGNAME", "odt-test");
+        let first_output = run_command(first_program, &[], None)
+            .expect("first login shell path should resolve command");
+        assert_eq!(first_output, "first-cache-ok");
+
+        env::set_var("SHELL", &second_shell);
+        env::set_var("HOME", &second_root);
+        let second_output = run_command(second_program, &[], None)
+            .expect("second login shell path should resolve command");
+        assert_eq!(second_output, "second-cache-ok");
+
+        fs::remove_file(&first_shell).expect("first fake shell should be removable");
+        env::set_var("SHELL", &first_shell);
+        env::set_var("HOME", &first_root);
+        env::set_var("PATH", &original_path);
+        let cached_first_output = run_command(first_program, &[], None)
+            .expect("first cached login shell path should remain available");
+        assert_eq!(cached_first_output, "first-cache-ok");
+
+        let _ = fs::remove_dir_all(first_root);
+        let _ = fs::remove_dir_all(second_root);
     }
 
     #[cfg(unix)]

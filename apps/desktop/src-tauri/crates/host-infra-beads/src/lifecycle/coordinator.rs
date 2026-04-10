@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use host_infra_system::resolve_repo_beads_attachment_dir;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -71,7 +71,7 @@ impl BeadsLifecycle {
             .map_err(|_| anyhow!("Beads repo lock poisoned"))?;
 
         let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
-        let store_exists = beads_store_footprint_exists(&beads_dir);
+        let store_exists = beads_store_footprint_exists(&beads_dir)?;
 
         self.ensure_dolt_server_running(repo_path)?;
 
@@ -129,8 +129,15 @@ impl BeadsLifecycle {
     }
 }
 
-fn beads_store_footprint_exists(beads_dir: &Path) -> bool {
-    beads_dir.exists()
-        || beads_dir.join("metadata.json").exists()
-        || beads_dir.join("beads.db").exists()
+fn beads_store_footprint_exists(beads_dir: &Path) -> Result<bool> {
+    match fs::metadata(beads_dir) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "Failed to inspect Beads attachment path {}",
+                beads_dir.display()
+            )
+        }),
+    }
 }

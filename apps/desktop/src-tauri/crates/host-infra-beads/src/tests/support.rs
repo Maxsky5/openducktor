@@ -37,7 +37,16 @@ impl MockCommandRunner {
         })
     }
 
+    pub(super) fn assert_no_remaining_steps(&self) {
+        let remaining = self.steps.lock().expect("steps lock poisoned").len();
+        assert_eq!(
+            remaining, 0,
+            "expected all mock command steps to be consumed"
+        );
+    }
+
     pub(super) fn take_calls(&self) -> Vec<RecordedCall> {
+        self.assert_no_remaining_steps();
         self.calls
             .lock()
             .expect("calls lock poisoned")
@@ -77,6 +86,15 @@ impl MockCommandRunner {
                 program: program.to_string(),
                 args: args.iter().map(|entry| (*entry).to_string()).collect(),
             });
+    }
+}
+
+impl Drop for MockCommandRunner {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
+        self.assert_no_remaining_steps();
     }
 }
 
@@ -194,11 +212,11 @@ pub(super) fn metadata_from_call(call: &RecordedCall) -> Value {
 pub(super) fn write_attachment_metadata(beads_dir: &Path, repo_path: &Path, port: u16) {
     fs::create_dir_all(beads_dir).expect("beads dir should be writable");
     let database_name = compute_beads_database_name(repo_path).expect("expected database name");
-    let effective_port = read_shared_dolt_server_state()
-        .ok()
-        .flatten()
-        .map(|state| state.port)
-        .unwrap_or(port);
+    let effective_port = match read_shared_dolt_server_state() {
+        Ok(Some(state)) => state.port,
+        Ok(None) => port,
+        Err(error) => panic!("failed reading shared Dolt server state: {error}"),
+    };
     fs::write(
         beads_dir.join("metadata.json"),
         json!({

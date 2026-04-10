@@ -236,8 +236,15 @@ fn read_server_state_from_path(path: &Path) -> Result<Option<SharedDoltServerSta
         return Ok(None);
     }
 
-    let payload = fs::read_to_string(path)
-        .with_context(|| format!("Failed reading shared Dolt server state {}", path.display()))?;
+    let payload = match fs::read_to_string(path) {
+        Ok(payload) => payload,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("Failed reading shared Dolt server state {}", path.display())
+            })
+        }
+    };
     let state = serde_json::from_str(&payload)
         .with_context(|| format!("Failed parsing shared Dolt server state {}", path.display()))?;
     Ok(Some(state))

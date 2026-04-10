@@ -249,18 +249,7 @@ fn get_task_metadata_handles_empty_metadata() -> Result<()> {
 #[test]
 fn clear_agent_sessions_by_roles_ignores_blank_role_inputs() -> Result<()> {
     let repo = RepoFixture::new("clear-agent-sessions-blank-roles");
-    let payload = issue_value(
-        "task-1",
-        "open",
-        "task",
-        None,
-        json!([]),
-        Some(json!({"openducktor": {"agentSessions": [
-            serde_json::to_value(make_session("session-1", "2026-02-20T10:00:00Z"))?
-        ]}})),
-    );
-    let runner =
-        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([payload]).to_string()))]);
+    let runner = MockCommandRunner::with_steps(vec![]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.clear_agent_sessions_by_roles(repo.path(), "task-1", &["   "])?;
