@@ -117,6 +117,7 @@ The version sync touches:
 - workspace package manifests discovered from the root `workspaces` configuration
 - `apps/desktop/src-tauri/tauri.conf.json`
 - `apps/desktop/src-tauri/Cargo.toml` (`[package]` and `[workspace.package]`)
+- `apps/desktop/src-tauri/Cargo.lock`
 - `bun.lock`
 
 The helper script remains useful because this repo spans three version domains:
