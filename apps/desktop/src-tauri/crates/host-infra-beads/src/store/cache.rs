@@ -1,4 +1,5 @@
 use super::*;
+use host_domain::{is_syncable_pull_request_state, is_terminal_task_status};
 
 #[derive(Clone)]
 pub(super) struct TaskListCacheEntry {
@@ -25,6 +26,12 @@ pub(super) struct KanbanTaskListCacheEntry {
 pub(super) struct KanbanTaskListCacheState {
     pub(super) generation: u64,
     pub(super) entry: Option<KanbanTaskListCacheEntry>,
+}
+
+#[derive(Clone)]
+pub(super) struct PullRequestSyncCandidateCacheEntry {
+    pub(super) tasks: Vec<TaskCard>,
+    pub(super) metadata_namespace: String,
 }
 
 impl BeadsTaskStore {
@@ -131,6 +138,117 @@ impl BeadsTaskStore {
         });
         Ok(())
     }
+
+    pub(super) fn cached_pull_request_sync_candidates(
+        &self,
+        repo_key: &str,
+        metadata_namespace: &str,
+    ) -> Result<Option<Vec<TaskCard>>> {
+        let cache = self
+            .pull_request_sync_candidate_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads PR-sync candidate cache lock poisoned"))?;
+        let Some(entry) = cache.get(repo_key) else {
+            return Ok(None);
+        };
+        if entry.metadata_namespace != metadata_namespace {
+            return Ok(None);
+        }
+        Ok(Some(entry.tasks.clone()))
+    }
+
+    pub(super) fn cache_pull_request_sync_candidates(
+        &self,
+        repo_key: &str,
+        metadata_namespace: &str,
+        tasks: &[TaskCard],
+    ) -> Result<()> {
+        let mut cache = self
+            .pull_request_sync_candidate_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads PR-sync candidate cache lock poisoned"))?;
+        cache.insert(
+            repo_key.to_string(),
+            PullRequestSyncCandidateCacheEntry {
+                tasks: tasks.to_vec(),
+                metadata_namespace: metadata_namespace.to_string(),
+            },
+        );
+        Ok(())
+    }
+
+    fn update_pull_request_sync_candidate_entry(tasks: &mut Vec<TaskCard>, task: TaskCard) {
+        tasks.retain(|entry| entry.id != task.id);
+        if Self::is_pull_request_sync_candidate(&task) {
+            tasks.push(task);
+            tasks.sort_by(|left, right| left.id.cmp(&right.id));
+        }
+    }
+
+    pub(super) fn is_pull_request_sync_candidate(task: &TaskCard) -> bool {
+        !is_terminal_task_status(&task.status)
+            && task.pull_request.as_ref().is_some_and(|pull_request| {
+                is_syncable_pull_request_state(pull_request.state.as_str())
+            })
+    }
+
+    pub(super) fn refresh_cached_pull_request_sync_candidate(
+        &self,
+        repo_path: &Path,
+        task: TaskCard,
+    ) -> Result<()> {
+        let metadata_namespace = self.current_metadata_namespace();
+        let repo_key = Self::repo_key(repo_path);
+        let mut cache = self
+            .pull_request_sync_candidate_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads PR-sync candidate cache lock poisoned"))?;
+        let Some(entry) = cache.get_mut(&repo_key) else {
+            return Ok(());
+        };
+        if entry.metadata_namespace != metadata_namespace {
+            return Ok(());
+        }
+        Self::update_pull_request_sync_candidate_entry(&mut entry.tasks, task);
+        Ok(())
+    }
+
+    pub(super) fn refresh_cached_pull_request_sync_candidate_from_store(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<()> {
+        let repo_key = Self::repo_key(repo_path);
+        let has_cached_entry = self
+            .pull_request_sync_candidate_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads PR-sync candidate cache lock poisoned"))?
+            .contains_key(&repo_key);
+        if !has_cached_entry {
+            return Ok(());
+        }
+
+        let task = self.show_task(repo_path, task_id)?;
+        self.refresh_cached_pull_request_sync_candidate(repo_path, task)
+    }
+
+    pub(super) fn remove_cached_pull_request_sync_candidate(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<()> {
+        let repo_key = Self::repo_key(repo_path);
+        let mut cache = self
+            .pull_request_sync_candidate_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads PR-sync candidate cache lock poisoned"))?;
+        let Some(entry) = cache.get_mut(&repo_key) else {
+            return Ok(());
+        };
+        entry.tasks.retain(|task| task.id != task_id);
+        Ok(())
+    }
+
     pub(crate) fn invalidate_task_list_cache(&self, repo_path: &Path) -> Result<()> {
         let repo_key = Self::repo_key(repo_path);
         {

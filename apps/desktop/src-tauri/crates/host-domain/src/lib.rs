@@ -36,8 +36,8 @@ pub use runtime::{
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
 pub use task::{
-    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskDirectMergeResult,
-    TaskStatus, UpdateTaskPatch,
+    is_syncable_pull_request_state, is_terminal_task_status, CreateTaskInput, IssueType,
+    PlanSubtaskInput, TaskAction, TaskCard, TaskDirectMergeResult, TaskStatus, UpdateTaskPatch,
 };
 
 pub const TASK_METADATA_NAMESPACE: &str = "openducktor";

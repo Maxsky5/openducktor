@@ -9,6 +9,7 @@ use std::path::Path;
 pub trait TaskStore: Send + Sync {
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()>;
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>>;
+    fn list_pull_request_sync_candidates(&self, repo_path: &Path) -> Result<Vec<TaskCard>>;
     fn get_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard>;
     fn list_tasks_for_kanban(
         &self,

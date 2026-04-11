@@ -15,4 +15,18 @@ describe("external-task-sync-schemas", () => {
     expect(parsed.repoPath).toBe("/repo");
     expect(parsed.taskId).toBe("task-7");
   });
+
+  test("parses batched task update sync events", () => {
+    const parsed = externalTaskSyncEventSchema.parse({
+      eventId: "event-2",
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-7", "task-8"],
+      emittedAt: "2026-04-10T13:05:00.000Z",
+    });
+
+    expect(parsed.kind).toBe("tasks_updated");
+    expect(parsed.repoPath).toBe("/repo");
+    expect(parsed.taskIds).toEqual(["task-7", "task-8"]);
+  });
 });

@@ -6,5 +6,6 @@ pub use app_service::{
     OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
     OdtTaskResult, OdtTaskSummary, OpencodeStartupWaitFailure, PreparedHookTrustChallenge,
-    RepoConfigUpdate, RepoSettingsUpdate, RunEmitter, WorkspaceSettingsSnapshotUpdate,
+    RepoConfigUpdate, RepoPullRequestSyncResult, RepoSettingsUpdate, RunEmitter,
+    WorkspaceSettingsSnapshotUpdate,
 };

@@ -12,7 +12,7 @@ export type RepoTaskViewRefreshOptions =
     }
   | {
       taskDocumentStrategy: "refresh";
-      taskId: string;
+      taskIds: string[];
     }
   | {
       taskDocumentStrategy: "remove";
@@ -26,7 +26,7 @@ export const refreshRepoTaskViewsFromQuery = async (
 ): Promise<void> => {
   const taskDocumentRefresh =
     options?.taskDocumentStrategy === "refresh"
-      ? refreshCachedTaskDocumentQueries(queryClient, repoPath, options.taskId)
+      ? refreshCachedTaskDocumentQueries(queryClient, repoPath, options.taskIds)
       : Promise.resolve();
 
   if (options?.taskDocumentStrategy === "remove") {

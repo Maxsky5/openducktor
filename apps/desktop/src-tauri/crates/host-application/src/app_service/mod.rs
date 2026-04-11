@@ -71,6 +71,7 @@ pub(crate) use service_core::{
     RuntimeCleanupTarget,
 };
 pub use service_core::{AppService, DevServerEmitter, RunEmitter};
+pub use task_workflow::RepoPullRequestSyncResult;
 #[cfg(test)]
 pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,

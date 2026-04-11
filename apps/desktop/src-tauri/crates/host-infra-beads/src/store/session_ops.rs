@@ -231,6 +231,7 @@ impl BeadsTaskStore {
 
         namespace_map.remove("delivery");
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
         Ok(())
     }
 
@@ -264,6 +265,7 @@ impl BeadsTaskStore {
 
         namespace_map.remove("delivery");
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
         Ok(())
     }
 

@@ -92,7 +92,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       });
       await refreshRepoTaskViewsFromQuery(queryClient, repo, {
         taskDocumentStrategy: "refresh",
-        taskId,
+        taskIds: [taskId],
       });
       return saved;
     },
@@ -116,7 +116,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       });
       await refreshRepoTaskViewsFromQuery(queryClient, repo, {
         taskDocumentStrategy: "refresh",
-        taskId,
+        taskIds: [taskId],
       });
       return saved;
     },
@@ -140,7 +140,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       });
       await refreshRepoTaskViewsFromQuery(queryClient, repo, {
         taskDocumentStrategy: "refresh",
-        taskId,
+        taskIds: [taskId],
       });
       return saved;
     },

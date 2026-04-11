@@ -125,7 +125,7 @@ describe("documents query helpers", () => {
     });
 
     try {
-      await refreshCachedTaskDocumentQueries(queryClient, "/repo", "task-1");
+      await refreshCachedTaskDocumentQueries(queryClient, "/repo", ["task-1"]);
 
       expect(taskDocumentGet).not.toHaveBeenCalled();
       expect(taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "task-1", "plan");

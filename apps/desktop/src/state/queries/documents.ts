@@ -155,13 +155,16 @@ export const removeCachedTaskDocumentQueries = (
 export const refreshCachedTaskDocumentQueries = async (
   queryClient: QueryClient,
   repoPath: string,
-  taskId: string,
+  taskIds: string[],
 ): Promise<void> => {
-  const cachedSections = cachedTaskDocumentSections(queryClient, repoPath, taskId);
+  const uniqueTaskIds = [...new Set(taskIds)];
   await Promise.all(
-    cachedSections.map((section) =>
-      fetchFreshTaskDocumentFromQuery(queryClient, repoPath, taskId, section),
-    ),
+    uniqueTaskIds.flatMap((taskId) => {
+      const cachedSections = cachedTaskDocumentSections(queryClient, repoPath, taskId);
+      return cachedSections.map((section) =>
+        fetchFreshTaskDocumentFromQuery(queryClient, repoPath, taskId, section),
+      );
+    }),
   );
 };
 
