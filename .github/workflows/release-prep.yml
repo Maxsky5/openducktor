@@ -95,8 +95,9 @@ jobs:
           bun run lint
           bun run test
           bun run build
-          bun run check:rust
-          bun run test:rust
+          cargo rust-lint-host
+          cargo rust-test-host-unit
+          cargo rust-test-host-integration
 
       - name: Commit release bump
         if: steps.release_state.outputs.tag_exists != 'true'
