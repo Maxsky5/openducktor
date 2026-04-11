@@ -27,7 +27,7 @@ fn start_pull_request_sync_loop_with_interval(
 
     std::thread::spawn(move || {
         let mut previous_repo_path = None;
-        if let Err(error) = run_pull_request_sync_loop(
+        run_pull_request_sync_loop(
             &loop_stop_requested,
             interval,
             || {
@@ -39,13 +39,7 @@ fn start_pull_request_sync_loop_with_interval(
                 )
             },
             |event| event_emitter(event),
-        ) {
-            tracing::error!(
-                target: "openducktor.task-sync",
-                error = %format!("{error:#}"),
-                "Pull request sync loop terminated unexpectedly"
-            );
-        }
+        );
     });
 
     stop_requested
@@ -88,15 +82,21 @@ fn run_pull_request_sync_loop(
     interval: Duration,
     mut sync_iteration: impl FnMut() -> Result<Option<ExternalTaskSyncEvent>>,
     mut emit_event: impl FnMut(ExternalTaskSyncEvent),
-) -> Result<()> {
+) {
     while !stop_requested.load(Ordering::SeqCst) {
-        if let Some(event) = sync_iteration()? {
-            emit_event(event);
+        match sync_iteration() {
+            Ok(Some(event)) => emit_event(event),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::error!(
+                    target: "openducktor.task-sync",
+                    error = %format!("{error:#}"),
+                    "Pull request sync iteration failed; the scheduler will retry on the next interval"
+                );
+            }
         }
         sleep_until_next_iteration(stop_requested, interval);
     }
-
-    Ok(())
 }
 
 fn sleep_until_next_iteration(stop_requested: &AtomicBool, interval: Duration) {
@@ -242,11 +242,38 @@ mod tests {
                 )))
             },
             |event| emitted.push(event),
-        )
-        .expect("loop should stop cleanly");
+        );
 
         assert_eq!(iteration_count, 1);
         assert_eq!(emitted.len(), 1);
         assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn sync_loop_continues_after_iteration_errors() {
+        let stop_requested = AtomicBool::new(false);
+        let mut emitted = Vec::new();
+        let mut iteration_count = 0;
+
+        run_pull_request_sync_loop(
+            &stop_requested,
+            Duration::ZERO,
+            || {
+                iteration_count += 1;
+                if iteration_count == 1 {
+                    return Err(anyhow::anyhow!("transient sync failure"));
+                }
+                stop_requested.store(true, Ordering::SeqCst);
+                Ok(Some(build_tasks_updated_event(
+                    "/repo".to_string(),
+                    vec!["task-1".to_string()],
+                )))
+            },
+            |event| emitted.push(event),
+        );
+
+        assert_eq!(iteration_count, 2);
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].repo_path, "/repo");
     }
 }
