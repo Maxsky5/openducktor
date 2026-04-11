@@ -3,7 +3,7 @@
 import TOML from "@iarna/toml";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 const workspaceRoot = process.cwd();
 
@@ -45,9 +45,11 @@ function readRootWorkspacePatterns(): string[] {
 
 function expandWorkspacePattern(pattern: string): string[] {
   if (!pattern.endsWith("/*")) {
-    throw new Error(
-      `Unsupported workspace pattern \`${pattern}\`. Expected a trailing /* pattern.`,
-    );
+    const directWorkspacePath = pattern.endsWith("/package.json")
+      ? pattern
+      : join(pattern, "package.json");
+    const directWorkspaceAbsolutePath = resolve(workspaceRoot, directWorkspacePath);
+    return existsSync(directWorkspaceAbsolutePath) ? [directWorkspacePath] : [];
   }
 
   const parentRelativePath = pattern.slice(0, -2);
@@ -137,6 +139,28 @@ function readCargoLock(): CargoLock {
   return TOML.parse(readFileSync(absolutePath, "utf8")) as CargoLock;
 }
 
+function resolveCargoWorkspaceMemberManifestPath(memberPath: string): string {
+  const tauriWorkspaceRoot = resolve(workspaceRoot, "apps/desktop/src-tauri");
+
+  if (isAbsolute(memberPath)) {
+    throw new Error(`Unsupported absolute Cargo workspace member path: ${memberPath}`);
+  }
+
+  const resolvedMemberRoot = resolve(tauriWorkspaceRoot, memberPath);
+  const relativeMemberRoot = relative(tauriWorkspaceRoot, resolvedMemberRoot);
+  if (relativeMemberRoot.startsWith("..") || relativeMemberRoot === "") {
+    throw new Error(`Unsupported Cargo workspace member path outside src-tauri: ${memberPath}`);
+  }
+
+  const resolvedManifestPath = resolve(resolvedMemberRoot, "Cargo.toml");
+  const relativeManifestPath = relative(tauriWorkspaceRoot, resolvedManifestPath);
+  if (relativeManifestPath.startsWith("..")) {
+    throw new Error(`Unsupported Cargo workspace member manifest path: ${memberPath}`);
+  }
+
+  return relative(workspaceRoot, resolvedManifestPath);
+}
+
 function collectCargoPackageNames(): string[] {
   const rootManifest = readCargoManifest();
   const rootPackageName = rootManifest.package?.name;
@@ -147,7 +171,7 @@ function collectCargoPackageNames(): string[] {
   }
 
   const memberPackageNames = workspaceMembers.map((memberPath) => {
-    const memberManifestPath = `apps/desktop/src-tauri/${memberPath}/Cargo.toml`;
+    const memberManifestPath = resolveCargoWorkspaceMemberManifestPath(memberPath);
     const memberManifest = readCargoManifestAtPath(memberManifestPath);
     const memberName = memberManifest.package?.name;
 
@@ -217,11 +241,19 @@ function readCargoLockVersions(): Array<{ file: string; version: string }> {
 
 function syncCargoLock(): void {
   const tauriWorkspaceRoot = resolve(workspaceRoot, "apps/desktop/src-tauri");
+  // `cargo metadata` refreshes local workspace package versions in Cargo.lock without the
+  // broad dependency churn that `cargo generate-lockfile` caused in this repo.
   const result = spawnSync("cargo", ["metadata", "--format-version", "1"], {
     cwd: tauriWorkspaceRoot,
     env: process.env,
     stdio: ["ignore", "ignore", "inherit"],
   });
+
+  if (result.error) {
+    throw new Error(
+      `Failed to run cargo metadata in ${tauriWorkspaceRoot}: ${result.error.message}. Ensure Cargo is installed and available on PATH.`,
+    );
+  }
 
   if (result.status !== 0) {
     throw new Error(`cargo metadata failed in ${tauriWorkspaceRoot}`);

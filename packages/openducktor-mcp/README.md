@@ -4,6 +4,8 @@ OpenDucktor MCP server for local repository task workflows.
 
 The MCP package is a thin client of the running Rust host.
 
+The published package is intentionally a standalone CLI/server package. It does not expose a supported JavaScript or TypeScript library API from `@openducktor/mcp`.
+
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
 - Standalone use auto-discovers a running host bridge from the local registry.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.

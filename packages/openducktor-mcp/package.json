@@ -11,7 +11,7 @@
     }
   },
   "bin": {
-    "openducktor-mcp": "./dist/index.js"
+    "openducktor-mcp": "./dist/cli.js"
   },
   "files": [
     "dist",
@@ -21,8 +21,8 @@
     "access": "public"
   },
   "scripts": {
-    "start": "bun run src/index.ts",
-    "build": "bun build --target=bun --outfile dist/index.js --banner '#!/usr/bin/env bun' src/index.ts && chmod +x dist/index.js && bunx tsc -p tsconfig.json --emitDeclarationOnly",
+    "start": "bun run src/cli.ts",
+    "build": "bun build --target=node --outfile dist/index.js src/index.ts && bun build --target=bun --outfile dist/cli.js --banner '#!/usr/bin/env bun' src/cli.ts && chmod +x dist/cli.js && bunx tsc -p tsconfig.json --emitDeclarationOnly",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test --timeout 1000",
     "lint": "biome check src",
