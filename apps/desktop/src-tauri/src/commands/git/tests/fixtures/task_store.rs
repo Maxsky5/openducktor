@@ -46,6 +46,13 @@ impl TaskStore for CommandTaskStore {
         Ok(Vec::new())
     }
 
+    fn list_pull_request_sync_candidates(
+        &self,
+        _repo_path: &Path,
+    ) -> anyhow::Result<Vec<TaskCard>> {
+        Ok(Vec::new())
+    }
+
     fn get_task(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<TaskCard> {
         Err(anyhow!(
             "unexpected task store get_task call in git command tests"

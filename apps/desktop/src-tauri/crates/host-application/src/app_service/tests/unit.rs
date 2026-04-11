@@ -86,6 +86,8 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             ensure_calls: Vec::new(),
             ensure_error: None,
             tasks: Vec::new(),
+            list_calls: Vec::new(),
+            list_pull_request_sync_candidate_calls: Vec::new(),
             get_task_calls: Vec::new(),
             get_task_error: None,
             list_error: None,

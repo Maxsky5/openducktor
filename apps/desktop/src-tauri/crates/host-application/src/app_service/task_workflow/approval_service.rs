@@ -1,7 +1,7 @@
 use super::approval_context_service::ApprovalContextService;
 use super::direct_merge_workflow_service::DirectMergeWorkflowService;
 use super::pull_request_provider_service::PullRequestProviderService;
-use super::pull_request_sync_service::PullRequestSyncService;
+use super::pull_request_sync_service::{PullRequestSyncService, RepoPullRequestSyncResult};
 use super::pull_request_workflow_service::PullRequestWorkflowService;
 use crate::app_service::service_core::AppService;
 use anyhow::Result;
@@ -92,7 +92,19 @@ impl AppService {
     }
 
     pub fn repo_pull_request_sync(&self, repo_path: &str) -> Result<bool> {
+        self.repo_pull_request_sync_detailed(repo_path)
+            .map(|result| result.ran)
+    }
+
+    pub fn repo_pull_request_sync_detailed(
+        &self,
+        repo_path: &str,
+    ) -> Result<RepoPullRequestSyncResult> {
         PullRequestSyncService::new(self).repo_pull_request_sync(repo_path)
+    }
+
+    pub fn prime_pull_request_sync_candidates(&self, repo_path: &str) -> Result<()> {
+        PullRequestSyncService::new(self).prime_pull_request_sync_candidates(repo_path)
     }
 
     pub fn auto_detect_git_provider_for_repo(&self, repo_path: &str) -> Result<()> {

@@ -20,3 +20,4 @@ mod task_reset_service;
 mod task_service;
 
 pub(crate) use cleanup_plans::normalize_path_for_comparison;
+pub use pull_request_sync_service::RepoPullRequestSyncResult;

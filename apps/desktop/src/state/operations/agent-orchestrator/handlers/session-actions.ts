@@ -60,7 +60,7 @@ type SessionActionsDependencies = {
   loadRepoDefaultTargetBranch?: (repoPath: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
-  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopBuildRun?: (runId: string) => Promise<void>;
   invalidateSessionStopQueries?: (input: {

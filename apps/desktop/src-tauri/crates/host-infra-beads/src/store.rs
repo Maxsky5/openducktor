@@ -25,13 +25,14 @@ mod namespace;
 mod session_ops;
 mod task_ops;
 
-use cache::{KanbanTaskListCacheState, TaskListCacheState};
+use cache::{KanbanTaskListCacheState, PullRequestSyncCandidateCacheEntry, TaskListCacheState};
 
 pub struct BeadsTaskStore {
     pub(crate) metadata_namespace: Mutex<String>,
     pub(crate) lifecycle: BeadsLifecycle,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
     kanban_task_list_cache: Mutex<HashMap<String, KanbanTaskListCacheState>>,
+    pull_request_sync_candidate_cache: Mutex<HashMap<String, PullRequestSyncCandidateCacheEntry>>,
 }
 
 impl fmt::Debug for BeadsTaskStore {
@@ -69,6 +70,7 @@ impl BeadsTaskStore {
             lifecycle: BeadsLifecycle::new(command_runner),
             task_list_cache: Mutex::new(HashMap::new()),
             kanban_task_list_cache: Mutex::new(HashMap::new()),
+            pull_request_sync_candidate_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -96,6 +98,10 @@ impl TaskStore for BeadsTaskStore {
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
         self.list_tasks_impl(repo_path)
+    }
+
+    fn list_pull_request_sync_candidates(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
+        self.list_pull_request_sync_candidates_impl(repo_path)
     }
 
     fn get_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {

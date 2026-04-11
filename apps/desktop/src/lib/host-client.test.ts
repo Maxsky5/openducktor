@@ -92,6 +92,40 @@ describe("host-client", () => {
     unsubscribe();
   });
 
+  test("passes through batched task update payloads from the Tauri task-event channel", async () => {
+    isTauriRuntime = true;
+    const listener = mock(() => {});
+    let registeredHandler: ((event: { payload: unknown }) => void) | undefined;
+
+    listenImpl = async (_event, handler) => {
+      registeredHandler = handler;
+      return () => {};
+    };
+
+    const { createHostBridge } = await import("./host-client");
+    const unsubscribe = await createHostBridge().subscribeTaskEvents(listener);
+
+    if (!registeredHandler) {
+      throw new Error("Expected the Tauri task-event handler to be registered");
+    }
+
+    registeredHandler({
+      payload: {
+        kind: "tasks_updated",
+        repoPath: "/repo",
+        taskIds: ["task-1", "task-2"],
+      },
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-1", "task-2"],
+    });
+
+    unsubscribe();
+  });
+
   test("normalizes Tauri event cleanup into an idempotent callback", async () => {
     isTauriRuntime = true;
     let cleanupCalls = 0;
