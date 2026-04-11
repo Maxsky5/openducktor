@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 const MCP_BRIDGE_READY_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_BRIDGE_BINARY_ENV: &str = "OPENDUCKTOR_MCP_BRIDGE_BINARY";
+const MCP_BRIDGE_FALLBACK_BINARY_NAME: &str = "openducktor-desktop";
 
 fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
     let Some(mut reader) = pipe.take() else {
@@ -108,7 +109,23 @@ fn resolve_mcp_bridge_binary_path() -> Result<PathBuf> {
         return Ok(PathBuf::from(trimmed));
     }
 
-    std::env::current_exe().context("Failed to resolve current executable for MCP bridge")
+    let current_exe =
+        std::env::current_exe().context("Failed to resolve current executable for MCP bridge")?;
+
+    if current_exe
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value == "browser_backend")
+    {
+        if let Some(parent) = current_exe.parent() {
+            let fallback = parent.join(MCP_BRIDGE_FALLBACK_BINARY_NAME);
+            if fallback.is_file() {
+                return Ok(fallback);
+            }
+        }
+    }
+
+    Ok(current_exe)
 }
 
 impl AppService {

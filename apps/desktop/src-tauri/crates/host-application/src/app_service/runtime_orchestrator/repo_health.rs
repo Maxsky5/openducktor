@@ -23,6 +23,7 @@ use url::{form_urlencoded, Url};
 const ODT_MCP_SERVER_NAME: &str = "openducktor";
 const RUNTIME_HEALTH_HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_CONNECT_STARTUP_GRACE_PERIOD: Duration = Duration::from_secs(10);
+const MCP_CONNECT_STATUS_RETRY_DELAY: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Copy)]
 enum RuntimeHealthHttpMethod {
@@ -591,6 +592,75 @@ impl AppService {
         )
     }
 
+    fn repo_runtime_normalize_mcp_server_status(
+        runtime: &RuntimeInstanceSummary,
+        host_status: Option<&RepoRuntimeStartupStatus>,
+        checked_at: &str,
+        status: ResolvedMcpServerStatus,
+    ) -> ResolvedMcpServerStatus {
+        if status.is_connected() {
+            return status;
+        }
+
+        if status.failure_kind != Some(RepoRuntimeStartupFailureKind::Error) {
+            return status;
+        }
+
+        if !repo_runtime_is_within_mcp_startup_grace_window(runtime, host_status, checked_at) {
+            return status;
+        }
+
+        ResolvedMcpServerStatus {
+            failure_kind: Some(RepoRuntimeStartupFailureKind::Timeout),
+            ..status
+        }
+    }
+
+    fn repo_runtime_refresh_mcp_status_after_connect(
+        &self,
+        runtime: &RuntimeInstanceSummary,
+        host_status: Option<&RepoRuntimeStartupStatus>,
+        initial_checked_at: &str,
+    ) -> std::result::Result<ResolvedMcpServerStatus, RuntimeHealthHttpFailure> {
+        let mut checked_at = initial_checked_at.to_string();
+        let mut latest_status = Self::repo_runtime_normalize_mcp_server_status(
+            runtime,
+            host_status,
+            checked_at.as_str(),
+            Self::repo_runtime_resolve_mcp_status(&self.repo_runtime_load_mcp_status(runtime)?),
+        );
+
+        if latest_status.is_connected()
+            || !repo_runtime_is_within_mcp_startup_grace_window(
+                runtime,
+                host_status,
+                checked_at.as_str(),
+            )
+        {
+            return Ok(latest_status);
+        }
+
+        while repo_runtime_is_within_mcp_startup_grace_window(
+            runtime,
+            host_status,
+            checked_at.as_str(),
+        ) {
+            std::thread::sleep(MCP_CONNECT_STATUS_RETRY_DELAY);
+            checked_at = now_rfc3339();
+            latest_status = Self::repo_runtime_normalize_mcp_server_status(
+                runtime,
+                host_status,
+                checked_at.as_str(),
+                Self::repo_runtime_resolve_mcp_status(&self.repo_runtime_load_mcp_status(runtime)?),
+            );
+            if latest_status.is_connected() {
+                return Ok(latest_status);
+            }
+        }
+
+        Ok(latest_status)
+    }
+
     fn repo_runtime_normalize_mcp_probe_failure(
         runtime: &RuntimeInstanceSummary,
         host_status: Option<&RepoRuntimeStartupStatus>,
@@ -1025,7 +1095,12 @@ impl AppService {
             }
         };
 
-        let mut mcp_status = Self::repo_runtime_resolve_mcp_status(&status_by_server);
+        let mut mcp_status = Self::repo_runtime_normalize_mcp_server_status(
+            &runtime,
+            host_status.as_ref(),
+            checked_at.as_str(),
+            Self::repo_runtime_resolve_mcp_status(&status_by_server),
+        );
         if !mcp_status.is_connected() {
             let reconnect_progress = repo_runtime_progress(RepoRuntimeProgressInput {
                 stage: RuntimeHealthWorkflowStage::ReconnectingMcp,
@@ -1059,8 +1134,12 @@ impl AppService {
 
             match self.repo_runtime_connect_mcp_server(&runtime, ODT_MCP_SERVER_NAME) {
                 Ok(()) => {
-                    let refreshed = match self.repo_runtime_load_mcp_status(&runtime) {
-                        Ok(refreshed) => refreshed,
+                    mcp_status = match self.repo_runtime_refresh_mcp_status_after_connect(
+                        &runtime,
+                        host_status.as_ref(),
+                        checked_at.as_str(),
+                    ) {
+                        Ok(status) => status,
                         Err(error) => {
                             let error = Self::repo_runtime_normalize_mcp_probe_failure(
                                 &runtime,
@@ -1104,7 +1183,6 @@ impl AppService {
                             );
                         }
                     };
-                    mcp_status = Self::repo_runtime_resolve_mcp_status(&refreshed);
                 }
                 Err(error) => {
                     let error = Self::repo_runtime_normalize_mcp_probe_failure(
@@ -1333,7 +1411,7 @@ fn lower_contains_any(haystack: &str, needles: &[&str]) -> bool {
 mod tests {
     use super::{
         repo_runtime_is_within_mcp_startup_grace_window, RepoRuntimeHealthHttpClient,
-        RuntimeHealthMcpServerStatus,
+        ResolvedMcpServerStatus, RuntimeHealthMcpServerStatus,
     };
     use host_domain::{
         AgentRuntimeKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RuntimeRole,
@@ -1485,5 +1563,45 @@ mod tests {
             Some(&host_status),
             "2026-04-11T10:00:45Z"
         ));
+    }
+
+    #[test]
+    fn normalize_mcp_server_status_downgrades_failed_status_within_startup_grace() {
+        let runtime = runtime_summary("2026-04-11T10:00:00Z");
+        let status = super::AppService::repo_runtime_normalize_mcp_server_status(
+            &runtime,
+            None,
+            "2026-04-11T10:00:08Z",
+            ResolvedMcpServerStatus::unavailable(
+                Some("failed".to_string()),
+                "Connection closed".to_string(),
+            ),
+        );
+
+        assert_eq!(
+            status.failure_kind,
+            Some(super::RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(status.status.as_deref(), Some("failed"));
+    }
+
+    #[test]
+    fn normalize_mcp_server_status_keeps_failed_status_hard_after_startup_grace() {
+        let runtime = runtime_summary("2026-04-11T10:00:00Z");
+        let status = super::AppService::repo_runtime_normalize_mcp_server_status(
+            &runtime,
+            None,
+            "2026-04-11T10:00:21Z",
+            ResolvedMcpServerStatus::unavailable(
+                Some("failed".to_string()),
+                "Connection closed".to_string(),
+            ),
+        );
+
+        assert_eq!(
+            status.failure_kind,
+            Some(super::RepoRuntimeStartupFailureKind::Error)
+        );
+        assert_eq!(status.status.as_deref(), Some("failed"));
     }
 }
