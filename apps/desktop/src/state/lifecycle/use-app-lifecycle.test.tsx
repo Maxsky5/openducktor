@@ -36,101 +36,7 @@ const createDeferred = <T,>() => {
   };
 };
 
-const createIntervalController = () => {
-  let nextIntervalId = 1;
-  const callbacks = new Map<number, () => void>();
-  const originalSetInterval = globalThis.setInterval.bind(globalThis);
-  const originalClearInterval = globalThis.clearInterval.bind(globalThis);
-
-  globalThis.setInterval = ((handler: TimerHandler) => {
-    if (typeof handler !== "function") {
-      throw new Error("Expected interval handler to be a function in lifecycle tests");
-    }
-
-    const intervalId = nextIntervalId;
-    nextIntervalId += 1;
-    callbacks.set(intervalId, handler as () => void);
-    return intervalId as unknown as ReturnType<typeof setInterval>;
-  }) as unknown as typeof setInterval;
-
-  globalThis.clearInterval = ((intervalId: ReturnType<typeof setInterval>) => {
-    callbacks.delete(intervalId as unknown as number);
-  }) as unknown as typeof clearInterval;
-
-  return {
-    tick(): void {
-      for (const callback of [...callbacks.values()]) {
-        callback();
-      }
-    },
-    restore(): void {
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
-    },
-  };
-};
-
-type WindowEventTargetOverride = typeof globalThis & {
-  addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
-  removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
-  dispatchEvent: (event: Event) => boolean;
-};
-
-const createVisibilityStateController = () => {
-  let visibilityState: DocumentVisibilityState = "visible";
-  const windowTarget = new EventTarget();
-  const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
-  const originalDocumentDispatchEventDescriptor = Object.getOwnPropertyDescriptor(
-    document,
-    "dispatchEvent",
-  );
-  const originalAddEventListener = globalThis.addEventListener.bind(globalThis);
-  const originalRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
-  const originalDispatchEvent = globalThis.dispatchEvent.bind(globalThis);
-
-  Object.defineProperty(document, "visibilityState", {
-    configurable: true,
-    get: () => visibilityState,
-  });
-
-  Object.defineProperty(document, "dispatchEvent", {
-    configurable: true,
-    writable: true,
-    value: EventTarget.prototype.dispatchEvent.bind(document),
-  });
-  (globalThis as WindowEventTargetOverride).addEventListener =
-    windowTarget.addEventListener.bind(windowTarget);
-  (globalThis as WindowEventTargetOverride).removeEventListener =
-    windowTarget.removeEventListener.bind(windowTarget);
-  (globalThis as WindowEventTargetOverride).dispatchEvent =
-    windowTarget.dispatchEvent.bind(windowTarget);
-
-  return {
-    set(value: DocumentVisibilityState) {
-      visibilityState = value;
-    },
-    restore() {
-      if (originalVisibilityState) {
-        Object.defineProperty(document, "visibilityState", originalVisibilityState);
-      } else {
-        Reflect.deleteProperty(document, "visibilityState");
-      }
-      if (originalDocumentDispatchEventDescriptor) {
-        Object.defineProperty(document, "dispatchEvent", originalDocumentDispatchEventDescriptor);
-      } else {
-        Reflect.deleteProperty(document, "dispatchEvent");
-      }
-      (globalThis as WindowEventTargetOverride).addEventListener = originalAddEventListener;
-      (globalThis as WindowEventTargetOverride).removeEventListener = originalRemoveEventListener;
-      (globalThis as WindowEventTargetOverride).dispatchEvent = originalDispatchEvent;
-    },
-  };
-};
-
-let visibilityStateController: ReturnType<typeof createVisibilityStateController>;
-
 beforeEach(() => {
-  visibilityStateController = createVisibilityStateController();
   subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
     subscribedRunListener = listener;
     return () => {
@@ -215,7 +121,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  visibilityStateController.restore();
   subscribeRunEventsImpl = null;
   subscribeTaskEventsImpl = null;
 });
@@ -334,7 +239,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
@@ -434,7 +339,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
@@ -485,7 +390,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
@@ -544,8 +449,8 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTaskData = mock(async (_repoPath: string, taskId?: string) => {
-      if (taskId === "task-1") {
+    const refreshTaskData = mock(async (_repoPath: string, taskIdOrIds?: string | string[]) => {
+      if (taskIdOrIds === "task-1") {
         throw new Error("sync failed");
       }
     });
@@ -601,7 +506,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
@@ -651,7 +556,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTaskData = mock(async (_repoPath: string, _taskId?: string) => {});
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
@@ -805,201 +710,171 @@ describe("useAppLifecycle", () => {
     }
   });
 
-  test("runs periodic PR sync only while visible and restarts the cadence on visibility changes", async () => {
+  test("refreshes the repo once for batched task update events", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const refreshTasksWithOptions = mock(async () => {});
-    const baseArgs: HookArgs = {
-      activeRepo: "/repo",
-      setEvents: mock((_updater) => {}),
-      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
-      refreshWorkspaces: mock(async () => {}),
-      refreshBranches: mock(async () => {}),
-      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
-      refreshTaskData: mock(async () => {}),
-      refreshTasksWithOptions,
-      clearBranchData: mock(() => {}),
-      pullRequestSyncIntervalMs: 20,
-    };
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
       useAppLifecycle(args);
       return null;
     };
-
-    const intervalController = createIntervalController();
-    visibilityStateController.set("hidden");
-    const harness = createSharedHookHarness(Harness, { args: baseArgs });
-
-    try {
-      await harness.mount();
-
-      expect(refreshTasksWithOptions).not.toHaveBeenCalled();
-
-      await harness.run(() => {
-        visibilityStateController.set("visible");
-        document.dispatchEvent(new Event("visibilitychange"));
-      });
-
-      expect(refreshTasksWithOptions).not.toHaveBeenCalled();
-
-      intervalController.tick();
-      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1);
-
-      const visibleCallCount = refreshTasksWithOptions.mock.calls.length;
-      expect(visibleCallCount).toBeGreaterThan(0);
-      expect(refreshTasksWithOptions).toHaveBeenCalledWith({ trigger: "scheduled" });
-
-      await harness.run(() => {
-        visibilityStateController.set("hidden");
-        document.dispatchEvent(new Event("visibilitychange"));
-      });
-
-      intervalController.tick();
-
-      expect(refreshTasksWithOptions).toHaveBeenCalledTimes(visibleCallCount);
-
-      await harness.run(() => {
-        visibilityStateController.set("visible");
-        document.dispatchEvent(new Event("visibilitychange"));
-      });
-
-      expect(refreshTasksWithOptions).toHaveBeenCalledTimes(visibleCallCount);
-
-      intervalController.tick();
-      await harness.waitFor(
-        () => refreshTasksWithOptions.mock.calls.length === visibleCallCount + 1,
-      );
-
-      expect(refreshTasksWithOptions.mock.calls.length).toBeGreaterThan(visibleCallCount);
-    } finally {
-      await harness.unmount();
-      intervalController.restore();
-    }
-  });
-
-  test("switches the periodic PR sync timer when the active repo changes", async () => {
-    const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
-
-    const refreshTasksForRepoA = mock(async () => {});
-    const refreshTasksForRepoB = mock(async () => {});
-    const baseArgs: HookArgs = {
-      activeRepo: "/repo-a",
-      setEvents: mock((_updater) => {}),
-      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
-      refreshWorkspaces: mock(async () => {}),
-      refreshBranches: mock(async () => {}),
-      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo-a/.beads",
-        beadsError: null,
-      })),
-      refreshTaskData: mock(async () => {}),
-      refreshTasksWithOptions: refreshTasksForRepoA,
-      clearBranchData: mock(() => {}),
-      pullRequestSyncIntervalMs: 20,
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
-      return null;
-    };
-
-    const intervalController = createIntervalController();
-    const harness = createSharedHookHarness(Harness, { args: baseArgs });
-
-    try {
-      await harness.mount();
-
-      intervalController.tick();
-      await harness.waitFor(() => refreshTasksForRepoA.mock.calls.length === 1);
-
-      const repoACallCount = refreshTasksForRepoA.mock.calls.length;
-      expect(repoACallCount).toBeGreaterThan(0);
-      expect(refreshTasksForRepoB).not.toHaveBeenCalled();
-
-      await harness.update({
-        args: {
-          ...baseArgs,
-          activeRepo: "/repo-b",
-          refreshTasksWithOptions: refreshTasksForRepoB,
-        },
-      });
-
-      intervalController.tick();
-      await harness.waitFor(() => refreshTasksForRepoB.mock.calls.length === 1);
-
-      expect(refreshTasksForRepoA).toHaveBeenCalledTimes(repoACallCount);
-      expect(refreshTasksForRepoB.mock.calls.length).toBeGreaterThan(0);
-    } finally {
-      await harness.unmount();
-      intervalController.restore();
-    }
-  });
-
-  test("keeps periodic PR sync active across parent rerenders such as route changes", async () => {
-    const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
-
-    const refreshTasksWithOptions = mock(async () => {});
-    const baseArgs: HookArgs = {
-      activeRepo: "/repo",
-      setEvents: mock((_updater) => {}),
-      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
-      refreshWorkspaces: mock(async () => {}),
-      refreshBranches: mock(async () => {}),
-      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
-      refreshTaskData: mock(async () => {}),
-      refreshTasksWithOptions,
-      clearBranchData: mock(() => {}),
-      pullRequestSyncIntervalMs: 20,
-    };
-
-    const Harness = ({ args, route }: { args: HookArgs; route: string }) => {
-      useAppLifecycle(args);
-      return <div data-route={route} />;
-    };
-
-    const intervalController = createIntervalController();
     const harness = createSharedHookHarness(Harness, {
-      args: baseArgs,
-      route: "/kanban",
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData,
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+    await harness.mount();
+    try {
+      refreshTaskData.mockClear();
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
+
+      await harness.run(() => {
+        subscribedTaskListener?.({
+          eventId: "event-2",
+          kind: "tasks_updated",
+          repoPath: "/repo",
+          taskIds: ["task-1", "task-2"],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        });
+      });
+
+      expect(refreshTaskData).toHaveBeenCalledTimes(1);
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not resync when a replayed batched task update event is duplicated", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData,
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+    await harness.mount();
+    try {
+      refreshTaskData.mockClear();
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
+
+      await harness.run(() => {
+        subscribedTaskListener?.({
+          eventId: "event-2",
+          kind: "tasks_updated",
+          repoPath: "/repo",
+          taskIds: ["task-1", "task-2"],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        });
+        subscribedTaskListener?.({
+          eventId: "event-2",
+          kind: "tasks_updated",
+          repoPath: "/repo",
+          taskIds: ["task-1", "task-2"],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        });
+      });
+
+      expect(refreshTaskData).toHaveBeenCalledTimes(1);
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces batched task update refresh failures", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const refreshTaskData = mock(async (_repoPath: string, taskIdOrIds?: string | string[]) => {
+      if (Array.isArray(taskIdOrIds) && taskIdOrIds.includes("task-1")) {
+        throw new Error("sync failed");
+      }
     });
 
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () => ({
+          beadsOk: true,
+          beadsPath: "/repo/.beads",
+          beadsError: null,
+        })),
+        refreshTaskData,
+        refreshTasksWithOptions: mock(async () => {}),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+    await harness.mount();
     try {
-      await harness.mount();
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
 
-      intervalController.tick();
-      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 1, 1000);
-
-      await harness.update({
-        args: baseArgs,
-        route: "/agents",
+      await harness.run(async () => {
+        subscribedTaskListener?.({
+          eventId: "event-2",
+          kind: "tasks_updated",
+          repoPath: "/repo",
+          taskIds: ["task-1", "task-2"],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        });
+        await Promise.resolve();
       });
 
-      expect(refreshTasksWithOptions).toHaveBeenCalledTimes(1);
-
-      intervalController.tick();
-      await harness.waitFor(() => refreshTasksWithOptions.mock.calls.length === 2, 1000);
-
-      expect(refreshTasksWithOptions).toHaveBeenNthCalledWith(1, { trigger: "scheduled" });
-      expect(refreshTasksWithOptions).toHaveBeenNthCalledWith(2, { trigger: "scheduled" });
+      expect(toastError).toHaveBeenCalledWith("Failed to sync task updates", {
+        description: "Task store unavailable. sync failed",
+      });
     } finally {
       await harness.unmount();
-      intervalController.restore();
     }
   });
 

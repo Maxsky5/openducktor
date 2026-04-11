@@ -42,7 +42,7 @@ type UseTaskOperationsResult = {
   pendingMergedPullRequest: { taskId: string; pullRequest: PullRequest } | null;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
-  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
@@ -143,11 +143,17 @@ export function useTaskOperations({
   }, [activeRepo]);
 
   const refreshTaskData = useCallback(
-    async (repoPath: string, taskId?: string): Promise<void> => {
+    async (repoPath: string, taskIdOrIds?: string | string[]): Promise<void> => {
+      const taskIds =
+        typeof taskIdOrIds === "string"
+          ? [taskIdOrIds]
+          : Array.isArray(taskIdOrIds)
+            ? taskIdOrIds
+            : null;
       await refreshRepoTaskViewsFromQuery(
         queryClient,
         repoPath,
-        taskId ? { taskDocumentStrategy: "refresh", taskId } : undefined,
+        taskIds ? { taskDocumentStrategy: "refresh", taskIds } : undefined,
       );
     },
     [queryClient],
@@ -189,7 +195,7 @@ export function useTaskOperations({
       if (strategy.kind === "task") {
         await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
           taskDocumentStrategy: "refresh",
-          taskId: strategy.taskId,
+          taskIds: [strategy.taskId],
         });
         return;
       }

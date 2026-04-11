@@ -1,6 +1,8 @@
 use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
+use crate::external_task_sync::ExternalTaskSyncEvent;
+use crate::pull_request_sync::start_pull_request_sync_loop;
 use crate::commands::workspace::is_staged_local_attachment_path;
 use crate::{
     startup_phase_service_bootstrap, startup_phase_shutdown_hooks_with_gate, startup_phase_tracing,
@@ -76,6 +78,19 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let task_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let pull_request_sync_stop_requested = start_pull_request_sync_loop(service.clone(), {
+        let task_events = task_events.clone();
+        move |event: ExternalTaskSyncEvent| match serde_json::to_string(&event) {
+            Ok(payload) => task_events.emit(payload),
+            Err(error) => {
+                tracing::error!(
+                    target: "openducktor.task-sync",
+                    error = %error,
+                    "Pull request sync loop failed to serialize a browser task event"
+                );
+            }
+        }
+    });
     let shutdown_signal = Arc::new(Notify::new());
     let shutdown_started = Arc::new(AtomicBool::new(false));
     startup_phase_shutdown_hooks_with_gate(
@@ -100,6 +115,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             events,
             dev_server_events,
             task_events,
+            pull_request_sync_stop_requested,
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
@@ -139,6 +155,9 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
 
     let service = state.service.clone();
     let shutdown_signal = state.shutdown_signal.clone();
+    state
+        .pull_request_sync_stop_requested
+        .store(true, Ordering::SeqCst);
     tokio::spawn(async move {
         shutdown_signal.notify_waiters();
         let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
@@ -392,6 +411,13 @@ mod tests {
         fn list_tasks(&self, _repo_path: &std::path::Path) -> Result<Vec<TaskCard>> {
             let state = self.state.lock().expect("task store lock poisoned");
             Ok(state.tasks.clone())
+        }
+
+        fn list_pull_request_sync_candidates(
+            &self,
+            repo_path: &std::path::Path,
+        ) -> Result<Vec<TaskCard>> {
+            self.list_tasks(repo_path)
         }
 
         fn get_task(&self, _repo_path: &std::path::Path, task_id: &str) -> Result<TaskCard> {
@@ -735,6 +761,7 @@ mod tests {
                 events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                 task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
                 registry,
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
@@ -775,6 +802,7 @@ mod tests {
                     events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                     dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
                     task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+                    pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
                     registry,
                     shutdown_signal: Arc::new(Notify::new()),
                     shutdown_started: Arc::new(AtomicBool::new(false)),

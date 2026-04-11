@@ -284,6 +284,34 @@ describe("browser live SSE subscriptions", () => {
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
   });
 
+  test("delivers batched task update payloads to browser-live task-event subscribers", async () => {
+    const { subscribeBrowserLiveTaskEvents } = await loadBrowserLiveClient();
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeBrowserLiveTaskEvents(listener);
+
+    FakeEventSource.instances[0]?.emit(
+      "message",
+      JSON.stringify({
+        eventId: "event-2",
+        kind: "tasks_updated",
+        repoPath: "/repo",
+        taskIds: ["task-1", "task-2"],
+        emittedAt: "2026-04-10T13:10:00.000Z",
+      }),
+    );
+
+    expect(listener).toHaveBeenCalledWith({
+      eventId: "event-2",
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-1", "task-2"],
+      emittedAt: "2026-04-10T13:10:00.000Z",
+    });
+
+    unsubscribe();
+  });
+
   test("emits reconnect and stream-warning control payloads for task-event subscribers", async () => {
     const { subscribeBrowserLiveTaskEvents } = await loadBrowserLiveClient();
     const listener = mock(() => {});

@@ -531,9 +531,12 @@ describe("agent-orchestrator-session-events", () => {
         updateSession,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
-        refreshTaskData: async (repoPath, taskId) => {
+        refreshTaskData: async (repoPath, taskIdOrIds) => {
           refreshTaskDataCalls += 1;
-          refreshTaskDataArgs.push([repoPath, taskId]);
+          refreshTaskDataArgs.push([
+            repoPath,
+            typeof taskIdOrIds === "string" ? taskIdOrIds : undefined,
+          ]);
         },
       });
 

@@ -14,7 +14,7 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.0.1",
+      "version": "0.0.3",
       "dependencies": {
         "@openducktor/adapters-opencode-sdk": "workspace:*",
         "@openducktor/adapters-tauri-host": "workspace:*",
@@ -67,7 +67,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.0.1",
+      "version": "0.0.3",
       "dependencies": {
         "@opencode-ai/sdk": "^1.3.16",
         "@openducktor/contracts": "workspace:*",
@@ -76,7 +76,7 @@
     },
     "packages/adapters-tauri-host": {
       "name": "@openducktor/adapters-tauri-host",
-      "version": "0.0.1",
+      "version": "0.0.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -84,28 +84,30 @@
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.0.1",
+      "version": "0.0.3",
       "dependencies": {
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.0.1",
+      "version": "0.0.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
       },
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.0.1",
+      "version": "0.0.3",
       "bin": {
         "openducktor-mcp": "./dist/index.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@openducktor/contracts": "workspace:*",
         "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@openducktor/contracts": "workspace:*",
       },
     },
   },

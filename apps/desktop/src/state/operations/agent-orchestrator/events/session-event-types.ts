@@ -42,7 +42,7 @@ export type AttachAgentSessionListenerParams = {
   updateSession: UpdateSession;
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionId: string) => void;
-  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 };
 
 export type SessionStoreContext = Pick<

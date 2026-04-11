@@ -18,6 +18,7 @@ use crate::app_service::test_support::{
     build_service_with_store, init_git_repo, lock_env, make_session, make_task, prepend_path,
     set_env_var, unique_temp_path, write_executable_script, GitCall,
 };
+use crate::app_service::RepoPullRequestSyncResult;
 use crate::RepoConfigUpdate;
 
 const TASK_ID: &str = "task-1";
@@ -231,11 +232,13 @@ fn merged_pull_request_record() -> PullRequestRecord {
 }
 
 fn insert_task_pull_request(task_state: &TaskStateHandle, pull_request: PullRequestRecord) {
-    task_state
-        .lock()
-        .expect("task state lock poisoned")
+    let mut state = task_state.lock().expect("task state lock poisoned");
+    state
         .pull_requests
-        .insert(TASK_ID.to_string(), pull_request);
+        .insert(TASK_ID.to_string(), pull_request.clone());
+    if let Some(task) = state.tasks.iter_mut().find(|task| task.id == TASK_ID) {
+        task.pull_request = Some(pull_request);
+    }
 }
 
 fn insert_task_direct_merge_record(task_state: &TaskStateHandle) {
@@ -2357,9 +2360,12 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
     insert_task_direct_merge_record(&fixture.task_state);
     set_local_task_branch(&fixture.git_state, TASK_SOURCE_BRANCH);
 
-    assert!(fixture
+    let result = fixture
         .service
-        .repo_pull_request_sync(fixture.repo_path.as_str())?);
+        .repo_pull_request_sync_detailed(fixture.repo_path.as_str())?;
+
+    assert!(result.ran);
+    assert_eq!(result.changed_task_ids, vec![TASK_ID.to_string()]);
 
     let state = fixture.task_state.lock().expect("task state lock poisoned");
     let task = state
@@ -2809,12 +2815,45 @@ fn repo_pull_request_sync_does_not_discover_pull_requests_for_unlinked_tasks() -
     )?;
 
     assert!(service.repo_pull_request_sync(repo_path.as_str())?);
-    assert!(!task_state
-        .lock()
-        .expect("task state lock poisoned")
-        .pull_requests
-        .contains_key("task-1"));
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert!(!state.pull_requests.contains_key("task-1"));
+    assert!(state.list_calls.is_empty());
+    assert_eq!(state.list_pull_request_sync_candidate_calls.len(), 1);
+    assert!(state.metadata_get_calls.is_empty());
     assert!(!gh_log.exists() || fs::read_to_string(&gh_log)?.trim().is_empty());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn repo_pull_request_sync_short_circuits_before_reading_candidates_when_provider_is_unavailable(
+) -> Result<()> {
+    let root = unique_temp_path("approval-pr-sync-provider-unavailable");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+
+    let result = service.repo_pull_request_sync_detailed(repo_path.as_str())?;
+
+    assert_eq!(result, RepoPullRequestSyncResult::default());
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert!(state.list_calls.is_empty());
+    assert!(state.list_pull_request_sync_candidate_calls.is_empty());
+    assert!(state.metadata_get_calls.is_empty());
 
     let _ = fs::remove_dir_all(root);
     Ok(())
