@@ -3,7 +3,7 @@ use host_domain::DEFAULT_BRANCH_PREFIX;
 use std::fs;
 use std::io::ErrorKind;
 use std::net::TcpListener;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 pub fn slugify_title(value: &str) -> String {
@@ -38,6 +38,34 @@ pub fn pick_free_port() -> Result<u16> {
     let port = listener.local_addr()?.port();
     drop(listener);
     Ok(port)
+}
+
+pub fn remove_worktree_path_if_present(path: &Path) -> Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Failed reading file metadata for {}", path.display()));
+        }
+    };
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)
+            .with_context(|| format!("Failed removing directory {}", path.display()))?;
+    } else {
+        fs::remove_file(path)
+            .with_context(|| format!("Failed removing file {}", path.display()))?;
+    }
+
+    Ok(())
+}
+
+fn resolve_worktree_cleanup_path(repo_path: &Path, worktree_path: &Path) -> PathBuf {
+    if worktree_path.is_absolute() {
+        return worktree_path.to_path_buf();
+    }
+
+    repo_path.join(worktree_path)
 }
 
 pub fn copy_configured_worktree_files(
@@ -217,6 +245,14 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
         ));
     }
 
+    let cleanup_path = resolve_worktree_cleanup_path(repo_path, worktree_path);
+    remove_worktree_path_if_present(cleanup_path.as_path()).with_context(|| {
+        format!(
+            "git worktree removal left filesystem path cleanup incomplete for {}",
+            cleanup_path.display()
+        )
+    })?;
+
     Ok(())
 }
 
@@ -224,7 +260,7 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 mod tests {
     use super::{
         build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
-        slugify_title,
+        remove_worktree_path_if_present, slugify_title,
     };
     use host_domain::DEFAULT_BRANCH_PREFIX;
     use std::fs;
@@ -461,6 +497,67 @@ mod tests {
         assert!(
             error.to_string().contains("git worktree remove failed for"),
             "unexpected remove_worktree error: {error}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn remove_worktree_path_if_present_removes_leftover_directory() {
+        let root = unique_temp_path("worktree-leftover-directory");
+        let leftover = root.join("leftover");
+        fs::create_dir_all(leftover.join("nested")).expect("leftover directory should exist");
+        fs::write(leftover.join("nested").join("debug.log"), "log\n")
+            .expect("leftover file should exist");
+
+        remove_worktree_path_if_present(&leftover)
+            .expect("leftover worktree directory should be removed");
+
+        assert!(!leftover.exists(), "leftover directory should be removed");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remove_worktree_path_if_present_removes_broken_symlink() {
+        let root = unique_temp_path("worktree-broken-symlink");
+        fs::create_dir_all(&root).expect("temp root should exist");
+        let broken_link = root.join("broken-link");
+        symlink(root.join("missing-target"), &broken_link).expect("broken symlink should exist");
+
+        remove_worktree_path_if_present(&broken_link).expect("broken symlink should be removed");
+
+        assert!(!broken_link.exists(), "broken symlink should be removed");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn remove_worktree_resolves_relative_cleanup_path_against_repo() {
+        if !git_available() {
+            return;
+        }
+
+        let root = unique_temp_path("worktree-relative-cleanup");
+        let repo = root.join("repo");
+        init_repo(&repo);
+        let status = Command::new("git")
+            .args([
+                "worktree",
+                "add",
+                "-b",
+                "feature/relative",
+                "relative-worktree",
+            ])
+            .current_dir(&repo)
+            .status()
+            .expect("git worktree add should run");
+        assert!(status.success(), "git worktree add should succeed");
+
+        remove_worktree(&repo, Path::new("relative-worktree"))
+            .expect("relative worktree removal should succeed");
+
+        assert!(
+            !repo.join("relative-worktree").exists(),
+            "relative worktree directory should be removed"
         );
         let _ = fs::remove_dir_all(root);
     }

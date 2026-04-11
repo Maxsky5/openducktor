@@ -834,6 +834,36 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
+  test("session start failure shows a single modal-level error toast", async () => {
+    startAgentSessionMock.mockImplementationOnce(async () => {
+      throw new Error("Worktree path already exists for task TASK-123");
+    });
+
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await confirmSessionStartModal({
+      modelId: "openai/gpt-5",
+      profileId: "build-agent",
+      variant: "default",
+    });
+
+    await waitForMockCall(startAgentSessionMock);
+    await waitForMockCall(toastErrorMock);
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
+      description: "Worktree path already exists for task TASK-123",
+    });
+    expect(latestLocation).toBe("/");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test("malformed kickoff override still reports kickoff error after session start", async () => {
     workspaceGetRepoConfigMock.mockImplementation(async () => {
       return createRepoConfigFixture({

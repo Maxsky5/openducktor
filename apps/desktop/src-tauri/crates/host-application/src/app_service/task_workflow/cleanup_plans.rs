@@ -8,7 +8,57 @@ use host_domain::{
 };
 use std::collections::HashSet;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
+
+fn task_named_managed_worktree_dir_name_matches(dir_name: &str, task_id: &str) -> bool {
+    dir_name == task_id || dir_name.starts_with(&format!("{task_id}-"))
+}
+
+pub(crate) fn is_task_named_managed_worktree_path(
+    managed_worktree_base: &Path,
+    candidate_path: &Path,
+    task_id: &str,
+) -> bool {
+    let Ok(relative_path) = candidate_path.strip_prefix(managed_worktree_base) else {
+        return false;
+    };
+
+    let mut components = relative_path.components();
+    let Some(Component::Normal(first_component)) = components.next() else {
+        return false;
+    };
+    if components.next().is_some() {
+        return false;
+    }
+
+    let Some(dir_name) = first_component.to_str() else {
+        return false;
+    };
+
+    task_named_managed_worktree_dir_name_matches(dir_name, task_id)
+}
+
+pub(crate) fn is_definitive_non_worktree_git_error(error: &anyhow::Error) -> bool {
+    let error_text = format!("{error:#}").to_ascii_lowercase();
+    [
+        "not a git repository",
+        "not a git worktree",
+        "not a working tree",
+        "is not a working tree",
+    ]
+    .into_iter()
+    .any(|needle| error_text.contains(needle))
+}
+
+pub(crate) fn path_exists_including_broken_symlink(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error)
+            .with_context(|| format!("Failed reading file metadata for {}", path.display())),
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct WorktreeCleanupPlan {
@@ -376,16 +426,28 @@ fn is_managed_task_worktree_session(
         return Ok(false);
     }
 
-    if !Path::new(working_directory).exists() {
+    let worktree_path = Path::new(working_directory);
+    if !path_exists_including_broken_symlink(worktree_path)? {
         return Ok(false);
     }
 
-    let current_branch = service
-        .git_port
-        .get_current_branch(Path::new(working_directory))
-        .with_context(|| {
-            format!("Failed to inspect implementation worktree branch for {working_directory}")
-        })?;
+    let is_task_named_path = is_task_named_managed_worktree_path(
+        scope.managed_worktree_base,
+        normalized_worktree.as_path(),
+        scope.task_id,
+    );
+
+    let current_branch = match service.git_port.get_current_branch(worktree_path) {
+        Ok(current_branch) => current_branch,
+        Err(error) if is_task_named_path && is_definitive_non_worktree_git_error(&error) => {
+            return Ok(true);
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("Failed to inspect implementation worktree branch for {working_directory}")
+            });
+        }
+    };
     let branch_name = current_branch
         .name
         .as_deref()
@@ -454,7 +516,7 @@ fn collect_related_task_branches(
         .collect())
 }
 
-fn resolve_effective_worktree_base_path(
+pub(crate) fn resolve_effective_worktree_base_path(
     service: &AppService,
     repo_path: &str,
 ) -> Result<Option<String>> {
@@ -507,12 +569,62 @@ fn to_active_related_worktree(
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_path_for_comparison;
+    use super::{
+        is_definitive_non_worktree_git_error, normalize_path_for_comparison,
+        path_exists_including_broken_symlink,
+    };
+    use anyhow::anyhow;
+    #[cfg(unix)]
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use std::path::PathBuf;
+    #[cfg(unix)]
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[cfg(unix)]
+    fn unique_temp_path(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "openducktor-cleanup-plans-test-{label}-{}-{nanos}",
+            std::process::id()
+        ))
+    }
 
     #[test]
     fn normalize_path_for_comparison_lexically_collapses_parent_dirs_when_missing() {
         let normalized = normalize_path_for_comparison("/tmp/openducktor-base/../outside");
         assert_eq!(normalized, PathBuf::from("/tmp/outside"));
+    }
+
+    #[test]
+    fn definitive_non_worktree_error_matches_known_git_messages() {
+        assert!(is_definitive_non_worktree_git_error(&anyhow!(
+            "fatal: '/tmp/wt' is not a working tree"
+        )));
+        assert!(is_definitive_non_worktree_git_error(&anyhow!(
+            "Not a git repository: /tmp/wt"
+        )));
+        assert!(!is_definitive_non_worktree_git_error(&anyhow!(
+            "permission denied"
+        )));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_exists_including_broken_symlink_detects_broken_link() {
+        let root = unique_temp_path("broken-symlink");
+        fs::create_dir_all(&root).expect("temp root should exist");
+        let broken_link = root.join("broken-link");
+        symlink(root.join("missing-target"), &broken_link).expect("broken link should exist");
+
+        assert!(path_exists_including_broken_symlink(&broken_link)
+            .expect("broken symlink lookup should succeed"));
+
+        let _ = fs::remove_file(&broken_link);
+        let _ = fs::remove_dir_all(&root);
     }
 }

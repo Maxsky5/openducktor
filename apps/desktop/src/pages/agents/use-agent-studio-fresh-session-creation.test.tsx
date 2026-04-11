@@ -152,6 +152,38 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.unmount();
   });
 
+  test("shows a single role-specific toast when fresh session start fails", async () => {
+    const startAgentSession = mock(async () => {
+      throw new Error("start failed");
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        startAgentSession,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "planner:planner_initial:fresh",
+        role: "planner",
+        scenario: "planner_initial",
+        label: "Planner · Start Planner",
+        description: "Create a new planner session from scratch",
+        disabled: false,
+      });
+    });
+
+    await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
+    await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start Planner session", {
+      description: "start failed",
+    });
+
+    await harness.unmount();
+  });
+
   test("uses host continuation target for fresh QA builder context", async () => {
     const startAgentSession = mock(async () => "session-qa");
     const harness = createHookHarness(

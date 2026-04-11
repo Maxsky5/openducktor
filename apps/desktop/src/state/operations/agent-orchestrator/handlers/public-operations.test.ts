@@ -61,7 +61,7 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("shows toast and rethrows start errors", async () => {
+  test("rethrows start errors without adding a toast", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
@@ -98,9 +98,7 @@ describe("agent-orchestrator-public-operations", () => {
           selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow("start failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to start agent session", {
-        description: "start failed",
-      });
+      expect(toastError).not.toHaveBeenCalled();
     } finally {
       toast.error = originalToastError;
     }

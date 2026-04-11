@@ -116,7 +116,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionFileSearch,
   removeAgentSessions,
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
-    withErrorToast("Failed to start agent session", () => sessionActions.startAgentSession(input)),
+    sessionActions.startAgentSession(input),
   sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
     withErrorToast("Failed to send message", () =>
       sessionActions.sendAgentMessage(sessionId, parts),
