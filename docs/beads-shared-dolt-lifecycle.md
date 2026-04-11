@@ -264,6 +264,7 @@ bd init \
   --server-port <shared-server-port> \
   --server-user root \
   --quiet \
+  --stealth \
   --skip-hooks \
   --skip-agents \
   --prefix <repo-slug> \
@@ -274,10 +275,13 @@ Why these flags matter:
 
 - `--server` and the server route flags force shared-server mode
 - `--quiet` keeps initialization noise down
+- `--stealth` persists Beads' `no-git-ops` mode so later commands stay isolated from the user repository
 - `--skip-hooks` avoids running repository hooks during internal setup
 - `--skip-agents` avoids Beads adding agent integration side effects during internal setup
 - `--prefix` gives the repo stable Beads issue ids
 - `--database` binds the attachment to the exact shared Dolt database OpenDucktor expects
+
+OpenDucktor also rewrites the managed attachment's `.beads/config.yaml` to keep `no-git-ops: true` on already-initialized attachments before running follow-up commands such as `bd where`, `bd config set`, or `bd doctor --fix`. That prevents older attachments from regressing into repo-local hook or agent-file writes.
 
 ## What Happens If The Shared Database Is Missing
 
