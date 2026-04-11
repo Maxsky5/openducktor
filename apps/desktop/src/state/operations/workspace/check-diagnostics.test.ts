@@ -58,7 +58,7 @@ describe("check-diagnostics helpers", () => {
     });
   });
 
-  test("builds toast issues across cli, beads, and runtime health checks", () => {
+  test("builds toast issues only for hard failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeRepo: "/repo",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -90,11 +90,10 @@ describe("check-diagnostics helpers", () => {
 
     expect(issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "diagnostics:cli-tools", severity: "timeout" }),
         expect.objectContaining({ id: "diagnostics:beads-store", severity: "error" }),
-        expect.objectContaining({ id: "diagnostics:runtime:opencode", severity: "timeout" }),
       ]),
     );
+    expect(issues).toHaveLength(1);
   });
 
   test("restores unhealthy cli and beads payload toasts even without query failures", () => {

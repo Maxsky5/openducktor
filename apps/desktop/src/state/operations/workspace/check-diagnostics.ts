@@ -7,13 +7,14 @@ import type {
 } from "@/types/diagnostics";
 
 type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
+type DiagnosticsToastSeverity = Exclude<RepoRuntimeFailureKind, "timeout" | null>;
 type AvailabilityVerb = "is" | "are";
 
 export type DiagnosticsToastIssue = {
   id: string;
   title: string;
   description: string;
-  severity: NonNullRepoRuntimeFailureKind;
+  severity: DiagnosticsToastSeverity;
 };
 
 export type DiagnosticsRetryPlan = {
@@ -169,24 +170,13 @@ const buildDiagnosticsToastIssue = ({
   id,
   label,
   detail,
-  failureKind,
-  availabilityVerb,
 }: DiagnosticsIssueCandidate): DiagnosticsToastIssue => {
-  return failureKind === "timeout"
-    ? {
-        id,
-        title: `${label} not yet available`,
-        description: buildTimeoutToastDescription(label, detail, {
-          availabilityVerb,
-        }),
-        severity: failureKind,
-      }
-    : {
-        id,
-        title: `${label} unavailable`,
-        description: buildErrorToastDescription(label, detail),
-        severity: failureKind,
-      };
+  return {
+    id,
+    title: `${label} unavailable`,
+    description: buildErrorToastDescription(label, detail),
+    severity: "error",
+  };
 };
 
 const buildDiagnosticsIssueCandidate = (
@@ -295,7 +285,10 @@ export const buildDiagnosticsToastIssues = ({
     getBeadsCheckIssueCandidate(beadsCheck, beadsCheckError, beadsCheckFailureKind),
     ...getRuntimeHealthIssueCandidates(runtimeDefinitions, runtimeHealthByRuntime),
   ]
-    .filter((issueCandidate) => issueCandidate !== null)
+    .filter(
+      (issueCandidate): issueCandidate is DiagnosticsIssueCandidate =>
+        issueCandidate !== null && issueCandidate.failureKind === "error",
+    )
     .map((issueCandidate) => buildDiagnosticsToastIssue(issueCandidate));
 };
 
@@ -314,6 +307,24 @@ export const hasRuntimeHealthTimeoutIssue = (
       (definition.capabilities.supportsMcpStatus && runtimeHealth.mcp?.failureKind === "timeout")
     );
   });
+};
+
+export const hasDiagnosticsRetryingState = ({
+  runtimeDefinitions,
+  runtimeCheckFailureKind,
+  beadsCheckFailureKind,
+  runtimeHealthByRuntime,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+}): boolean => {
+  return (
+    runtimeCheckFailureKind === "timeout" ||
+    beadsCheckFailureKind === "timeout" ||
+    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime)
+  );
 };
 
 export const buildDiagnosticsRetryPlan = ({

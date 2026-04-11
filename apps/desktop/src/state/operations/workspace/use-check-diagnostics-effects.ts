@@ -27,19 +27,11 @@ export function useDiagnosticsToasts(diagnosticsToastIssues: DiagnosticsToastIss
         continue;
       }
 
-      if (issue.severity === "timeout") {
-        toast(issue.title, {
-          id: issue.id,
-          description: issue.description,
-          duration: Number.POSITIVE_INFINITY,
-        });
-      } else {
-        toast.error(issue.title, {
-          id: issue.id,
-          description: issue.description,
-          duration: Number.POSITIVE_INFINITY,
-        });
-      }
+      toast.error(issue.title, {
+        id: issue.id,
+        description: issue.description,
+        duration: Number.POSITIVE_INFINITY,
+      });
 
       issueSignaturesRef.current.set(issue.id, signature);
     }

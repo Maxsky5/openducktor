@@ -229,6 +229,20 @@ fn summarize_mcp_status(
     if input.mcp_ok {
         return RepoRuntimeMcpStatus::Connected;
     }
+    if input.mcp_failure_kind == Some(RepoRuntimeStartupFailureKind::Timeout) {
+        let workflow_stage = input
+            .progress
+            .as_ref()
+            .map(|value| value.stage)
+            .unwrap_or_else(|| default_workflow_stage(input));
+        return match workflow_stage {
+            RuntimeHealthWorkflowStage::ReconnectingMcp => RepoRuntimeMcpStatus::Reconnecting,
+            RuntimeHealthWorkflowStage::RuntimeReady
+            | RuntimeHealthWorkflowStage::CheckingMcpStatus
+            | RuntimeHealthWorkflowStage::Ready => RepoRuntimeMcpStatus::Checking,
+            _ => RepoRuntimeMcpStatus::Error,
+        };
+    }
     if input.mcp_failure_kind.is_some() || input.mcp_error.is_some() {
         return RepoRuntimeMcpStatus::Error;
     }
@@ -276,5 +290,75 @@ fn default_workflow_stage(input: &RepoRuntimeHealthCheckInput) -> RuntimeHealthW
         RuntimeHealthWorkflowStage::StartupFailed
     } else {
         RuntimeHealthWorkflowStage::Idle
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_repo_runtime_health_check, repo_runtime_progress, RepoRuntimeHealthCheckInput,
+        RepoRuntimeProgressInput, RuntimeHealthWorkflowStage,
+    };
+    use host_domain::{
+        now_rfc3339, RepoRuntimeHealthState, RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind,
+    };
+
+    fn build_runtime_ready_timeout_health_check(
+        stage: RuntimeHealthWorkflowStage,
+    ) -> host_domain::RepoRuntimeHealthCheck {
+        let checked_at = now_rfc3339();
+        build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+            checked_at: checked_at.clone(),
+            runtime: None,
+            runtime_ok: true,
+            runtime_error: None,
+            runtime_failure_kind: None,
+            supports_mcp_status: true,
+            mcp_ok: false,
+            mcp_error: Some("Timed out probing MCP startup".to_string()),
+            mcp_failure_kind: Some(RepoRuntimeStartupFailureKind::Timeout),
+            mcp_server_status: None,
+            available_tool_ids: Vec::new(),
+            progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
+                stage,
+                observation: None,
+                host: None,
+                checked_at,
+                failure_reason: None,
+                started_at: None,
+                updated_at: None,
+                elapsed_ms: Some(1_000),
+                attempts: Some(2),
+            })),
+        })
+    }
+
+    #[test]
+    fn timeout_mcp_probe_stays_checking_after_runtime_is_ready() {
+        let health =
+            build_runtime_ready_timeout_health_check(RuntimeHealthWorkflowStage::RuntimeReady);
+
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Checking)
+        );
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+    }
+
+    #[test]
+    fn timeout_mcp_reconnect_stays_reconnecting() {
+        let health =
+            build_runtime_ready_timeout_health_check(RuntimeHealthWorkflowStage::ReconnectingMcp);
+
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Reconnecting)
+        );
     }
 }

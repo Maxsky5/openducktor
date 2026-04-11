@@ -32,19 +32,19 @@ export const buildDiagnosticsSummary = ({
     };
   }
 
-  if (isChecking) {
-    return {
-      label: "Checking...",
-      toneClass: "text-muted-foreground",
-      iconClass: "text-muted-foreground",
-    };
-  }
-
   if (hasCriticalIssues) {
     return {
       label: "Critical issue",
       toneClass: "text-destructive-muted",
       iconClass: "text-destructive-accent",
+    };
+  }
+
+  if (isChecking) {
+    return {
+      label: "Checking...",
+      toneClass: "text-muted-foreground",
+      iconClass: "text-muted-foreground",
     };
   }
 

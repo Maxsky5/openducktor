@@ -534,6 +534,8 @@ describe("buildDiagnosticsPanelModel", () => {
       expect.arrayContaining([expect.objectContaining({ label: "Tools detected" })]),
     );
     expect(mcpSection?.errors).toEqual([]);
+    expect(model.summaryState.label).toBe("Checking...");
+    expect(model.criticalReasons).toEqual([]);
   });
 
   test("keeps runtime and mcp progress details scoped to the relevant section", () => {
@@ -720,14 +722,80 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    expect(model.isSummaryChecking).toBe(false);
-    expect(model.criticalReasons).toEqual(
-      expect.arrayContaining(["Runtime CLI checks still retrying", "Beads store still retrying"]),
-    );
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Checking...");
+    expect(model.criticalReasons).toEqual([]);
     expect(model.sections[1]?.badge).toEqual({ label: "Retrying", variant: "warning" });
     expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
     expect(model.sections[4]?.badge).toEqual({ label: "Retrying", variant: "warning" });
     expect(model.sections[4]?.errors[0]).toContain("Beads store is not yet available");
+  });
+
+  test("keeps hard failures ahead of retrying summary state", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: false,
+        gitVersion: null,
+        ghOk: false,
+        ghVersion: null,
+        ghAuthOk: false,
+        ghAuthLogin: null,
+        ghAuthError: "Timed out after 15000ms",
+        runtimes: [{ kind: "opencode", ok: false, version: null }],
+        errors: ["Timed out after 15000ms"],
+      },
+      beadsCheck: {
+        beadsOk: true,
+        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+        beadsError: null,
+      },
+      runtimeCheckFailureKind: "timeout",
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "error",
+          runtime: {
+            status: "error",
+            stage: "startup_failed",
+            observation: null,
+            instance: runtimeSummary,
+            startedAt: runtimeSummary.startedAt,
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            elapsedMs: 20_000,
+            attempts: 4,
+            detail: "runtime failed",
+            failureKind: "error",
+            failureReason: null,
+          },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Runtime is unavailable, so MCP cannot be verified.",
+            failureKind: "timeout",
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    expect(model.isSummaryChecking).toBe(true);
+    expect(model.summaryState.label).toBe("Critical issue");
+    expect(model.criticalReasons).toEqual(expect.arrayContaining(["runtime failed"]));
   });
 
   test("treats GitHub CLI auth failures as CLI issues even without query failure classification", () => {
