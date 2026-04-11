@@ -36,6 +36,7 @@ It:
 
 - validates that the checked-out repo state matches the tag version
 - verifies that the draft GitHub release already exists
+- installs the packaged Beads sidecar prerequisites on the runner (`bd` and `dolt`)
 - runs the repo's CEF bootstrap step
 - builds macOS assets for:
   - Apple Silicon (`aarch64-apple-darwin`)

@@ -81,6 +81,30 @@ jobs:
       - name: Install JS dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install packaged sidecar prerequisites
+        run: |
+          set -euo pipefail
+          if ! command -v bd >/dev/null 2>&1 || ! command -v dolt >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install beads
+          fi
+
+      - name: Resolve packaged sidecar binaries
+        run: |
+          set -euo pipefail
+          BD_BINARY="$(command -v bd)"
+          DOLT_BINARY="$(command -v dolt)"
+
+          if [[ -z "$BD_BINARY" || -z "$DOLT_BINARY" ]]; then
+            echo "Expected bd and dolt to be available for sidecar packaging." >&2
+            exit 1
+          fi
+
+          echo "OPENDUCKTOR_BD_BINARY=$BD_BINARY" >> "$GITHUB_ENV"
+          echo "OPENDUCKTOR_DOLT_BINARY=$DOLT_BINARY" >> "$GITHUB_ENV"
+
+          "$BD_BINARY" --help >/dev/null
+          "$DOLT_BINARY" version
+
       - name: Verify repo version matches tag
         run: bun run release:version:check "${{ steps.release_meta.outputs.version }}"
 

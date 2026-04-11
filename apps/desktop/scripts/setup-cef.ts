@@ -114,7 +114,7 @@ function hasValidExportedCefBundle(): boolean {
 
 await (async () => {
   if (process.platform === "darwin") {
-    await run("rustup", ["target", "add", "x86_64-apple-darwin"]);
+    await run("rustup", ["target", "add", "x86_64-apple-darwin", "aarch64-apple-darwin"]);
   }
 
   if (!isRunnableBinary(cargoTauriPath, ["--version"])) {
