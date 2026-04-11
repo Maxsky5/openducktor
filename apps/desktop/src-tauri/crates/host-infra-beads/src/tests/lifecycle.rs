@@ -395,7 +395,7 @@ fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Resu
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
     fs::write(
         beads_dir.join("config.yaml"),
-        "json: true\nno-git-ops: false\n",
+        "json: true\n  no-git-ops: false   # keep me\n",
     )
     .expect("config.yaml should be writable");
     let runner = MockCommandRunner::with_steps(vec![
@@ -419,7 +419,7 @@ fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Resu
     let config =
         fs::read_to_string(beads_dir.join("config.yaml")).expect("config.yaml should be readable");
     assert!(config.contains("json: true"));
-    assert!(config.contains("no-git-ops: true"));
+    assert!(config.contains("  no-git-ops: true   # keep me"));
     assert!(!config.contains("no-git-ops: false"));
     assert_eq!(calls.len(), 3);
     assert_eq!(calls[0].program, "dolt");

@@ -93,7 +93,7 @@ impl MockCommandRunner {
         _kind: CallKind,
         program: &str,
         args: &[&str],
-        _cwd: Option<&Path>,
+        cwd: Option<&Path>,
         _env: &[(&str, &str)],
     ) {
         self.calls
@@ -102,7 +102,7 @@ impl MockCommandRunner {
             .push(RecordedCall {
                 program: program.to_string(),
                 args: args.iter().map(|entry| (*entry).to_string()).collect(),
-                cwd: _cwd.map(Path::to_path_buf),
+                cwd: cwd.map(Path::to_path_buf),
             });
     }
 }

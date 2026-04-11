@@ -5,7 +5,8 @@ use host_infra_system::{
 };
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{BeadsLifecycle, LifecycleError};
 
@@ -53,12 +54,7 @@ impl BeadsLifecycle {
             return Ok(());
         }
 
-        fs::write(&config_path, updated).with_context(|| {
-            format!(
-                "Failed writing Beads tool config to keep git ops disabled at {}",
-                config_path.display()
-            )
-        })?;
+        write_config_atomically(&config_path, updated.as_str())?;
         Ok(())
     }
 
@@ -110,13 +106,16 @@ impl BeadsLifecycle {
     }
 }
 
+// Beads' managed `config.yaml` is currently a flat key-value file. We only
+// normalize the top-level `no-git-ops` key here and intentionally avoid a full
+// YAML parser so the existing file layout stays intact.
 fn ensure_no_git_ops_config(config: &str) -> String {
     let mut replaced = false;
     let mut lines = Vec::new();
     for line in config.lines() {
-        if line.trim_start().starts_with("no-git-ops:") {
+        if let Some(rewritten) = rewrite_no_git_ops_line(line) {
             if !replaced {
-                lines.push("no-git-ops: true".to_string());
+                lines.push(rewritten);
                 replaced = true;
             }
             continue;
@@ -134,4 +133,82 @@ fn ensure_no_git_ops_config(config: &str) -> String {
     let mut normalized = lines.join("\n");
     normalized.push('\n');
     normalized
+}
+
+fn rewrite_no_git_ops_line(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("no-git-ops:") {
+        return None;
+    }
+
+    let leading_whitespace_len = line.len() - trimmed.len();
+    let leading_whitespace = &line[..leading_whitespace_len];
+    let suffix = &trimmed["no-git-ops:".len()..];
+    let comment_suffix = match suffix.find('#') {
+        Some(comment_start) => {
+            let mut suffix_start = comment_start;
+            while suffix_start > 0 && suffix.as_bytes()[suffix_start - 1].is_ascii_whitespace() {
+                suffix_start -= 1;
+            }
+            &suffix[suffix_start..]
+        }
+        None => "",
+    };
+
+    let mut rewritten = format!("{leading_whitespace}no-git-ops: true");
+    rewritten.push_str(comment_suffix);
+    Some(rewritten)
+}
+
+fn write_config_atomically(config_path: &Path, contents: &str) -> Result<()> {
+    let tmp_path = temporary_config_path(config_path);
+    fs::write(&tmp_path, contents).with_context(|| {
+        format!(
+            "Failed writing Beads tool config to keep git ops disabled at {}",
+            config_path.display()
+        )
+    })?;
+
+    if let Err(error) = fs::rename(&tmp_path, config_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(error).with_context(|| {
+            format!(
+                "Failed finalizing Beads tool config update at {}",
+                config_path.display()
+            )
+        });
+    }
+
+    Ok(())
+}
+
+fn temporary_config_path(config_path: &Path) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    config_path.with_extension(format!("yaml.tmp.{nonce}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_no_git_ops_config;
+
+    #[test]
+    fn ensure_no_git_ops_config_preserves_indentation_and_comments() {
+        let config = "json: true\n  no-git-ops: false   # keep me\n";
+
+        let rewritten = ensure_no_git_ops_config(config);
+
+        assert_eq!(rewritten, "json: true\n  no-git-ops: true   # keep me\n");
+    }
+
+    #[test]
+    fn ensure_no_git_ops_config_appends_missing_key() {
+        let config = "json: true\n";
+
+        let rewritten = ensure_no_git_ops_config(config);
+
+        assert_eq!(rewritten, "json: true\n\nno-git-ops: true\n");
+    }
 }
