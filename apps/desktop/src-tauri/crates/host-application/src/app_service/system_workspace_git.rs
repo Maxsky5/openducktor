@@ -13,9 +13,10 @@ use host_domain::{
 };
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree,
-    remove_worktree_path_if_present, repo_script_fingerprint, resolve_repo_live_database_dir,
-    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
-    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    remove_worktree_path_if_present, repo_script_fingerprint, resolve_effective_worktree_base_dir,
+    resolve_repo_live_database_dir, run_command, run_command_allow_failure_with_env,
+    version_command, AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings,
+    PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -45,6 +46,13 @@ fn resolve_worktree_path(repo_path: &Path, worktree_path: &Path) -> PathBuf {
     repo_path.join(worktree_path)
 }
 
+fn path_is_within_root(root: &Path, candidate: &Path) -> bool {
+    let normalized_root = normalize_path_for_comparison(root.to_string_lossy().as_ref());
+    let normalized_candidate = normalize_path_for_comparison(candidate.to_string_lossy().as_ref());
+
+    normalized_candidate.starts_with(&normalized_root)
+}
+
 type SettingsSnapshotTuple = (
     String,
     GlobalGitConfig,
@@ -68,6 +76,28 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
 }
 
 impl AppService {
+    fn is_allowed_force_worktree_cleanup_path(
+        &self,
+        repo_path: &str,
+        candidate_path: &Path,
+    ) -> Result<bool> {
+        let repo_path_ref = Path::new(repo_path);
+        if path_is_within_root(repo_path_ref, candidate_path) {
+            return Ok(true);
+        }
+
+        let repo_config = self.config_store.repo_config(repo_path)?;
+        let managed_worktree_base = resolve_effective_worktree_base_dir(
+            repo_path_ref,
+            repo_config.worktree_base_path.as_deref(),
+        )?;
+
+        Ok(path_is_within_root(
+            managed_worktree_base.as_path(),
+            candidate_path,
+        ))
+    }
+
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {
         self.runtime_check_with_refresh(false)
     }
@@ -487,6 +517,18 @@ impl AppService {
             if !force || !is_definitive_non_worktree_git_error(&error) {
                 return Err(error);
             }
+
+            if !self.is_allowed_force_worktree_cleanup_path(
+                repo_path.as_str(),
+                effective_worktree_path.as_path(),
+            )? {
+                return Err(error).with_context(|| {
+                    format!(
+                        "Refusing forced worktree cleanup outside managed roots for {}",
+                        effective_worktree_path.display()
+                    )
+                });
+            }
         }
         remove_worktree_path_if_present(effective_worktree_path.as_path()).with_context(|| {
             format!("git worktree removal left filesystem path cleanup incomplete for {worktree}")
@@ -766,9 +808,22 @@ mod tests {
         let repo = root.join("repo");
         let worktree = root.join("worktree");
         fs::create_dir_all(&repo).expect("repo directory should exist");
+        init_git_repo(&repo).expect("repo should be initialized");
         fs::create_dir_all(worktree.join("nested")).expect("worktree directory should exist");
 
         let (service, _task_state, git_state) = build_service_with_state(vec![]);
+        service
+            .workspace_add(repo.to_string_lossy().as_ref())
+            .expect("repo should be registered");
+        service
+            .workspace_update_repo_config(
+                repo.to_string_lossy().as_ref(),
+                host_infra_system::RepoConfig {
+                    worktree_base_path: Some(root.to_string_lossy().to_string()),
+                    ..Default::default()
+                },
+            )
+            .expect("worktree base should be configured");
         git_state
             .lock()
             .expect("git state lock poisoned")
@@ -805,6 +860,33 @@ mod tests {
             !worktree.exists(),
             "relative worktree directory should be removed"
         );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn module_git_remove_worktree_does_not_force_delete_unmanaged_relative_paths() {
+        let root = unique_temp_path("module-git-remove-worktree-unmanaged-relative");
+        let repo = root.join("repo");
+        let outside = root.join("outside");
+        fs::create_dir_all(&repo).expect("repo directory should exist");
+        init_git_repo(&repo).expect("repo should be initialized");
+        fs::create_dir_all(outside.join("nested")).expect("outside directory should exist");
+
+        let (service, _task_state, git_state) = build_service_with_state(vec![]);
+        service
+            .workspace_add(repo.to_string_lossy().as_ref())
+            .expect("repo should be registered");
+        git_state
+            .lock()
+            .expect("git state lock poisoned")
+            .remove_worktree_error = Some("fatal: '../outside' is not a working tree".to_string());
+
+        let error = service
+            .git_remove_worktree(repo.to_string_lossy().as_ref(), "../outside", true)
+            .expect_err("unmanaged paths should not be force-deleted");
+        assert!(error.to_string().contains("outside managed roots"));
+        assert!(outside.exists(), "unmanaged directory should be preserved");
 
         let _ = fs::remove_dir_all(root);
     }

@@ -111,11 +111,12 @@ impl<'a> BuilderBranchService<'a> {
         {
             Ok(current_branch) => current_branch,
             Err(error)
-                if self.is_stranded_managed_task_worktree(
-                    repo_path,
-                    task_id,
-                    working_directory.as_str(),
-                )? && is_definitive_non_worktree_git_error(&error) =>
+                if is_definitive_non_worktree_git_error(&error)
+                    && self.is_stranded_managed_task_worktree(
+                        repo_path,
+                        task_id,
+                        working_directory.as_str(),
+                    )? =>
             {
                 return Ok(BuilderBranchContextLoadResult::MissingWorktree(
                     MissingBuilderWorktree::new(task_id, operation_label),
@@ -206,7 +207,9 @@ impl<'a> BuilderBranchService<'a> {
         if working_directory.is_empty() {
             return Ok(None);
         }
-        if !Path::new(working_directory.as_str()).exists() {
+        if !path_exists_including_broken_symlink(Path::new(working_directory.as_str()))
+            .with_context(|| format!("Failed checking builder worktree path {working_directory}"))?
+        {
             return Ok(None);
         }
         let current_branch = match self
@@ -216,11 +219,12 @@ impl<'a> BuilderBranchService<'a> {
         {
             Ok(current_branch) => current_branch,
             Err(error)
-                if self.is_stranded_managed_task_worktree(
-                    repo_path,
-                    task_id,
-                    working_directory.as_str(),
-                )? && is_definitive_non_worktree_git_error(&error) =>
+                if is_definitive_non_worktree_git_error(&error)
+                    && self.is_stranded_managed_task_worktree(
+                        repo_path,
+                        task_id,
+                        working_directory.as_str(),
+                    )? =>
             {
                 return Ok(Some(BuilderCleanupTarget { working_directory }));
             }
@@ -252,9 +256,9 @@ impl<'a> BuilderBranchService<'a> {
         task_id: &str,
         working_directory: &str,
     ) -> Result<bool> {
-        if !path_exists_including_broken_symlink(Path::new(working_directory)).with_context(
-            || format!("Failed checking implementation worktree path {working_directory}"),
-        )? {
+        if !path_exists_including_broken_symlink(Path::new(working_directory))
+            .with_context(|| format!("Failed checking builder worktree path {working_directory}"))?
+        {
             return Ok(false);
         }
 
