@@ -105,7 +105,7 @@ function FileDiffEntry({
   const fileName = diff.file.split("/").pop() ?? diff.file;
   const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
-  const diffResetKey = diff.diff;
+  const diffResetKey = `${diffScope}:${diff.diff}`;
   const fileComments = useMemo(
     () => allDrafts.filter((comment) => comment.filePath === diff.file),
     [allDrafts, diff.file],

@@ -211,6 +211,57 @@ describe("useAgentStudioComposerModel", () => {
     resetInlineComments();
   });
 
+  test("marks only the submitted comment snapshot as sent when a draft changes while send is pending", async () => {
+    resetInlineComments();
+    useInlineCommentDraftStore.getState().resetForContext("draft-1");
+    const commentId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "src/example.ts",
+      diffScope: "uncommitted",
+      startLine: 2,
+      endLine: 3,
+      side: "new",
+      text: "Initial pending comment",
+      codeContext: [{ lineNumber: 2, text: "target", isSelected: true }],
+      language: "ts",
+    });
+
+    let resolveSend: ((value: boolean) => void) | null = null;
+    const sentDrafts: string[] = [];
+    const harness = createComposerHookHarness(
+      createComposerHookArgs({
+        onSend: async (draft) => {
+          sentDrafts.push(draftToSerializedText(draft));
+          return await new Promise<boolean>((resolve) => {
+            resolveSend = resolve;
+          });
+        },
+      }),
+    );
+
+    await harness.mount();
+    const sendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
+
+    useInlineCommentDraftStore
+      .getState()
+      .updateDraft(commentId, "Edited after the send snapshot was captured");
+
+    if (resolveSend == null) {
+      throw new Error("Expected pending send resolver");
+    }
+
+    await act(async () => {
+      resolveSend?.(true);
+      await sendPromise;
+    });
+
+    expect(sentDrafts[0]).toContain("Initial pending comment");
+    expect(sentDrafts[0]).not.toContain("Edited after the send snapshot was captured");
+    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("pending");
+
+    await harness.unmount();
+    resetInlineComments();
+  });
+
   test("keeps pending inline comments when send fails or the draft context changes", async () => {
     resetInlineComments();
     useInlineCommentDraftStore.getState().resetForContext("draft-1");

@@ -140,6 +140,50 @@ function FileDiffListHarness(): ReactElement {
   );
 }
 
+function ScopeSwitchFileDiffListHarness(): ReactElement {
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/example.ts"]));
+  const [diffScope, setDiffScope] = useState<"uncommitted" | "target">("uncommitted");
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setDiffScope("target")}>
+        Switch scope
+      </button>
+      <FileDiffList
+        fileDiffs={[
+          {
+            file: "src/example.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ]}
+        diffScope={diffScope}
+        conflictedFiles={new Set()}
+        diffStyle="unified"
+        setDiffStyle={() => {}}
+        expandedFiles={expandedFiles}
+        onToggleFile={(filePath) => {
+          setExpandedFiles((previous) => {
+            const next = new Set(previous);
+            if (next.has(filePath)) {
+              next.delete(filePath);
+            } else {
+              next.add(filePath);
+            }
+            return next;
+          });
+        }}
+        preloadLimit={1}
+        canResetFiles={false}
+        isResetDisabled={false}
+        resetDisabledReason={null}
+      />
+    </TooltipProvider>
+  );
+}
+
 describe("FileDiffList", () => {
   test("keeps row expansion working while preload entries are mounted", () => {
     render(<FileDiffListHarness />);
@@ -174,13 +218,28 @@ describe("FileDiffList", () => {
       "Please tighten the null handling",
     );
 
+    const sentSnapshot = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
+
     act(() => {
-      useInlineCommentDraftStore.getState().markPendingAsSent();
+      useInlineCommentDraftStore.getState().markDraftsAsSent(sentSnapshot);
     });
 
     expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
     expect(screen.getByTestId("agent-studio-git-sent-comment-trigger").textContent).toContain(
       "Please tighten the null handling",
     );
+  });
+
+  test("clears an unsaved selection form when the diff scope changes for the same file row", () => {
+    render(<ScopeSwitchFileDiffListHarness />);
+
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
+    expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
   });
 });

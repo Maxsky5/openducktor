@@ -55,9 +55,13 @@ describe("use-inline-comment-draft-store", () => {
     expect(
       useInlineCommentDraftStore.getState().drafts.find((draft) => draft.id === firstId)?.text,
     ).toBe("Updated note");
+    const pendingSnapshots = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     Date.now = () => 1_700_000_000_100;
-    useInlineCommentDraftStore.getState().markPendingAsSent();
+    useInlineCommentDraftStore.getState().markDraftsAsSent(pendingSnapshots);
 
     const sentState = useInlineCommentDraftStore.getState();
     expect(sentState.getDraftCount()).toBe(0);
@@ -69,6 +73,50 @@ describe("use-inline-comment-draft-store", () => {
     expect(
       useInlineCommentDraftStore.getState().getFileDraftCount("apps/desktop/src/file-a.ts"),
     ).toBe(1);
+  });
+
+  test("marks only the submitted snapshot as sent when a pending draft changes in flight", () => {
+    Date.now = () => 1_700_000_000_000;
+
+    const firstId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 10,
+      endLine: 10,
+      side: "new",
+      text: "First note",
+      codeContext: [{ lineNumber: 10, text: "first", isSelected: true }],
+      language: "ts",
+    });
+    useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-b.ts",
+      diffScope: "target",
+      startLine: 20,
+      endLine: 20,
+      side: "old",
+      text: "Second note",
+      codeContext: [{ lineNumber: 20, text: "second", isSelected: true }],
+      language: "ts",
+    });
+
+    const sentSnapshot = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
+
+    Date.now = () => 1_700_000_000_050;
+    useInlineCommentDraftStore
+      .getState()
+      .updateDraft(firstId, "First note updated after send start");
+
+    Date.now = () => 1_700_000_000_100;
+    useInlineCommentDraftStore.getState().markDraftsAsSent(sentSnapshot);
+
+    const drafts = useInlineCommentDraftStore.getState().drafts;
+    expect(drafts.find((draft) => draft.id === firstId)?.status).toBe("pending");
+    expect(drafts.find((draft) => draft.filePath === "apps/desktop/src/file-b.ts")?.status).toBe(
+      "sent",
+    );
   });
 
   test("formats a deterministic pending appendix with scope, side, lines, context, and comment text", () => {

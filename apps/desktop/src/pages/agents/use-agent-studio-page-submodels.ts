@@ -342,13 +342,20 @@ export const useAgentStudioComposerModel = ({
 
   const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
     async (draft) => {
-      const commentAppendix = useInlineCommentDraftStore.getState().formatPendingBatchMessage();
+      const pendingDrafts = useInlineCommentDraftStore.getState().getPendingDrafts();
+      const commentAppendix = useInlineCommentDraftStore
+        .getState()
+        .formatBatchMessage(pendingDrafts);
       const nextDraft =
         commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
       scrollToBottomOnSendRef.current?.();
       const didSend = await onSend(nextDraft);
       if (didSend) {
-        useInlineCommentDraftStore.getState().markPendingAsSent();
+        useInlineCommentDraftStore
+          .getState()
+          .markDraftsAsSent(
+            pendingDrafts.map((draft) => ({ id: draft.id, revision: draft.revision })),
+          );
       }
       return didSend;
     },

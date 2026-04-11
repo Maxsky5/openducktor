@@ -20,10 +20,14 @@ export type InlineCommentDraft = {
   text: string;
   codeContext: InlineCommentContextLine[];
   language: string | null;
+  revision: number;
   createdAt: number;
+  updatedAt: number;
   sentAt: number | null;
   status: InlineCommentStatus;
 };
+
+export type InlineCommentDraftSnapshot = Pick<InlineCommentDraft, "id" | "revision">;
 
 export type AddInlineCommentDraftInput = {
   filePath: string;
@@ -43,8 +47,10 @@ export type InlineCommentDraftStore = {
   updateDraft: (id: string, text: string) => void;
   removeDraft: (id: string) => void;
   clearAll: () => void;
-  markPendingAsSent: () => void;
+  markDraftsAsSent: (drafts: InlineCommentDraftSnapshot[]) => void;
   resetForContext: (draftStateKey: string) => void;
+  getPendingDrafts: () => InlineCommentDraft[];
+  formatBatchMessage: (drafts: InlineCommentDraft[]) => string;
   formatPendingBatchMessage: () => string;
   getDraftCount: () => number;
   getFileDraftCount: (filePath: string) => number;
@@ -57,8 +63,10 @@ const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
 };
 
 let nextId = 0;
+let nextRevision = 0;
 
 const generateId = (): string => `draft-${Date.now()}-${++nextId}`;
+const generateRevision = (): number => ++nextRevision;
 
 const normalizeLineRange = (
   startLine: number,
@@ -120,7 +128,9 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       text,
       codeContext: draft.codeContext,
       language: draft.language ?? null,
+      revision: generateRevision(),
       createdAt: Date.now(),
+      updatedAt: Date.now(),
       sentAt: null,
       status: "pending",
     };
@@ -136,7 +146,14 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
 
     set((state) => ({
       drafts: state.drafts.map((draft) =>
-        draft.id === id && draft.status === "pending" ? { ...draft, text: normalizedText } : draft,
+        draft.id === id && draft.status === "pending"
+          ? {
+              ...draft,
+              text: normalizedText,
+              revision: generateRevision(),
+              updatedAt: Date.now(),
+            }
+          : draft,
       ),
     }));
   },
@@ -149,11 +166,18 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     set({ drafts: [] });
   },
 
-  markPendingAsSent: () => {
+  markDraftsAsSent: (drafts) => {
+    if (drafts.length === 0) {
+      return;
+    }
+
     const sentAt = Date.now();
+    const snapshots = new Map(drafts.map((draft) => [draft.id, draft.revision]));
     set((state) => ({
       drafts: state.drafts.map((draft) =>
-        draft.status === "pending" ? { ...draft, status: "sent", sentAt } : draft,
+        draft.status === "pending" && snapshots.get(draft.id) === draft.revision
+          ? { ...draft, status: "sent", sentAt }
+          : draft,
       ),
     }));
   },
@@ -166,15 +190,17 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     set({ drafts: [], draftStateKey });
   },
 
-  formatPendingBatchMessage: () => {
-    const pendingDrafts = get()
+  getPendingDrafts: () =>
+    get()
       .drafts.filter((draft) => draft.status === "pending")
-      .sort(compareDrafts);
-    if (pendingDrafts.length === 0) {
+      .sort(compareDrafts),
+
+  formatBatchMessage: (drafts) => {
+    if (drafts.length === 0) {
       return "";
     }
 
-    const sections = pendingDrafts.map((draft, index) => {
+    const sections = drafts.map((draft, index) => {
       const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
       return [
         `### Comment ${index + 1}`,
@@ -188,6 +214,10 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     });
 
     return ["## Git Diff Comments", ...sections].join("\n\n");
+  },
+
+  formatPendingBatchMessage: () => {
+    return get().formatBatchMessage(get().getPendingDrafts());
   },
 
   getDraftCount: () => get().drafts.filter((draft) => draft.status === "pending").length,
