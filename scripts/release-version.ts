@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import TOML from "@iarna/toml";
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -12,14 +13,17 @@ const cargoTomlPath = "apps/desktop/src-tauri/Cargo.toml";
 type Mode = "check" | "set";
 
 type CargoManifest = {
-  package?: { version?: string };
-  workspace?: { package?: { version?: string } };
+  package?: { name?: string; version?: string };
+  workspace?: { package?: { version?: string }; members?: string[] };
+};
+
+type CargoLock = {
+  package?: Array<{ name?: string; version?: string }>;
 };
 
 function usage(): never {
   console.error("Usage: bun run scripts/release-version.ts <check|set> <version>");
   process.exit(1);
-  throw new Error("unreachable");
 }
 
 function validateVersion(version: string): void {
@@ -123,6 +127,40 @@ function readCargoManifest(): CargoManifest {
   return TOML.parse(readFileSync(absolutePath, "utf8")) as CargoManifest;
 }
 
+function readCargoManifestAtPath(relativePath: string): CargoManifest {
+  const absolutePath = resolve(workspaceRoot, relativePath);
+  return TOML.parse(readFileSync(absolutePath, "utf8")) as CargoManifest;
+}
+
+function readCargoLock(): CargoLock {
+  const absolutePath = resolve(workspaceRoot, "apps/desktop/src-tauri/Cargo.lock");
+  return TOML.parse(readFileSync(absolutePath, "utf8")) as CargoLock;
+}
+
+function collectCargoPackageNames(): string[] {
+  const rootManifest = readCargoManifest();
+  const rootPackageName = rootManifest.package?.name;
+  const workspaceMembers = rootManifest.workspace?.members ?? [];
+
+  if (!rootPackageName) {
+    throw new Error(`Missing [package].name in ${cargoTomlPath}`);
+  }
+
+  const memberPackageNames = workspaceMembers.map((memberPath) => {
+    const memberManifestPath = `apps/desktop/src-tauri/${memberPath}/Cargo.toml`;
+    const memberManifest = readCargoManifestAtPath(memberManifestPath);
+    const memberName = memberManifest.package?.name;
+
+    if (!memberName) {
+      throw new Error(`Missing [package].name in ${memberManifestPath}`);
+    }
+
+    return memberName;
+  });
+
+  return [rootPackageName, ...memberPackageNames];
+}
+
 function readCargoVersions(): { packageVersion: string; workspaceVersion: string } {
   const manifest = readCargoManifest();
   const packageVersion = manifest.package?.version;
@@ -159,6 +197,37 @@ function writeCargoVersions(version: string): void {
   writeFileSync(absolutePath, TOML.stringify(manifest));
 }
 
+function readCargoLockVersions(): Array<{ file: string; version: string }> {
+  const lockFile = readCargoLock();
+  const packages = lockFile.package ?? [];
+
+  return collectCargoPackageNames().map((packageName) => {
+    const entry = packages.find((pkg) => pkg.name === packageName);
+
+    if (!entry?.version) {
+      throw new Error(`Could not resolve ${packageName} from apps/desktop/src-tauri/Cargo.lock`);
+    }
+
+    return {
+      file: `apps/desktop/src-tauri/Cargo.lock [${packageName}]`,
+      version: entry.version,
+    };
+  });
+}
+
+function syncCargoLock(): void {
+  const tauriWorkspaceRoot = resolve(workspaceRoot, "apps/desktop/src-tauri");
+  const result = spawnSync("cargo", ["metadata", "--format-version", "1"], {
+    cwd: tauriWorkspaceRoot,
+    env: process.env,
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`cargo metadata failed in ${tauriWorkspaceRoot}`);
+  }
+}
+
 function collectCurrentVersions(): Array<{ file: string; version: string }> {
   const entries: Array<{ file: string; version: string }> = collectWorkspacePackageJsonPaths().map(
     (relativePath) => ({
@@ -174,6 +243,7 @@ function collectCurrentVersions(): Array<{ file: string; version: string }> {
     file: `${cargoTomlPath} [workspace.package]`,
     version: cargoVersions.workspaceVersion,
   });
+  entries.push(...readCargoLockVersions());
   return entries;
 }
 
@@ -198,8 +268,11 @@ function setVersions(version: string): void {
 
   writeTauriConfigVersion(version);
   writeCargoVersions(version);
+  syncCargoLock();
 
-  console.log(`Updated release version to ${version} in package manifests and Tauri config.`);
+  console.log(
+    `Updated release version to ${version} in package manifests, Tauri config, and Cargo.lock.`,
+  );
 }
 
 const [, , rawMode, rawVersion] = process.argv;
