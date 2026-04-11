@@ -1,5 +1,4 @@
 use super::*;
-use crate::lifecycle::BeadsLifecycle;
 use crate::lifecycle::RepoReadiness;
 use host_infra_system::resolve_repo_beads_attachment_root;
 
@@ -330,8 +329,28 @@ fn ensure_repo_initialized_initializes_in_attachment_root_with_stealth() -> Resu
     let repo = RepoFixture::new("init-stealth");
     let attachment_root = resolve_repo_beads_attachment_root(repo.path())?;
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    let effective_port = match read_shared_dolt_server_state()? {
+        Some(state) => state.port,
+        None => 3307,
+    };
     let runner = MockCommandRunner::with_steps(vec![
-        MockStep::AllowFailureWithEnv(Ok((true, String::new(), String::new()))),
+        MockStep::AllowFailureWithEnvAndWrites {
+            result: Ok((true, String::new(), String::new())),
+            writes: vec![(
+                beads_dir.join("metadata.json"),
+                json!({
+                    "backend": "dolt",
+                    "dolt_mode": "server",
+                    "dolt_server_host": "127.0.0.1",
+                    "dolt_server_port": effective_port,
+                    "dolt_server_user": "root",
+                    "dolt_database": database_name,
+                })
+                .to_string(),
+            )],
+        },
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
         MockStep::AllowFailureWithEnv(Ok((
             true,
             json!({
@@ -348,17 +367,22 @@ fn ensure_repo_initialized_initializes_in_attachment_root_with_stealth() -> Resu
     store.ensure_repo_initialized(repo.path())?;
 
     let calls = runner.take_calls();
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 4);
     assert_eq!(calls[0].args[0], "init");
     assert!(calls[0].args.iter().any(|arg| arg == "--stealth"));
     assert_eq!(calls[0].cwd.as_deref(), Some(attachment_root.as_path()));
-    assert_eq!(calls[1].args, vec!["where", "--json"]);
-    assert_eq!(calls[1].cwd.as_deref(), Some(attachment_root.as_path()));
+    assert_eq!(calls[1].program, "dolt");
     assert_eq!(
-        calls[2].args,
+        calls[1].args.last().expect("expected sql query"),
+        "show databases"
+    );
+    assert_eq!(calls[2].args, vec!["where", "--json"]);
+    assert_eq!(calls[2].cwd.as_deref(), Some(attachment_root.as_path()));
+    assert_eq!(
+        calls[3].args,
         vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
     );
-    assert_eq!(calls[2].cwd.as_deref(), Some(attachment_root.as_path()));
+    assert_eq!(calls[3].cwd.as_deref(), Some(attachment_root.as_path()));
     Ok(())
 }
 
@@ -366,6 +390,8 @@ fn ensure_repo_initialized_initializes_in_attachment_root_with_stealth() -> Resu
 fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Result<()> {
     let repo = RepoFixture::new("existing-no-git-ops");
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let attachment_root = resolve_repo_beads_attachment_root(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
     fs::write(
         beads_dir.join("config.yaml"),
@@ -373,6 +399,7 @@ fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Resu
     )
     .expect("config.yaml should be writable");
     let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
         MockStep::AllowFailureWithEnv(Ok((
             true,
             json!({
@@ -384,38 +411,30 @@ fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Resu
         ))),
         MockStep::WithEnv(Ok("configured statuses".to_string())),
     ]);
-    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     store.ensure_repo_initialized(repo.path())?;
+    let calls = runner.take_calls();
 
     let config =
         fs::read_to_string(beads_dir.join("config.yaml")).expect("config.yaml should be readable");
     assert!(config.contains("json: true"));
     assert!(config.contains("no-git-ops: true"));
     assert!(!config.contains("no-git-ops: false"));
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[0].program, "dolt");
+    assert_eq!(
+        calls[0].args.last().expect("expected sql query"),
+        "show databases"
+    );
+    assert_eq!(calls[1].args, vec!["where", "--json"]);
+    assert_eq!(calls[1].cwd.as_deref(), Some(attachment_root.as_path()));
+    assert_eq!(
+        calls[2].args,
+        vec!["config", "set", "status.custom", CUSTOM_STATUS_VALUES]
+    );
+    assert_eq!(calls[2].cwd.as_deref(), Some(attachment_root.as_path()));
     Ok(())
-}
-
-#[test]
-fn lifecycle_verifier_only_restores_for_missing_shared_database_reasons() {
-    assert!(BeadsLifecycle::reason_requires_shared_database_seed(
-        "database \"odt_demo_deadbeef\" not found on Dolt server"
-    ));
-    assert!(BeadsLifecycle::reason_requires_shared_database_seed(
-        "database \"beads\" not found"
-    ));
-    assert!(BeadsLifecycle::reason_requires_shared_database_seed(
-        "Error 1049: unknown database"
-    ));
-    assert!(!BeadsLifecycle::reason_requires_shared_database_seed(
-        "server not reachable"
-    ));
-    assert!(!BeadsLifecycle::reason_requires_shared_database_seed(
-        "dolt server unreachable"
-    ));
-    assert!(!BeadsLifecycle::reason_requires_shared_database_seed(
-        "attachment metadata is malformed"
-    ));
 }
 
 #[test]
