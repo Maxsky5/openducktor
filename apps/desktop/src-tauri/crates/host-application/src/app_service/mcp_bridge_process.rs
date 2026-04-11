@@ -3,7 +3,7 @@ use super::{terminate_child_process, AppService, McpBridgeProcess};
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::pick_free_port;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -98,6 +98,13 @@ fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
     Ok(child)
 }
 
+fn mcp_bridge_fallback_binary_path(parent: &Path) -> PathBuf {
+    parent.join(format!(
+        "{MCP_BRIDGE_FALLBACK_BINARY_NAME}{}",
+        std::env::consts::EXE_SUFFIX
+    ))
+}
+
 fn resolve_mcp_bridge_binary_path() -> Result<PathBuf> {
     if let Ok(raw) = std::env::var(MCP_BRIDGE_BINARY_ENV) {
         let trimmed = raw.trim();
@@ -118,7 +125,7 @@ fn resolve_mcp_bridge_binary_path() -> Result<PathBuf> {
         .is_some_and(|value| value == "browser_backend")
     {
         if let Some(parent) = current_exe.parent() {
-            let fallback = parent.join(MCP_BRIDGE_FALLBACK_BINARY_NAME);
+            let fallback = mcp_bridge_fallback_binary_path(parent);
             if fallback.is_file() {
                 return Ok(fallback);
             }
@@ -192,5 +199,22 @@ impl AppService {
             self.unregister_mcp_bridge_port(port)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mcp_bridge_fallback_binary_path;
+    use std::path::Path;
+
+    #[test]
+    fn fallback_bridge_binary_appends_platform_executable_suffix() {
+        let expected = format!("openducktor-desktop{}", std::env::consts::EXE_SUFFIX);
+        let resolved = mcp_bridge_fallback_binary_path(Path::new("/tmp"));
+
+        assert_eq!(
+            resolved.file_name().and_then(|value| value.to_str()),
+            Some(expected.as_str())
+        );
     }
 }
