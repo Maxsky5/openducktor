@@ -7,13 +7,14 @@ import type {
 } from "@/types/diagnostics";
 
 type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
+type DiagnosticsToastSeverity = Exclude<RepoRuntimeFailureKind, "timeout" | null>;
 type AvailabilityVerb = "is" | "are";
 
 export type DiagnosticsToastIssue = {
   id: string;
   title: string;
   description: string;
-  severity: NonNullRepoRuntimeFailureKind;
+  severity: DiagnosticsToastSeverity;
 };
 
 export type DiagnosticsRetryPlan = {
@@ -169,24 +170,13 @@ const buildDiagnosticsToastIssue = ({
   id,
   label,
   detail,
-  failureKind,
-  availabilityVerb,
 }: DiagnosticsIssueCandidate): DiagnosticsToastIssue => {
-  return failureKind === "timeout"
-    ? {
-        id,
-        title: `${label} not yet available`,
-        description: buildTimeoutToastDescription(label, detail, {
-          availabilityVerb,
-        }),
-        severity: failureKind,
-      }
-    : {
-        id,
-        title: `${label} unavailable`,
-        description: buildErrorToastDescription(label, detail),
-        severity: failureKind,
-      };
+  return {
+    id,
+    title: `${label} unavailable`,
+    description: buildErrorToastDescription(label, detail),
+    severity: "error",
+  };
 };
 
 const buildDiagnosticsIssueCandidate = (
@@ -245,7 +235,7 @@ const getRuntimeHealthIssueCandidates = (
         availabilityVerb: "is",
       },
       runtimeHealth.runtime.detail,
-      runtimeHealth.runtime.status === "error" ? runtimeHealth.runtime.failureKind : null,
+      runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
     );
 
     if (runtimeIssue !== null) {
@@ -264,7 +254,7 @@ const getRuntimeHealthIssueCandidates = (
         availabilityVerb: "is",
       },
       runtimeHealth.mcp?.detail ?? null,
-      runtimeHealth.mcp?.status === "error" ? runtimeHealth.mcp.failureKind : null,
+      runtimeHealth.mcp?.status === "error" ? "error" : (runtimeHealth.mcp?.failureKind ?? null),
     );
 
     if (mcpIssue !== null) {
@@ -295,7 +285,10 @@ export const buildDiagnosticsToastIssues = ({
     getBeadsCheckIssueCandidate(beadsCheck, beadsCheckError, beadsCheckFailureKind),
     ...getRuntimeHealthIssueCandidates(runtimeDefinitions, runtimeHealthByRuntime),
   ]
-    .filter((issueCandidate) => issueCandidate !== null)
+    .filter(
+      (issueCandidate): issueCandidate is DiagnosticsIssueCandidate =>
+        issueCandidate !== null && issueCandidate.failureKind === "error",
+    )
     .map((issueCandidate) => buildDiagnosticsToastIssue(issueCandidate));
 };
 
@@ -310,10 +303,31 @@ export const hasRuntimeHealthTimeoutIssue = (
     }
 
     return (
-      runtimeHealth.runtime.failureKind === "timeout" ||
-      (definition.capabilities.supportsMcpStatus && runtimeHealth.mcp?.failureKind === "timeout")
+      (runtimeHealth.runtime.status !== "error" &&
+        runtimeHealth.runtime.failureKind === "timeout") ||
+      (definition.capabilities.supportsMcpStatus &&
+        runtimeHealth.mcp?.status !== "error" &&
+        runtimeHealth.mcp?.failureKind === "timeout")
     );
   });
+};
+
+export const hasDiagnosticsRetryingState = ({
+  runtimeDefinitions,
+  runtimeCheckFailureKind,
+  beadsCheckFailureKind,
+  runtimeHealthByRuntime,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheckFailureKind: RepoRuntimeFailureKind;
+  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+}): boolean => {
+  return (
+    runtimeCheckFailureKind === "timeout" ||
+    beadsCheckFailureKind === "timeout" ||
+    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime)
+  );
 };
 
 export const buildDiagnosticsRetryPlan = ({

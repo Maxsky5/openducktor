@@ -36,4 +36,16 @@ describe("buildDiagnosticsSummary", () => {
 
     expect(summary.label).toBe("Healthy");
   });
+
+  test("keeps critical issues ahead of retrying state", () => {
+    const summary = buildDiagnosticsSummary({
+      hasActiveRepo: true,
+      isChecking: true,
+      hasCriticalIssues: true,
+      hasSetupIssues: false,
+    });
+
+    expect(summary.label).toBe("Critical issue");
+    expect(summary.toneClass).toBe("text-destructive-muted");
+  });
 });

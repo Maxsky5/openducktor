@@ -838,10 +838,12 @@ mod tests {
     use crate::app_service::test_support::{build_service_with_state, make_task};
     use crate::app_service::{AgentRuntimeProcess, RunProcess};
     use anyhow::{anyhow, Result};
+    use chrono::{TimeDelta, Utc};
     use host_domain::{
-        AgentRuntimeKind, AgentSessionDocument, RepoRuntimeHealthMcp, RepoRuntimeHealthObservation,
-        RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus,
-        RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary, TaskStatus,
+        now_rfc3339, AgentRuntimeKind, AgentSessionDocument, RepoRuntimeHealthMcp,
+        RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime, RepoRuntimeHealthState,
+        RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary,
+        TaskStatus,
     };
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
@@ -912,6 +914,46 @@ mod tests {
                     let _ = stream.flush();
                 }
             }
+            requests
+        });
+        Ok((port, handle))
+    }
+
+    fn spawn_runtime_http_server_until_idle(
+        responses: Vec<String>,
+        idle_timeout: Duration,
+    ) -> Result<(u16, std::thread::JoinHandle<Vec<String>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let port = listener.local_addr()?.port();
+        let handle = std::thread::spawn(move || {
+            let mut requests = Vec::new();
+            let mut responses = responses.into_iter();
+            let mut last_activity = Instant::now();
+
+            loop {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let mut request_buffer = [0_u8; 4096];
+                        let size = stream.read(&mut request_buffer).unwrap_or(0);
+                        requests.push(String::from_utf8_lossy(&request_buffer[..size]).to_string());
+                        if let Some(response) = responses.next() {
+                            let _ = stream.write_all(response.as_bytes());
+                            let _ = stream.flush();
+                        }
+                        last_activity = Instant::now();
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if requests.is_empty() || last_activity.elapsed() < idle_timeout {
+                            std::thread::sleep(Duration::from_millis(10));
+                            continue;
+                        }
+                        break;
+                    }
+                    Err(_) => break,
+                }
+            }
+
             requests
         });
         Ok((port, handle))
@@ -1259,10 +1301,10 @@ mod tests {
             "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-refresh-failure "
         ));
         assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
-        assert_eq!(health.status, RepoRuntimeHealthState::Error);
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
         assert_eq!(
             health.mcp.as_ref().map(|value| value.status),
-            Some(RepoRuntimeMcpStatus::Error)
+            Some(RepoRuntimeMcpStatus::Reconnecting)
         );
         assert!(health
             .mcp
@@ -1271,6 +1313,144 @@ mod tests {
             .is_some_and(
                 |value| value.contains("Failed to refresh runtime MCP status after reconnect")
             ));
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_keeps_startup_failed_mcp_checking_within_grace_window() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let started_at = (Utc::now() - TimeDelta::milliseconds(9_300)).to_rfc3339();
+        let (port, server_handle) = spawn_runtime_http_server_until_idle(
+            vec![
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response("200 OK", r#"true"#),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+                runtime_http_response(
+                    "200 OK",
+                    r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+                ),
+            ],
+            Duration::from_millis(150),
+        )?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-startup-failed-mcp".to_string(),
+            repo_path: "/tmp/repo-health-startup-failed-mcp".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-startup-failed-mcp".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at,
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health =
+            service.repo_runtime_health("opencode", "/tmp/repo-health-startup-failed-mcp")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(requests[1].starts_with(
+            "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-startup-failed-mcp "
+        ));
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Reconnecting)
+        );
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_recovers_after_startup_failed_status_retries() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let started_at = now_rfc3339();
+        let (port, server_handle) = spawn_runtime_http_server(vec![
+            runtime_http_response(
+                "200 OK",
+                r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+            ),
+            runtime_http_response("200 OK", r#"true"#),
+            runtime_http_response(
+                "200 OK",
+                r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+            ),
+            runtime_http_response(
+                "200 OK",
+                r#"{"openducktor":{"status":"failed","error":"MCP error -32000: Connection closed"}}"#,
+            ),
+            runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
+            runtime_http_response("200 OK", r#"["odt_read_task"]"#),
+        ])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-startup-retry-success".to_string(),
+            repo_path: "/tmp/repo-health-startup-retry-success".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-startup-retry-success".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at,
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health =
+            service.repo_runtime_health("opencode", "/tmp/repo-health-startup-retry-success")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(requests[1].starts_with(
+            "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-startup-retry-success "
+        ));
+        assert_eq!(health.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Connected)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(vec!["odt_read_task".to_string()])
+        );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
     }

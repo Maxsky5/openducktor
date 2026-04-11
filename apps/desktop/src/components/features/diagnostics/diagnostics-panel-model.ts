@@ -19,6 +19,7 @@ import {
 import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
+  hasDiagnosticsRetryingState,
   hasRuntimeCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -287,12 +288,8 @@ export const buildDiagnosticsPanelModel = (
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
-    if (hasRuntimeCheckFailure(runtimeCheck)) {
-      criticalReasons.push(
-        runtimeCheckFailureKind === "timeout"
-          ? "Runtime CLI checks still retrying"
-          : "Runtime CLI checks failing",
-      );
+    if (hasRuntimeCheckFailure(runtimeCheck) && runtimeCheckFailureKind !== "timeout") {
+      criticalReasons.push("Runtime CLI checks failing");
     }
     for (const { definition, runtimeHealth } of runtimeEntries) {
       if (runtimeHealth?.status === "error") {
@@ -302,12 +299,8 @@ export const buildDiagnosticsPanelModel = (
         );
       }
     }
-    if (hasBeadsCheckFailure(beadsCheck)) {
-      criticalReasons.push(
-        beadsCheckFailureKind === "timeout"
-          ? "Beads store still retrying"
-          : "Beads store unavailable",
-      );
+    if (hasBeadsCheckFailure(beadsCheck) && beadsCheckFailureKind !== "timeout") {
+      criticalReasons.push("Beads store unavailable");
     }
   }
 
@@ -323,7 +316,13 @@ export const buildDiagnosticsPanelModel = (
       runtimeCheck === null ||
       beadsCheck === null ||
       isRuntimeHealthPending ||
-      hasCheckingRuntimeHealth);
+      hasCheckingRuntimeHealth ||
+      hasDiagnosticsRetryingState({
+        runtimeDefinitions,
+        runtimeCheckFailureKind,
+        beadsCheckFailureKind,
+        runtimeHealthByRuntime,
+      }));
 
   const repositorySection: DiagnosticsSectionModel = {
     key: "repository",

@@ -797,10 +797,7 @@ describe("use-checks", () => {
           description: "runtime down",
         }),
       );
-      expect(toastMessage).toHaveBeenCalledWith(
-        "Beads store not yet available",
-        expect.objectContaining({ id: "diagnostics:beads-store" }),
-      );
+      expect(toastMessage).not.toHaveBeenCalled();
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
@@ -865,14 +862,7 @@ describe("use-checks", () => {
           value.isLoadingChecks === false,
       );
 
-      expect(toastMessage).toHaveBeenCalledWith(
-        "CLI tools not yet available",
-        expect.objectContaining({ id: "diagnostics:cli-tools" }),
-      );
-      expect(toastMessage).toHaveBeenCalledWith(
-        "Beads store not yet available",
-        expect.objectContaining({ id: "diagnostics:beads-store" }),
-      );
+      expect(toastMessage).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
