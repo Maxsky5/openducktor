@@ -1348,6 +1348,70 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
 }
 
 #[test]
+fn task_reset_propagates_non_worktree_branch_errors_for_task_managed_worktrees() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-non-worktree-branch-error-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let spec_worktree = worktree_base.join("task-1-spec");
+    fs::create_dir_all(&spec_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::ReadyForDev);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        workspace.path.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branch_error_by_path
+        .insert(
+            spec_worktree.to_string_lossy().to_string(),
+            "permission denied".to_string(),
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "spec-session".to_string(),
+        external_session_id: None,
+        role: "spec".to_string(),
+        scenario: "spec_authoring".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: spec_worktree.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let error = service
+        .task_reset(workspace.path.as_str(), "task-1")
+        .expect_err("non-worktree branch errors should propagate");
+    assert!(format!("{error:#}").contains("Failed to inspect implementation worktree branch"));
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { .. }
+    )));
+
+    Ok(())
+}
+
+#[test]
 fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whitespace() -> Result<()>
 {
     let repo_path = unique_temp_path("task-delete-live-qa-trimmed-role-repo");
@@ -2499,6 +2563,75 @@ fn task_reset_implementation_removes_stranded_managed_worktree_when_branch_inspe
         call,
         crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
             if worktree_path == &managed_worktree.to_string_lossy() && *force
+    )));
+
+    Ok(())
+}
+
+#[test]
+fn task_reset_implementation_propagates_non_worktree_branch_errors_for_managed_worktrees(
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-non-worktree-branch-error-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let managed_worktree = worktree_base.join("task-1");
+    fs::create_dir_all(&managed_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    service.workspace_update_repo_config(
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branch_error_by_path
+        .insert(
+            managed_worktree.to_string_lossy().to_string(),
+            "permission denied".to_string(),
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: managed_worktree.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let error = service
+        .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("non-worktree branch errors should propagate");
+    assert!(format!("{error:#}").contains("Failed to inspect implementation worktree branch"));
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(!git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { .. }
     )));
 
     Ok(())

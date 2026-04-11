@@ -852,6 +852,7 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     await waitForMockCall(startAgentSessionMock);
+    await waitForMockCall(toastErrorMock);
     expect(toastErrorMock).toHaveBeenCalledTimes(1);
     expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
       description: "Worktree path already exists for task TASK-123",

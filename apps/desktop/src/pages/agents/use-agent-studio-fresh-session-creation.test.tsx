@@ -175,6 +175,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
     });
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
+    await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
     expect(toastErrorMock).toHaveBeenCalledTimes(1);
     expect(toastErrorMock).toHaveBeenCalledWith("Failed to start Planner session", {
       description: "start failed",
