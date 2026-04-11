@@ -25,6 +25,7 @@ pub(super) enum MockStep {
 pub(super) struct RecordedCall {
     pub(super) program: String,
     pub(super) args: Vec<String>,
+    pub(super) cwd: Option<PathBuf>,
 }
 
 #[derive(Debug, Default)]
@@ -101,6 +102,7 @@ impl MockCommandRunner {
             .push(RecordedCall {
                 program: program.to_string(),
                 args: args.iter().map(|entry| (*entry).to_string()).collect(),
+                cwd: _cwd.map(Path::to_path_buf),
             });
     }
 }

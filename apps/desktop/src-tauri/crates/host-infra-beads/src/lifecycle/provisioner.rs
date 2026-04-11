@@ -139,6 +139,7 @@ impl BeadsLifecycle {
                 "--server-user",
                 "root",
                 "--quiet",
+                "--stealth",
                 "--skip-hooks",
                 "--skip-agents",
                 "--prefix",
