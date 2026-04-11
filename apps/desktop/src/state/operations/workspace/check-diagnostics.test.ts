@@ -91,9 +91,10 @@ describe("check-diagnostics helpers", () => {
     expect(issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "diagnostics:beads-store", severity: "error" }),
+        expect.objectContaining({ id: "diagnostics:runtime:opencode", severity: "error" }),
       ]),
     );
-    expect(issues).toHaveLength(1);
+    expect(issues).toHaveLength(2);
   });
 
   test("restores unhealthy cli and beads payload toasts even without query failures", () => {
@@ -191,10 +192,10 @@ describe("check-diagnostics helpers", () => {
         beadsCheckFetching: true,
         runtimeHealthByRuntime: {
           opencode: makeRepoHealth({
-            status: "error",
+            status: "checking",
             mcp: {
               supported: true,
-              status: "error",
+              status: "checking",
               serverName: "openducktor",
               serverStatus: null,
               toolIds: [],
@@ -209,6 +210,36 @@ describe("check-diagnostics helpers", () => {
       retryRuntimeCheck: false,
       retryBeadsCheck: false,
       retryRuntimeHealth: true,
+    });
+
+    expect(
+      buildDiagnosticsRetryPlan({
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeCheckFailureKind: null,
+        runtimeCheckFetching: false,
+        beadsCheckFailureKind: null,
+        beadsCheckFetching: false,
+        runtimeHealthByRuntime: {
+          opencode: makeRepoHealth({
+            status: "error",
+            mcp: {
+              supported: true,
+              status: "error",
+              serverName: "openducktor",
+              serverStatus: null,
+              toolIds: [],
+              detail: "OpenCode MCP timed out after retries",
+              failureKind: "timeout",
+            },
+          }),
+        },
+        runtimeHealthFetching: false,
+      }),
+    ).toEqual({
+      retryRuntimeCheck: false,
+      retryBeadsCheck: false,
+      retryRuntimeHealth: false,
     });
   });
 });

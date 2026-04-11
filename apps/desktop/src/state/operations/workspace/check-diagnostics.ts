@@ -235,7 +235,7 @@ const getRuntimeHealthIssueCandidates = (
         availabilityVerb: "is",
       },
       runtimeHealth.runtime.detail,
-      runtimeHealth.runtime.status === "error" ? runtimeHealth.runtime.failureKind : null,
+      runtimeHealth.runtime.status === "error" ? "error" : runtimeHealth.runtime.failureKind,
     );
 
     if (runtimeIssue !== null) {
@@ -254,7 +254,7 @@ const getRuntimeHealthIssueCandidates = (
         availabilityVerb: "is",
       },
       runtimeHealth.mcp?.detail ?? null,
-      runtimeHealth.mcp?.status === "error" ? runtimeHealth.mcp.failureKind : null,
+      runtimeHealth.mcp?.status === "error" ? "error" : (runtimeHealth.mcp?.failureKind ?? null),
     );
 
     if (mcpIssue !== null) {
@@ -303,8 +303,11 @@ export const hasRuntimeHealthTimeoutIssue = (
     }
 
     return (
-      runtimeHealth.runtime.failureKind === "timeout" ||
-      (definition.capabilities.supportsMcpStatus && runtimeHealth.mcp?.failureKind === "timeout")
+      (runtimeHealth.runtime.status !== "error" &&
+        runtimeHealth.runtime.failureKind === "timeout") ||
+      (definition.capabilities.supportsMcpStatus &&
+        runtimeHealth.mcp?.status !== "error" &&
+        runtimeHealth.mcp?.failureKind === "timeout")
     );
   });
 };
