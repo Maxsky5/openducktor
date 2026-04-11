@@ -43,10 +43,13 @@ export type AddInlineCommentDraftInput = {
 export type InlineCommentDraftStore = {
   drafts: InlineCommentDraft[];
   draftStateKey: string | null;
+  submittingDrafts: InlineCommentDraftSnapshot[];
   addDraft: (draft: AddInlineCommentDraftInput) => string;
   updateDraft: (id: string, text: string) => void;
   removeDraft: (id: string) => void;
   clearAll: () => void;
+  beginSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => void;
+  clearSubmittingDrafts: () => void;
   markDraftsAsSent: (drafts: InlineCommentDraftSnapshot[]) => void;
   resetForContext: (draftStateKey: string) => void;
   getPendingDrafts: () => InlineCommentDraft[];
@@ -55,6 +58,7 @@ export type InlineCommentDraftStore = {
   getDraftCount: () => number;
   getFileDraftCount: (filePath: string) => number;
   getDraftsForFile: (filePath: string) => InlineCommentDraft[];
+  isDraftSubmitting: (draft: InlineCommentDraftSnapshot) => boolean;
 };
 
 const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
@@ -76,6 +80,16 @@ const normalizeLineRange = (
 };
 
 const normalizeDraftText = (text: string): string => text.trim();
+
+const isSnapshotSubmitting = (
+  submittingDrafts: InlineCommentDraftSnapshot[],
+  draft: InlineCommentDraftSnapshot,
+): boolean => {
+  return submittingDrafts.some(
+    (submittingDraft) =>
+      submittingDraft.id === draft.id && submittingDraft.revision === draft.revision,
+  );
+};
 
 const compareDrafts = (left: InlineCommentDraft, right: InlineCommentDraft): number => {
   return (
@@ -109,6 +123,7 @@ const formatContextBlock = (
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
   drafts: [],
   draftStateKey: null,
+  submittingDrafts: [],
 
   addDraft: (draft) => {
     const text = normalizeDraftText(draft.text);
@@ -143,27 +158,44 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     if (normalizedText.length === 0) {
       throw new Error("Inline comments cannot be empty.");
     }
+    const draft = get().drafts.find((candidate) => candidate.id === id);
+    if (draft && isSnapshotSubmitting(get().submittingDrafts, draft)) {
+      throw new Error("Cannot edit a git diff comment while it is being sent.");
+    }
 
     set((state) => ({
-      drafts: state.drafts.map((draft) =>
-        draft.id === id && draft.status === "pending"
+      drafts: state.drafts.map((currentDraft) =>
+        currentDraft.id === id && currentDraft.status === "pending"
           ? {
-              ...draft,
+              ...currentDraft,
               text: normalizedText,
               revision: generateRevision(),
               updatedAt: Date.now(),
             }
-          : draft,
+          : currentDraft,
       ),
     }));
   },
 
   removeDraft: (id) => {
-    set((state) => ({ drafts: state.drafts.filter((draft) => draft.id !== id) }));
+    const draft = get().drafts.find((candidate) => candidate.id === id);
+    if (draft && isSnapshotSubmitting(get().submittingDrafts, draft)) {
+      throw new Error("Cannot remove a git diff comment while it is being sent.");
+    }
+
+    set((state) => ({ drafts: state.drafts.filter((currentDraft) => currentDraft.id !== id) }));
   },
 
   clearAll: () => {
-    set({ drafts: [] });
+    set({ drafts: [], submittingDrafts: [] });
+  },
+
+  beginSubmittingDrafts: (drafts) => {
+    set({ submittingDrafts: drafts });
+  },
+
+  clearSubmittingDrafts: () => {
+    set({ submittingDrafts: [] });
   },
 
   markDraftsAsSent: (drafts) => {
@@ -187,7 +219,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return;
     }
 
-    set({ drafts: [], draftStateKey });
+    set({ drafts: [], draftStateKey, submittingDrafts: [] });
   },
 
   getPendingDrafts: () =>
@@ -229,4 +261,6 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     get()
       .drafts.filter((draft) => draft.filePath === filePath)
       .sort(compareDrafts),
+
+  isDraftSubmitting: (draft) => isSnapshotSubmitting(get().submittingDrafts, draft),
 }));

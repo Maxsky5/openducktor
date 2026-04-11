@@ -64,7 +64,7 @@ const viewerMock = mock(
 );
 
 const resetInlineComments = (): void => {
-  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
+  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null, submittingDrafts: [] });
 };
 
 beforeAll(async () => {
@@ -231,6 +231,30 @@ describe("FileDiffList", () => {
     expect(screen.getByTestId("agent-studio-git-sent-comment-trigger").textContent).toContain(
       "Please tighten the null handling",
     );
+  });
+
+  test("disables edit and remove actions for submitted comments while send is in flight", () => {
+    render(<FileDiffListHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
+      target: { value: "Please tighten the null handling" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save comment" }));
+
+    const sentSnapshot = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
+
+    act(() => {
+      useInlineCommentDraftStore.getState().beginSubmittingDrafts(sentSnapshot);
+    });
+
+    expect(screen.getByRole("button", { name: "Edit" }).getAttribute("disabled")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Remove" }).getAttribute("disabled")).not.toBeNull();
+    expect(screen.getByText("Sending")).toBeDefined();
   });
 
   test("clears an unsaved selection form when the diff scope changes for the same file row", () => {

@@ -20,7 +20,7 @@ type HookArgs = Parameters<typeof useAgentStudioThreadModel>[0];
 type ComposerHookArgs = Parameters<typeof useAgentStudioComposerModel>[0];
 
 const resetInlineComments = (): void => {
-  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
+  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null, submittingDrafts: [] });
 };
 
 const createHookArgs = (showThinkingMessages = false): HookArgs => ({
@@ -211,7 +211,7 @@ describe("useAgentStudioComposerModel", () => {
     resetInlineComments();
   });
 
-  test("marks only the submitted comment snapshot as sent when a draft changes while send is pending", async () => {
+  test("locks the submitted comment snapshot while send is pending and preserves it as sent on success", async () => {
     resetInlineComments();
     useInlineCommentDraftStore.getState().resetForContext("draft-1");
     const commentId = useInlineCommentDraftStore.getState().addDraft({
@@ -241,9 +241,13 @@ describe("useAgentStudioComposerModel", () => {
     await harness.mount();
     const sendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
 
-    useInlineCommentDraftStore
-      .getState()
-      .updateDraft(commentId, "Edited after the send snapshot was captured");
+    expect(useInlineCommentDraftStore.getState().submittingDrafts).toHaveLength(1);
+
+    expect(() =>
+      useInlineCommentDraftStore
+        .getState()
+        .updateDraft(commentId, "Edited after the send snapshot was captured"),
+    ).toThrow("Cannot edit a git diff comment while it is being sent.");
 
     if (resolveSend == null) {
       throw new Error("Expected pending send resolver");
@@ -256,7 +260,8 @@ describe("useAgentStudioComposerModel", () => {
 
     expect(sentDrafts[0]).toContain("Initial pending comment");
     expect(sentDrafts[0]).not.toContain("Edited after the send snapshot was captured");
-    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("pending");
+    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("sent");
+    expect(useInlineCommentDraftStore.getState().submittingDrafts).toEqual([]);
 
     await harness.unmount();
     resetInlineComments();

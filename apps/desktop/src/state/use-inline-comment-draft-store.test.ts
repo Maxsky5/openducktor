@@ -7,6 +7,7 @@ const resetStore = (): void => {
   useInlineCommentDraftStore.setState({
     drafts: [],
     draftStateKey: null,
+    submittingDrafts: [],
   });
 };
 
@@ -116,6 +117,32 @@ describe("use-inline-comment-draft-store", () => {
     expect(drafts.find((draft) => draft.id === firstId)?.status).toBe("pending");
     expect(drafts.find((draft) => draft.filePath === "apps/desktop/src/file-b.ts")?.status).toBe(
       "sent",
+    );
+  });
+
+  test("rejects editing or removing a comment while that exact draft is being sent", () => {
+    const draftId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 1,
+      endLine: 1,
+      side: "new",
+      text: "Pending comment",
+      codeContext: [{ lineNumber: 1, text: "line", isSelected: true }],
+      language: "ts",
+    });
+    const snapshot = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
+
+    useInlineCommentDraftStore.getState().beginSubmittingDrafts(snapshot);
+
+    expect(() => useInlineCommentDraftStore.getState().updateDraft(draftId, "Edited")).toThrow(
+      "Cannot edit a git diff comment while it is being sent.",
+    );
+    expect(() => useInlineCommentDraftStore.getState().removeDraft(draftId)).toThrow(
+      "Cannot remove a git diff comment while it is being sent.",
     );
   });
 

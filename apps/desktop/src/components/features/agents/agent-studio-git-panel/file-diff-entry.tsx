@@ -98,6 +98,7 @@ function FileDiffEntry({
   const StatusIcon = FILE_STATUS_ICON[diff.type] ?? FileText;
   const statusColor = FILE_STATUS_COLOR[diff.type] ?? "text-muted-foreground";
   const allDrafts = useInlineCommentDraftStore((store) => store.drafts);
+  const submittingDrafts = useInlineCommentDraftStore((store) => store.submittingDrafts);
   const addDraft = useInlineCommentDraftStore((store) => store.addDraft);
   const updateDraft = useInlineCommentDraftStore((store) => store.updateDraft);
   const removeDraft = useInlineCommentDraftStore((store) => store.removeDraft);
@@ -113,6 +114,14 @@ function FileDiffEntry({
   const fileCommentCount = fileComments.length;
   const pendingComments = fileComments.filter((comment) => comment.status === "pending");
   const sentComments = fileComments.filter((comment) => comment.status === "sent");
+  const isDraftSubmitting = useCallback(
+    (comment: InlineCommentDraft): boolean =>
+      submittingDrafts.some(
+        (submittingDraft) =>
+          submittingDraft.id === comment.id && submittingDraft.revision === comment.revision,
+      ),
+    [submittingDrafts],
+  );
 
   // Keep diff subtrees mounted after first expand in production for cheap reopen,
   // but reset them in tests so assertions stay deterministic.
@@ -143,6 +152,18 @@ function FileDiffEntry({
     setEditingCommentId(null);
     setEditingText("");
   }, [diffResetKey]);
+
+  useEffect(() => {
+    if (editingCommentId == null) {
+      return;
+    }
+
+    const editingComment = pendingComments.find((comment) => comment.id === editingCommentId);
+    if (editingComment && isDraftSubmitting(editingComment)) {
+      setEditingCommentId(null);
+      setEditingText("");
+    }
+  }, [editingCommentId, isDraftSubmitting, pendingComments]);
 
   const shouldRenderPersistedDiffBody =
     hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
@@ -366,6 +387,7 @@ function FileDiffEntry({
                 <section className="space-y-3" data-testid="agent-studio-git-pending-comments">
                   {pendingComments.map((comment) => {
                     const isEditing = editingCommentId === comment.id;
+                    const isSubmitting = isDraftSubmitting(comment);
                     return (
                       <div
                         key={comment.id}
@@ -374,6 +396,7 @@ function FileDiffEntry({
                       >
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <Badge variant="warning">Pending</Badge>
+                          {isSubmitting ? <Badge variant="outline">Sending</Badge> : null}
                           <span>{getDiffScopeLabel(comment.diffScope)}</span>
                           <span>{comment.side === "old" ? "Old side" : "New side"}</span>
                           <span>{formatLineRange(comment.startLine, comment.endLine)}</span>
@@ -384,6 +407,7 @@ function FileDiffEntry({
                             <Textarea
                               value={editingText}
                               className="mt-3 min-h-24"
+                              disabled={isSubmitting}
                               onChange={(event) => setEditingText(event.currentTarget.value)}
                             />
                             <div className="mt-3 flex items-center justify-end gap-2">
@@ -391,6 +415,7 @@ function FileDiffEntry({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                disabled={isSubmitting}
                                 onClick={handleCancelEditing}
                               >
                                 <X className="mr-1.5 size-3.5" />
@@ -399,7 +424,7 @@ function FileDiffEntry({
                               <Button
                                 type="button"
                                 size="sm"
-                                disabled={editingText.trim().length === 0}
+                                disabled={isSubmitting || editingText.trim().length === 0}
                                 onClick={handleSaveEditing}
                               >
                                 <Check className="mr-1.5 size-3.5" />
@@ -417,6 +442,7 @@ function FileDiffEntry({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                disabled={isSubmitting}
                                 onClick={() => handleStartEditing(comment)}
                               >
                                 <Pencil className="mr-1.5 size-3.5" />
@@ -426,6 +452,7 @@ function FileDiffEntry({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                disabled={isSubmitting}
                                 onClick={() => removeDraft(comment.id)}
                               >
                                 <Trash2 className="mr-1.5 size-3.5" />
