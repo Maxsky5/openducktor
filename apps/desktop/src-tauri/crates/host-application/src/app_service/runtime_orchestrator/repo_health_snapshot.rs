@@ -235,13 +235,7 @@ fn summarize_mcp_status(
             .as_ref()
             .map(|value| value.stage)
             .unwrap_or_else(|| default_workflow_stage(input));
-        return match workflow_stage {
-            RuntimeHealthWorkflowStage::ReconnectingMcp => RepoRuntimeMcpStatus::Reconnecting,
-            RuntimeHealthWorkflowStage::RuntimeReady
-            | RuntimeHealthWorkflowStage::CheckingMcpStatus
-            | RuntimeHealthWorkflowStage::Ready => RepoRuntimeMcpStatus::Checking,
-            _ => RepoRuntimeMcpStatus::Error,
-        };
+        return summarize_timeout_mcp_status(workflow_stage);
     }
     if input.mcp_failure_kind.is_some() || input.mcp_error.is_some() {
         return RepoRuntimeMcpStatus::Error;
@@ -251,6 +245,17 @@ fn summarize_mcp_status(
         Some(RuntimeHealthWorkflowStage::ReconnectingMcp) => RepoRuntimeMcpStatus::Reconnecting,
         Some(RuntimeHealthWorkflowStage::CheckingMcpStatus) => RepoRuntimeMcpStatus::Checking,
         _ => RepoRuntimeMcpStatus::Checking,
+    }
+}
+
+fn summarize_timeout_mcp_status(
+    workflow_stage: RuntimeHealthWorkflowStage,
+) -> RepoRuntimeMcpStatus {
+    match workflow_stage {
+        RuntimeHealthWorkflowStage::CheckingMcpStatus
+        | RuntimeHealthWorkflowStage::RestartSkippedActiveRun => RepoRuntimeMcpStatus::Checking,
+        RuntimeHealthWorkflowStage::ReconnectingMcp => RepoRuntimeMcpStatus::Reconnecting,
+        _ => RepoRuntimeMcpStatus::Error,
     }
 }
 
@@ -336,7 +341,7 @@ mod tests {
     #[test]
     fn timeout_mcp_probe_stays_checking_after_runtime_is_ready() {
         let health =
-            build_runtime_ready_timeout_health_check(RuntimeHealthWorkflowStage::RuntimeReady);
+            build_runtime_ready_timeout_health_check(RuntimeHealthWorkflowStage::CheckingMcpStatus);
 
         assert_eq!(health.status, RepoRuntimeHealthState::Checking);
         assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
@@ -359,6 +364,31 @@ mod tests {
         assert_eq!(
             health.mcp.as_ref().map(|value| value.status),
             Some(RepoRuntimeMcpStatus::Reconnecting)
+        );
+    }
+
+    #[test]
+    fn timeout_mcp_restart_skip_stays_checking() {
+        let health = build_runtime_ready_timeout_health_check(
+            RuntimeHealthWorkflowStage::RestartSkippedActiveRun,
+        );
+
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Checking)
+        );
+    }
+
+    #[test]
+    fn timeout_mcp_outside_retry_stage_escalates_to_error() {
+        let health =
+            build_runtime_ready_timeout_health_check(RuntimeHealthWorkflowStage::RuntimeReady);
+
+        assert_eq!(health.status, RepoRuntimeHealthState::Error);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Error)
         );
     }
 }

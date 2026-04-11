@@ -1010,7 +1010,7 @@ impl AppService {
                         mcp_server_status: None,
                         available_tool_ids: Vec::new(),
                         progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
-                            stage: RuntimeHealthWorkflowStage::RuntimeReady,
+                            stage: checking_progress.stage,
                             observation,
                             host: host_status,
                             checked_at: checked_at.clone(),
