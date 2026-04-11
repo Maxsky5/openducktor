@@ -11,6 +11,14 @@ const resetStore = (): void => {
   });
 };
 
+const requireDraftRevision = (index: number): number => {
+  const revision = useInlineCommentDraftStore.getState().drafts[index]?.revision;
+  if (revision == null) {
+    throw new Error(`Expected draft revision at index ${index}`);
+  }
+  return revision;
+};
+
 describe("use-inline-comment-draft-store", () => {
   beforeEach(() => {
     resetStore();
@@ -144,6 +152,54 @@ describe("use-inline-comment-draft-store", () => {
     expect(() => useInlineCommentDraftStore.getState().removeDraft(draftId)).toThrow(
       "Cannot remove a git diff comment while it is being sent.",
     );
+  });
+
+  test("excludes submitting drafts from new pending batches and clears submitting locks per batch", () => {
+    const firstId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 1,
+      endLine: 1,
+      side: "new",
+      text: "First",
+      codeContext: [{ lineNumber: 1, text: "first", isSelected: true }],
+      language: "ts",
+    });
+    const secondId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-b.ts",
+      diffScope: "target",
+      startLine: 2,
+      endLine: 2,
+      side: "old",
+      text: "Second",
+      codeContext: [{ lineNumber: 2, text: "second", isSelected: true }],
+      language: "ts",
+    });
+
+    const firstSnapshot = [{ id: firstId, revision: requireDraftRevision(0) }];
+    const secondSnapshot = [{ id: secondId, revision: requireDraftRevision(1) }];
+
+    useInlineCommentDraftStore.getState().beginSubmittingDrafts(firstSnapshot);
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .getPendingDrafts()
+        .map((draft) => draft.id),
+    ).toEqual([secondId]);
+    expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(1);
+
+    useInlineCommentDraftStore.getState().beginSubmittingDrafts(secondSnapshot);
+    expect(useInlineCommentDraftStore.getState().submittingDrafts).toHaveLength(2);
+    expect(useInlineCommentDraftStore.getState().getPendingDrafts()).toEqual([]);
+
+    useInlineCommentDraftStore.getState().clearSubmittingDrafts(firstSnapshot);
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .getPendingDrafts()
+        .map((draft) => draft.id),
+    ).toEqual([firstId]);
+    expect(useInlineCommentDraftStore.getState().submittingDrafts).toEqual(secondSnapshot);
   });
 
   test("formats a deterministic pending appendix with scope, side, lines, context, and comment text", () => {

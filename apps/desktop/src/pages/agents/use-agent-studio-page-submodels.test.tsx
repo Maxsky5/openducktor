@@ -113,7 +113,9 @@ describe("useAgentStudioThreadModel", () => {
   test("forwards showThinkingMessages into the thread model", async () => {
     const harness = createHookHarness(createHookArgs(true));
 
-    await harness.mount();
+    await act(async () => {
+      await harness.mount();
+    });
     expect(harness.getLatest().showThinkingMessages).toBe(true);
 
     await harness.update(createHookArgs(false));
@@ -303,6 +305,84 @@ describe("useAgentStudioComposerModel", () => {
     expect(useInlineCommentDraftStore.getState().drafts).toEqual([]);
 
     await harness.unmount();
+    resetInlineComments();
+  });
+
+  test("does not re-append already-submitting comments during a queueable follow-up send", async () => {
+    resetInlineComments();
+    useInlineCommentDraftStore.getState().resetForContext("draft-1");
+    await act(async () => {
+      useInlineCommentDraftStore.getState().addDraft({
+        filePath: "src/example-a.ts",
+        diffScope: "uncommitted",
+        startLine: 2,
+        endLine: 2,
+        side: "new",
+        text: "First batch comment",
+        codeContext: [{ lineNumber: 2, text: "target-a", isSelected: true }],
+        language: "ts",
+      });
+    });
+
+    const sentDrafts: string[] = [];
+    const resolvers: Array<(value: boolean) => void> = [];
+    const harness = createComposerHookHarness(
+      createComposerHookArgs({
+        isSending: true,
+        isSessionWorking: true,
+        onSend: async (draft) => {
+          sentDrafts.push(draftToSerializedText(draft));
+          return await new Promise<boolean>((resolve) => {
+            resolvers.push(resolve);
+          });
+        },
+      }),
+    );
+
+    await harness.mount();
+    let firstSendPromise: Promise<boolean> | null = null;
+    await act(async () => {
+      firstSendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
+    });
+
+    await act(async () => {
+      useInlineCommentDraftStore.getState().addDraft({
+        filePath: "src/example-b.ts",
+        diffScope: "target",
+        startLine: 5,
+        endLine: 5,
+        side: "old",
+        text: "Second batch comment",
+        codeContext: [{ lineNumber: 5, text: "target-b", isSelected: true }],
+        language: "ts",
+      });
+    });
+
+    let secondSendPromise: Promise<boolean> | null = null;
+    await act(async () => {
+      secondSendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
+    });
+
+    expect(sentDrafts).toHaveLength(2);
+    expect(sentDrafts[0]).toContain("First batch comment");
+    expect(sentDrafts[0]).not.toContain("Second batch comment");
+    expect(sentDrafts[1]).toContain("Second batch comment");
+    expect(sentDrafts[1]).not.toContain("First batch comment");
+
+    await act(async () => {
+      resolvers[0]?.(true);
+      resolvers[1]?.(true);
+      await Promise.all([firstSendPromise, secondSendPromise]);
+    });
+
+    expect(
+      useInlineCommentDraftStore.getState().drafts.every((draft) => draft.status === "sent"),
+    ).toBe(true);
+    expect(useInlineCommentDraftStore.getState().submittingDrafts).toEqual([]);
+
+    await act(async () => {
+      await harness.unmount();
+    });
     resetInlineComments();
   });
 });

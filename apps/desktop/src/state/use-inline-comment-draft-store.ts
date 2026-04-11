@@ -49,7 +49,7 @@ export type InlineCommentDraftStore = {
   removeDraft: (id: string) => void;
   clearAll: () => void;
   beginSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => void;
-  clearSubmittingDrafts: () => void;
+  clearSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => void;
   markDraftsAsSent: (drafts: InlineCommentDraftSnapshot[]) => void;
   resetForContext: (draftStateKey: string) => void;
   getPendingDrafts: () => InlineCommentDraft[];
@@ -90,6 +90,11 @@ const isSnapshotSubmitting = (
       submittingDraft.id === draft.id && submittingDraft.revision === draft.revision,
   );
 };
+
+const isSameSnapshot = (
+  left: InlineCommentDraftSnapshot,
+  right: InlineCommentDraftSnapshot,
+): boolean => left.id === right.id && left.revision === right.revision;
 
 const compareDrafts = (left: InlineCommentDraft, right: InlineCommentDraft): number => {
   return (
@@ -191,11 +196,28 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
   },
 
   beginSubmittingDrafts: (drafts) => {
-    set({ submittingDrafts: drafts });
+    if (drafts.length === 0) {
+      return;
+    }
+
+    set((state) => ({
+      submittingDrafts: [...state.submittingDrafts, ...drafts].filter(
+        (draft, index, snapshots) =>
+          snapshots.findIndex((snapshot) => isSameSnapshot(snapshot, draft)) === index,
+      ),
+    }));
   },
 
-  clearSubmittingDrafts: () => {
-    set({ submittingDrafts: [] });
+  clearSubmittingDrafts: (drafts) => {
+    if (drafts.length === 0) {
+      return;
+    }
+
+    set((state) => ({
+      submittingDrafts: state.submittingDrafts.filter(
+        (submittingDraft) => !drafts.some((draft) => isSameSnapshot(draft, submittingDraft)),
+      ),
+    }));
   },
 
   markDraftsAsSent: (drafts) => {
@@ -224,7 +246,10 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
 
   getPendingDrafts: () =>
     get()
-      .drafts.filter((draft) => draft.status === "pending")
+      .drafts.filter(
+        (draft) =>
+          draft.status === "pending" && !isSnapshotSubmitting(get().submittingDrafts, draft),
+      )
       .sort(compareDrafts),
 
   formatBatchMessage: (drafts) => {
@@ -252,7 +277,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     return get().formatBatchMessage(get().getPendingDrafts());
   },
 
-  getDraftCount: () => get().drafts.filter((draft) => draft.status === "pending").length,
+  getDraftCount: () => get().getPendingDrafts().length,
 
   getFileDraftCount: (filePath) =>
     get().drafts.filter((draft) => draft.filePath === filePath).length,

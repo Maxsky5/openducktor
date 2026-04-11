@@ -361,7 +361,7 @@ export const useAgentStudioComposerModel = ({
         }
         return didSend;
       } finally {
-        useInlineCommentDraftStore.getState().clearSubmittingDrafts();
+        useInlineCommentDraftStore.getState().clearSubmittingDrafts(submittingDrafts);
       }
     },
     [onSend, scrollToBottomOnSendRef],
