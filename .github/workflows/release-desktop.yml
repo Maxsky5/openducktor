@@ -8,9 +8,6 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.tag }}
   cancel-in-progress: false
@@ -21,74 +18,10 @@ env:
   APPLE_SIGNING_ENABLED: ${{ vars.APPLE_SIGNING_ENABLED || 'false' }}
 
 jobs:
-  create-release:
-    name: Create desktop release draft
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-      tag: ${{ steps.meta.outputs.tag }}
-      version: ${{ steps.meta.outputs.version }}
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ inputs.tag }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Resolve release metadata
-        id: meta
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          TAG="$INPUT_TAG"
-          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Release tag must look like v0.1.0 or v0.1.0-rc.1." >&2
-            exit 1
-          fi
-          VERSION="${TAG#v}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Verify repo version matches tag
-        run: bun run release:version:check "${{ steps.meta.outputs.version }}"
-
-      - name: Create or reuse draft release
-        id: create_release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.meta.outputs.tag }}
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
-            if [[ "$IS_DRAFT" != "true" ]]; then
-              echo "Release $TAG already exists and is not a draft. Refusing to overwrite a published release." >&2
-              exit 1
-            fi
-
-            RELEASE_ID="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')"
-            echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          gh release create "$TAG" --draft --title "OpenDucktor v$VERSION" --generate-notes
-          RELEASE_ID="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')"
-          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-
   build-macos:
     name: Build ${{ matrix.label }} desktop assets
-    needs: create-release
+    permissions:
+      contents: write
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -106,12 +39,50 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.create-release.outputs.tag }}
+          ref: ${{ inputs.tag }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Resolve release metadata
+        id: release_meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="$INPUT_TAG"
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like v0.1.0 or v0.1.0-rc.1." >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify draft release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Draft release $TAG was not found. Run Prepare Release first or rerun this workflow manually with the correct tag." >&2
+            exit 1
+          fi
+
+          IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [[ "$IS_DRAFT" != "true" ]]; then
+            echo "Release $TAG already exists and is not a draft. Desktop artifacts should only attach to a draft release." >&2
+            exit 1
+          fi
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify repo version matches tag
+        run: bun run release:version:check "${{ steps.release_meta.outputs.version }}"
 
       - name: Resolve CEF cache metadata
         id: cef_cache
@@ -162,17 +133,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cef-runtime-
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
       - name: Verify CEF native build prerequisites
         run: |
           set -euo pipefail
           cmake --version
           ninja --version
-
-      - name: Verify repo version matches tag
-        run: bun run release:version:check "${{ needs.create-release.outputs.version }}"
 
       - name: Validate release secrets
         if: env.APPLE_SIGNING_ENABLED == 'true'
@@ -225,7 +190,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ steps.release_meta.outputs.tag }}
           projectPath: apps/desktop
           tauriScript: ${{ steps.cef.outputs.cargo_tauri_path }}
           args: --target ${{ matrix.target }} --config src-tauri/bundle.sidecars.json --features cef -- --no-default-features
@@ -243,7 +208,7 @@ jobs:
           CEF_PATH: ${{ steps.cef.outputs.cef_path }}
           OPENDUCKTOR_PREPARE_SIDECARS: "1"
         with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ steps.release_meta.outputs.tag }}
           projectPath: apps/desktop
           tauriScript: ${{ steps.cef.outputs.cargo_tauri_path }}
           args: --target ${{ matrix.target }} --config src-tauri/bundle.sidecars.json --features cef -- --no-default-features
@@ -254,8 +219,9 @@ jobs:
 
   finalize-release:
     name: Summarize release draft
+    permissions:
+      contents: read
     needs:
-      - create-release
       - build-macos
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -264,7 +230,7 @@ jobs:
         env:
           APPLE_SIGNING_ENABLED: ${{ env.APPLE_SIGNING_ENABLED }}
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.create-release.outputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           RELEASE_URL="$(gh release view "$TAG" --json url --jq '.url')"

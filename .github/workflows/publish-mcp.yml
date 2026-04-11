@@ -8,16 +8,15 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-  id-token: write
-
 env:
   BUN_VERSION: 1.3.11
 
 jobs:
   publish-mcp:
     name: Publish @openducktor/mcp
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

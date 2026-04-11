@@ -8,7 +8,7 @@ This document defines allowed runtime transports and threat assumptions for `@op
 - Not allowed: network transports (`streamable-http`, SSE, WebSocket, Lambda adapters, reverse-proxied HTTP endpoints).
 
 Current implementation uses `StdioServerTransport` in
-`packages/openducktor-mcp/src/index.ts`.
+`packages/openducktor-mcp/src/cli.ts`.
 
 ## Threat Assumptions (V1)
 

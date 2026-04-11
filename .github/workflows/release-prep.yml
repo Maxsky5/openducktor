@@ -8,10 +8,6 @@ on:
         required: true
         type: string
 
-permissions:
-  actions: write
-  contents: write
-
 concurrency:
   group: release-prep
   cancel-in-progress: false
@@ -22,7 +18,10 @@ env:
 
 jobs:
   prepare-release:
-    name: Bump, commit, tag, and dispatch
+    name: Bump, commit, tag, and draft
+    permissions:
+      actions: write
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -48,25 +47,38 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Ensure release refs do not already exist
+      - name: Resolve release state
+        id: release_state
         env:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           TAG="v$VERSION"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists locally." >&2
-            exit 1
-          fi
+
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists on origin." >&2
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally without a matching remote tag." >&2
             exit 1
           fi
 
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+
       - name: Apply version bump
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -75,17 +87,34 @@ jobs:
           bun install
           bun run release:version:check "$VERSION"
 
+      - name: Verify release changes before commit/tag
+        if: steps.release_state.outputs.tag_exists != 'true'
+        run: |
+          set -euo pipefail
+          bun run typecheck
+          bun run lint
+          bun run test
+          bun run build
+          bun run check:rust
+          bun run test:rust
+
       - name: Commit release bump
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json bun.lock apps/desktop/package.json apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/tauri.conf.json packages
+          git add -u :/
+          if git diff --cached --quiet; then
+            echo "Release version bump did not change any tracked files." >&2
+            exit 1
+          fi
           git commit -m "chore(release): v$VERSION"
 
       - name: Create release tags
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -93,6 +122,7 @@ jobs:
           git tag -a "v$VERSION" -m "OpenDucktor v$VERSION"
 
       - name: Push release commit and tags
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           DEFAULT_BRANCH: ${{ env.DEFAULT_BRANCH }}
           RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
@@ -100,6 +130,27 @@ jobs:
           set -euo pipefail
           git remote set-url origin "https://x-access-token:${RELEASE_AUTOMATION_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --follow-tags origin HEAD:"$DEFAULT_BRANCH"
+
+      - name: Create draft GitHub release
+        id: draft_release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.release_state.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+            if [[ "$IS_DRAFT" != "true" ]]; then
+              echo "Release $TAG already exists and is not a draft. Refusing to overwrite a published release." >&2
+              exit 1
+            fi
+            echo "status=verified" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh release create "$TAG" --draft --title "OpenDucktor v$VERSION" --generate-notes
+          echo "status=created" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch desktop publish workflow
         env:
@@ -117,13 +168,14 @@ jobs:
 
       - name: Publish workflow summary
         env:
+          DRAFT_RELEASE_STATUS: ${{ steps.draft_release.outputs.status }}
           VERSION: ${{ inputs.version }}
         run: |
           {
             echo "## Release prepared"
             echo
             echo "- Release commit created on default branch"
-            echo "- Desktop tag: v$VERSION"
-            echo "- Shared release tag: v$VERSION"
+            echo "- Release tag pushed: v$VERSION"
+            echo "- Draft GitHub release ${DRAFT_RELEASE_STATUS:-verified} with generated notes"
             echo "- Dispatched workflows: Release Desktop, Publish MCP Package"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -25,16 +25,17 @@ It does all release preparation work:
 - creates the release bump commit on the default branch
 - creates one tag:
   - `v0.1.0` for the desktop release and MCP publish
-- dispatches the desktop and MCP publish workflows
+- creates the draft GitHub release with generated notes after the commit and tag are pushed
+- dispatches the desktop and MCP publish workflows explicitly after the draft exists
 
 ### 2. Release Desktop
 
-`Release Desktop` is dispatched by `Prepare Release` with a desktop tag input such as `v0.1.0`.
+`Release Desktop` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
 
 It:
 
 - validates that the checked-out repo state matches the tag version
-- creates or reuses a **draft GitHub release**
+- verifies that the draft GitHub release already exists
 - runs the repo's CEF bootstrap step
 - builds macOS assets for:
   - Apple Silicon (`aarch64-apple-darwin`)
@@ -50,7 +51,7 @@ The release remains a **draft** so maintainers can smoke-test the downloaded ass
 
 ### 3. Publish MCP Package
 
-`Publish MCP Package` is dispatched by `Prepare Release` with the shared release tag such as `v0.1.0`.
+`Publish MCP Package` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
 
 It:
 
@@ -116,6 +117,7 @@ The version sync touches:
 - workspace package manifests discovered from the root `workspaces` configuration
 - `apps/desktop/src-tauri/tauri.conf.json`
 - `apps/desktop/src-tauri/Cargo.toml` (`[package]` and `[workspace.package]`)
+- `apps/desktop/src-tauri/Cargo.lock`
 - `bun.lock`
 
 The helper script remains useful because this repo spans three version domains:
@@ -129,9 +131,9 @@ The helper script remains useful because this repo spans three version domains:
 1. Open GitHub Actions.
 2. Run `Prepare Release`.
 3. Enter the target version, for example `0.1.0`.
-4. Wait for `Prepare Release` to finish.
-5. Wait for `Release Desktop` to finish.
-6. Wait for `Publish MCP Package` to finish.
+4. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
+5. Wait for `Release Desktop` to finish uploading desktop assets.
+6. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
 7. Open the draft GitHub release and smoke-test the desktop assets.
 8. Publish the draft release when the assets and notes look correct.
 
