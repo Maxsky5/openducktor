@@ -114,4 +114,114 @@ describe("getRenderableFileDiff", () => {
       },
     ]);
   });
+
+  test("builds an inline comment selection snapshot for additions with surrounding context", async () => {
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const patch = [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "--- a/src/app.ts",
+      "+++ b/src/app.ts",
+      "@@ -1,4 +1,5 @@",
+      " one",
+      "-two",
+      "+two updated",
+      "+two extra",
+      " three",
+      " four",
+      "",
+    ].join("\n");
+    const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
+
+    expect(
+      buildPierreDiffSelection(requireFileDiff(fileDiff), {
+        start: 2,
+        end: 3,
+        side: "additions",
+        endSide: "additions",
+      }),
+    ).toEqual({
+      selectedLines: {
+        start: 2,
+        end: 3,
+        side: "additions",
+        endSide: "additions",
+      },
+      side: "new",
+      startLine: 2,
+      endLine: 3,
+      codeContext: [
+        { lineNumber: 1, text: "one", isSelected: false },
+        { lineNumber: 2, text: "two updated", isSelected: true },
+        { lineNumber: 3, text: "two extra", isSelected: true },
+        { lineNumber: 4, text: "three", isSelected: false },
+        { lineNumber: 5, text: "four", isSelected: false },
+      ],
+      language: null,
+    });
+  });
+
+  test("builds an inline comment selection snapshot for old-side ranges", async () => {
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const patch = [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "--- a/src/app.ts",
+      "+++ b/src/app.ts",
+      "@@ -8,4 +8,2 @@",
+      " eight",
+      "-nine",
+      "-ten",
+      " eleven",
+      "",
+    ].join("\n");
+    const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
+
+    expect(
+      buildPierreDiffSelection(requireFileDiff(fileDiff), {
+        start: 9,
+        end: 10,
+        side: "deletions",
+        endSide: "deletions",
+      }),
+    ).toEqual({
+      selectedLines: {
+        start: 9,
+        end: 10,
+        side: "deletions",
+        endSide: "deletions",
+      },
+      side: "old",
+      startLine: 9,
+      endLine: 10,
+      codeContext: [
+        { lineNumber: 8, text: "eight", isSelected: false },
+        { lineNumber: 9, text: "nine", isSelected: true },
+        { lineNumber: 10, text: "ten", isSelected: true },
+        { lineNumber: 11, text: "eleven", isSelected: false },
+      ],
+      language: null,
+    });
+  });
+
+  test("rejects mixed-side selections for inline comments", async () => {
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const patch = [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "--- a/src/app.ts",
+      "+++ b/src/app.ts",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+      "",
+    ].join("\n");
+    const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
+
+    expect(
+      buildPierreDiffSelection(requireFileDiff(fileDiff), {
+        start: 1,
+        end: 1,
+        side: "deletions",
+        endSide: "additions",
+      }),
+    ).toBeNull();
+  });
 });

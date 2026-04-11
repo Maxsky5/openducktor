@@ -1,4 +1,10 @@
-import type { DiffLineAnnotation, FileDiffMetadata, Hunk } from "@pierre/diffs";
+import type {
+  DiffLineAnnotation,
+  FileDiffMetadata,
+  Hunk,
+  SelectedLineRange,
+  SelectionSide,
+} from "@pierre/diffs";
 import { getSingularPatch } from "@pierre/diffs";
 import { FileDiff as PierreReactFileDiff, useWorkerPool } from "@pierre/diffs/react";
 import type { DiffRendererInstance } from "@pierre/diffs/worker";
@@ -7,11 +13,24 @@ import { type CSSProperties, memo, type ReactElement, useEffect, useId, useMemo 
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type {
+  InlineCommentContextLine,
+  InlineCommentSide,
+} from "@/state/use-inline-comment-draft-store";
 import { selectRenderableDiff } from "./renderable-patch";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type PierreDiffStyle = "split" | "unified";
+
+export type PierreDiffSelection = {
+  selectedLines: SelectedLineRange;
+  side: InlineCommentSide;
+  startLine: number;
+  endLine: number;
+  codeContext: InlineCommentContextLine[];
+  language: string | null;
+};
 
 type PierreDiffViewerProps = {
   /** Raw unified diff / patch string (e.g. from `git diff`). */
@@ -24,6 +43,8 @@ type PierreDiffViewerProps = {
   enableHunkReset?: boolean;
   isHunkResetDisabled?: boolean;
   onResetHunk?: ((hunkIndex: number) => void) | undefined;
+  selectedLines?: SelectedLineRange | null;
+  onLineSelectionEnd?: ((selection: PierreDiffSelection | null) => void) | undefined;
   /** CSS class applied to the wrapper. */
   className?: string;
 };
@@ -141,6 +162,14 @@ type RenderableFileDiff = {
   fallbackPatch: string;
 };
 
+type DiffSideLine = {
+  lineNumber: number;
+  text: string;
+};
+
+const INLINE_COMMENT_CONTEXT_RADIUS = 2;
+const normalizeDiffLineText = (value: string): string => value.replace(/\n$/, "");
+
 const renderableFileDiffCache = new Map<string, RenderableFileDiff>();
 
 export const getRenderableFileDiff = (patch: string, filePath: string) => {
@@ -204,6 +233,147 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   return null;
 });
 
+const normalizeSelectedLineRange = (selectedLines: SelectedLineRange): SelectedLineRange => {
+  const normalizedStartSide = selectedLines.side;
+  const normalizedEndSide = selectedLines.endSide ?? normalizedStartSide;
+
+  const withOptionalSides = (
+    range: Pick<SelectedLineRange, "start" | "end">,
+    startSide: SelectionSide | undefined,
+    endSide: SelectionSide | undefined,
+  ): SelectedLineRange => {
+    return {
+      ...range,
+      ...(startSide ? { side: startSide } : {}),
+      ...(endSide ? { endSide } : {}),
+    };
+  };
+
+  if (selectedLines.start < selectedLines.end) {
+    return withOptionalSides(selectedLines, normalizedStartSide, normalizedEndSide);
+  }
+
+  if (selectedLines.start === selectedLines.end) {
+    return withOptionalSides(
+      {
+        start: selectedLines.start,
+        end: selectedLines.end,
+      },
+      normalizedStartSide,
+      normalizedEndSide,
+    );
+  }
+
+  return withOptionalSides(
+    {
+      start: selectedLines.end,
+      end: selectedLines.start,
+    },
+    normalizedEndSide,
+    normalizedStartSide,
+  );
+};
+
+const mapSelectionSide = (side: SelectionSide | undefined): InlineCommentSide => {
+  return side === "deletions" ? "old" : "new";
+};
+
+const buildSideLines = (fileDiff: FileDiffMetadata, side: SelectionSide): DiffSideLine[] => {
+  const lines = side === "deletions" ? fileDiff.deletionLines : fileDiff.additionLines;
+  const sideLines: DiffSideLine[] = [];
+
+  for (const hunk of fileDiff.hunks) {
+    let additionLineNumber = hunk.additionStart;
+    let deletionLineNumber = hunk.deletionStart;
+
+    for (const content of hunk.hunkContent) {
+      if (content.type === "context") {
+        for (let index = 0; index < content.lines; index += 1) {
+          sideLines.push({
+            lineNumber:
+              side === "deletions" ? deletionLineNumber + index : additionLineNumber + index,
+            text: normalizeDiffLineText(
+              lines[
+                (side === "deletions" ? content.deletionLineIndex : content.additionLineIndex) +
+                  index
+              ] ?? "",
+            ),
+          });
+        }
+        additionLineNumber += content.lines;
+        deletionLineNumber += content.lines;
+        continue;
+      }
+
+      if (side === "deletions") {
+        for (let index = 0; index < content.deletions; index += 1) {
+          sideLines.push({
+            lineNumber: deletionLineNumber + index,
+            text: normalizeDiffLineText(lines[content.deletionLineIndex + index] ?? ""),
+          });
+        }
+      }
+
+      if (side === "additions") {
+        for (let index = 0; index < content.additions; index += 1) {
+          sideLines.push({
+            lineNumber: additionLineNumber + index,
+            text: normalizeDiffLineText(lines[content.additionLineIndex + index] ?? ""),
+          });
+        }
+      }
+
+      additionLineNumber += content.additions;
+      deletionLineNumber += content.deletions;
+    }
+  }
+
+  return sideLines;
+};
+
+export const buildPierreDiffSelection = (
+  fileDiff: FileDiffMetadata,
+  selectedLines: SelectedLineRange | null,
+): PierreDiffSelection | null => {
+  if (selectedLines == null) {
+    return null;
+  }
+
+  const normalizedSelection = normalizeSelectedLineRange(selectedLines);
+  const startSide = normalizedSelection.side ?? "additions";
+  const endSide = normalizedSelection.endSide ?? startSide;
+  if (startSide !== endSide) {
+    return null;
+  }
+
+  const sideLines = buildSideLines(fileDiff, startSide);
+  const startIndex = sideLines.findIndex((line) => line.lineNumber === normalizedSelection.start);
+  const endIndex = sideLines.findIndex((line) => line.lineNumber === normalizedSelection.end);
+  if (startIndex < 0 || endIndex < 0) {
+    return null;
+  }
+
+  const contextStartIndex = Math.max(0, startIndex - INLINE_COMMENT_CONTEXT_RADIUS);
+  const contextEndIndex = Math.min(sideLines.length - 1, endIndex + INLINE_COMMENT_CONTEXT_RADIUS);
+  const codeContext = sideLines.slice(contextStartIndex, contextEndIndex + 1).map((line, index) => {
+    const absoluteIndex = contextStartIndex + index;
+    return {
+      lineNumber: line.lineNumber,
+      text: line.text,
+      isSelected: absoluteIndex >= startIndex && absoluteIndex <= endIndex,
+    } satisfies InlineCommentContextLine;
+  });
+
+  return {
+    selectedLines: normalizedSelection,
+    side: mapSelectionSide(startSide),
+    startLine: normalizedSelection.start,
+    endLine: normalizedSelection.end,
+    codeContext,
+    language: fileDiff.lang ?? null,
+  };
+};
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export const PierreDiffViewer = memo(function PierreDiffViewer({
@@ -214,6 +384,8 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   enableHunkReset = false,
   isHunkResetDisabled = false,
   onResetHunk,
+  selectedLines = null,
+  onLineSelectionEnd,
   className,
 }: PierreDiffViewerProps): ReactElement {
   const { theme } = useTheme();
@@ -229,6 +401,15 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
         : [],
     [enableHunkReset, fileDiff, onResetHunk],
   );
+  const handleLineSelectionEnd = useMemo(
+    () =>
+      onLineSelectionEnd && fileDiff != null
+        ? (range: SelectedLineRange | null) => {
+            onLineSelectionEnd(buildPierreDiffSelection(fileDiff, range));
+          }
+        : undefined,
+    [fileDiff, onLineSelectionEnd],
+  );
   const options = useMemo(
     () => ({
       theme: DIFF_THEME,
@@ -240,9 +421,10 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       overflow: "wrap" as const,
       disableFileHeader: true,
       enableLineSelection,
+      ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : {}),
       ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : {}),
     }),
-    [diffStyle, enableHunkReset, enableLineSelection, lineDiffType, theme],
+    [diffStyle, enableHunkReset, enableLineSelection, handleLineSelectionEnd, lineDiffType, theme],
   );
 
   let content: ReactElement;
@@ -253,6 +435,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
         <PierreReactFileDiff
           fileDiff={fileDiff}
+          selectedLines={selectedLines}
           options={options}
           lineAnnotations={lineAnnotations}
           renderAnnotation={(annotation) => (

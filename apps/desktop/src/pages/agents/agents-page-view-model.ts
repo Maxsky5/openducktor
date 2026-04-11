@@ -137,6 +137,7 @@ type AgentChatComposerModelArgs = {
   isReadOnly: boolean;
   readOnlyReason: string | null;
   busySendBlockedReason: string | null;
+  pendingInlineCommentCount: number;
   draftStateKey: string;
   onSend: AgentChatComposerModel["onSend"];
   isSending: boolean;
@@ -215,6 +216,7 @@ export const buildAgentChatComposerModel = (
   isReadOnly: args.isReadOnly,
   readOnlyReason: args.readOnlyReason,
   busySendBlockedReason: args.busySendBlockedReason,
+  pendingInlineCommentCount: args.pendingInlineCommentCount,
   draftStateKey: args.draftStateKey,
   onSend: args.onSend,
   isSending: args.isSending,

@@ -18,7 +18,6 @@ import { ForcePushDialog } from "./force-push-dialog";
 import { GitConfirmationDialog } from "./git-confirmation-dialog";
 import { GitInfoHeader } from "./git-info-header";
 import { PullRebaseDialog } from "./pull-rebase-dialog";
-import { ReviewActions } from "./review-actions";
 import type { AgentStudioGitPanelModel } from "./types";
 
 export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
@@ -321,6 +320,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           {hasFiles ? (
             <FileDiffList
               fileDiffs={displayedFileDiffs}
+              diffScope={uiDiffScope}
               conflictedFiles={conflictedFiles}
               diffStyle={diffStyle}
               setDiffStyle={setDiffStyle}
@@ -342,8 +342,6 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
             />
           )}
         </ScrollArea>
-
-        {model.onSendReview != null ? <ReviewActions onSendReview={model.onSendReview} /> : null}
 
         {uiDiffScope === "uncommitted" ? (
           <CommitComposer

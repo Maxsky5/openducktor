@@ -505,6 +505,31 @@ export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolea
 
 export const draftHasSlashCommandSegment = hasExistingSlashCommandSegment;
 
+export const appendTextToDraft = (
+  draft: AgentChatComposerDraft,
+  appendedText: string,
+): AgentChatComposerDraft => {
+  if (appendedText.length === 0) {
+    return draft;
+  }
+
+  const normalizedDraft = normalizeComposerDraft(draft);
+  const lastSegment = normalizedDraft.segments[normalizedDraft.segments.length - 1];
+  if (!lastSegment || lastSegment.kind !== "text") {
+    return normalizedDraft;
+  }
+
+  const separator = draftToSerializedText(normalizedDraft).trim().length > 0 ? "\n\n" : "";
+  return {
+    ...normalizedDraft,
+    segments: normalizedDraft.segments.map((segment, index) =>
+      index === normalizedDraft.segments.length - 1 && segment.kind === "text"
+        ? { ...segment, text: `${segment.text}${separator}${appendedText}` }
+        : segment,
+    ),
+  };
+};
+
 export const appendAttachmentsToDraft = (
   draft: AgentChatComposerDraft,
   attachments: AgentChatComposerAttachment[],

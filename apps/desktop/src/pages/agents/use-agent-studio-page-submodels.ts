@@ -1,10 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { RefObject } from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import { appendTextToDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
+import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -329,14 +331,25 @@ export const useAgentStudioComposerModel = ({
     activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
   );
   const activeSessionId = activeSession?.sessionId;
+  const pendingInlineCommentCount = useInlineCommentDraftStore((store) => store.getDraftCount());
   const waitingInputPlaceholder = activeSession
     ? getAgentSessionWaitingInputPlaceholder(activeSession)
     : null;
 
+  useEffect(() => {
+    useInlineCommentDraftStore.getState().resetForContext(draftStateKey);
+  }, [draftStateKey]);
+
   const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
     async (draft) => {
+      const commentAppendix = useInlineCommentDraftStore.getState().formatPendingBatchMessage();
+      const nextDraft =
+        commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
       scrollToBottomOnSendRef.current?.();
-      const didSend = await onSend(draft);
+      const didSend = await onSend(nextDraft);
+      if (didSend) {
+        useInlineCommentDraftStore.getState().markPendingAsSent();
+      }
       return didSend;
     },
     [onSend, scrollToBottomOnSendRef],
@@ -357,6 +370,7 @@ export const useAgentStudioComposerModel = ({
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
         busySendBlockedReason,
+        pendingInlineCommentCount,
         draftStateKey,
         onSend: handleSend,
         isSending,
@@ -410,6 +424,7 @@ export const useAgentStudioComposerModel = ({
       isSessionWorking,
       isWaitingInput,
       busySendBlockedReason,
+      pendingInlineCommentCount,
       isStarting,
       waitingInputPlaceholder,
       modelGroups,
