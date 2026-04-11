@@ -4,7 +4,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 
 ## Read This First
 
-- [../README.md](../README.md): public project overview, current scope, local setup, and contribution entry point.
+- [../README.md](../README.md): public project overview, install guide, and contribution entry point.
 - [architecture-overview.md](architecture-overview.md): high-level map of the system and how data moves across layers.
 - [runtime-integration-guide.md](runtime-integration-guide.md): how runtimes fit into OpenDucktor and what a new runtime integration requires.
 
