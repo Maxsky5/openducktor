@@ -1259,10 +1259,10 @@ mod tests {
             "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-refresh-failure "
         ));
         assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
-        assert_eq!(health.status, RepoRuntimeHealthState::Error);
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
         assert_eq!(
             health.mcp.as_ref().map(|value| value.status),
-            Some(RepoRuntimeMcpStatus::Error)
+            Some(RepoRuntimeMcpStatus::Reconnecting)
         );
         assert!(health
             .mcp
