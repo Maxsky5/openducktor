@@ -55,22 +55,30 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Ensure release refs do not already exist
+      - name: Resolve release state
+        id: release_state
         env:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           TAG="v$VERSION"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists locally." >&2
-            exit 1
-          fi
+
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists on origin." >&2
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally without a matching remote tag." >&2
             exit 1
           fi
 
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+
       - name: Apply version bump
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -79,7 +87,19 @@ jobs:
           bun install
           bun run release:version:check "$VERSION"
 
+      - name: Verify release changes before commit/tag
+        if: steps.release_state.outputs.tag_exists != 'true'
+        run: |
+          set -euo pipefail
+          bun run typecheck
+          bun run lint
+          bun run test
+          bun run build
+          bun run check:rust
+          bun run test:rust
+
       - name: Commit release bump
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -94,6 +114,7 @@ jobs:
           git commit -m "chore(release): v$VERSION"
 
       - name: Create release tags
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -101,6 +122,7 @@ jobs:
           git tag -a "v$VERSION" -m "OpenDucktor v$VERSION"
 
       - name: Push release commit and tags
+        if: steps.release_state.outputs.tag_exists != 'true'
         env:
           DEFAULT_BRANCH: ${{ env.DEFAULT_BRANCH }}
           RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
@@ -114,9 +136,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.release_state.outputs.tag }}
         run: |
           set -euo pipefail
-          TAG="v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
             if [[ "$IS_DRAFT" != "true" ]]; then
