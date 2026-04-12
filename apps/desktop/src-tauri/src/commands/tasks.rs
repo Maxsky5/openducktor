@@ -235,10 +235,20 @@ mod tests {
             labels: None,
             assignee: None,
             parent_id: None,
-            target_branch: None,
+            target_branch: Some(host_domain::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "release/2026.04".to_string(),
+            }),
         })?;
 
         assert_eq!(patch.issue_type, Some(IssueType::Feature));
+        assert_eq!(
+            patch.target_branch,
+            Some(host_domain::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "release/2026.04".to_string(),
+            })
+        );
         Ok(())
     }
 }

@@ -7,10 +7,10 @@ import {
   INVALID_TASK_TARGET_BRANCH_LABEL,
   normalizeTargetBranch,
   resolveTaskTargetBranchState,
-  taskTargetBranchValidationError,
-  targetBranchSelectionValue,
   targetBranchFromSelection,
   targetBranchRemote,
+  targetBranchSelectionValue,
+  taskTargetBranchValidationError,
   UPSTREAM_TARGET_BRANCH,
 } from "./target-branch";
 

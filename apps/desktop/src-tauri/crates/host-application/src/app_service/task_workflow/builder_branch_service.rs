@@ -160,9 +160,12 @@ impl<'a> BuilderBranchService<'a> {
         repo_path: &str,
         task_id: &str,
     ) -> Result<Option<GitTargetBranch>> {
-        let metadata = self.service.task_metadata_get(repo_path, task_id)?;
-        metadata
-            .target_branch
+        let task = self.task_card_for_task(repo_path, task_id)?;
+        if let Some(error) = task.target_branch_error.as_ref() {
+            return Err(anyhow!(error.clone()));
+        }
+
+        task.target_branch
             .as_ref()
             .map(normalize_recorded_target_branch)
             .transpose()
@@ -200,14 +203,25 @@ impl<'a> BuilderBranchService<'a> {
         repo_path: &str,
         task_id: &str,
     ) -> Result<Option<GitTargetBranch>> {
-        let metadata = self.service.task_metadata_get(repo_path, task_id)?;
-        match metadata.target_branch.as_ref() {
+        let task = self.task_card_for_task(repo_path, task_id)?;
+        if let Some(error) = task.target_branch_error.as_ref() {
+            return Err(anyhow!(error.clone()));
+        }
+
+        match task.target_branch.as_ref() {
             Some(target_branch) => publish_recorded_target_branch(target_branch),
             None => {
                 let repo_config = self.service.workspace_get_repo_config(repo_path)?;
                 publish_target_branch(&repo_config.default_target_branch)
             }
         }
+    }
+
+    fn task_card_for_task(&self, repo_path: &str, task_id: &str) -> Result<host_domain::TaskCard> {
+        let resolved_repo_path = self.service.resolve_task_repo_path(repo_path)?;
+        self.service
+            .task_store
+            .get_task(Path::new(&resolved_repo_path), task_id)
     }
 
     pub(super) fn latest_cleanup_target(
@@ -933,13 +947,11 @@ mod tests {
                 ..Default::default()
             },
         )?;
-        task_state
-            .lock()
-            .expect("task state lock poisoned")
-            .metadata_target_branch = Some(host_domain::GitTargetBranch {
-            remote: Some("origin".to_string()),
-            branch: "release/2026.04".to_string(),
-        });
+        task_state.lock().expect("task state lock poisoned").tasks[0].target_branch =
+            Some(host_domain::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "release/2026.04".to_string(),
+            });
 
         let target_branch = BuilderBranchService::new(&service)
             .effective_target_branch_for_task(repo_path.as_str(), "task-1")?;
@@ -984,6 +996,50 @@ mod tests {
             .effective_target_branch_for_task(repo_path.as_str(), "task-1")?;
 
         assert_eq!(target_branch.canonical(), "origin/release/2026.05");
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn effective_target_branch_for_task_errors_on_invalid_persisted_metadata() -> Result<()> {
+        let root = unique_temp_path("builder-invalid-task-target-branch");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            host_infra_system::RepoConfig {
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                ..Default::default()
+            },
+        )?;
+        task_state.lock().expect("task state lock poisoned").tasks[0].target_branch_error = Some(
+            "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.".to_string(),
+        );
+
+        let error = BuilderBranchService::new(&service)
+            .effective_target_branch_for_task(repo_path.as_str(), "task-1")
+            .expect_err("invalid task target branch metadata should fail fast");
+
+        assert!(error
+            .to_string()
+            .contains("Invalid openducktor.targetBranch metadata"));
         let _ = fs::remove_dir_all(root);
         Ok(())
     }

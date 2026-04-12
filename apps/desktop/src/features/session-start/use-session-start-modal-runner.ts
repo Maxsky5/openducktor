@@ -10,6 +10,7 @@ import {
   taskTargetBranchValidationError,
 } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { supportsTaskTargetBranchSelection } from "./constants";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
 
@@ -151,16 +152,19 @@ export function useSessionStartModalRunner({
       if (isStarting) {
         throw new Error("A session start is already in progress.");
       }
+      resolvePendingRun(undefined);
       const targetBranchValidationError = taskTargetBranchValidationError(
         request.initialTargetBranchError,
       );
-      if (targetBranchValidationError) {
+      if (
+        targetBranchValidationError &&
+        supportsTaskTargetBranchSelection(request.role, request.scenario)
+      ) {
         toast.error(INVALID_TASK_TARGET_BRANCH_LABEL, {
           description: targetBranchValidationError,
         });
         return Promise.resolve(undefined);
       }
-      resolvePendingRun(undefined);
       openStartModal(request);
 
       return new Promise<T | undefined>((resolve) => {

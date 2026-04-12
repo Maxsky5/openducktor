@@ -235,9 +235,6 @@ export function useKanbanSessionStartFlow({
           taskId: intent.taskId,
           role: intent.role,
           scenario: intent.scenario,
-          ...(intent.initialTargetBranch
-            ? { initialTargetBranch: intent.initialTargetBranch }
-            : {}),
           ...(intent.initialStartMode ? { initialStartMode: intent.initialStartMode } : {}),
           ...(intent.targetWorkingDirectory !== undefined
             ? { targetWorkingDirectory: intent.targetWorkingDirectory }

@@ -58,10 +58,7 @@ impl BeadsTaskStore {
                     .and_then(|delivery| delivery.get("directMerge"))
                     .and_then(parse_direct_merge_record)
             });
-        let target_branch = namespace
-            .map(crate::metadata::metadata_target_branch_strict)
-            .transpose()?
-            .flatten();
+        let target_branch = namespace.and_then(crate::metadata::metadata_target_branch);
 
         Ok(TaskMetadata {
             spec,

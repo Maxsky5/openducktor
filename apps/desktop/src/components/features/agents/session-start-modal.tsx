@@ -2,8 +2,8 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
 import type { FormEvent, ReactElement } from "react";
-import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
+import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
 import {

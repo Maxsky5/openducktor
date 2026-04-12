@@ -360,13 +360,11 @@ fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local
             agent_defaults: Default::default(),
         },
     )?;
-    task_state
-        .lock()
-        .expect("task state lock poisoned")
-        .metadata_target_branch = Some(host_domain::GitTargetBranch {
-        remote: Some("origin".to_string()),
-        branch: "develop".to_string(),
-    });
+    task_state.lock().expect("task state lock poisoned").tasks[0].target_branch =
+        Some(host_domain::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "develop".to_string(),
+        });
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
     let emitter = make_emitter(events);

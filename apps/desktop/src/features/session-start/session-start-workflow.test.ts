@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { startSessionWorkflow } from "./session-start-workflow";
 
 const BUILD_SELECTION = {
@@ -71,5 +72,57 @@ describe("session-start-workflow", () => {
         targetWorkingDirectory: "/repo/worktrees/conflict-task-1",
       }),
     );
+  });
+
+  test("uses the just-selected target branch for pull request kickoff prompts", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-pr");
+
+    const result = await startSessionWorkflow({
+      activeRepo: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-2",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        startMode: "reuse",
+        sourceSessionId: "builder-session-1",
+        targetBranch: {
+          remote: "origin",
+          branch: "release/2026.04",
+        },
+        postStartAction: "kickoff",
+      },
+      selection: null,
+      task: createTaskCardFixture({
+        id: "TASK-2",
+        title: "Generate PR",
+        description: "desc",
+        status: "in_progress",
+        priority: 1,
+        targetBranch: {
+          remote: "origin",
+          branch: "main",
+        },
+      }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(result).toEqual({
+      sessionId: "session-pr",
+      postStartActionError: null,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-pr", [
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("targetBranch: origin/release/2026.04"),
+      }),
+    ]);
+    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
+      [string, Array<{ text?: string }>]
+    >;
+    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    expect(sentText).not.toContain("targetBranch: origin/main");
   });
 });

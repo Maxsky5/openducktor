@@ -39,6 +39,12 @@ fn parse_target_branch_value(value: &Value) -> Result<GitTargetBranch> {
     })
 }
 
+pub(crate) fn metadata_target_branch(namespace: &Map<String, Value>) -> Option<GitTargetBranch> {
+    namespace
+        .get("targetBranch")
+        .and_then(|value| parse_target_branch_value(value).ok())
+}
+
 pub(crate) fn metadata_target_branch_strict(
     namespace: &Map<String, Value>,
 ) -> Result<Option<GitTargetBranch>> {

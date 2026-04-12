@@ -505,9 +505,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     builtinVersion: 2,
     template: joinPromptBlocks(
       "Scenario: Pull request generation.",
-      bulletSection("Objective", [
-        "Create or update the canonical pull request for this task.",
-      ]),
+      bulletSection("Objective", ["Create or update the canonical pull request for this task."]),
       bulletSection("Required sequence", [
         "Use the runtime's native git and provider-native pull-request tools (ex: `gh` or `glab` CLI) to inspect source-branch state, remote publication state, and existing pull-request state before creating anything new.",
         "Treat the task target branch as the authoritative pull-request base branch. Do not silently substitute a repo default or another inferred branch when task context provides a target branch.",
@@ -602,14 +600,12 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     builtinVersion: 4,
     template: joinPromptBlocks(
       "Focus only on pull request publication work for the current Builder session.",
-      lineSection("Pull request context", [
-        "- targetBranch: {{git.targetBranch}}"
-      ]),
+      lineSection("Pull request context", ["- targetBranch: {{git.targetBranch}}"]),
       bulletSection("Publication workflow", [
         "Treat the targetBranch above as the pull-request base branch for this task.",
         "Inspect the current source branch, remote branch, and existing pull-request state before deciding whether to create a new pull request or update an existing one.",
         "Always rebase on targetBranch before pushing the source branch.",
-        "Then create or update the pull request against the exact targetBranch above using the provider - native tooling available.",
+        "Then create or update the pull request against the exact targetBranch above using the provider-native tooling available.",
         "Write a pull request title and body grounded in the task, spec, plan, and actual implementation diff.",
         "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
       ]),

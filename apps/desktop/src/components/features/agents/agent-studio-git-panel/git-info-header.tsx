@@ -194,7 +194,7 @@ function GitBranchContextRow({
           {isRepositoryMode ? "Repository branch" : "Current branch"}
         </p>
         <div
-          className="mt-1 flex h-5 min-w-0 items-center gap-1.5"
+          className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
           data-testid="agent-studio-git-current-branch-display-row"
         >
           <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
@@ -229,7 +229,7 @@ function GitBranchContextRow({
             </p>
             {isEditingTargetBranch ? (
               <div
-                className="mt-1 flex h-5 min-w-0 items-center gap-2"
+                className="mt-1 flex h-7 min-w-0 items-center gap-2"
                 data-testid="agent-studio-git-target-branch-editor"
               >
                 <div className="min-w-0 flex-1">
@@ -248,6 +248,7 @@ function GitBranchContextRow({
                   size="icon"
                   variant="ghost"
                   className="size-7"
+                  aria-label="Cancel target branch edit"
                   onClick={onCancelTargetBranchEdit}
                   disabled={isSavingTargetBranch}
                   data-testid="agent-studio-git-target-branch-cancel"
@@ -261,7 +262,7 @@ function GitBranchContextRow({
               </div>
             ) : (
               <div
-                className="mt-1 flex h-5 min-w-0 items-center gap-1.5"
+                className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
                 data-testid="agent-studio-git-target-branch-display-row"
               >
                 <Target className="size-3.5 shrink-0 text-muted-foreground" />
@@ -277,6 +278,7 @@ function GitBranchContextRow({
                     size="icon"
                     variant="ghost"
                     className="ml-auto size-7 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Edit target branch"
                     onClick={onEditTargetBranch}
                     data-testid="agent-studio-git-target-branch-edit"
                   >

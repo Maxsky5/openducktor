@@ -176,8 +176,8 @@ describe("buildAgentSystemPrompt", () => {
 
     expectPromptToContainAll(prompt, [
       "Scenario: Pull request generation.",
-      "current Builder session or a fork created from it",
-      "Use the runtime's native git and provider-native pull-request tools to inspect source-branch state",
+      "Create or update the canonical pull request for this task.",
+      "Use the runtime's native git and provider-native pull-request tools (ex: `gh` or `glab` CLI) to inspect source-branch state",
       "authoritative pull-request base branch",
       "call odt_set_pull_request exactly once with taskId task-42, the tool's required providerId, and the pull request number.",
     ]);
@@ -375,10 +375,11 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(prompt, [
-      "Focus only on pull request publication work for the current Builder session or fork.",
+      "Focus only on pull request publication work for the current Builder session.",
       "targetBranch: origin/release/2026.04",
       "Treat the targetBranch above as the pull-request base branch",
-      "provider-native tooling available in this runtime",
+      "Always rebase on targetBranch before pushing the source branch.",
+      "provider-native tooling available",
       "call odt_set_pull_request with taskId task-1, the tool's required providerId, and the pull request number.",
     ]);
     expect(prompt).not.toContain("Builder fork");

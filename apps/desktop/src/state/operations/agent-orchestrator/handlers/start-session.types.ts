@@ -22,6 +22,7 @@ export type StartAgentSessionInput =
       scenario?: AgentScenario;
       selectedModel?: never;
       sendKickoff?: boolean;
+      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "reuse";
       sourceSessionId: string;
     }
@@ -31,6 +32,7 @@ export type StartAgentSessionInput =
       scenario?: AgentScenario;
       selectedModel: AgentModelSelection;
       sendKickoff?: boolean;
+      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
     }
@@ -40,6 +42,7 @@ export type StartAgentSessionInput =
       scenario?: AgentScenario;
       selectedModel: AgentModelSelection;
       sendKickoff?: boolean;
+      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fork";
       sourceSessionId: string;
     };

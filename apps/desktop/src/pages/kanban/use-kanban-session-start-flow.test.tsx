@@ -270,6 +270,38 @@ describe("useKanbanSessionStartFlow", () => {
     }
   });
 
+  test("does not block QA start when a task has an invalid build target branch", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      tasks: [
+        createTaskCardFixture({
+          id: "TASK-1",
+          status: "ready_for_dev",
+          targetBranchError:
+            "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+        }),
+      ],
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        state.onQaStart("TASK-1");
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().sessionStartModal?.title).toBe("Start QA Session");
+      expect(toastError).not.toHaveBeenCalled();
+    } finally {
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      await harness.unmount();
+    }
+  });
+
   test("opens the shared session start modal for pull request generation with reuse as the default builder flow", async () => {
     const harness = createHookHarness(createBaseArgs());
     let startPromise: Promise<string | undefined> | undefined;

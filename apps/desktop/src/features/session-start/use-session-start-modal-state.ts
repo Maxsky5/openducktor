@@ -11,6 +11,7 @@ import {
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
+import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/lib/target-branch";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { supportsTaskTargetBranchSelection } from "./constants";
 import { orderStartModesForDisplay } from "./session-start-display";
 import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
 import { useSessionStartModalRuntimeState } from "./session-start-modal-runtime-state";
@@ -73,18 +74,6 @@ type UseSessionStartModalStateResult = {
   handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
-};
-
-const supportsTaskTargetBranchSelection = (intent: SessionStartModalIntent | null): boolean => {
-  if (!intent || intent.role !== "build") {
-    return false;
-  }
-
-  return (
-    intent.scenario === "build_implementation_start" ||
-    intent.scenario === "build_after_qa_rejected" ||
-    intent.scenario === "build_after_human_request_changes"
-  );
 };
 
 export function useSessionStartModalState({
@@ -273,7 +262,10 @@ export function useSessionStartModalState({
     return orderStartModesForDisplay(availableStartModes);
   }, [availableStartModes]);
 
-  const showTargetBranchSelector = supportsTaskTargetBranchSelection(intent);
+  const showTargetBranchSelector = supportsTaskTargetBranchSelection(
+    intent?.role,
+    intent?.scenario,
+  );
   const targetBranchOptions = useMemo<ComboboxOption[]>(() => {
     const effectiveTargetBranch = effectiveTaskTargetBranch(
       intent?.initialTargetBranch,

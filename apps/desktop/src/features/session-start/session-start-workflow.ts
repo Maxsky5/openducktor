@@ -101,13 +101,16 @@ const buildPostStartMessage = async ({
   const promptOverrides = activeRepo
     ? await loadEffectivePromptOverrides(activeRepo, queryClient)
     : undefined;
+  const repoDefaultTargetBranch = activeRepo
+    ? (await loadRepoConfigFromQuery(queryClient, activeRepo)).defaultTargetBranch
+    : null;
   const git =
-    kickoffScenario === "build_pull_request_generation" && activeRepo
+    kickoffScenario === "build_pull_request_generation"
       ? {
           targetBranch: canonicalTargetBranch(
             effectiveTaskTargetBranch(
-              task?.targetBranch,
-              (await loadRepoConfigFromQuery(queryClient, activeRepo)).defaultTargetBranch,
+              intent.targetBranch ?? task?.targetBranch,
+              repoDefaultTargetBranch,
             ),
           ),
         }
@@ -184,6 +187,9 @@ export const startSessionWorkflow = async ({
           scenario: intent.scenario,
           startMode: "reuse",
           sourceSessionId: requireSourceSessionId(intent.sourceSessionId, "reuse"),
+          ...(intent.targetBranch !== undefined
+            ? { kickoffTargetBranch: intent.targetBranch }
+            : {}),
           startAgentSession,
         })
       : intent.startMode === "fork"
@@ -194,6 +200,9 @@ export const startSessionWorkflow = async ({
             startMode: "fork",
             selectedModel: requireSelectedModel(selection, "fork"),
             sourceSessionId: requireSourceSessionId(intent.sourceSessionId, "fork"),
+            ...(intent.targetBranch !== undefined
+              ? { kickoffTargetBranch: intent.targetBranch }
+              : {}),
             startAgentSession,
           })
         : await executeSessionStart({
@@ -202,6 +211,9 @@ export const startSessionWorkflow = async ({
             scenario: intent.scenario,
             startMode: "fresh",
             selectedModel: requireSelectedModel(selection, "fresh"),
+            ...(intent.targetBranch !== undefined
+              ? { kickoffTargetBranch: intent.targetBranch }
+              : {}),
             ...(intent.targetWorkingDirectory !== undefined
               ? { targetWorkingDirectory: intent.targetWorkingDirectory }
               : {}),

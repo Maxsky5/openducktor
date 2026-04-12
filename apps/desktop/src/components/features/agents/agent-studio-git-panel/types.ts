@@ -1,5 +1,5 @@
-import type { ComboboxOption } from "@/components/ui/combobox";
 import type { PullRequest } from "@openducktor/contracts";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
