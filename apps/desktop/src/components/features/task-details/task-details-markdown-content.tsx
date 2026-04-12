@@ -1,4 +1,3 @@
-import { Check, Copy } from "lucide-react";
 import {
   type MouseEvent,
   memo,
@@ -8,9 +7,9 @@ import {
   useEffect,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
+import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 type TaskDetailsMarkdownContentProps = {
@@ -18,13 +17,10 @@ type TaskDetailsMarkdownContentProps = {
   empty: string;
   active: boolean;
   copyableMarkdown?: string;
-  copyResetDelayMs?: number;
 };
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
 const LABELED_CODE_FENCE_PATTERN = /^[ \t]{0,3}(?:```|~~~)[ \t]*[^\s`~]/im;
-const MARKDOWN_COPY_PREVIEW_LENGTH = 50;
-
 type TaskDetailsRenderedMarkdownProps = {
   markdown: string;
   hasLabeledCodeFence: boolean;
@@ -99,51 +95,17 @@ function DeferredTaskDetailsMarkdown({
           hasLabeledCodeFence={hasLabeledCodeFence}
         />
       </div>
-      {copyableMarkdown ? <TaskDetailsCopyButton copied={copied} onClick={onCopy} /> : null}
+      {copyableMarkdown ? (
+        <CopyIconButton
+          copied={copied}
+          ariaLabel="Copy document content"
+          dataTestId="copy-document-content"
+          className="absolute top-2 right-2 z-10"
+          onClick={onCopy}
+        />
+      ) : null}
     </div>
   );
-}
-
-function TaskDetailsCopyButton({
-  copied,
-  onClick,
-}: {
-  copied: boolean;
-  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
-}): ReactElement {
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="absolute top-2 right-2 z-10 size-7 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Copy document content"
-            data-testid="copy-document-content"
-            onClick={onClick}
-          >
-            {copied ? (
-              <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          <p>Copy</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-function buildCopyPreview(markdown: string): string {
-  if (markdown.length <= MARKDOWN_COPY_PREVIEW_LENGTH) {
-    return markdown;
-  }
-  return `${markdown.slice(0, MARKDOWN_COPY_PREVIEW_LENGTH)}...`;
 }
 
 export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownContent({
@@ -151,11 +113,9 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   empty,
   active,
   copyableMarkdown,
-  copyResetDelayMs,
 }: TaskDetailsMarkdownContentProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: buildCopyPreview,
-    ...(copyResetDelayMs === undefined ? {} : { resetDelayMs: copyResetDelayMs }),
     errorLogContext: "TaskDetailsMarkdownContent",
   });
   const hasContent = /\S/.test(markdown);
@@ -204,7 +164,15 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
           hasLabeledCodeFence={hasLabeledCodeFence}
         />
       </div>
-      {copyableMarkdown ? <TaskDetailsCopyButton copied={copied} onClick={handleCopy} /> : null}
+      {copyableMarkdown ? (
+        <CopyIconButton
+          copied={copied}
+          ariaLabel="Copy document content"
+          dataTestId="copy-document-content"
+          className="absolute top-2 right-2 z-10"
+          onClick={handleCopy}
+        />
+      ) : null}
     </div>
   );
 });

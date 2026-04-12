@@ -20,6 +20,7 @@ import {
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import { resolveActiveStreamingAssistantMessageId } from "./agent-chat-streaming";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import {
@@ -45,6 +46,7 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
+  isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
@@ -52,6 +54,7 @@ type AgentChatThreadMotionRowProps = {
 };
 
 type AgentChatTranscriptProps = {
+  activeStreamingAssistantMessageId: string | null;
   hasSession: boolean;
   taskSelected: boolean;
   canKickoffNewSession: boolean;
@@ -137,6 +140,7 @@ const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowR
 const AgentChatThreadMotionRow = memo(
   function AgentChatThreadMotionRow({
     row,
+    isStreamingAssistantMessage,
     sessionAgentColors,
     sessionRole,
     sessionWorkingDirectory,
@@ -146,6 +150,7 @@ const AgentChatThreadMotionRow = memo(
       <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
         <AgentChatThreadRow
           row={row}
+          isStreamingAssistantMessage={isStreamingAssistantMessage}
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
@@ -157,6 +162,7 @@ const AgentChatThreadMotionRow = memo(
     return (
       previousProps.sessionRole === nextProps.sessionRole &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
+      previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
       previousProps.resolveRowRef === nextProps.resolveRowRef &&
       areChatRowsEquivalent(previousProps.row, nextProps.row)
@@ -166,6 +172,7 @@ const AgentChatThreadMotionRow = memo(
 
 const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
+  activeStreamingAssistantMessageId,
   sessionAgentColors,
   sessionRole,
   sessionWorkingDirectory,
@@ -173,6 +180,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   allowTurnContainment,
 }: {
   turn: AgentChatRenderedTurn;
+  activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
@@ -185,6 +193,9 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
         <AgentChatThreadMotionRow
           key={row.key}
           row={row}
+          isStreamingAssistantMessage={
+            row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
+          }
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
@@ -196,6 +207,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 });
 
 const AgentChatTranscript = memo(function AgentChatTranscript({
+  activeStreamingAssistantMessageId,
   hasSession,
   taskSelected,
   canKickoffNewSession,
@@ -294,6 +306,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               <AgentChatTurnGroup
                 key={turn.key}
                 turn={turn}
+                activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
                 sessionRole={sessionRole}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
@@ -639,6 +652,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     const latestUserMessage = findLastUserSessionMessage(session);
     return latestUserMessage ? `${session.sessionId}:${latestUserMessage.id}` : null;
   }, [isSessionWorking, session]);
+  const activeStreamingAssistantMessageId = useMemo(() => {
+    return resolveActiveStreamingAssistantMessageId(session);
+  }, [session]);
   const renderedTurns = useMemo(() => {
     return stagedTurns.map((turn) => ({
       key: turn.key,
@@ -695,6 +711,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <AgentChatTranscript
+        activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
         hasSession={session !== null}
         taskSelected={taskSelected}
         canKickoffNewSession={canKickoffNewSession}

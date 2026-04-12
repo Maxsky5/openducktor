@@ -7,15 +7,20 @@ import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
 import {
   Fragment,
   lazy,
+  type MouseEvent,
   type ReactElement,
   type ReactNode,
   Suspense,
+  useCallback,
   useDeferredValue,
   useEffect,
   useRef,
   useState,
 } from "react";
+import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import { buildCopyPreview } from "@/lib/copy-preview";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
@@ -251,19 +256,59 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
 type AssistantMessageProps = {
   message: AgentChatMessage;
   assistantAccentColor: string | undefined;
+  isStreamingAssistantMessage: boolean;
 };
+
+const canCopyAssistantMessage = (
+  message: AgentChatMessage,
+  isStreamingAssistantMessage: boolean,
+): boolean => {
+  if (message.role !== "assistant" || message.content.trim().length === 0) {
+    return false;
+  }
+
+  return !isStreamingAssistantMessage;
+};
+
+function AssistantMessageCopyButton({ markdown }: { markdown: string }): ReactElement {
+  const { copied, copyToClipboard } = useCopyToClipboard({
+    getSuccessDescription: buildCopyPreview,
+    errorLogContext: "AgentChatMessageCardContent",
+  });
+
+  const handleCopy = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      void copyToClipboard(markdown);
+    },
+    [copyToClipboard, markdown],
+  );
+
+  return (
+    <CopyIconButton
+      copied={copied}
+      ariaLabel="Copy assistant message content"
+      dataTestId="copy-assistant-message-content"
+      className="absolute top-0 right-0 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
+      onClick={handleCopy}
+    />
+  );
+}
 
 const AssistantMessage = ({
   message,
   assistantAccentColor,
+  isStreamingAssistantMessage,
 }: AssistantMessageProps): ReactElement => {
-  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  const streaming = assistantMeta?.isFinal === false;
+  const streaming = isStreamingAssistantMessage;
+  const copyable = canCopyAssistantMessage(message, isStreamingAssistantMessage);
   const pacedContent = usePacedStreamingText(message.content, streaming);
   const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message);
   return (
-    <div className="space-y-2">
+    <div className="group/message relative space-y-2 pr-9">
+      {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
       <DeferredMarkdownRenderer
         markdown={streaming ? renderedContent : pacedContent}
         variant="document"
@@ -417,6 +462,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 type MessageBodyProps = {
   message: AgentChatMessage;
   assistantAccentColor: string | undefined;
+  isStreamingAssistantMessage: boolean;
   timeLabel: string;
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
@@ -425,6 +471,7 @@ type MessageBodyProps = {
 export const MessageBody = ({
   message,
   assistantAccentColor,
+  isStreamingAssistantMessage,
   timeLabel,
   systemPromptBody,
   sessionWorkingDirectory,
@@ -538,7 +585,13 @@ export const MessageBody = ({
   }
 
   if (message.role === "assistant") {
-    return <AssistantMessage message={message} assistantAccentColor={assistantAccentColor} />;
+    return (
+      <AssistantMessage
+        message={message}
+        assistantAccentColor={assistantAccentColor}
+        isStreamingAssistantMessage={isStreamingAssistantMessage}
+      />
+    );
   }
 
   return <DeferredMarkdownRenderer markdown={message.content} variant="document" />;
