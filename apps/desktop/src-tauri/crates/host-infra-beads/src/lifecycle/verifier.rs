@@ -69,6 +69,8 @@ struct SharedServerSnapshot {
     acquisition: Option<SharedDoltServerAcquisition>,
 }
 
+type DiagnosticsEnv = (Vec<(String, String)>, SharedServerSnapshot, bool);
+
 impl SharedDoltConnection {
     fn from_env(env: &[(String, String)]) -> Result<Self> {
         Ok(Self {
@@ -142,7 +144,21 @@ impl BeadsLifecycle {
 
         let (env, shared_server, verify_contract) =
             match self.diagnostics_env_for_repo_store(repo_path, &beads_dir, &base_shared_server) {
-                Ok(values) => values,
+                Ok(Some(values)) => values,
+                Ok(None) => {
+                    let detail = LifecycleError::SharedDoltStateMissing {
+                        repo_path: repo_path.to_path_buf(),
+                    }
+                    .to_string();
+                    return Ok(self.build_repo_store_health(
+                        RepoStoreHealthCategory::SharedServerUnavailable,
+                        RepoStoreHealthStatus::Blocking,
+                        Some(detail),
+                        attachment_path,
+                        database_name,
+                        &base_shared_server,
+                    ));
+                }
                 Err(error) => {
                     return Ok(self.build_repo_store_health(
                         RepoStoreHealthCategory::AttachmentContractInvalid,
@@ -266,49 +282,26 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
         shared_server: &SharedServerSnapshot,
-    ) -> Result<(Vec<(String, String)>, SharedServerSnapshot, bool)> {
+    ) -> Result<Option<DiagnosticsEnv>> {
         if shared_server.host.is_some() && shared_server.port.is_some() {
-            return Ok((self.build_bd_env(repo_path)?, shared_server.clone(), true));
+            return Ok(Some((
+                self.build_bd_env(repo_path)?,
+                shared_server.clone(),
+                true,
+            )));
         }
 
         if !self.command_runner().uses_real_processes() {
-            return Ok((self.build_bd_env(repo_path)?, shared_server.clone(), true));
+            return Ok(Some((
+                self.build_bd_env(repo_path)?,
+                shared_server.clone(),
+                true,
+            )));
         }
 
         let metadata = Self::read_attachment_metadata(beads_dir)?;
-        let connection = Self::shared_dolt_connection_from_metadata(&metadata)?;
-        let port = connection.port.parse::<u16>().map_err(|_| {
-            anyhow!(
-                "Beads attachment metadata port is not a valid u16: {}",
-                connection.port
-            )
-        })?;
-
-        Ok((
-            vec![
-                (
-                    "BEADS_DIR".to_string(),
-                    beads_dir.to_string_lossy().to_string(),
-                ),
-                ("BEADS_DOLT_SERVER_MODE".to_string(), "1".to_string()),
-                (
-                    "BEADS_DOLT_SERVER_HOST".to_string(),
-                    connection.host.clone(),
-                ),
-                ("BEADS_DOLT_SERVER_PORT".to_string(), connection.port),
-                (
-                    "BEADS_DOLT_SERVER_USER".to_string(),
-                    connection.user.clone(),
-                ),
-            ],
-            SharedServerSnapshot {
-                host: Some(connection.host),
-                port: Some(port),
-                owner_pid: None,
-                acquisition: None,
-            },
-            true,
-        ))
+        Self::validate_attachment_metadata_for_diagnostics(repo_path, &metadata)?;
+        Ok(None)
     }
 
     fn read_attachment_metadata(beads_dir: &Path) -> Result<BeadsAttachmentMetadata> {
@@ -334,9 +327,10 @@ impl BeadsLifecycle {
         })
     }
 
-    fn shared_dolt_connection_from_metadata(
+    fn validate_attachment_metadata_for_diagnostics(
+        repo_path: &Path,
         metadata: &BeadsAttachmentMetadata,
-    ) -> Result<SharedDoltConnection> {
+    ) -> Result<()> {
         if metadata.backend.as_deref() != Some("dolt") {
             return Err(anyhow!(
                 "Beads attachment backend is {:?}, expected dolt",
@@ -350,22 +344,31 @@ impl BeadsLifecycle {
             ));
         }
 
-        let host = metadata
+        metadata
             .dolt_server_host
             .clone()
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| anyhow!("Beads attachment host is missing from metadata"))?;
-        let port = metadata
+        metadata
             .dolt_server_port
             .ok_or_else(|| anyhow!("Beads attachment port is missing from metadata"))?
             .to_string();
-        let user = metadata
+        metadata
             .dolt_server_user
             .clone()
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| anyhow!("Beads attachment user is missing from metadata"))?;
 
-        Ok(SharedDoltConnection { host, port, user })
+        let expected_database = compute_beads_database_name(repo_path)?;
+        if metadata.dolt_database.as_deref() != Some(expected_database.as_str()) {
+            return Err(anyhow!(
+                "Beads attachment database is {:?}, expected {}",
+                metadata.dolt_database,
+                expected_database
+            ));
+        }
+
+        Ok(())
     }
 
     fn probe_beads_where(

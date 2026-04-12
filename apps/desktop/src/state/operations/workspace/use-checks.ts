@@ -296,9 +296,6 @@ export function useChecks({
 
     return null;
   }, [activeRepo, beadsCheckError, beadsCheckQuery.data]);
-  const activeBeadsCheck = rawBeadsCheck;
-  const effectiveBeadsCheckError = beadsCheckError;
-  const effectiveBeadsCheckFailureKind = beadsCheckFailureKind;
   const diagnosticsToastIssues = useMemo(
     (): DiagnosticsToastIssue[] =>
       buildDiagnosticsToastIssues({
@@ -307,17 +304,17 @@ export function useChecks({
         runtimeCheck: runtimeCheckState,
         runtimeCheckError,
         runtimeCheckFailureKind,
-        beadsCheck: activeBeadsCheck,
-        beadsCheckError: effectiveBeadsCheckError,
-        beadsCheckFailureKind: effectiveBeadsCheckFailureKind,
+        beadsCheck: rawBeadsCheck,
+        beadsCheckError,
+        beadsCheckFailureKind,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
       }),
     [
       activeRepo,
-      activeBeadsCheck,
+      rawBeadsCheck,
       activeRepoRuntimeHealthByRuntime,
-      effectiveBeadsCheckError,
-      effectiveBeadsCheckFailureKind,
+      beadsCheckError,
+      beadsCheckFailureKind,
       runtimeCheckState,
       runtimeCheckError,
       runtimeCheckFailureKind,
@@ -332,7 +329,7 @@ export function useChecks({
         runtimeDefinitions,
         runtimeCheckFailureKind,
         runtimeCheckFetching: runtimeCheckQuery.isFetching,
-        beadsCheckFailureKind: effectiveBeadsCheckFailureKind,
+        beadsCheckFailureKind,
         beadsCheckFetching: beadsCheckQuery.isFetching,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
         runtimeHealthFetching: runtimeHealthQuery.isFetching,
@@ -340,7 +337,7 @@ export function useChecks({
     [
       activeRepo,
       activeRepoRuntimeHealthByRuntime,
-      effectiveBeadsCheckFailureKind,
+      beadsCheckFailureKind,
       beadsCheckQuery.isFetching,
       runtimeCheckFailureKind,
       runtimeCheckQuery.isFetching,
@@ -368,8 +365,8 @@ export function useChecks({
   return {
     runtimeCheck: runtimeCheckState,
     runtimeCheckFailureKind,
-    activeBeadsCheck,
-    beadsCheckFailureKind: effectiveBeadsCheckFailureKind,
+    activeBeadsCheck: rawBeadsCheck,
+    beadsCheckFailureKind,
     activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks: setIsManualLoadingChecks,

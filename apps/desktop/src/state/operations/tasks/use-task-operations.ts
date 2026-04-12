@@ -161,7 +161,15 @@ export function useTaskOperations({
       repoStoreHealthByRepoRef.current.set(repoPath, getBlockingRepoStoreHealth(beadsCheck));
       await host.repoPullRequestSync(repoPath);
       await refreshTaskData(repoPath);
-      void refreshBeadsCheckForRepo(repoPath, true).catch(() => {});
+      try {
+        const refreshedBeadsCheck = await refreshBeadsCheckForRepo(repoPath, true);
+        repoStoreHealthByRepoRef.current.set(
+          repoPath,
+          getBlockingRepoStoreHealth(refreshedBeadsCheck),
+        );
+      } catch {
+        // Keep refresh semantics unchanged when the follow-up diagnostics check fails.
+      }
     },
     [refreshBeadsCheckForRepo, refreshTaskData],
   );

@@ -8,8 +8,8 @@ import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  createBeadsCheckFixture,
   createAgentSessionFixture,
+  createBeadsCheckFixture,
   createDeferred,
   createTaskCardFixture,
   enableReactActEnvironment,

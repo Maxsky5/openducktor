@@ -9,8 +9,8 @@ import { QueryProvider } from "@/lib/query-provider";
 import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createBeadsCheckFixture as createSharedBeadsCheckFixture,
   type BeadsCheckFixtureOverrides,
+  createBeadsCheckFixture as createSharedBeadsCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";

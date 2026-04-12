@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { BeadsCheck, RuntimeDescriptor, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
-  createBeadsCheckFixture,
   type BeadsCheckFixtureOverrides,
+  createBeadsCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";

@@ -11,9 +11,9 @@ import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  type BeadsCheckFixtureOverrides,
   createBeadsCheckFixture,
   createDeferred,
-  type BeadsCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "../shared/host";
@@ -323,12 +323,12 @@ describe("use-checks", () => {
     host.runtimeCheck = runtimeCheck;
     host.beadsCheck = beadsCheck;
 
-    try {
-      const harness = createHookHarness({
-        activeRepo: "/repo-a",
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      });
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
 
+    try {
       await harness.mount();
       await harness.waitFor(
         (value) => value.runtimeCheck !== null && value.activeBeadsCheck !== null,
@@ -338,9 +338,8 @@ describe("use-checks", () => {
       expect(current.activeBeadsCheck?.repoStoreHealth.status).toBe("initializing");
       expect(current.beadsCheckFailureKind).toBeNull();
       expect(toastError).not.toHaveBeenCalledWith("Beads store unavailable", expect.anything());
-
-      await harness.unmount();
     } finally {
+      await harness.unmount();
       host.runtimeCheck = original.runtimeCheck;
       host.beadsCheck = original.beadsCheck;
     }

@@ -7,8 +7,8 @@ import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createBeadsCheckFixture,
   createAgentSessionFixture,
+  createBeadsCheckFixture,
   createDeferred,
   createTaskCardFixture,
   enableReactActEnvironment,

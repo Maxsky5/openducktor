@@ -76,9 +76,13 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
 }
 
 fn build_beads_check(repo_store_health: RepoStoreHealth) -> BeadsCheck {
-    let beads_error = (!repo_store_health.is_ready)
-        .then(|| repo_store_health.detail.clone())
-        .flatten();
+    let beads_error = (!repo_store_health.is_ready
+        && !matches!(
+            repo_store_health.status,
+            RepoStoreHealthStatus::Initializing
+        ))
+    .then(|| repo_store_health.detail.clone())
+    .flatten();
 
     BeadsCheck {
         beads_ok: repo_store_health.is_ready,

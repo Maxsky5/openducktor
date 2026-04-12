@@ -13,8 +13,8 @@ import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createBeadsCheckFixture,
   createAgentSessionFixture,
+  createBeadsCheckFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";

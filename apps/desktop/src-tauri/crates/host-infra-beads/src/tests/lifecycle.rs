@@ -8,6 +8,7 @@ use host_infra_system::{
     is_process_alive, resolve_repo_beads_attachment_root, resolve_server_state_file,
     SharedDoltServerAcquisition, SharedDoltServerState,
 };
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::{Arc, Condvar, LazyLock, Mutex};
 
@@ -22,6 +23,34 @@ struct BlockingInitRunner {
 struct BlockingInitState {
     entered: bool,
     released: bool,
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+        let previous = std::env::var_os(key);
+        unsafe {
+            std::env::set_var(key, value);
+        }
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => unsafe {
+                std::env::set_var(self.key, value);
+            },
+            None => unsafe {
+                std::env::remove_var(self.key);
+            },
+        }
+    }
 }
 
 impl BlockingInitRunner {
@@ -149,10 +178,7 @@ fn diagnose_repo_store_reports_healthy_attachment_and_server() -> Result<()> {
     let repo = RepoFixture::new("diagnose-healthy");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     fs::create_dir_all(&beads_dir)?;
@@ -183,15 +209,6 @@ fn diagnose_repo_store_reports_healthy_attachment_and_server() -> Result<()> {
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let health = store.diagnose_repo_store(repo.path())?;
-
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
 
     assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
     assert_eq!(health.status, RepoStoreHealthStatus::Ready);
@@ -249,10 +266,7 @@ fn diagnose_repo_store_does_not_report_reused_owner_for_dead_foreign_pid() -> Re
     let repo = RepoFixture::new("diagnose-dead-foreign-owner");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
 
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
@@ -308,15 +322,6 @@ fn diagnose_repo_store_does_not_report_reused_owner_for_dead_foreign_pid() -> Re
 
     let health = store.diagnose_repo_store(repo.path())?;
 
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
-
     assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
     assert_eq!(health.status, RepoStoreHealthStatus::Ready);
     assert!(health.is_ready);
@@ -334,10 +339,7 @@ fn diagnose_repo_store_reports_restore_needed_when_shared_database_is_missing() 
     let repo = RepoFixture::new("diagnose-restore-needed");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     fs::create_dir_all(&beads_dir)?;
@@ -362,15 +364,6 @@ fn diagnose_repo_store_reports_restore_needed_when_shared_database_is_missing() 
 
     let health = store.diagnose_repo_store(repo.path())?;
 
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
-
     assert_eq!(
         health.category,
         RepoStoreHealthCategory::MissingSharedDatabase
@@ -394,10 +387,7 @@ fn diagnose_repo_store_reports_attachment_contract_mismatch() -> Result<()> {
     let repo = RepoFixture::new("diagnose-contract-mismatch");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     fs::create_dir_all(&beads_dir)?;
     let database_name = compute_beads_database_name(repo.path())?;
@@ -417,15 +407,6 @@ fn diagnose_repo_store_reports_attachment_contract_mismatch() -> Result<()> {
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let health = store.diagnose_repo_store(repo.path())?;
-
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
 
     assert_eq!(
         health.category,
@@ -447,23 +428,11 @@ fn diagnose_repo_store_reports_missing_attachment_when_state_and_attachment_are_
     let repo = RepoFixture::new("diagnose-missing-shared-server");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
     let runner = MockCommandRunner::with_steps_using_real_processes(vec![]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let health = store.diagnose_repo_store(repo.path())?;
-
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
 
     assert_eq!(health.category, RepoStoreHealthCategory::MissingAttachment);
     assert_eq!(health.status, RepoStoreHealthStatus::Blocking);
@@ -484,10 +453,7 @@ fn diagnose_repo_store_uses_attachment_metadata_when_shared_server_state_is_miss
     let repo = RepoFixture::new("diagnose-missing-state-uses-metadata");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     fs::create_dir_all(&beads_dir)?;
@@ -503,40 +469,28 @@ fn diagnose_repo_store_uses_attachment_metadata_when_shared_server_state_is_miss
         })
         .to_string(),
     )?;
-    let runner = MockCommandRunner::with_steps_using_real_processes(vec![
-        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
-        MockStep::AllowFailureWithEnv(Ok((
-            true,
-            json!({
-                "path": beads_dir,
-                "prefix": "openducktor"
-            })
-            .to_string(),
-            String::new(),
-        ))),
-    ]);
+    let runner = MockCommandRunner::with_steps_using_real_processes(vec![]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let health = store.diagnose_repo_store(repo.path())?;
 
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
-
-    assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
-    assert_eq!(health.status, RepoStoreHealthStatus::Ready);
-    assert!(health.is_ready);
-    assert_eq!(health.shared_server.host.as_deref(), Some("127.0.0.1"));
-    assert_eq!(health.shared_server.port, Some(3307));
+    assert_eq!(
+        health.category,
+        RepoStoreHealthCategory::SharedServerUnavailable
+    );
+    assert_eq!(health.status, RepoStoreHealthStatus::Blocking);
+    assert!(!health.is_ready);
+    assert_eq!(health.shared_server.host, None);
+    assert_eq!(health.shared_server.port, None);
     assert_eq!(
         health.shared_server.ownership_state,
         RepoStoreSharedServerOwnershipState::Unavailable
     );
+    assert!(health
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Shared Dolt server state is missing"));
     Ok(())
 }
 
@@ -545,10 +499,7 @@ fn diagnose_repo_store_rejects_wrong_database_when_shared_server_state_is_missin
     let repo = RepoFixture::new("diagnose-missing-state-wrong-database");
     let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
     let config_root = repo.path().join("config-root");
-    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
-    unsafe {
-        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
-    }
+    let _config_dir_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", &config_root);
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     fs::create_dir_all(&beads_dir)?;
@@ -568,15 +519,6 @@ fn diagnose_repo_store_rejects_wrong_database_when_shared_server_state_is_missin
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let health = store.diagnose_repo_store(repo.path())?;
-
-    match previous_config_dir {
-        Some(value) => unsafe {
-            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
-        },
-        None => unsafe {
-            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
-        },
-    }
 
     assert_eq!(
         health.category,

@@ -9,6 +9,27 @@ use crate::command_runner::CommandRunner;
 
 use super::{LifecycleError, RepoReadiness};
 
+struct RepoInitializingGuard<'a> {
+    lifecycle: &'a BeadsLifecycle,
+    repo_key: String,
+}
+
+impl<'a> RepoInitializingGuard<'a> {
+    fn new(lifecycle: &'a BeadsLifecycle, repo_key: &str) -> Result<Self> {
+        lifecycle.mark_repo_initializing(repo_key)?;
+        Ok(Self {
+            lifecycle,
+            repo_key: repo_key.to_string(),
+        })
+    }
+}
+
+impl Drop for RepoInitializingGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.lifecycle.clear_repo_initializing(&self.repo_key);
+    }
+}
+
 pub(crate) struct BeadsLifecycle {
     command_runner: Arc<dyn CommandRunner>,
     init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
@@ -97,9 +118,9 @@ impl BeadsLifecycle {
         let _guard = lock
             .lock()
             .map_err(|_| anyhow!("Beads repo lock poisoned"))?;
-        self.mark_repo_initializing(&repo_key)?;
+        let _initializing_guard = RepoInitializingGuard::new(self, &repo_key)?;
 
-        let result = (|| {
+        (|| {
             let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
 
             self.ensure_dolt_server_running(repo_path)?;
@@ -148,9 +169,6 @@ impl BeadsLifecycle {
             self.ensure_custom_statuses(repo_path)?;
             self.mark_repo_initialized(&repo_key)?;
             Ok(())
-        })();
-
-        self.clear_repo_initializing(&repo_key)?;
-        result
+        })()
     }
 }

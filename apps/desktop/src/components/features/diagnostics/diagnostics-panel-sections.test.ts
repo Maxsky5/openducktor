@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type BeadsCheck } from "@openducktor/contracts";
+import { type BeadsCheck, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";

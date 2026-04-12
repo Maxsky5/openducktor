@@ -9,8 +9,8 @@ import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createBeadsCheckFixture as createSharedBeadsCheckFixture,
   createAgentSessionFixture as createSharedAgentSessionFixture,
+  createBeadsCheckFixture as createSharedBeadsCheckFixture,
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";

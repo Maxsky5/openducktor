@@ -5,8 +5,8 @@ import { act } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createBeadsCheckFixture,
   type BeadsCheckFixtureOverrides,
+  createBeadsCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;

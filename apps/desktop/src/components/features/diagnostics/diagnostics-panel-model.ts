@@ -8,14 +8,6 @@ import type {
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
-  getRepoStoreCategoryLabel,
-  getRepoStoreDetail,
-  getRepoStoreHealth,
-  getRepoStoreOwnershipLabel,
-  getRepoStoreStatusLabel,
-  isRepoStoreReady,
-} from "@/lib/repo-store-health";
-import {
   describeRepoRuntimeStatus,
   formatRepoRuntimeElapsed,
   formatRepoRuntimeObservation,
@@ -24,6 +16,14 @@ import {
   getRepoRuntimeMcpBadge,
   getRepoRuntimeMcpStatusLabel,
 } from "@/lib/repo-runtime-health";
+import {
+  getRepoStoreCategoryLabel,
+  getRepoStoreDetail,
+  getRepoStoreHealth,
+  getRepoStoreOwnershipLabel,
+  getRepoStoreStatusLabel,
+  isRepoStoreReady,
+} from "@/lib/repo-store-health";
 import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
@@ -122,12 +122,12 @@ const getRepoStoreFailureBadge = (
   beadsCheck: BeadsCheck | null,
   failureKind: RepoRuntimeFailureKind,
 ): DiagnosticsSectionModel["badge"] => {
+  if (failureKind === "timeout") {
+    return { label: "Retrying", variant: "warning" };
+  }
   const repoStoreHealth = getRepoStoreHealth(beadsCheck);
   if (repoStoreHealth === null) {
     return { label: "Checking", variant: "secondary" };
-  }
-  if (failureKind === "timeout") {
-    return { label: "Retrying", variant: "warning" };
   }
 
   switch (repoStoreHealth.status) {
@@ -200,6 +200,15 @@ const buildRepoStoreErrors = (
   beadsCheck: BeadsCheck | null,
   failureKind: RepoRuntimeFailureKind,
 ): string[] => {
+  if (failureKind === "timeout") {
+    const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+    return buildFailureMessages({
+      label: "Beads store",
+      detail: repoStoreHealth ? getRepoStoreDetail(repoStoreHealth) : null,
+      failureKind,
+    });
+  }
+
   const repoStoreHealth = getRepoStoreHealth(beadsCheck);
   if (
     !repoStoreHealth ||
@@ -391,6 +400,7 @@ export const buildDiagnosticsPanelModel = (
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
+    const repoStoreHealth = getRepoStoreHealth(beadsCheck);
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
@@ -405,8 +415,12 @@ export const buildDiagnosticsPanelModel = (
         );
       }
     }
-    if (hasBeadsCheckFailure(beadsCheck) && beadsCheckFailureKind !== "timeout") {
-      criticalReasons.push(getRepoStoreDetail(getRepoStoreHealth(beadsCheck)!));
+    if (
+      repoStoreHealth &&
+      hasBeadsCheckFailure(beadsCheck) &&
+      beadsCheckFailureKind !== "timeout"
+    ) {
+      criticalReasons.push(getRepoStoreDetail(repoStoreHealth));
     }
   }
 
@@ -421,6 +435,7 @@ export const buildDiagnosticsPanelModel = (
       isLoadingChecks ||
       runtimeCheck === null ||
       beadsCheck === null ||
+      beadsCheck?.repoStoreHealth.status === "initializing" ||
       isRuntimeHealthPending ||
       hasCheckingRuntimeHealth ||
       hasDiagnosticsRetryingState({

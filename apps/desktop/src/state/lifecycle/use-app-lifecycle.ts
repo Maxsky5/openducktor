@@ -1,6 +1,6 @@
 import {
-  externalTaskSyncEventSchema,
   type BeadsCheck,
+  externalTaskSyncEventSchema,
   type RepoStoreHealth,
   type RunEvent,
   runEventSchema,
@@ -263,7 +263,9 @@ export function useAppLifecycle({
       try {
         const beadsCheck = await refreshBeadsCheckForRepo(activeRepo, false);
         repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
-        clearBeadsPreparationTimer();
+        if (beadsCheck.repoStoreHealth.isReady) {
+          clearBeadsPreparationTimer();
+        }
 
         await refreshTaskData(activeRepo);
         void refreshBeadsCheckForRepo(activeRepo, true).catch(() => {});

@@ -351,10 +351,10 @@ mod tests {
     use host_application::AppService;
     use host_domain::{
         AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, IssueType,
-        PullRequestRecord, QaReportDocument, QaVerdict, RepoStoreAttachmentHealth,
-        RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
-        RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, SpecDocument,
-        TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+        PullRequestRecord, QaReportDocument, QaVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+        RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+        RepoStoreSharedServerOwnershipState, SpecDocument, TaskCard, TaskDocumentSummary,
+        TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
     };
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::{AppConfigStore, RepoConfig};
