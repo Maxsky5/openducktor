@@ -231,7 +231,7 @@ describe("use-inline-comment-draft-store", () => {
     ).toEqual([secondId]);
   });
 
-  test("formats a deterministic agent-oriented appendix with selected lines only", () => {
+  test("formats a deterministic JSON appendix with explicit change semantics", () => {
     Date.now = () => 1_700_000_000_000;
 
     useInlineCommentDraftStore.getState().addDraft({
@@ -263,29 +263,42 @@ describe("use-inline-comment-draft-store", () => {
 
     expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toBe(
       [
-        "git_diff_comments:",
-        "- path: apps/desktop/src/alpha.ts",
-        "  scope: uncommitted",
-        "  side: old",
-        "  lines: 12-15",
-        "  note: |",
-        "    Alpha range comment",
-        "  code: |",
-        "    12 | removed one",
-        "    13 | removed two",
-        "- path: apps/desktop/src/beta.ts",
-        "  scope: branch",
-        "  side: new",
-        "  lines: 30",
-        "  note: |",
-        "    Beta line comment",
-        "  code: |",
-        "    30 | selected",
+        "```json",
+        "{",
+        '  "git_diff_comments": [',
+        "    {",
+        '      "path": "apps/desktop/src/alpha.ts",',
+        '      "lines": {',
+        '        "start": 12,',
+        '        "end": 15',
+        "      },",
+        '      "change": "removed",',
+        '      "instruction": "Alpha range comment",',
+        '      "selected_code": [',
+        '        "12 | removed one",',
+        '        "13 | removed two"',
+        "      ]",
+        "    },",
+        "    {",
+        '      "path": "apps/desktop/src/beta.ts",',
+        '      "lines": {',
+        '        "start": 30,',
+        '        "end": 30',
+        "      },",
+        '      "change": "added",',
+        '      "instruction": "Beta line comment",',
+        '      "selected_code": [',
+        '        "30 | selected"',
+        "      ]",
+        "    }",
+        "  ]",
+        "}",
+        "```",
       ].join("\n"),
     );
   });
 
-  test("formats multiline notes as an indented block", () => {
+  test("formats multiline instructions as escaped JSON strings", () => {
     useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/file-a.ts",
       diffScope: "target",
@@ -298,7 +311,10 @@ describe("use-inline-comment-draft-store", () => {
     });
 
     expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
-      ["  note: |", "    First line", "    Second line", "  code: |", "    5 | target"].join("\n"),
+      '"instruction": "First line\\nSecond line"',
+    );
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
+      '"selected_code": [\n        "5 | target"\n      ]',
     );
   });
 

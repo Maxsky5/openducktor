@@ -60,11 +60,6 @@ export type InlineCommentDraftStore = {
   getDraftsForFile: (filePath: string) => InlineCommentDraft[];
 };
 
-const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
-  uncommitted: "uncommitted",
-  target: "branch",
-};
-
 let nextId = 0;
 let nextRevision = 0;
 let nextSubmissionId = 0;
@@ -99,15 +94,7 @@ const compareDrafts = (left: InlineCommentDraft, right: InlineCommentDraft): num
   );
 };
 
-const formatLineRange = (startLine: number, endLine: number): string => {
-  return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
-};
-
-const indentBlock = (value: string): string[] => {
-  return value.split("\n").map((line) => `    ${line}`);
-};
-
-const formatSelectedCodeBlock = (codeContext: InlineCommentContextLine[]): string => {
+const formatSelectedCodeLines = (codeContext: InlineCommentContextLine[]): string[] => {
   const selectedLines = codeContext.filter((line) => line.isSelected);
   const lines = (selectedLines.length > 0 ? selectedLines : codeContext).map(
     ({ lineNumber, text }) => {
@@ -115,7 +102,11 @@ const formatSelectedCodeBlock = (codeContext: InlineCommentContextLine[]): strin
     },
   );
 
-  return lines.join("\n");
+  return lines;
+};
+
+const mapCommentSideToChange = (side: InlineCommentSide): "added" | "removed" => {
+  return side === "old" ? "removed" : "added";
 };
 
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
@@ -262,21 +253,23 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return "";
     }
 
-    const sections = drafts.map((draft) => {
-      const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
-      return [
-        `- path: ${draft.filePath}`,
-        `  scope: ${DIFF_SCOPE_LABELS[draft.diffScope]}`,
-        `  side: ${draft.side}`,
-        `  lines: ${formatLineRange(startLine, endLine)}`,
-        `  note: |`,
-        ...indentBlock(draft.text),
-        `  code: |`,
-        ...indentBlock(formatSelectedCodeBlock(draft.codeContext)),
-      ].join("\n");
-    });
+    const payload = {
+      git_diff_comments: drafts.map((draft) => {
+        const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
+        return {
+          path: draft.filePath,
+          lines: {
+            start: startLine,
+            end: endLine,
+          },
+          change: mapCommentSideToChange(draft.side),
+          instruction: draft.text,
+          selected_code: formatSelectedCodeLines(draft.codeContext),
+        };
+      }),
+    };
 
-    return ["git_diff_comments:", ...sections].join("\n");
+    return ["```json", JSON.stringify(payload, null, 2), "```"].join("\n");
   },
 
   formatPendingBatchMessage: () => {
