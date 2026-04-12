@@ -105,6 +105,18 @@ const formatSelectedCodeLines = (codeContext: InlineCommentContextLine[]): strin
   return lines;
 };
 
+const formatLineRange = (startLine: number, endLine: number): string => {
+  return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
+};
+
+const formatSelectedContextBlock = (
+  codeContext: InlineCommentContextLine[],
+  language: string | null,
+): string => {
+  const fence = typeof language === "string" && language.length > 0 ? language : "text";
+  return ["Context:", `\`\`\`${fence}`, ...formatSelectedCodeLines(codeContext), "```"].join("\n");
+};
+
 const mapCommentSideToChange = (side: InlineCommentSide): "added" | "removed" => {
   return side === "old" ? "removed" : "added";
 };
@@ -253,23 +265,19 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return "";
     }
 
-    const payload = {
-      git_diff_comments: drafts.map((draft) => {
-        const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
-        return {
-          path: draft.filePath,
-          lines: {
-            start: startLine,
-            end: endLine,
-          },
-          change: mapCommentSideToChange(draft.side),
-          instruction: draft.text,
-          selected_code: formatSelectedCodeLines(draft.codeContext),
-        };
-      }),
-    };
+    const sections = drafts.map((draft, index) => {
+      const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
+      return [
+        `### Comment ${index + 1}`,
+        `File: \`${draft.filePath}\``,
+        `Change: ${mapCommentSideToChange(draft.side)}`,
+        `Lines: ${formatLineRange(startLine, endLine)}`,
+        formatSelectedContextBlock(draft.codeContext, draft.language),
+        `Instruction: ${draft.text}`,
+      ].join("\n");
+    });
 
-    return ["```json", JSON.stringify(payload, null, 2), "```"].join("\n");
+    return ["## Git Diff Comments", ...sections].join("\n\n");
   },
 
   formatPendingBatchMessage: () => {

@@ -56,7 +56,7 @@ export const NewCommentForm = ({
 };
 
 export const DiffAnnotationShell = ({ children }: { children: ReactElement }): ReactElement => {
-  return <div className="py-4 px-5">{children}</div>;
+  return <div className="py-2 px-4">{children}</div>;
 };
 
 export const DraftCommentCard = ({
@@ -155,12 +155,11 @@ export const SentCommentCard = ({ comment }: { comment: InlineCommentDraft }): R
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left cursor-pointer"
             data-testid="agent-studio-git-sent-comment-trigger"
           >
             <div className="min-w-0">
               <CommentMeta status="sent" />
-              <p className={`mt-2 truncate ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>
             </div>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
           </button>
