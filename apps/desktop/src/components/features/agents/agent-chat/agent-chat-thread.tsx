@@ -46,7 +46,7 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
-  activeStreamingAssistantMessageId: string | null;
+  isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
@@ -140,7 +140,7 @@ const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowR
 const AgentChatThreadMotionRow = memo(
   function AgentChatThreadMotionRow({
     row,
-    activeStreamingAssistantMessageId,
+    isStreamingAssistantMessage,
     sessionAgentColors,
     sessionRole,
     sessionWorkingDirectory,
@@ -150,7 +150,7 @@ const AgentChatThreadMotionRow = memo(
       <div ref={resolveRowRef(row.key)} data-row-key={row.key} className="agent-chat-row-motion">
         <AgentChatThreadRow
           row={row}
-          activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
+          isStreamingAssistantMessage={isStreamingAssistantMessage}
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
@@ -162,8 +162,7 @@ const AgentChatThreadMotionRow = memo(
     return (
       previousProps.sessionRole === nextProps.sessionRole &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
-      previousProps.activeStreamingAssistantMessageId ===
-        nextProps.activeStreamingAssistantMessageId &&
+      previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
       previousProps.resolveRowRef === nextProps.resolveRowRef &&
       areChatRowsEquivalent(previousProps.row, nextProps.row)
@@ -194,7 +193,9 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
         <AgentChatThreadMotionRow
           key={row.key}
           row={row}
-          activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
+          isStreamingAssistantMessage={
+            row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
+          }
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}

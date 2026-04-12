@@ -1,13 +1,15 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
 enableReactActEnvironment();
 
 const writeClipboardMock = mock(async (_value: string) => {});
+let restoreClipboard: (() => void) | null = null;
 
 function ClipboardHookHarness({ resetDelayMs }: { resetDelayMs: number }): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
@@ -32,13 +34,12 @@ describe("useCopyToClipboard", () => {
   beforeEach(() => {
     writeClipboardMock.mockClear();
     writeClipboardMock.mockImplementation(async () => {});
+    restoreClipboard = replaceNavigatorClipboard(writeClipboardMock);
+  });
 
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: writeClipboardMock,
-      },
-    });
+  afterEach(() => {
+    restoreClipboard?.();
+    restoreClipboard = null;
   });
 
   test("resets copied state after the configured delay", async () => {

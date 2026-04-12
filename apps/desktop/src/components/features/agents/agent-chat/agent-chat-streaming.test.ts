@@ -22,7 +22,7 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
     expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-live");
   });
 
-  test("treats non-final assistant rows as stable once later transcript rows exist", () => {
+  test("keeps tracking a live non-final assistant row after later tool rows are appended", () => {
     const session = buildSession({
       status: "running",
       messages: [
@@ -48,7 +48,36 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
       pendingQuestions: [],
     });
 
-    expect(resolveActiveStreamingAssistantMessageId(session)).toBeNull();
+    expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-intermediate");
+  });
+
+  test("keeps tracking a live non-final assistant row after later subtask rows are appended", () => {
+    const session = buildSession({
+      status: "running",
+      messages: [
+        buildMessage("assistant", "Drafting the plan", {
+          id: "assistant-subtask-live",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+          },
+        }),
+        buildMessage("system", "Subtask (planner): inspect tests", {
+          id: "subtask:planner-1",
+          meta: {
+            kind: "subtask",
+            partId: "part-subtask-1",
+            agent: "planner",
+            prompt: "Inspect the tests",
+            description: "inspect tests",
+          },
+        }),
+      ],
+      pendingQuestions: [],
+    });
+
+    expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-subtask-live");
   });
 
   test("does not mark non-final assistant rows as streaming after the session stops", () => {

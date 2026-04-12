@@ -1,4 +1,4 @@
-import { findLastSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
+import { findLastSessionMessageByRole } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export const resolveActiveStreamingAssistantMessageId = (
@@ -8,11 +8,11 @@ export const resolveActiveStreamingAssistantMessageId = (
     return null;
   }
 
-  const lastMessage = findLastSessionMessage(session);
-  if (!lastMessage || lastMessage.role !== "assistant") {
-    return null;
-  }
+  const lastStreamingAssistantMessage = findLastSessionMessageByRole(
+    session,
+    "assistant",
+    (message) => message.meta?.kind === "assistant" && message.meta.isFinal === false,
+  );
 
-  const assistantMeta = lastMessage.meta?.kind === "assistant" ? lastMessage.meta : null;
-  return assistantMeta?.isFinal === false ? lastMessage.id : null;
+  return lastStreamingAssistantMessage?.id ?? null;
 };

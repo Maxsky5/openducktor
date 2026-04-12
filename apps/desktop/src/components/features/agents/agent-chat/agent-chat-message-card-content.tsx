@@ -307,7 +307,7 @@ const AssistantMessage = ({
   const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message);
   return (
-    <div className={cn("group/message relative space-y-2", copyable ? "pr-9" : "")}>
+    <div className="group/message relative space-y-2 pr-9">
       {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
       <DeferredMarkdownRenderer
         markdown={streaming ? renderedContent : pacedContent}

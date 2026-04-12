@@ -1,26 +1,27 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 
 enableReactActEnvironment();
 
 const writeClipboardMock = mock(async (_value: string) => {});
+let restoreClipboard: (() => void) | null = null;
 
 describe("AgentChatMessageCard assistant copy", () => {
   beforeEach(() => {
     writeClipboardMock.mockClear();
     writeClipboardMock.mockImplementation(async () => {});
+    restoreClipboard = replaceNavigatorClipboard(writeClipboardMock);
+  });
 
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: writeClipboardMock,
-      },
-    });
+  afterEach(() => {
+    restoreClipboard?.();
+    restoreClipboard = null;
   });
 
   test("copies the raw assistant markdown and shows the shared success preview", async () => {

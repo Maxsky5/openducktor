@@ -15,6 +15,10 @@ export const withMockedToast = async (
   toast.success = toastSuccessMock;
   toast.error = toastErrorMock;
 
+  if (toast.success !== toastSuccessMock || toast.error !== toastErrorMock) {
+    throw new Error("withMockedToast: toast properties are not writable");
+  }
+
   try {
     await callback({ toastSuccessMock, toastErrorMock });
   } finally {
