@@ -92,8 +92,11 @@ function FileDiffEntry({
   const hasDiffContent = diff.diff.trim().length > 0;
   const diffResetKey = `${diffScope}:${diff.diff}`;
   const fileComments = useMemo(
-    () => allDrafts.filter((comment) => comment.filePath === diff.file),
-    [allDrafts, diff.file],
+    () =>
+      allDrafts.filter(
+        (comment) => comment.filePath === diff.file && comment.diffScope === diffScope,
+      ),
+    [allDrafts, diff.file, diffScope],
   );
   const fileCommentCount = fileComments.length;
   const draftComments = fileComments.filter((comment) => comment.status !== "sent");

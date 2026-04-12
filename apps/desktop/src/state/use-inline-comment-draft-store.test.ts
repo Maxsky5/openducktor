@@ -267,6 +267,7 @@ describe("use-inline-comment-draft-store", () => {
         "",
         "### Comment 1",
         "File: `apps/desktop/src/alpha.ts`",
+        "Diff: uncommitted changes",
         "Change: removed",
         "Lines: 12-15",
         "Context:",
@@ -278,6 +279,7 @@ describe("use-inline-comment-draft-store", () => {
         "",
         "### Comment 2",
         "File: `apps/desktop/src/beta.ts`",
+        "Diff: branch changes",
         "Change: added",
         "Lines: 30",
         "Context:",
@@ -306,6 +308,9 @@ describe("use-inline-comment-draft-store", () => {
     );
     expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
       ["Context:", "```ts", "5 | target", "```"].join("\n"),
+    );
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
+      "Diff: branch changes",
     );
   });
 

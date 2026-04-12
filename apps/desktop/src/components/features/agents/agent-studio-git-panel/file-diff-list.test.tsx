@@ -258,9 +258,8 @@ describe("FileDiffList", () => {
     });
 
     expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
-    expect(screen.getByTestId("agent-studio-git-sent-comment-trigger").textContent).toContain(
-      "Please tighten the null handling",
-    );
+    fireEvent.click(screen.getByTestId("agent-studio-git-sent-comment-trigger"));
+    expect(screen.getByText("Please tighten the null handling")).toBeDefined();
   });
 
   test("disables edit and remove actions for submitted comments while send is in flight", () => {
@@ -295,5 +294,25 @@ describe("FileDiffList", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
     expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
+  });
+
+  test("keeps comments isolated to the diff scope they were created in", () => {
+    render(<ScopeSwitchFileDiffListHarness />);
+
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
+      target: { value: "Only for uncommitted" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+    expect(screen.getByTestId("agent-studio-git-file-comment-count").textContent).toContain("1");
+    expect(screen.getByTestId("agent-studio-git-pending-comment").textContent).toContain(
+      "Only for uncommitted",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
+
+    expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
+    expect(screen.queryByTestId("agent-studio-git-file-comment-count")).toBeNull();
   });
 });

@@ -121,6 +121,11 @@ const mapCommentSideToChange = (side: InlineCommentSide): "added" | "removed" =>
   return side === "old" ? "removed" : "added";
 };
 
+const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
+  uncommitted: "uncommitted changes",
+  target: "branch changes",
+};
+
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
   drafts: [],
   draftStateKey: null,
@@ -270,6 +275,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return [
         `### Comment ${index + 1}`,
         `File: \`${draft.filePath}\``,
+        `Diff: ${DIFF_SCOPE_LABELS[draft.diffScope]}`,
         `Change: ${mapCommentSideToChange(draft.side)}`,
         `Lines: ${formatLineRange(startLine, endLine)}`,
         formatSelectedContextBlock(draft.codeContext, draft.language),
