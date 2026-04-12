@@ -20,7 +20,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -72,6 +71,9 @@ const hasComposerSendContent = (
 ): boolean => {
   return draftHasMeaningfulContent(draft) || pendingInlineCommentCount > 0;
 };
+
+const SEND_COMMENT_BADGE_CLASS_NAME =
+  "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onPickAttachments,
@@ -227,13 +229,12 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             )}
           </Button>
           {pendingInlineCommentCount > 0 ? (
-            <Badge
-              variant="warning"
-              className="absolute -right-1.5 -top-1.5 min-w-5 justify-center px-1 text-[10px] leading-4"
+            <span
+              className={SEND_COMMENT_BADGE_CLASS_NAME}
               data-testid="agent-chat-send-comment-badge"
             >
               {pendingInlineCommentCount}
-            </Badge>
+            </span>
           ) : null}
         </div>
       </div>

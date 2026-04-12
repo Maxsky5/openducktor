@@ -9,9 +9,7 @@ import type { DiffScope } from "@/features/agent-studio-git";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
 
-const COMMENT_CONTEXT_PREVIEW_CLASS_NAME =
-  "overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
-const COMMENT_ANNOTATION_SHELL_CLASS_NAME = "max-w-[95%] py-4 pl-5 sm:max-w-[70%]";
+const COMMENT_BODY_CLASS_NAME = "text-xs leading-5 text-foreground";
 
 const getDiffScopeLabel = (diffScope: DiffScope): string => {
   return DIFF_SCOPE_OPTIONS.find((option) => option.scope === diffScope)?.label ?? diffScope;
@@ -19,23 +17,6 @@ const getDiffScopeLabel = (diffScope: DiffScope): string => {
 
 const formatLineRange = (startLine: number, endLine: number): string => {
   return startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}-${endLine}`;
-};
-
-const CommentContextPreview = ({
-  comment,
-}: {
-  comment: Pick<InlineCommentDraft, "codeContext">;
-}): ReactElement => {
-  return (
-    <pre className={COMMENT_CONTEXT_PREVIEW_CLASS_NAME}>
-      {comment.codeContext
-        .map(({ lineNumber, text, isSelected }) => {
-          const marker = isSelected ? ">" : " ";
-          return `${marker} ${String(lineNumber).padStart(4, " ")} | ${text}`;
-        })
-        .join("\n")}
-    </pre>
-  );
 };
 
 const CommentMeta = ({
@@ -57,9 +38,6 @@ const CommentMeta = ({
         {status === "sent" ? "Sent" : "Pending"}
       </Badge>
       {status === "submitting" ? <Badge variant="outline">Sending</Badge> : null}
-      <span>{getDiffScopeLabel(diffScope)}</span>
-      <span>{side === "old" ? "Old side" : "New side"}</span>
-      <span>{formatLineRange(startLine, endLine)}</span>
     </div>
   );
 };
@@ -91,22 +69,18 @@ export const NewCommentForm = ({
         endLine={selection.endLine}
         status="pending"
       />
-      <div className="mt-3">
-        <CommentContextPreview comment={{ codeContext: selection.codeContext }} />
-      </div>
       <Textarea
         value={value}
         placeholder="Add a comment for the Builder"
         className="mt-3 min-h-24"
         onChange={(event) => onChange(event.currentTarget.value)}
       />
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          <X className="mr-1.5 size-3.5" />
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="button" size="sm" disabled={value.trim().length === 0} onClick={onSave}>
-          <Check className="mr-1.5 size-3.5" />
+          <Check className="size-4" />
           Comment
         </Button>
       </div>
@@ -115,7 +89,7 @@ export const NewCommentForm = ({
 };
 
 export const DiffAnnotationShell = ({ children }: { children: ReactElement }): ReactElement => {
-  return <div className={COMMENT_ANNOTATION_SHELL_CLASS_NAME}>{children}</div>;
+  return <div className="py-4 px-5">{children}</div>;
 };
 
 export const DraftCommentCard = ({
@@ -151,9 +125,6 @@ export const DraftCommentCard = ({
         endLine={comment.endLine}
         status={comment.status}
       />
-      <div className="mt-3">
-        <CommentContextPreview comment={comment} />
-      </div>
       {isEditing ? (
         <>
           <Textarea
@@ -162,15 +133,14 @@ export const DraftCommentCard = ({
             disabled={isSubmitting}
             onChange={(event) => onEditingTextChange(event.currentTarget.value)}
           />
-          <div className="mt-3 flex items-center justify-end gap-2">
+          <div className="mt-3 flex items-center justify-between gap-2">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
               disabled={isSubmitting}
               onClick={onCancelEditing}
             >
-              <X className="mr-1.5 size-3.5" />
               Cancel
             </Button>
             <Button
@@ -179,34 +149,32 @@ export const DraftCommentCard = ({
               disabled={isSubmitting || editingText.trim().length === 0}
               onClick={onSaveEditing}
             >
-              <Check className="mr-1.5 size-3.5" />
+              <Check className="size-4" />
               Save
             </Button>
           </div>
         </>
       ) : (
         <>
-          <p className="mt-3 whitespace-pre-wrap text-sm text-foreground">{comment.text}</p>
+          <p className={`mt-3 whitespace-pre-wrap ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>
           <div className="mt-3 flex items-center justify-end gap-2">
             <Button
               type="button"
-              variant="ghost"
-              size="sm"
+              variant="outline"
+              size="icon"
               disabled={isSubmitting}
               onClick={() => onStartEditing(comment)}
             >
-              <Pencil className="mr-1.5 size-3.5" />
-              Edit
+              <Pencil className="size-4" />
             </Button>
             <Button
               type="button"
-              variant="ghost"
-              size="sm"
+              variant="destructive"
+              size="icon"
               disabled={isSubmitting}
               onClick={() => onRemove(comment.id)}
             >
-              <Trash2 className="mr-1.5 size-3.5" />
-              Remove
+              <Trash2 className="size-4" />
             </Button>
           </div>
         </>
@@ -233,16 +201,13 @@ export const SentCommentCard = ({ comment }: { comment: InlineCommentDraft }): R
                 endLine={comment.endLine}
                 status="sent"
               />
-              <p className="mt-1 truncate text-sm text-foreground">{comment.text}</p>
+              <p className={`mt-2 truncate ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>
             </div>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="border-t border-border px-3 py-3">
-          <div>
-            <CommentContextPreview comment={comment} />
-          </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm text-foreground">{comment.text}</p>
+          <p className={`whitespace-pre-wrap ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>
         </CollapsibleContent>
       </div>
     </Collapsible>
