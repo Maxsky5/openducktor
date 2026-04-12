@@ -446,7 +446,18 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> =>
+        makeBeadsCheck({
+          beadsOk: false,
+          beadsPath: "/repo/.beads",
+          beadsError: "beads unavailable",
+          repoStoreHealth: {
+            category: "shared_server_unavailable",
+            status: "blocking",
+            isReady: false,
+            detail: "beads unavailable",
+          },
+        }),
     });
 
     try {
@@ -1022,7 +1033,7 @@ describe("use-task-operations", () => {
     }
   });
 
-  test("refreshTasks prefers structured repo-store messaging when diagnostics report a blocking store state", async () => {
+  test("refreshTasks preserves the thrown error when a later step fails", async () => {
     const repoPullRequestSync = mock(async () => {
       throw new Error("gh auth expired");
     });
@@ -1075,14 +1086,12 @@ describe("use-task-operations", () => {
       });
 
       expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
-        description:
-          "Task store unavailable. Shared Dolt database repo_db is missing and restore is required Reopen the repository so OpenDucktor can restore the shared database from the attachment backup.",
+        description: "Task store unavailable. gh auth expired",
       });
       expect(consoleWarn).toHaveBeenCalledWith(TASK_REFRESH_WARNING, {
         repoPath: "/repo",
         trigger: "manual",
-        description:
-          "Task store unavailable. Shared Dolt database repo_db is missing and restore is required Reopen the repository so OpenDucktor can restore the shared database from the attachment backup.",
+        description: "Task store unavailable. gh auth expired",
         error: "gh auth expired",
       });
     } finally {

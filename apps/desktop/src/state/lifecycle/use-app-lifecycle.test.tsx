@@ -1459,7 +1459,7 @@ describe("useAppLifecycle", () => {
     }
   });
 
-  test("uses structured repo-store health for repo-load failure messaging without showing ready success", async () => {
+  test("preserves the thrown repo-load error even when repo-store health is blocking", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
@@ -1527,8 +1527,7 @@ describe("useAppLifecycle", () => {
       expect(toastDismiss).toHaveBeenCalledWith("toast-id");
       expect(toastSuccess).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
-        description:
-          "Task store unavailable. Shared Dolt database repo_db is missing and restore is required Reopen the repository so OpenDucktor can restore the shared database from the attachment backup.",
+        description: "Task store unavailable. gh auth expired",
       });
     } finally {
       beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));

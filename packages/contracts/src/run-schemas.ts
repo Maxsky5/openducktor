@@ -13,6 +13,7 @@ export type RuntimeHealth = z.infer<typeof runtimeHealthSchema>;
 export const repoStoreHealthCategorySchema = z.enum([
   "initializing",
   "healthy",
+  "check_call_failed",
   "missing_attachment",
   "missing_shared_database",
   "attachment_contract_invalid",

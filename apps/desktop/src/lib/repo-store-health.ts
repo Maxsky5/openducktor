@@ -6,6 +6,8 @@ const defaultRepoStoreDetail = (health: RepoStoreHealth): string => {
       return "Beads task store initialization is in progress.";
     case "healthy":
       return "Beads attachment and shared Dolt server are healthy.";
+    case "check_call_failed":
+      return "OpenDucktor could not check the Beads store health.";
     case "missing_attachment":
       return "Beads attachment is missing for this repository.";
     case "missing_shared_database":
@@ -45,6 +47,8 @@ export const getRepoStoreCategoryLabel = (health: RepoStoreHealth): string => {
       return "Initializing";
     case "healthy":
       return "Healthy";
+    case "check_call_failed":
+      return "Check failed";
     case "missing_attachment":
       return "Missing attachment";
     case "missing_shared_database":
@@ -92,6 +96,8 @@ export const buildRepoStoreUnavailableDescription = (health: RepoStoreHealth): s
   switch (health.category) {
     case "initializing":
       return detail;
+    case "check_call_failed":
+      return `Beads diagnostics unavailable. ${detail}`;
     case "missing_attachment":
       return `Task store unavailable. ${detail} Open the repository again to initialize the Beads attachment.`;
     case "missing_shared_database":

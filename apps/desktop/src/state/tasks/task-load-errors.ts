@@ -30,12 +30,13 @@ export const summarizeTaskLoadError = ({
   error,
   repoStoreHealth = null,
 }: TaskLoadFailureContext): string => {
-  if (repoStoreHealth) {
+  const message = (errorMessage(error).split("\n").at(0) ?? "Unknown error").trim();
+  const beadsFailure = /beads|beads_dir|\bbd\b|task store|repo store/i.test(message);
+
+  if (repoStoreHealth && beadsFailure) {
     return buildRepoStoreUnavailableDescription(repoStoreHealth);
   }
 
-  const message = (errorMessage(error).split("\n").at(0) ?? "Unknown error").trim();
-  const beadsFailure = /beads|beads_dir|\bbd\b|task store/i.test(message);
   if (beadsFailure) {
     return `Task store unavailable. ${message} ${TASK_STORE_HINT}`;
   }

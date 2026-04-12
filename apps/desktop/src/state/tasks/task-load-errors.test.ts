@@ -50,7 +50,7 @@ describe("summarizeTaskLoadError", () => {
     expect(message).toContain("Task store unavailable.");
   });
 
-  test("prefers structured repo-store health over raw error text when provided", () => {
+  test("preserves unrelated thrown errors even when repo-store health is present", () => {
     const message = summarizeTaskLoadError({
       error: new Error("gh auth expired"),
       repoStoreHealth: {
@@ -70,8 +70,7 @@ describe("summarizeTaskLoadError", () => {
       },
     });
 
-    expect(message).toContain("restore the shared database");
-    expect(message).not.toContain("gh auth expired");
+    expect(message).toBe("Task store unavailable. gh auth expired");
   });
 
   test("falls back to raw error text when no structured repo-store context exists", () => {

@@ -118,7 +118,12 @@ impl BeadsLifecycle {
         let _guard = lock
             .lock()
             .map_err(|_| anyhow!("Beads repo lock poisoned"))?;
-        let _initializing_guard = RepoInitializingGuard::new(self, &repo_key)?;
+        let cached_initialized = self.is_repo_cached_initialized(&repo_key)?;
+        let initializing_guard = if cached_initialized {
+            None
+        } else {
+            Some(RepoInitializingGuard::new(self, &repo_key)?)
+        };
 
         (|| {
             let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
@@ -127,11 +132,15 @@ impl BeadsLifecycle {
 
             let readiness = self.verify_repo_initialized(repo_path, &beads_dir)?;
 
-            if self.is_repo_cached_initialized(&repo_key)?
-                && matches!(readiness, RepoReadiness::Ready)
-            {
+            if cached_initialized && matches!(readiness, RepoReadiness::Ready) {
                 return Ok(());
             }
+
+            let _initializing_guard = if cached_initialized {
+                Some(RepoInitializingGuard::new(self, &repo_key)?)
+            } else {
+                initializing_guard
+            };
 
             match readiness {
                 RepoReadiness::Ready => {}

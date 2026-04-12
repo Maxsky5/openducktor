@@ -263,8 +263,11 @@ export function useAppLifecycle({
       try {
         const beadsCheck = await refreshBeadsCheckForRepo(activeRepo, false);
         repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
-        if (beadsCheck.repoStoreHealth.isReady) {
+        if (beadsCheck.repoStoreHealth.status !== "initializing") {
           clearBeadsPreparationTimer();
+          if (!beadsCheck.repoStoreHealth.isReady) {
+            dismissBeadsPreparationToast();
+          }
         }
 
         await refreshTaskData(activeRepo);

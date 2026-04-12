@@ -91,8 +91,8 @@ export const buildRuntimeCheckErrorState = (
 
 export const buildBeadsCheckErrorState = (beadsCheckError: string): BeadsCheck => ({
   repoStoreHealth: {
-    category: "attachment_verification_failed",
-    status: "blocking",
+    category: "check_call_failed",
+    status: "degraded",
     isReady: false,
     detail: beadsCheckError,
     attachment: {
@@ -231,8 +231,9 @@ const getBeadsCheckIssueCandidate = (
   beadsCheckError: string | null,
   beadsCheckFailureKind: RepoRuntimeFailureKind,
 ): DiagnosticsIssueCandidate | null => {
-  const detail =
-    beadsCheckError ?? beadsCheck?.repoStoreHealth?.detail ?? beadsCheck?.beadsError ?? null;
+  const detail = hasBeadsCheckFailure(beadsCheck)
+    ? (beadsCheck?.repoStoreHealth?.detail ?? beadsCheckError ?? beadsCheck?.beadsError ?? null)
+    : (beadsCheckError ?? beadsCheck?.repoStoreHealth?.detail ?? beadsCheck?.beadsError ?? null);
   const failureKind = beadsCheckFailureKind ?? (hasBeadsCheckFailure(beadsCheck) ? "error" : null);
   return buildDiagnosticsIssueCandidate(BEADS_STORE_ISSUE_META, detail, failureKind);
 };

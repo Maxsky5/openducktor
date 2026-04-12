@@ -53,8 +53,8 @@ describe("check-diagnostics helpers", () => {
 
     expect(buildBeadsCheckErrorState("beads offline")).toEqual({
       repoStoreHealth: {
-        category: "attachment_verification_failed",
-        status: "blocking",
+        category: "check_call_failed",
+        status: "degraded",
         isReady: false,
         detail: "beads offline",
         attachment: {

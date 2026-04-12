@@ -11,6 +11,9 @@ use host_infra_system::{
 use host_test_support::{lock_env, EnvVarGuard};
 use std::path::Path;
 use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
+
+const BLOCKING_INIT_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
 struct BlockingInitRunner {
@@ -32,9 +35,14 @@ impl BlockingInitRunner {
         let (lock, condvar) = &self.state;
         let mut state = lock.lock().expect("blocking init state poisoned");
         while !state.entered {
-            state = condvar
-                .wait(state)
+            let (next, timeout) = condvar
+                .wait_timeout(state, BLOCKING_INIT_WAIT_TIMEOUT)
                 .expect("blocking init wait should not poison");
+            assert!(
+                !timeout.timed_out(),
+                "timed out waiting for init runner to enter `init`"
+            );
+            state = next;
         }
     }
 
@@ -43,6 +51,20 @@ impl BlockingInitRunner {
         let mut state = lock.lock().expect("blocking init state poisoned");
         state.released = true;
         condvar.notify_all();
+    }
+
+    fn wait_until_released(&self, mut state: std::sync::MutexGuard<'_, BlockingInitState>) {
+        let (_, condvar) = &self.state;
+        while !state.released {
+            let (next, timeout) = condvar
+                .wait_timeout(state, BLOCKING_INIT_WAIT_TIMEOUT)
+                .expect("blocking init wait should not poison");
+            assert!(
+                !timeout.timed_out(),
+                "timed out waiting for init runner release"
+            );
+            state = next;
+        }
     }
 }
 
@@ -74,12 +96,7 @@ impl CommandRunner for BlockingInitRunner {
         let mut state = lock.lock().expect("blocking init state poisoned");
         state.entered = true;
         condvar.notify_all();
-
-        while !state.released {
-            state = condvar
-                .wait(state)
-                .expect("blocking init wait should not poison");
-        }
+        self.wait_until_released(state);
 
         Ok((false, String::new(), "init blocked for test".to_string()))
     }
@@ -217,10 +234,10 @@ fn diagnose_repo_store_reports_initializing_while_repo_init_is_in_progress() -> 
     let init_handle = std::thread::spawn(move || init_store.ensure_repo_initialized(&repo_path));
     runner.wait_until_entered();
 
-    let health = store.diagnose_repo_store(repo.path())?;
-
+    let health_result = store.diagnose_repo_store(repo.path());
     runner.release();
     let init_result = init_handle.join().expect("init thread should join");
+    let health = health_result?;
 
     assert!(init_result.is_err());
     assert_eq!(health.category, RepoStoreHealthCategory::Initializing);
