@@ -319,6 +319,38 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("injects an upstream target branch option that matches the initialized selector value", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-8",
+        role: "build",
+        scenario: "build_implementation_start",
+        initialTargetBranch: {
+          branch: "@{upstream}",
+        },
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedTargetBranch).toBe("@{upstream}");
+    expect(harness.getLatest().targetBranchOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          value: "@{upstream}",
+          label: "@{upstream}",
+        }),
+      ]),
+    );
+
+    await harness.unmount();
+  });
+
   test("uses role defaults for modal initialization", async () => {
     const harness = createHookHarness(createBaseProps());
 

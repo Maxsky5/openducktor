@@ -266,20 +266,20 @@ export function useSessionStartModalState({
     intent?.role,
     intent?.scenario,
   );
+  const selectedInitialTargetBranch = useMemo(
+    () => effectiveTaskTargetBranch(intent?.initialTargetBranch, repoSettings?.defaultTargetBranch),
+    [intent?.initialTargetBranch, repoSettings?.defaultTargetBranch],
+  );
+  const selectedInitialTargetBranchValue = targetBranchSelectionValue(selectedInitialTargetBranch);
   const targetBranchOptions = useMemo<ComboboxOption[]>(() => {
-    const effectiveTargetBranch = effectiveTaskTargetBranch(
-      intent?.initialTargetBranch,
-      repoSettings?.defaultTargetBranch,
-    );
-    const configuredTargetBranch = canonicalTargetBranch(effectiveTargetBranch);
-    const configuredTargetBranchValue = targetBranchSelectionValue(effectiveTargetBranch);
+    const configuredTargetBranch = canonicalTargetBranch(selectedInitialTargetBranch);
 
     return toBranchSelectorOptions(branches, {
       valueFormat: "full_ref",
-      includeOptions: configuredTargetBranch
+      includeOptions: selectedInitialTargetBranchValue.trim()
         ? [
             {
-              value: configuredTargetBranchValue,
+              value: selectedInitialTargetBranchValue,
               label: configuredTargetBranch,
               secondaryLabel: "configured",
               searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
@@ -287,7 +287,7 @@ export function useSessionStartModalState({
           ]
         : [],
     });
-  }, [branches, intent?.initialTargetBranch, repoSettings?.defaultTargetBranch]);
+  }, [branches, selectedInitialTargetBranch, selectedInitialTargetBranchValue]);
 
   const handleSelectTargetBranch = useCallback((branch: string) => {
     setSelectedTargetBranch(branch);

@@ -3401,6 +3401,113 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("fails fast when build pull request kickoff would use invalid task target branch metadata", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const originalLoadSessionHistory = adapter.loadSessionHistory;
+    adapter.forkSession = async () => ({
+      runtimeKind: "opencode",
+      sessionId: "session-created",
+      externalSessionId: "external-created",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "build",
+      scenario: "build_pull_request_generation",
+      status: "idle",
+    });
+    adapter.loadSessionHistory = async () => [];
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    let sessionsById: Record<string, AgentSessionState> = {
+      "source-build": {
+        runtimeKind: "opencode",
+        sessionId: "source-build",
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: BUILD_SELECTION,
+        isLoadingModelCatalog: false,
+      },
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+      },
+      sessionsRef: { current: sessionsById },
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            title: "Implement feature",
+            description: "desc",
+            status: "in_progress",
+            priority: 1,
+            targetBranchError: "Invalid openducktor.targetBranch metadata: missing field `branch`.",
+          }),
+        ],
+      },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadRepoDefaultTargetBranch: async () => ({ remote: "origin", branch: "main" }),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          sendKickoff: true,
+          startMode: "fork",
+          sourceSessionId: "source-build",
+          selectedModel: BUILD_SELECTION,
+        }),
+      ).rejects.toThrow(
+        'Task "task-1" has invalid target branch metadata: Invalid openducktor.targetBranch metadata: missing field `branch`.',
+      );
+    } finally {
+      adapter.forkSession = originalForkSession;
+      adapter.loadSessionHistory = originalLoadSessionHistory;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("passes the selected model to adapter session creation", async () => {
     const selectedModel: AgentModelSelection = {
       runtimeKind: "opencode",

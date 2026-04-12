@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
 import type { AgentStudioGitPanelModel } from "./types";
 
+const TARGET_BRANCH_LABEL_ID = "agent-studio-git-target-branch-label";
+
 type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "contextMode"
@@ -224,7 +226,10 @@ function GitBranchContextRow({
           </div>
 
           <div className="rounded-lg border border-border bg-card px-3 py-2">
-            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            <p
+              id={TARGET_BRANCH_LABEL_ID}
+              className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+            >
               Target branch
             </p>
             {isEditingTargetBranch ? (
@@ -236,6 +241,7 @@ function GitBranchContextRow({
                   <BranchSelector
                     value={targetBranchSelectionValue}
                     options={targetBranchOptions}
+                    triggerAriaLabelledBy={TARGET_BRANCH_LABEL_ID}
                     className="w-full"
                     popoverClassName="w-[min(28rem,calc(100vw-2rem))] p-0"
                     triggerClassName="h-7 text-xs"
@@ -614,6 +620,13 @@ export const GitInfoHeader = memo(function GitInfoHeader({
             : "Branch is up to date with upstream";
   const canEditTargetBranch =
     !isRepositoryMode && onUpdateTargetBranch != null && targetBranchOptions.length > 0;
+
+  useEffect(() => {
+    if (!canEditTargetBranch && isEditingTargetBranch) {
+      setIsEditingTargetBranch(false);
+      setTargetBranchDraft(targetBranchSelectionValue);
+    }
+  }, [canEditTargetBranch, isEditingTargetBranch, targetBranchSelectionValue]);
 
   useEffect(() => {
     if (!isEditingTargetBranch) {

@@ -113,6 +113,12 @@ const resolveKickoffGitContext = async ({
     };
   }
 
+  if (taskCard.targetBranchError) {
+    throw new Error(
+      `Task "${taskCard.id}" has invalid target branch metadata: ${taskCard.targetBranchError}`,
+    );
+  }
+
   const repoDefaultTargetBranch = model.loadRepoDefaultTargetBranch
     ? await model.loadRepoDefaultTargetBranch(repoPath)
     : null;
