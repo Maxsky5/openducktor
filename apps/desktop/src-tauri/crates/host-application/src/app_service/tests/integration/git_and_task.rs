@@ -3,12 +3,12 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitAheadBehind, GitBranch, GitCommitAllRequest,
-    GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitPort,
-    GitPullRequest, GitPullResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
-    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitUpstreamAheadBehind, GitWorktreeStatusData, PlanSubtaskInput, QaReportDocument, QaVerdict,
-    RunEvent, RunState, RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFetchRequest, GitFileDiff,
+    GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitResetSnapshot, GitResetWorktreeSelection,
+    GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitUpstreamAheadBehind,
+    GitWorktreeStatusData, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -528,6 +528,39 @@ fn git_pull_branch_forwards_working_dir_and_returns_result() -> Result<()> {
     assert!(git_state.calls.contains(&GitCall::PullBranch {
         repo_path: "/tmp/odt-repo-pull-worktree".to_string(),
         working_dir: Some("/tmp/odt-repo-pull-worktree".to_string()),
+    }));
+
+    Ok(())
+}
+
+#[test]
+fn git_fetch_remote_forwards_working_dir_and_trimmed_target_branch() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-fetch";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let result = service.git_fetch_remote(
+        repo_path,
+        GitFetchRequest {
+            working_dir: Some("/tmp/odt-repo-fetch-worktree".to_string()),
+            target_branch: "  origin/main  ".to_string(),
+        },
+    )?;
+
+    assert_eq!(result.output, "Fetched origin");
+
+    let git_state = git_state.lock().expect("git lock poisoned");
+    assert!(git_state.calls.contains(&GitCall::FetchRemote {
+        repo_path: "/tmp/odt-repo-fetch-worktree".to_string(),
+        working_dir: Some("/tmp/odt-repo-fetch-worktree".to_string()),
+        target_branch: "origin/main".to_string(),
     }));
 
     Ok(())

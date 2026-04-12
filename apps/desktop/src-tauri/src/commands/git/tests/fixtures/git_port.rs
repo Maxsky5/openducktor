@@ -8,11 +8,12 @@ use anyhow::anyhow;
 use host_domain::GitPort;
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitConflictAbortRequest,
-    GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
-    GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest, GitPullResult, GitPushResult,
-    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
-    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData, GitWorktreeSummary,
+    GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFetchRequest, GitFetchResult,
+    GitFileDiff, GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest,
+    GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitResetWorktreeSelection,
+    GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitWorktreeStatusData,
+    GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 
 #[derive(Clone)]
@@ -70,11 +71,20 @@ pub(crate) struct ResetWorktreeSelectionCall {
     pub(crate) selection: GitResetWorktreeSelection,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FetchRemoteCall {
+    pub(crate) repo_path: String,
+    pub(crate) working_dir: Option<String>,
+    pub(crate) target_branch: String,
+}
+
 pub(crate) struct CommandGitPortState {
     pub(crate) worktree_status_result: WorktreeStatusResult,
     pub(crate) worktree_status_calls: Vec<WorktreeStatusCall>,
     pub(crate) worktree_status_summary_result: WorktreeStatusSummaryResult,
     pub(crate) worktree_status_summary_calls: Vec<WorktreeStatusSummaryCall>,
+    pub(crate) fetch_remote_result: Result<GitFetchResult, String>,
+    pub(crate) fetch_remote_calls: Vec<FetchRemoteCall>,
     pub(crate) reset_worktree_selection_result: ResetWorktreeSelectionResult,
     pub(crate) reset_worktree_selection_calls: Vec<ResetWorktreeSelectionCall>,
     pub(crate) worktree_mutation_allowed: bool,
@@ -98,6 +108,10 @@ impl CommandGitPort {
                 worktree_status_calls: Vec::new(),
                 worktree_status_summary_result: summary_result,
                 worktree_status_summary_calls: Vec::new(),
+                fetch_remote_result: Ok(GitFetchResult {
+                    output: "Fetched origin".to_string(),
+                }),
+                fetch_remote_calls: Vec::new(),
                 reset_worktree_selection_result: ResetWorktreeSelectionResult::Ok(
                     GitResetWorktreeSelectionResult {
                         affected_paths: vec!["src/main.rs".to_string()],
@@ -205,6 +219,26 @@ impl GitPort for CommandGitPort {
         _request: GitPullRequest,
     ) -> anyhow::Result<GitPullResult> {
         panic!("unexpected call: pull_branch");
+    }
+
+    fn fetch_remote(
+        &self,
+        repo_path: &Path,
+        request: GitFetchRequest,
+    ) -> anyhow::Result<GitFetchResult> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("command git port state lock should not be poisoned");
+        state.fetch_remote_calls.push(FetchRemoteCall {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            target_branch: request.target_branch,
+        });
+        match state.fetch_remote_result.clone() {
+            Ok(payload) => Ok(payload),
+            Err(message) => Err(anyhow!(message)),
+        }
     }
 
     fn rebase_abort(

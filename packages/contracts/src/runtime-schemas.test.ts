@@ -9,6 +9,8 @@ import {
   gitCommitAllResultSchema,
   gitCurrentBranchSchema,
   gitDiffScopeSchema,
+  gitFetchRemoteRequestSchema,
+  gitFetchRemoteResultSchema,
   gitPullBranchRequestSchema,
   gitPullBranchResultSchema,
   gitRebaseBranchRequestSchema,
@@ -403,6 +405,21 @@ describe("runtime schemas", () => {
     expect(conflictsResult.outcome).toBe("conflicts");
   });
 
+  test("git fetch remote request and result payloads parse", () => {
+    const fetchRequest = gitFetchRemoteRequestSchema.parse({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      workingDir: null,
+    });
+    const fetchResult = gitFetchRemoteResultSchema.parse({
+      output: "From origin\n * [new branch]      main -> origin/main",
+    });
+
+    expect(fetchRequest.repoPath).toBe("/repo");
+    expect(fetchRequest.workingDir).toBeUndefined();
+    expect(fetchResult.output).toContain("origin/main");
+  });
+
   test("git pull branch result rejects unknown and malformed payloads", () => {
     expect(() =>
       gitPullBranchResultSchema.parse({
@@ -421,6 +438,19 @@ describe("runtime schemas", () => {
       gitPullBranchResultSchema.parse({
         outcome: "conflicts",
         output: "needs files",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitFetchRemoteRequestSchema.parse({
+        repoPath: "/repo",
+        targetBranch: "   ",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitFetchRemoteResultSchema.parse({
+        output: 12,
       }),
     ).toThrow();
   });

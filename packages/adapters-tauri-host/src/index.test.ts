@@ -257,6 +257,7 @@ describe("TauriHostClient", () => {
       "gitRemoveWorktree",
       "gitPushBranch",
       "gitPullBranch",
+      "gitFetchRemote",
       "gitGetStatus",
       "gitGetDiff",
       "gitCommitsAheadBehind",
@@ -829,6 +830,9 @@ describe("TauriHostClient", () => {
       if (command === "git_rebase_abort") {
         return { outcome: "aborted", output: "rebase aborted" };
       }
+      if (command === "git_fetch_remote") {
+        return { output: "From origin\n * [new branch]      main -> origin/main" };
+      }
       if (command === "git_pull_branch") {
         return { outcome: "pulled", output: "updated from origin/feature/task-1" };
       }
@@ -893,6 +897,7 @@ describe("TauriHostClient", () => {
     const committed = await client.gitCommitAll("/repo", "Build all changes");
     const rebased = await client.gitRebaseBranch("/repo", "origin/main", "/tmp/wt/task-1");
     const aborted = await client.gitRebaseAbort("/repo", "/tmp/wt/task-1");
+    const fetched = await client.gitFetchRemote("/repo", "origin/main", "/tmp/wt/task-1");
     const pulled = await client.gitPullBranch("/repo", "/tmp/wt/task-1");
     const pushed = await client.gitPushBranch("/repo", "feature/task-1", {
       remote: "origin",
@@ -936,6 +941,7 @@ describe("TauriHostClient", () => {
     expect(committed.outcome).toBe("no_changes");
     expect(rebased.outcome).toBe("rebased");
     expect(aborted.outcome).toBe("aborted");
+    expect(fetched.output.includes("origin/main")).toBe(true);
     expect(pulled.outcome).toBe("pulled");
     expect(pushed.outcome).toBe("pushed");
     expect(pushed.remote).toBe("origin");
@@ -953,6 +959,7 @@ describe("TauriHostClient", () => {
       "git_commit_all",
       "git_rebase_branch",
       "git_rebase_abort",
+      "git_fetch_remote",
       "git_pull_branch",
       "git_push_branch",
       "git_get_worktree_status",
@@ -991,20 +998,19 @@ describe("TauriHostClient", () => {
     });
     expect(calls[8].args).toEqual({
       repoPath: "/repo",
+      targetBranch: "origin/main",
       workingDir: "/tmp/wt/task-1",
     });
     expect(calls[9].args).toEqual({
+      repoPath: "/repo",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[10].args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       remote: "origin",
       setUpstream: true,
       forceWithLease: true,
-      workingDir: "/tmp/wt/task-1",
-    });
-    expect(calls[10].args).toEqual({
-      repoPath: "/repo",
-      targetBranch: "origin/main",
-      diffScope: "target",
       workingDir: "/tmp/wt/task-1",
     });
     expect(calls[11].args).toEqual({
@@ -1014,6 +1020,12 @@ describe("TauriHostClient", () => {
       workingDir: "/tmp/wt/task-1",
     });
     expect(calls[12].args).toEqual({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      diffScope: "target",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[13].args).toEqual({
       repoPath: "/repo",
       workingDir: "/tmp/wt/task-1",
       targetBranch: "origin/main",
@@ -1043,10 +1055,13 @@ describe("TauriHostClient", () => {
     );
   });
 
-  test("git commit-all, pull, and rebase parse and reject malformed host payloads", async () => {
+  test("git commit-all, fetch, pull, and rebase parse and reject malformed host payloads", async () => {
     const { client } = createClient((command) => {
       if (command === "git_commit_all") {
         return { outcome: "committed" };
+      }
+      if (command === "git_fetch_remote") {
+        return {};
       }
       if (command === "git_pull_branch") {
         return { outcome: "pulled" };
@@ -1058,6 +1073,7 @@ describe("TauriHostClient", () => {
     });
 
     await expect(client.gitCommitAll("/repo", "Build all changes")).rejects.toThrow();
+    await expect(client.gitFetchRemote("/repo", "origin/main")).rejects.toThrow();
     await expect(client.gitPullBranch("/repo")).rejects.toThrow();
     await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
   });

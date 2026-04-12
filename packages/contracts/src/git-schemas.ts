@@ -209,6 +209,18 @@ export const gitPullBranchRequestSchema = z.object({
 });
 export type GitPullBranchRequest = z.infer<typeof gitPullBranchRequestSchema>;
 
+export const gitFetchRemoteRequestSchema = z.object({
+  repoPath: z.string(),
+  targetBranch: z.string().trim().min(1),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type GitFetchRemoteRequest = z.infer<typeof gitFetchRemoteRequestSchema>;
+
+export const gitFetchRemoteResultSchema = z.object({
+  output: z.string(),
+});
+export type GitFetchRemoteResult = z.infer<typeof gitFetchRemoteResultSchema>;
+
 export const gitPullBranchResultSchema = z.discriminatedUnion("outcome", [
   z.object({
     outcome: z.literal("pulled"),

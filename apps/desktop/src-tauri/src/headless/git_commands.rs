@@ -89,6 +89,14 @@ struct GitPullBranchArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct GitFetchRemoteArgs {
+    repo_path: String,
+    target_branch: String,
+    working_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GitResetWorktreeSelectionArgs {
     repo_path: String,
     target_branch: String,
@@ -223,6 +231,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("git_reset_worktree_selection", |state, args| {
         Box::pin(handle_git_reset_worktree_selection(state, args))
+    })?;
+    registry.register("git_fetch_remote", |state, args| {
+        Box::pin(handle_git_fetch_remote(state, args))
     })?;
     registry.register("git_pull_branch", |state, args| {
         Box::pin(handle_git_pull_branch(state, args))
@@ -540,6 +551,28 @@ async fn handle_git_pull_branch(state: &HeadlessState, args: Value) -> CommandRe
                 &request.repo_path,
                 host_domain::GitPullRequest {
                     working_dir: Some(effective),
+                },
+            )
+        })
+        .await?,
+    )
+}
+
+async fn handle_git_fetch_remote(state: &HeadlessState, args: Value) -> CommandResult {
+    let request: GitFetchRemoteArgs = deserialize_args(args)?;
+    let target_branch = require_target_branch(&request.target_branch)
+        .map_err(request_error)?
+        .to_string();
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking("git_fetch_remote", move || {
+            service.git_fetch_remote(
+                &request.repo_path,
+                host_domain::GitFetchRequest {
+                    working_dir: Some(effective),
+                    target_branch,
                 },
             )
         })

@@ -14,6 +14,15 @@ if (typeof document === "undefined") {
 }
 
 const runsListMock = mock(async (): Promise<Array<{ runId: string; worktreePath: string }>> => []);
+const gitFetchRemoteMock = mock(
+  async (
+    _repoPath: string,
+    _targetBranch: string,
+    _workingDir?: string,
+  ): Promise<{ output: string }> => ({
+    output: "From origin",
+  }),
+);
 const gitGetWorktreeStatusMock = mock(
   async (
     _repoPath: string,
@@ -85,6 +94,7 @@ const gitGetWorktreeStatusSummaryMock = mock(
 mock.module("@/state/operations/host", () => ({
   host: {
     runsList: runsListMock,
+    gitFetchRemote: gitFetchRemoteMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
     gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
   },
@@ -93,6 +103,7 @@ mock.module("@/state/operations/host", () => ({
 mock.module("@/lib/host-client", () => ({
   hostClient: {
     runsList: runsListMock,
+    gitFetchRemote: gitFetchRemoteMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
     gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
   },
@@ -199,8 +210,10 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearAppQueryClient();
   runsListMock.mockClear();
+  gitFetchRemoteMock.mockClear();
   gitGetWorktreeStatusMock.mockClear();
   gitGetWorktreeStatusSummaryMock.mockClear();
+  gitFetchRemoteMock.mockResolvedValue({ output: "From origin" });
   gitGetWorktreeStatusMock.mockImplementation(
     async (
       _repoPath: string,
@@ -341,7 +354,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("manual refresh updates active scope without extra background scope call", async () => {
+  test("manual refresh fetches remote before reloading the active scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
     try {
@@ -353,6 +366,8 @@ describe("useAgentStudioDiffData", () => {
       });
 
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitFetchRemoteMock).toHaveBeenNthCalledWith(1, "/repo", "origin/main", undefined);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo",
@@ -360,6 +375,31 @@ describe("useAgentStudioDiffData", () => {
         "uncommitted",
         undefined,
       );
+      expect(gitFetchRemoteMock.mock.invocationCallOrder[0]).toBeLessThan(
+        gitGetWorktreeStatusMock.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("manual refresh surfaces fetch failures and does not reload status", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockRejectedValueOnce(new Error("Cannot resolve safe remote for refresh"));
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      await harness.waitFor(
+        (state) => state.error === "Error: Cannot resolve safe remote for refresh",
+      );
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
     } finally {
       await harness.unmount();
     }
@@ -1976,6 +2016,46 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor((state) => state.branch === "feature/second");
 
       expect(harness.getLatest().fileDiffs[0]?.file).toBe("src/second.ts");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("queues one additional refresh cycle while fetch is in flight", async () => {
+    const firstFetch = createDeferred<{ output: string }>();
+    const secondFetch = createDeferred<{ output: string }>();
+    const fetchQueue = [firstFetch, secondFetch];
+
+    gitFetchRemoteMock.mockImplementation(async () => {
+      const deferred = fetchQueue.shift();
+      if (!deferred) {
+        throw new Error("No deferred fetch response left");
+      }
+
+      return deferred.promise;
+    });
+
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.refresh();
+        state.refresh();
+      });
+
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+
+      firstFetch.resolve({ output: "From origin" });
+      await harness.waitFor(() => gitFetchRemoteMock.mock.calls.length >= 2);
+
+      secondFetch.resolve({ output: "From origin" });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(2);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
     } finally {
       await harness.unmount();
     }

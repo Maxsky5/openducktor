@@ -1,5 +1,5 @@
 use host_domain::GitPort;
-use host_domain::{GitPullRequest, GitPullResult, GitPushResult};
+use host_domain::{GitFetchRequest, GitPullRequest, GitPullResult, GitPushResult};
 use std::fs;
 
 use super::super::GitCliPort;
@@ -52,6 +52,188 @@ fn push_branch_pushes_to_remote_with_typed_result() {
     assert!(
         ls_remote.contains("refs/heads/feature/push"),
         "remote should contain pushed branch"
+    );
+}
+
+#[test]
+fn fetch_remote_fetches_tracked_upstream_remote() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("fetch-upstream");
+    let remote = setup_bare_remote("fetch-upstream-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let clone_root = TempPath::new("fetch-upstream-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    fs::write(clone_repo.join("upstream.txt"), "upstream\n").expect("upstream file should write");
+    run_git_ok(&clone_repo, &["add", "upstream.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "upstream update"]);
+    run_git_ok(&clone_repo, &["push", "origin", "main"]);
+    let expected_remote_head = run_git_ok(&clone_repo, &["rev-parse", "HEAD"]);
+
+    let git = GitCliPort::new();
+    let result = git
+        .fetch_remote(
+            &repo.path,
+            GitFetchRequest {
+                working_dir: None,
+                target_branch: "@{upstream}".to_string(),
+            },
+        )
+        .expect("fetch should succeed for tracked upstream");
+
+    assert!(
+        !result.output.trim().is_empty(),
+        "successful fetch should include actionable output"
+    );
+    let fetched_remote_head = run_git_ok(&repo.path, &["rev-parse", "refs/remotes/origin/main"]);
+    assert_eq!(fetched_remote_head, expected_remote_head);
+}
+
+#[test]
+fn fetch_remote_falls_back_to_same_name_remote_branch_when_tracking_is_missing() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("fetch-fallback");
+    let remote = setup_bare_remote("fetch-fallback-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "origin", "main"]);
+
+    let clone_root = TempPath::new("fetch-fallback-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    fs::write(clone_repo.join("fallback.txt"), "fallback\n").expect("fallback file should write");
+    run_git_ok(&clone_repo, &["add", "fallback.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "fallback update"]);
+    run_git_ok(&clone_repo, &["push", "origin", "main"]);
+    let expected_remote_head = run_git_ok(&clone_repo, &["rev-parse", "HEAD"]);
+
+    let git = GitCliPort::new();
+    git.fetch_remote(
+        &repo.path,
+        GitFetchRequest {
+            working_dir: None,
+            target_branch: "@{upstream}".to_string(),
+        },
+    )
+    .expect("fetch should succeed using same-name remote branch fallback");
+
+    let fetched_remote_head = run_git_ok(&repo.path, &["rev-parse", "refs/remotes/origin/main"]);
+    assert_eq!(fetched_remote_head, expected_remote_head);
+}
+
+#[test]
+fn fetch_remote_uses_explicit_compare_target_remote_when_branch_has_no_upstream() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("fetch-explicit-target");
+    let remote = setup_bare_remote("fetch-explicit-target-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "origin", "main"]);
+    let git = GitCliPort::new();
+    git.switch_branch(&repo.path, "feature/local-only", true)
+        .expect("feature branch should be created");
+
+    let clone_root = TempPath::new("fetch-explicit-target-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    fs::write(clone_repo.join("target.txt"), "target\n").expect("target file should write");
+    run_git_ok(&clone_repo, &["add", "target.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "target update"]);
+    run_git_ok(&clone_repo, &["push", "origin", "main"]);
+    let expected_remote_head = run_git_ok(&clone_repo, &["rev-parse", "HEAD"]);
+
+    git.fetch_remote(
+        &repo.path,
+        GitFetchRequest {
+            working_dir: None,
+            target_branch: "origin/main".to_string(),
+        },
+    )
+    .expect("fetch should succeed for explicit compare target remote");
+
+    let fetched_remote_head = run_git_ok(&repo.path, &["rev-parse", "refs/remotes/origin/main"]);
+    assert_eq!(fetched_remote_head, expected_remote_head);
+}
+
+#[test]
+fn fetch_remote_returns_actionable_error_when_no_safe_remote_can_be_resolved() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("fetch-no-safe-remote");
+    let git = GitCliPort::new();
+
+    let error = git
+        .fetch_remote(
+            &repo.path,
+            GitFetchRequest {
+                working_dir: None,
+                target_branch: "main".to_string(),
+            },
+        )
+        .expect_err("fetch should fail when there is no safe remote");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("no safe remote could be resolved"),
+        "unexpected error: {message}"
     );
 }
 

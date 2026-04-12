@@ -51,7 +51,7 @@ type UseAgentStudioDiffControllerResult = {
   setDiffScope: (scope: DiffScope) => void;
   state: DiffBatchState;
   statusSnapshotKey: string | null;
-  refreshActiveScope: () => void;
+  refreshActiveScope: () => Promise<void>;
   reloadActiveScope: (showLoading?: boolean) => void;
 };
 
@@ -417,12 +417,12 @@ export function useAgentStudioDiffController({
     poll: pollActiveScopeSummary,
   });
 
-  const refreshActiveScope = useCallback((): void => {
+  const refreshActiveScope = useCallback(async (): Promise<void> => {
     if (shouldBlockDiffLoading || !repoPathRef.current) {
       return;
     }
 
-    void loadData(true, {
+    await loadData(true, {
       repoPath: repoPathRef.current,
       targetBranch: targetBranchRef.current,
       workingDir: workingDirRef.current,
