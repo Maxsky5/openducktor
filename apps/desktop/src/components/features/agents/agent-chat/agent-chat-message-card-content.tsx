@@ -3,19 +3,25 @@ import {
   type AgentUserMessageDisplayPart,
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
-import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
+import { Brain, Check, Copy, Hammer, MessageSquareQuote } from "lucide-react";
 import {
   Fragment,
   lazy,
+  type MouseEvent,
   type ReactElement,
   type ReactNode,
   Suspense,
+  useCallback,
   useDeferredValue,
   useEffect,
   useRef,
   useState,
 } from "react";
+import { Button } from "@/components/ui/button";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { buildCopyPreview } from "@/lib/copy-preview";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
@@ -251,19 +257,87 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
 type AssistantMessageProps = {
   message: AgentChatMessage;
   assistantAccentColor: string | undefined;
+  copyResetDelayMs?: number;
 };
+
+const canCopyAssistantMessage = (message: AgentChatMessage): boolean => {
+  if (message.role !== "assistant" || message.content.trim().length === 0) {
+    return false;
+  }
+
+  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+  return assistantMeta?.isFinal !== false;
+};
+
+function AssistantMessageCopyButton({
+  markdown,
+  copyResetDelayMs,
+}: {
+  markdown: string;
+  copyResetDelayMs?: number;
+}): ReactElement {
+  const { copied, copyToClipboard } = useCopyToClipboard({
+    getSuccessDescription: buildCopyPreview,
+    ...(copyResetDelayMs === undefined ? {} : { resetDelayMs: copyResetDelayMs }),
+    errorLogContext: "AgentChatMessageCardContent",
+  });
+
+  const handleCopy = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      void copyToClipboard(markdown);
+    },
+    [copyToClipboard, markdown],
+  );
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="absolute top-0 right-0 z-10 size-7 opacity-0 pointer-events-none text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
+            aria-label="Copy assistant message content"
+            data-testid="copy-assistant-message-content"
+            onClick={handleCopy}
+          >
+            {copied ? (
+              <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          <p>Copy</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 const AssistantMessage = ({
   message,
   assistantAccentColor,
+  copyResetDelayMs,
 }: AssistantMessageProps): ReactElement => {
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   const streaming = assistantMeta?.isFinal === false;
+  const copyable = canCopyAssistantMessage(message);
   const pacedContent = usePacedStreamingText(message.content, streaming);
   const renderedContent = useDeferredValue(pacedContent);
   const footer = getAssistantFooterData(message);
   return (
-    <div className="space-y-2">
+    <div className={cn("group/message relative space-y-2", copyable ? "pr-9" : "")}>
+      {copyable ? (
+        <AssistantMessageCopyButton
+          markdown={message.content}
+          {...(copyResetDelayMs === undefined ? {} : { copyResetDelayMs })}
+        />
+      ) : null}
       <DeferredMarkdownRenderer
         markdown={streaming ? renderedContent : pacedContent}
         variant="document"
@@ -420,6 +494,7 @@ type MessageBodyProps = {
   timeLabel: string;
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
+  copyResetDelayMs?: number;
 };
 
 export const MessageBody = ({
@@ -428,6 +503,7 @@ export const MessageBody = ({
   timeLabel,
   systemPromptBody,
   sessionWorkingDirectory,
+  copyResetDelayMs,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
 
@@ -538,7 +614,13 @@ export const MessageBody = ({
   }
 
   if (message.role === "assistant") {
-    return <AssistantMessage message={message} assistantAccentColor={assistantAccentColor} />;
+    return (
+      <AssistantMessage
+        message={message}
+        assistantAccentColor={assistantAccentColor}
+        {...(copyResetDelayMs === undefined ? {} : { copyResetDelayMs })}
+      />
+    );
   }
 
   return <DeferredMarkdownRenderer markdown={message.content} variant="document" />;

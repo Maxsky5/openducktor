@@ -10,6 +10,7 @@ type AgentChatMessageCardProps = {
   sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
+  copyResetDelayMs?: number;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
@@ -18,6 +19,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionSelectedModel,
   sessionAgentColors,
   sessionWorkingDirectory,
+  copyResetDelayMs,
 }: AgentChatMessageCardProps): ReactElement | null {
   const vm = buildAgentChatMessageCardViewModel({
     message,
@@ -42,6 +44,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
+        {...(copyResetDelayMs === undefined ? {} : { copyResetDelayMs })}
       />
     </article>
   );

@@ -4,6 +4,7 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 export type AgentStudioWorkspaceDocument = {
@@ -41,15 +42,6 @@ type DocumentSectionProps = {
   emptyState: string;
   document: TaskDocumentState;
 };
-
-const DOCUMENT_COPY_PREVIEW_LENGTH = 50;
-
-function buildCopyPreview(markdown: string): string {
-  if (markdown.length <= DOCUMENT_COPY_PREVIEW_LENGTH) {
-    return markdown;
-  }
-  return `${markdown.slice(0, DOCUMENT_COPY_PREVIEW_LENGTH)}...`;
-}
 
 function AgentStudioDocumentCopyButton({ markdown }: { markdown: string }): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({

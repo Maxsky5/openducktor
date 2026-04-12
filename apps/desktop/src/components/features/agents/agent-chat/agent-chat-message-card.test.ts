@@ -584,6 +584,100 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("background-color:#f97316");
   });
 
+  test("renders a hover-only copy button for completed assistant rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-copyable",
+          role: "assistant",
+          content: "# Summary\n\nImplemented the requested changes.",
+          timestamp: "2026-02-22T10:24:45.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: true,
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("copy-assistant-message-content");
+    expect(html).toContain("group/message");
+    expect(html).toContain("group-hover/message:opacity-100");
+  });
+
+  test("does not render a copy button for streaming assistant rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-streaming",
+          role: "assistant",
+          content: "Still writing the answer",
+          timestamp: "2026-02-22T10:24:50.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: false,
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toContain("copy-assistant-message-content");
+  });
+
+  test("does not render a copy button for whitespace-only assistant rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-empty",
+          role: "assistant",
+          content: "   \n\t  ",
+          timestamp: "2026-02-22T10:24:55.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: true,
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toContain("copy-assistant-message-content");
+  });
+
+  test("does not render a copy button for reasoning rows", async () => {
+    const html = await renderToHtml(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "thinking-no-copy",
+          role: "thinking",
+          content: "Inspect the **diff** before applying.",
+          timestamp: "2026-02-22T10:25:00.000Z",
+          meta: {
+            kind: "reasoning",
+            partId: "part-thinking-no-copy",
+            completed: true,
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toContain("copy-assistant-message-content");
+  });
+
   test("renders user messages with border color from send-time user agent metadata", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

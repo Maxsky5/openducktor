@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 type TaskDetailsMarkdownContentProps = {
@@ -23,8 +24,6 @@ type TaskDetailsMarkdownContentProps = {
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
 const LABELED_CODE_FENCE_PATTERN = /^[ \t]{0,3}(?:```|~~~)[ \t]*[^\s`~]/im;
-const MARKDOWN_COPY_PREVIEW_LENGTH = 50;
-
 type TaskDetailsRenderedMarkdownProps = {
   markdown: string;
   hasLabeledCodeFence: boolean;
@@ -137,13 +136,6 @@ function TaskDetailsCopyButton({
       </Tooltip>
     </TooltipProvider>
   );
-}
-
-function buildCopyPreview(markdown: string): string {
-  if (markdown.length <= MARKDOWN_COPY_PREVIEW_LENGTH) {
-    return markdown;
-  }
-  return `${markdown.slice(0, MARKDOWN_COPY_PREVIEW_LENGTH)}...`;
 }
 
 export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownContent({
