@@ -230,6 +230,7 @@ export function useAppLifecycle({
     const loadVersion = ++repoLoadVersionRef.current;
     let beadsPreparationToastId: string | number | null = null;
     let beadsPreparationToastShown = false;
+    let hadBeadsPreparationToast = false;
     let beadsPreparationTimer: ReturnType<typeof setTimeout> | null = null;
 
     const clearBeadsPreparationTimer = (): void => {
@@ -255,6 +256,7 @@ export function useAppLifecycle({
           return;
         }
         beadsPreparationToastShown = true;
+        hadBeadsPreparationToast = true;
         beadsPreparationToastId = toast.loading("Preparing Beads database", {
           description: "OpenDucktor is initializing the Beads task store for this repository.",
         });
@@ -265,17 +267,24 @@ export function useAppLifecycle({
         repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
         if (beadsCheck.repoStoreHealth.status !== "initializing") {
           clearBeadsPreparationTimer();
-          if (!beadsCheck.repoStoreHealth.isReady) {
+          if (beadsPreparationToastShown) {
             dismissBeadsPreparationToast();
           }
         }
 
         await refreshTaskData(activeRepo);
-        void refreshBeadsCheckForRepo(activeRepo, true).catch(() => {});
+        if (!beadsCheck.repoStoreHealth.isReady) {
+          try {
+            const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepo, true);
+            repoStoreHealth = getBlockingRepoStoreHealth(refreshedBeadsCheck);
+          } catch {
+            // Preserve the main repo-load outcome if the follow-up diagnostics refresh fails.
+          }
+        }
 
         if (
           !repoStoreHealth &&
-          beadsPreparationToastShown &&
+          hadBeadsPreparationToast &&
           repoLoadVersionRef.current === loadVersion &&
           activeRepoRef.current === activeRepo
         ) {

@@ -1273,6 +1273,60 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("does not force a second Beads refresh when the first check is already ready", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const taskDeferred = createDeferred<void>();
+    const branchesDeferred = createDeferred<void>();
+    const refreshBeadsCheckForRepo = mock(
+      async (): Promise<BeadsCheck> => makeBeadsCheck({ beadsPath: null }),
+    );
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo,
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await harness.run(async () => {
+        taskDeferred.resolve();
+        branchesDeferred.resolve();
+      });
+
+      expect(refreshBeadsCheckForRepo).toHaveBeenCalledTimes(1);
+      expect(refreshBeadsCheckForRepo).toHaveBeenCalledWith("/repo", false);
+    } finally {
+      taskDeferred.resolve();
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
   test("does not show Beads preparation toast when task loading is slow but Beads is already ready", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
@@ -1450,6 +1504,71 @@ describe("useAppLifecycle", () => {
       expect(toastSuccess).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
         description: "Task store unavailable. store failed",
+      });
+    } finally {
+      beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      taskDeferred.resolve();
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("dismisses a shown Beads preparation toast as soon as the first check leaves initializing", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const taskDeferred = createDeferred<void>();
+    const branchesDeferred = createDeferred<void>();
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+
+      expect(toastLoading).toHaveBeenCalledWith("Preparing Beads database", {
+        description: "OpenDucktor is initializing the Beads task store for this repository.",
+      });
+
+      await harness.run(async () => {
+        beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      });
+
+      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
+      expect(toastSuccess).not.toHaveBeenCalled();
+
+      await harness.run(async () => {
+        taskDeferred.resolve();
+        branchesDeferred.resolve();
       });
     } finally {
       beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
