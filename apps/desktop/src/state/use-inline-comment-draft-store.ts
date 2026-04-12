@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { DiffScope } from "@/features/agent-studio-git";
 
 export type InlineCommentSide = "old" | "new";
-export type InlineCommentStatus = "pending" | "sent";
+export type InlineCommentStatus = "pending" | "submitting" | "sent";
 
 export type InlineCommentContextLine = {
   lineNumber: number;
@@ -21,6 +21,7 @@ export type InlineCommentDraft = {
   codeContext: InlineCommentContextLine[];
   language: string | null;
   revision: number;
+  submissionId: string | null;
   createdAt: number;
   updatedAt: number;
   sentAt: number | null;
@@ -43,14 +44,13 @@ export type AddInlineCommentDraftInput = {
 export type InlineCommentDraftStore = {
   drafts: InlineCommentDraft[];
   draftStateKey: string | null;
-  submittingDrafts: InlineCommentDraftSnapshot[];
   addDraft: (draft: AddInlineCommentDraftInput) => string;
   updateDraft: (id: string, text: string) => void;
   removeDraft: (id: string) => void;
   clearAll: () => void;
-  beginSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => void;
-  clearSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => void;
-  markDraftsAsSent: (drafts: InlineCommentDraftSnapshot[]) => void;
+  beginSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => string | null;
+  restoreSubmittingDrafts: (submissionId: string) => void;
+  markSubmittingDraftsAsSent: (submissionId: string) => void;
   resetForContext: (draftStateKey: string) => void;
   getPendingDrafts: () => InlineCommentDraft[];
   formatBatchMessage: (drafts: InlineCommentDraft[]) => string;
@@ -58,7 +58,6 @@ export type InlineCommentDraftStore = {
   getDraftCount: () => number;
   getFileDraftCount: (filePath: string) => number;
   getDraftsForFile: (filePath: string) => InlineCommentDraft[];
-  isDraftSubmitting: (draft: InlineCommentDraftSnapshot) => boolean;
 };
 
 const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
@@ -68,9 +67,11 @@ const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
 
 let nextId = 0;
 let nextRevision = 0;
+let nextSubmissionId = 0;
 
 const generateId = (): string => `draft-${Date.now()}-${++nextId}`;
 const generateRevision = (): number => ++nextRevision;
+const generateSubmissionId = (): string => `submission-${Date.now()}-${++nextSubmissionId}`;
 
 const normalizeLineRange = (
   startLine: number,
@@ -81,20 +82,10 @@ const normalizeLineRange = (
 
 const normalizeDraftText = (text: string): string => text.trim();
 
-const isSnapshotSubmitting = (
-  submittingDrafts: InlineCommentDraftSnapshot[],
-  draft: InlineCommentDraftSnapshot,
-): boolean => {
-  return submittingDrafts.some(
-    (submittingDraft) =>
-      submittingDraft.id === draft.id && submittingDraft.revision === draft.revision,
-  );
-};
-
-const isSameSnapshot = (
-  left: InlineCommentDraftSnapshot,
-  right: InlineCommentDraftSnapshot,
-): boolean => left.id === right.id && left.revision === right.revision;
+const isDraftSnapshotMatch = (
+  draft: InlineCommentDraft,
+  snapshot: InlineCommentDraftSnapshot,
+): boolean => draft.id === snapshot.id && draft.revision === snapshot.revision;
 
 const compareDrafts = (left: InlineCommentDraft, right: InlineCommentDraft): number => {
   return (
@@ -122,13 +113,12 @@ const formatContextBlock = (
     return `${marker} ${String(lineNumber).padStart(4, " ")} | ${text}`;
   });
 
-  return ["Context:", "```" + fence, ...lines, "```"].join("\n");
+  return ["Context:", `\`\`\`${fence}`, ...lines, "```"].join("\n");
 };
 
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
   drafts: [],
   draftStateKey: null,
-  submittingDrafts: [],
 
   addDraft: (draft) => {
     const text = normalizeDraftText(draft.text);
@@ -149,6 +139,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       codeContext: draft.codeContext,
       language: draft.language ?? null,
       revision: generateRevision(),
+      submissionId: null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       sentAt: null,
@@ -164,7 +155,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       throw new Error("Inline comments cannot be empty.");
     }
     const draft = get().drafts.find((candidate) => candidate.id === id);
-    if (draft && isSnapshotSubmitting(get().submittingDrafts, draft)) {
+    if (draft?.status === "submitting") {
       throw new Error("Cannot edit a git diff comment while it is being sent.");
     }
 
@@ -175,6 +166,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
               ...currentDraft,
               text: normalizedText,
               revision: generateRevision(),
+              submissionId: null,
               updatedAt: Date.now(),
             }
           : currentDraft,
@@ -184,7 +176,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
 
   removeDraft: (id) => {
     const draft = get().drafts.find((candidate) => candidate.id === id);
-    if (draft && isSnapshotSubmitting(get().submittingDrafts, draft)) {
+    if (draft?.status === "submitting") {
       throw new Error("Cannot remove a git diff comment while it is being sent.");
     }
 
@@ -192,45 +184,59 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
   },
 
   clearAll: () => {
-    set({ drafts: [], submittingDrafts: [] });
+    set({ drafts: [] });
   },
 
   beginSubmittingDrafts: (drafts) => {
     if (drafts.length === 0) {
+      return null;
+    }
+
+    const submissionId = generateSubmissionId();
+    let didTransition = false;
+    set((state) => ({
+      drafts: state.drafts.map((draft) => {
+        if (
+          draft.status === "pending" &&
+          drafts.some((snapshot) => isDraftSnapshotMatch(draft, snapshot))
+        ) {
+          didTransition = true;
+          return {
+            ...draft,
+            status: "submitting",
+            submissionId,
+          };
+        }
+        return draft;
+      }),
+    }));
+    return didTransition ? submissionId : null;
+  },
+
+  restoreSubmittingDrafts: (submissionId) => {
+    if (submissionId.length === 0) {
       return;
     }
 
     set((state) => ({
-      submittingDrafts: [...state.submittingDrafts, ...drafts].filter(
-        (draft, index, snapshots) =>
-          snapshots.findIndex((snapshot) => isSameSnapshot(snapshot, draft)) === index,
+      drafts: state.drafts.map((draft) =>
+        draft.status === "submitting" && draft.submissionId === submissionId
+          ? { ...draft, status: "pending", submissionId: null }
+          : draft,
       ),
     }));
   },
 
-  clearSubmittingDrafts: (drafts) => {
-    if (drafts.length === 0) {
-      return;
-    }
-
-    set((state) => ({
-      submittingDrafts: state.submittingDrafts.filter(
-        (submittingDraft) => !drafts.some((draft) => isSameSnapshot(draft, submittingDraft)),
-      ),
-    }));
-  },
-
-  markDraftsAsSent: (drafts) => {
-    if (drafts.length === 0) {
+  markSubmittingDraftsAsSent: (submissionId) => {
+    if (submissionId.length === 0) {
       return;
     }
 
     const sentAt = Date.now();
-    const snapshots = new Map(drafts.map((draft) => [draft.id, draft.revision]));
     set((state) => ({
       drafts: state.drafts.map((draft) =>
-        draft.status === "pending" && snapshots.get(draft.id) === draft.revision
-          ? { ...draft, status: "sent", sentAt }
+        draft.status === "submitting" && draft.submissionId === submissionId
+          ? { ...draft, status: "sent", submissionId: null, sentAt }
           : draft,
       ),
     }));
@@ -241,15 +247,12 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return;
     }
 
-    set({ drafts: [], draftStateKey, submittingDrafts: [] });
+    set({ drafts: [], draftStateKey });
   },
 
   getPendingDrafts: () =>
     get()
-      .drafts.filter(
-        (draft) =>
-          draft.status === "pending" && !isSnapshotSubmitting(get().submittingDrafts, draft),
-      )
+      .drafts.filter((draft) => draft.status === "pending")
       .sort(compareDrafts),
 
   formatBatchMessage: (drafts) => {
@@ -286,6 +289,4 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     get()
       .drafts.filter((draft) => draft.filePath === filePath)
       .sort(compareDrafts),
-
-  isDraftSubmitting: (draft) => isSnapshotSubmitting(get().submittingDrafts, draft),
 }));

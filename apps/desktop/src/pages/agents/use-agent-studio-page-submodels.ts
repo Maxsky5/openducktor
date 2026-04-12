@@ -353,15 +353,26 @@ export const useAgentStudioComposerModel = ({
       const nextDraft =
         commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
       scrollToBottomOnSendRef.current?.();
-      useInlineCommentDraftStore.getState().beginSubmittingDrafts(submittingDrafts);
+      const submissionId = useInlineCommentDraftStore
+        .getState()
+        .beginSubmittingDrafts(submittingDrafts);
       try {
         const didSend = await onSend(nextDraft);
+        if (!submissionId) {
+          return didSend;
+        }
+
         if (didSend) {
-          useInlineCommentDraftStore.getState().markDraftsAsSent(submittingDrafts);
+          useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
+        } else {
+          useInlineCommentDraftStore.getState().restoreSubmittingDrafts(submissionId);
         }
         return didSend;
-      } finally {
-        useInlineCommentDraftStore.getState().clearSubmittingDrafts(submittingDrafts);
+      } catch (error) {
+        if (submissionId) {
+          useInlineCommentDraftStore.getState().restoreSubmittingDrafts(submissionId);
+        }
+        throw error;
       }
     },
     [onSend, scrollToBottomOnSendRef],

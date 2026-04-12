@@ -20,7 +20,7 @@ type HookArgs = Parameters<typeof useAgentStudioThreadModel>[0];
 type ComposerHookArgs = Parameters<typeof useAgentStudioComposerModel>[0];
 
 const resetInlineComments = (): void => {
-  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null, submittingDrafts: [] });
+  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
 };
 
 const createHookArgs = (showThinkingMessages = false): HookArgs => ({
@@ -118,10 +118,14 @@ describe("useAgentStudioThreadModel", () => {
     });
     expect(harness.getLatest().showThinkingMessages).toBe(true);
 
-    await harness.update(createHookArgs(false));
+    await act(async () => {
+      await harness.update(createHookArgs(false));
+    });
     expect(harness.getLatest().showThinkingMessages).toBe(false);
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
   });
 
   test("forwards isSessionWorking into the thread model", async () => {
@@ -130,10 +134,14 @@ describe("useAgentStudioThreadModel", () => {
       isSessionWorking: true,
     });
 
-    await harness.mount();
+    await act(async () => {
+      await harness.mount();
+    });
     expect(harness.getLatest().isSessionWorking).toBe(true);
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
   });
 
   test("forwards readiness state into the thread model", async () => {
@@ -144,11 +152,15 @@ describe("useAgentStudioThreadModel", () => {
       agentStudioBlockedReason: "Runtime unavailable",
     });
 
-    await harness.mount();
+    await act(async () => {
+      await harness.mount();
+    });
     expect(harness.getLatest().readinessState).toBe("blocked");
     expect(harness.getLatest().blockedReason).toBe("Runtime unavailable");
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
   });
 
   test("forwards runtime-waiting separately from history loading", async () => {
@@ -160,30 +172,36 @@ describe("useAgentStudioThreadModel", () => {
       isSessionHistoryLoading: false,
     });
 
-    await harness.mount();
+    await act(async () => {
+      await harness.mount();
+    });
     expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
     expect(harness.getLatest().isSessionHistoryLoading).toBe(false);
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
   });
 });
 
 describe("useAgentStudioComposerModel", () => {
   test("appends pending inline comments to the outgoing draft and marks them sent on success", async () => {
-    resetInlineComments();
-    useInlineCommentDraftStore.getState().resetForContext("draft-1");
-    useInlineCommentDraftStore.getState().addDraft({
-      filePath: "src/example.ts",
-      diffScope: "uncommitted",
-      startLine: 2,
-      endLine: 3,
-      side: "new",
-      text: "Please tighten the null handling",
-      codeContext: [
-        { lineNumber: 1, text: "before", isSelected: false },
-        { lineNumber: 2, text: "target", isSelected: true },
-      ],
-      language: "ts",
+    await act(async () => {
+      resetInlineComments();
+      useInlineCommentDraftStore.getState().resetForContext("draft-1");
+      useInlineCommentDraftStore.getState().addDraft({
+        filePath: "src/example.ts",
+        diffScope: "uncommitted",
+        startLine: 2,
+        endLine: 3,
+        side: "new",
+        text: "Please tighten the null handling",
+        codeContext: [
+          { lineNumber: 1, text: "before", isSelected: false },
+          { lineNumber: 2, text: "target", isSelected: true },
+        ],
+        language: "ts",
+      });
     });
 
     const sentDrafts: string[] = [];
@@ -196,11 +214,13 @@ describe("useAgentStudioComposerModel", () => {
       }),
     );
 
-    await harness.mount();
+    await act(async () => {
+      await harness.mount();
+    });
     expect(harness.getLatest().pendingInlineCommentCount).toBe(1);
 
-    await act(async () => {
-      await harness.getLatest().onSend(createEmptyComposerDraft());
+    await harness.run((model) => {
+      void model.onSend(createEmptyComposerDraft());
     });
 
     expect(sentDrafts).toHaveLength(1);
@@ -209,22 +229,27 @@ describe("useAgentStudioComposerModel", () => {
     expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(0);
     expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("sent");
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
     resetInlineComments();
   });
 
   test("locks the submitted comment snapshot while send is pending and preserves it as sent on success", async () => {
-    resetInlineComments();
-    useInlineCommentDraftStore.getState().resetForContext("draft-1");
-    const commentId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "src/example.ts",
-      diffScope: "uncommitted",
-      startLine: 2,
-      endLine: 3,
-      side: "new",
-      text: "Initial pending comment",
-      codeContext: [{ lineNumber: 2, text: "target", isSelected: true }],
-      language: "ts",
+    let commentId = "";
+    await act(async () => {
+      resetInlineComments();
+      useInlineCommentDraftStore.getState().resetForContext("draft-1");
+      commentId = useInlineCommentDraftStore.getState().addDraft({
+        filePath: "src/example.ts",
+        diffScope: "uncommitted",
+        startLine: 2,
+        endLine: 3,
+        side: "new",
+        text: "Initial pending comment",
+        codeContext: [{ lineNumber: 2, text: "target", isSelected: true }],
+        language: "ts",
+      });
     });
 
     let resolveSend: ((value: boolean) => void) | null = null;
@@ -240,10 +265,17 @@ describe("useAgentStudioComposerModel", () => {
       }),
     );
 
-    await harness.mount();
-    const sendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
+    await act(async () => {
+      await harness.mount();
+    });
+    let sendPromise: Promise<boolean> | null = null;
+    await harness.run((model) => {
+      sendPromise = model.onSend(createEmptyComposerDraft());
+    });
 
-    expect(useInlineCommentDraftStore.getState().submittingDrafts).toHaveLength(1);
+    expect(
+      useInlineCommentDraftStore.getState().drafts.filter((draft) => draft.status === "submitting"),
+    ).toHaveLength(1);
 
     expect(() =>
       useInlineCommentDraftStore
@@ -263,24 +295,30 @@ describe("useAgentStudioComposerModel", () => {
     expect(sentDrafts[0]).toContain("Initial pending comment");
     expect(sentDrafts[0]).not.toContain("Edited after the send snapshot was captured");
     expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("sent");
-    expect(useInlineCommentDraftStore.getState().submittingDrafts).toEqual([]);
+    expect(
+      useInlineCommentDraftStore.getState().drafts.some((draft) => draft.status === "submitting"),
+    ).toBe(false);
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
     resetInlineComments();
   });
 
   test("keeps pending inline comments when send fails or the draft context changes", async () => {
-    resetInlineComments();
-    useInlineCommentDraftStore.getState().resetForContext("draft-1");
-    useInlineCommentDraftStore.getState().addDraft({
-      filePath: "src/example.ts",
-      diffScope: "target",
-      startLine: 8,
-      endLine: 8,
-      side: "old",
-      text: "Keep this pending",
-      codeContext: [{ lineNumber: 8, text: "old line", isSelected: true }],
-      language: "ts",
+    await act(async () => {
+      resetInlineComments();
+      useInlineCommentDraftStore.getState().resetForContext("draft-1");
+      useInlineCommentDraftStore.getState().addDraft({
+        filePath: "src/example.ts",
+        diffScope: "target",
+        startLine: 8,
+        endLine: 8,
+        side: "old",
+        text: "Keep this pending",
+        codeContext: [{ lineNumber: 8, text: "old line", isSelected: true }],
+        language: "ts",
+      });
     });
 
     const harness = createComposerHookHarness(
@@ -289,29 +327,35 @@ describe("useAgentStudioComposerModel", () => {
       }),
     );
 
-    await harness.mount();
     await act(async () => {
-      await harness.getLatest().onSend(createEmptyComposerDraft());
+      await harness.mount();
+    });
+    await harness.run((model) => {
+      void model.onSend(createEmptyComposerDraft());
     });
     expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(1);
     expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("pending");
 
-    await harness.update(
-      createComposerHookArgs({
-        onSend: async () => false,
-        draftStateKey: "draft-2",
-      }),
-    );
+    await act(async () => {
+      await harness.update(
+        createComposerHookArgs({
+          onSend: async () => false,
+          draftStateKey: "draft-2",
+        }),
+      );
+    });
     expect(useInlineCommentDraftStore.getState().drafts).toEqual([]);
 
-    await harness.unmount();
+    await act(async () => {
+      await harness.unmount();
+    });
     resetInlineComments();
   });
 
   test("does not re-append already-submitting comments during a queueable follow-up send", async () => {
-    resetInlineComments();
-    useInlineCommentDraftStore.getState().resetForContext("draft-1");
     await act(async () => {
+      resetInlineComments();
+      useInlineCommentDraftStore.getState().resetForContext("draft-1");
       useInlineCommentDraftStore.getState().addDraft({
         filePath: "src/example-a.ts",
         diffScope: "uncommitted",
@@ -339,10 +383,12 @@ describe("useAgentStudioComposerModel", () => {
       }),
     );
 
-    await harness.mount();
-    let firstSendPromise: Promise<boolean> | null = null;
     await act(async () => {
-      firstSendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
+      await harness.mount();
+    });
+    let firstSendPromise: Promise<boolean> | null = null;
+    await harness.run((model) => {
+      firstSendPromise = model.onSend(createEmptyComposerDraft());
     });
 
     await act(async () => {
@@ -359,8 +405,8 @@ describe("useAgentStudioComposerModel", () => {
     });
 
     let secondSendPromise: Promise<boolean> | null = null;
-    await act(async () => {
-      secondSendPromise = harness.getLatest().onSend(createEmptyComposerDraft());
+    await harness.run((model) => {
+      secondSendPromise = model.onSend(createEmptyComposerDraft());
     });
 
     expect(sentDrafts).toHaveLength(2);
@@ -378,7 +424,9 @@ describe("useAgentStudioComposerModel", () => {
     expect(
       useInlineCommentDraftStore.getState().drafts.every((draft) => draft.status === "sent"),
     ).toBe(true);
-    expect(useInlineCommentDraftStore.getState().submittingDrafts).toEqual([]);
+    expect(
+      useInlineCommentDraftStore.getState().drafts.some((draft) => draft.status === "submitting"),
+    ).toBe(false);
 
     await act(async () => {
       await harness.unmount();

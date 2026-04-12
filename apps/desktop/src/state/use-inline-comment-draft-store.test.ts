@@ -7,7 +7,6 @@ const resetStore = (): void => {
   useInlineCommentDraftStore.setState({
     drafts: [],
     draftStateKey: null,
-    submittingDrafts: [],
   });
 };
 
@@ -70,7 +69,13 @@ describe("use-inline-comment-draft-store", () => {
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     Date.now = () => 1_700_000_000_100;
-    useInlineCommentDraftStore.getState().markDraftsAsSent(pendingSnapshots);
+    const submissionId = useInlineCommentDraftStore
+      .getState()
+      .beginSubmittingDrafts(pendingSnapshots);
+    if (submissionId == null) {
+      throw new Error("Expected submission id");
+    }
+    useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
 
     const sentState = useInlineCommentDraftStore.getState();
     expect(sentState.getDraftCount()).toBe(0);
@@ -119,7 +124,11 @@ describe("use-inline-comment-draft-store", () => {
       .updateDraft(firstId, "First note updated after send start");
 
     Date.now = () => 1_700_000_000_100;
-    useInlineCommentDraftStore.getState().markDraftsAsSent(sentSnapshot);
+    const submissionId = useInlineCommentDraftStore.getState().beginSubmittingDrafts(sentSnapshot);
+    if (submissionId == null) {
+      throw new Error("Expected submission id");
+    }
+    useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
 
     const drafts = useInlineCommentDraftStore.getState().drafts;
     expect(drafts.find((draft) => draft.id === firstId)?.status).toBe("pending");
@@ -144,7 +153,10 @@ describe("use-inline-comment-draft-store", () => {
       .getPendingDrafts()
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
-    useInlineCommentDraftStore.getState().beginSubmittingDrafts(snapshot);
+    const submissionId = useInlineCommentDraftStore.getState().beginSubmittingDrafts(snapshot);
+    if (submissionId == null) {
+      throw new Error("Expected submission id");
+    }
 
     expect(() => useInlineCommentDraftStore.getState().updateDraft(draftId, "Edited")).toThrow(
       "Cannot edit a git diff comment while it is being sent.",
@@ -179,7 +191,12 @@ describe("use-inline-comment-draft-store", () => {
     const firstSnapshot = [{ id: firstId, revision: requireDraftRevision(0) }];
     const secondSnapshot = [{ id: secondId, revision: requireDraftRevision(1) }];
 
-    useInlineCommentDraftStore.getState().beginSubmittingDrafts(firstSnapshot);
+    const firstSubmissionId = useInlineCommentDraftStore
+      .getState()
+      .beginSubmittingDrafts(firstSnapshot);
+    if (firstSubmissionId == null) {
+      throw new Error("Expected first submission id");
+    }
     expect(
       useInlineCommentDraftStore
         .getState()
@@ -188,18 +205,30 @@ describe("use-inline-comment-draft-store", () => {
     ).toEqual([secondId]);
     expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(1);
 
-    useInlineCommentDraftStore.getState().beginSubmittingDrafts(secondSnapshot);
-    expect(useInlineCommentDraftStore.getState().submittingDrafts).toHaveLength(2);
+    const secondSubmissionId = useInlineCommentDraftStore
+      .getState()
+      .beginSubmittingDrafts(secondSnapshot);
+    if (secondSubmissionId == null) {
+      throw new Error("Expected second submission id");
+    }
+    expect(
+      useInlineCommentDraftStore.getState().drafts.filter((draft) => draft.status === "submitting"),
+    ).toHaveLength(2);
     expect(useInlineCommentDraftStore.getState().getPendingDrafts()).toEqual([]);
 
-    useInlineCommentDraftStore.getState().clearSubmittingDrafts(firstSnapshot);
+    useInlineCommentDraftStore.getState().restoreSubmittingDrafts(firstSubmissionId);
     expect(
       useInlineCommentDraftStore
         .getState()
         .getPendingDrafts()
         .map((draft) => draft.id),
     ).toEqual([firstId]);
-    expect(useInlineCommentDraftStore.getState().submittingDrafts).toEqual(secondSnapshot);
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .drafts.filter((draft) => draft.status === "submitting")
+        .map((draft) => draft.id),
+    ).toEqual([secondId]);
   });
 
   test("formats a deterministic pending appendix with scope, side, lines, context, and comment text", () => {

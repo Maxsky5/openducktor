@@ -64,7 +64,7 @@ const viewerMock = mock(
 );
 
 const resetInlineComments = (): void => {
-  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null, submittingDrafts: [] });
+  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
 };
 
 beforeAll(async () => {
@@ -224,7 +224,13 @@ describe("FileDiffList", () => {
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
-      useInlineCommentDraftStore.getState().markDraftsAsSent(sentSnapshot);
+      const submissionId = useInlineCommentDraftStore
+        .getState()
+        .beginSubmittingDrafts(sentSnapshot);
+      if (!submissionId) {
+        throw new Error("Expected submission id");
+      }
+      useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
     });
 
     expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
