@@ -609,6 +609,29 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("group-hover/message:opacity-100");
   });
 
+  test("renders a hover-only copy button for completed intermediate assistant rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-intermediate-copyable",
+          role: "assistant",
+          content: "Intermediate progress update.",
+          timestamp: "2026-02-22T10:24:47.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("copy-assistant-message-content");
+    expect(html).toContain("group-hover/message:opacity-100");
+  });
+
   test("does not render a copy button for streaming assistant rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
