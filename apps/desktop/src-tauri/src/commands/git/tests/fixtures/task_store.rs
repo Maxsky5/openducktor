@@ -1,8 +1,10 @@
 use anyhow::anyhow;
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, DirectMergeRecord, PullRequestRecord, QaReportDocument,
-    QaVerdict, QaWorkflowVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    QaVerdict, QaWorkflowVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, SpecDocument, TaskCard, TaskMetadata, TaskStatus,
+    TaskStore, UpdateTaskPatch,
 };
 use std::path::Path;
 
@@ -18,6 +20,24 @@ fn empty_spec_document() -> SpecDocument {
 }
 
 impl TaskStore for CommandTaskStore {
+    fn diagnose_repo_store(&self, repo_path: &Path) -> anyhow::Result<RepoStoreHealth> {
+        Ok(RepoStoreHealth {
+            category: RepoStoreHealthCategory::Healthy,
+            status: RepoStoreHealthStatus::Ready,
+            is_ready: true,
+            detail: Some("Beads attachment and shared Dolt server are healthy.".to_string()),
+            attachment: RepoStoreAttachmentHealth {
+                path: Some(repo_path.join(".beads").to_string_lossy().to_string()),
+                database_name: Some("git-command-test".to_string()),
+            },
+            shared_server: RepoStoreSharedServerHealth {
+                host: Some("127.0.0.1".to_string()),
+                port: Some(3307),
+                ownership_state: RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess,
+            },
+        })
+    }
+
     fn ensure_repo_initialized(&self, _repo_path: &Path) -> anyhow::Result<()> {
         Ok(())
     }

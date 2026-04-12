@@ -59,6 +59,12 @@ import type {
   PlanSubtaskPriority,
   QaReportVerdict,
   QaWorkflowVerdict,
+  RepoStoreAttachmentHealth,
+  RepoStoreHealth,
+  RepoStoreHealthCategory,
+  RepoStoreHealthStatus,
+  RepoStoreSharedServerHealth,
+  RepoStoreSharedServerOwnershipState,
   RepoAgentDefaults,
   RepoConfig,
   RepoDevServerScript,
@@ -260,6 +266,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeHealthSchema",
   "runtimeKindSchema",
   "repoRuntimeHealthCheckSchema",
+  "repoStoreAttachmentHealthSchema",
+  "repoStoreHealthCategorySchema",
+  "repoStoreHealthSchema",
+  "repoStoreHealthStatusSchema",
+  "repoStoreSharedServerHealthSchema",
+  "repoStoreSharedServerOwnershipStateSchema",
   "repoRuntimeHealthMcpSchema",
   "repoRuntimeHealthObservationSchema",
   "repoRuntimeHealthRuntimeSchema",
@@ -402,6 +414,12 @@ type ExportedTypeContract = {
   RuntimeCapabilityClass: RuntimeCapabilityClass;
   RuntimeCapabilityKey: RuntimeCapabilityKey;
   RepoRuntimeHealthCheck: RepoRuntimeHealthCheck;
+  RepoStoreAttachmentHealth: RepoStoreAttachmentHealth;
+  RepoStoreHealth: RepoStoreHealth;
+  RepoStoreHealthCategory: RepoStoreHealthCategory;
+  RepoStoreHealthStatus: RepoStoreHealthStatus;
+  RepoStoreSharedServerHealth: RepoStoreSharedServerHealth;
+  RepoStoreSharedServerOwnershipState: RepoStoreSharedServerOwnershipState;
   RepoRuntimeHealthMcp: RepoRuntimeHealthMcp;
   RepoRuntimeHealthObservation: RepoRuntimeHealthObservation;
   RepoRuntimeHealthRuntime: RepoRuntimeHealthRuntime;

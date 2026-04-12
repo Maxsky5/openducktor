@@ -26,7 +26,9 @@ use host_domain::{
     GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
     GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
     GitWorktreeSummary, IssueType, PlanSubtaskInput, PullRequestRecord, QaReportDocument,
-    QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
+    QaVerdict, QaWorkflowVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
     SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
@@ -83,6 +85,9 @@ pub(crate) fn write_private_file(path: &Path, contents: &str) -> Result<()> {
 
 #[derive(Debug, Default)]
 pub(crate) struct TaskStoreState {
+    pub(crate) diagnose_calls: Vec<String>,
+    pub(crate) diagnose_error: Option<String>,
+    pub(crate) diagnose_health: Option<RepoStoreHealth>,
     pub(crate) ensure_calls: Vec<String>,
     pub(crate) ensure_error: Option<String>,
     pub(crate) tasks: Vec<TaskCard>,
@@ -119,7 +124,39 @@ pub(crate) struct FakeTaskStore {
     pub(crate) state: Arc<Mutex<TaskStoreState>>,
 }
 
+fn default_repo_store_health(repo_path: &Path) -> RepoStoreHealth {
+    RepoStoreHealth {
+        category: RepoStoreHealthCategory::Healthy,
+        status: RepoStoreHealthStatus::Ready,
+        is_ready: true,
+        detail: Some("Beads attachment and shared Dolt server are healthy.".to_string()),
+        attachment: RepoStoreAttachmentHealth {
+            path: Some(repo_path.join(".beads").to_string_lossy().to_string()),
+            database_name: Some("test-db".to_string()),
+        },
+        shared_server: RepoStoreSharedServerHealth {
+            host: Some("127.0.0.1".to_string()),
+            port: Some(3307),
+            ownership_state: RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess,
+        },
+    }
+}
+
 impl TaskStore for FakeTaskStore {
+    fn diagnose_repo_store(&self, repo_path: &Path) -> Result<RepoStoreHealth> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state
+            .diagnose_calls
+            .push(repo_path.to_string_lossy().to_string());
+        if let Some(message) = state.diagnose_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
+        Ok(state
+            .diagnose_health
+            .clone()
+            .unwrap_or_else(|| default_repo_store_health(repo_path)))
+    }
+
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {
         let mut state = self.state.lock().expect("task store lock poisoned");
         if let Some(message) = state.ensure_error.as_ref() {
@@ -1076,6 +1113,9 @@ pub(crate) fn build_service_with_git_state_enforced(
     current_branch: GitCurrentBranch,
 ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
     let task_state = Arc::new(Mutex::new(TaskStoreState {
+        diagnose_calls: Vec::new(),
+        diagnose_error: None,
+        diagnose_health: None,
         ensure_calls: Vec::new(),
         ensure_error: None,
         tasks,
@@ -1168,6 +1208,9 @@ pub(crate) fn build_service_with_git_state(
     current_branch: GitCurrentBranch,
 ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
     let task_state = Arc::new(Mutex::new(TaskStoreState {
+        diagnose_calls: Vec::new(),
+        diagnose_error: None,
+        diagnose_health: None,
         ensure_calls: Vec::new(),
         ensure_error: None,
         tasks,
@@ -1723,6 +1766,9 @@ pub(crate) fn build_service_with_store(
     config_store: AppConfigStore,
 ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
     let task_state = Arc::new(Mutex::new(TaskStoreState {
+        diagnose_calls: Vec::new(),
+        diagnose_error: None,
+        diagnose_health: None,
         ensure_calls: Vec::new(),
         ensure_error: None,
         tasks,

@@ -8,6 +8,14 @@ import type {
 import { runtimeLabelFor } from "@/lib/agent-runtime";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import {
+  getRepoStoreCategoryLabel,
+  getRepoStoreDetail,
+  getRepoStoreHealth,
+  getRepoStoreOwnershipLabel,
+  getRepoStoreStatusLabel,
+  isRepoStoreReady,
+} from "@/lib/repo-store-health";
+import {
   describeRepoRuntimeStatus,
   formatRepoRuntimeElapsed,
   formatRepoRuntimeObservation,
@@ -108,6 +116,104 @@ const buildFailureMessages = ({
   }
 
   return detail ? [detail] : [];
+};
+
+const getRepoStoreFailureBadge = (
+  beadsCheck: BeadsCheck | null,
+  failureKind: RepoRuntimeFailureKind,
+): DiagnosticsSectionModel["badge"] => {
+  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  if (repoStoreHealth === null) {
+    return { label: "Checking", variant: "secondary" };
+  }
+  if (failureKind === "timeout") {
+    return { label: "Retrying", variant: "warning" };
+  }
+
+  switch (repoStoreHealth.status) {
+    case "initializing":
+      return { label: "Preparing", variant: "secondary" };
+    case "ready":
+      return { label: "Ready", variant: "success" };
+    case "degraded":
+      return { label: "Degraded", variant: "warning" };
+    case "restore_needed":
+      return { label: "Restore needed", variant: "warning" };
+    case "blocking":
+      return { label: "Blocked", variant: "danger" };
+  }
+};
+
+const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRowModel[] => {
+  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  if (!repoStoreHealth) {
+    return [];
+  }
+
+  const rows: DiagnosticKeyValueRowModel[] = [
+    {
+      label: "Status",
+      value: getRepoStoreStatusLabel(repoStoreHealth),
+    },
+    {
+      label: "Health category",
+      value: getRepoStoreCategoryLabel(repoStoreHealth),
+    },
+    {
+      label: "Beads attachment path",
+      value: repoStoreHealth.attachment.path ?? "Unavailable",
+      breakAll: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt database name",
+      value: repoStoreHealth.attachment.databaseName ?? "Unavailable",
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt server host",
+      value: repoStoreHealth.sharedServer.host ?? "Unavailable",
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt server port",
+      value:
+        repoStoreHealth.sharedServer.port === null
+          ? "Unavailable"
+          : String(repoStoreHealth.sharedServer.port),
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt server ownership",
+      value: getRepoStoreOwnershipLabel(repoStoreHealth),
+      valueClassName: "text-muted-foreground",
+    },
+  ];
+
+  return rows;
+};
+
+const buildRepoStoreErrors = (
+  beadsCheck: BeadsCheck | null,
+  failureKind: RepoRuntimeFailureKind,
+): string[] => {
+  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  if (
+    !repoStoreHealth ||
+    isRepoStoreReady(repoStoreHealth) ||
+    repoStoreHealth.status === "initializing"
+  ) {
+    return [];
+  }
+
+  return buildFailureMessages({
+    label: "Beads store",
+    detail: getRepoStoreDetail(repoStoreHealth),
+    failureKind,
+  });
 };
 
 const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValueRowModel[] => {
@@ -300,7 +406,7 @@ export const buildDiagnosticsPanelModel = (
       }
     }
     if (hasBeadsCheckFailure(beadsCheck) && beadsCheckFailureKind !== "timeout") {
-      criticalReasons.push("Beads store unavailable");
+      criticalReasons.push(getRepoStoreDetail(getRepoStoreHealth(beadsCheck)!));
     }
   }
 
@@ -429,28 +535,9 @@ export const buildDiagnosticsPanelModel = (
   const beadsStoreSection: DiagnosticsSectionModel = {
     key: "beads-store",
     title: "Beads Store",
-    badge: getFailureBadge(beadsCheck?.beadsOk ?? null, beadsCheckFailureKind, {
-      healthy: "Ready",
-      timeout: "Retrying",
-      error: "Unavailable",
-      checking: "Checking",
-    }),
-    rows:
-      activeRepo && beadsCheck?.beadsPath
-        ? [
-            {
-              label: "Store path",
-              value: beadsCheck.beadsPath,
-              breakAll: true,
-              valueClassName: "text-muted-foreground",
-            },
-          ]
-        : [],
-    errors: buildFailureMessages({
-      label: "Beads store",
-      detail: beadsCheck?.beadsError ?? null,
-      failureKind: beadsCheckFailureKind,
-    }),
+    badge: getRepoStoreFailureBadge(beadsCheck, beadsCheckFailureKind),
+    rows: activeRepo ? buildRepoStoreRows(beadsCheck) : [],
+    errors: buildRepoStoreErrors(beadsCheck, beadsCheckFailureKind),
     ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
   };
 

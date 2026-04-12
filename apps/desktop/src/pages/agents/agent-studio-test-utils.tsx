@@ -9,6 +9,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  createBeadsCheckFixture as createSharedBeadsCheckFixture,
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
@@ -59,11 +60,8 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
     runtimes: [],
     errors: [],
   }),
-  refreshBeadsCheckForRepo: async () => ({
-    beadsOk: true,
-    beadsPath: "/repo/.beads",
-    beadsError: null,
-  }),
+  refreshBeadsCheckForRepo: async () =>
+    createSharedBeadsCheckFixture({}, { beadsPath: "/repo/.beads" }),
   refreshRepoRuntimeHealthForRepo: async () => ({}),
   clearActiveBeadsCheck: () => {},
   clearActiveRepoRuntimeHealth: () => {},
@@ -74,6 +72,8 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
 } satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
 
 export const createDeferred = createSharedDeferred;
+
+export const createBeadsCheckFixture = createSharedBeadsCheckFixture;
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(PAGE_TASK_CARD_DEFAULTS, overrides);

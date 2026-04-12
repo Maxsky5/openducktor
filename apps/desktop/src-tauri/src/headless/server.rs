@@ -351,8 +351,10 @@ mod tests {
     use host_application::AppService;
     use host_domain::{
         AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, IssueType,
-        PullRequestRecord, QaReportDocument, QaVerdict, SpecDocument, TaskCard,
-        TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+        PullRequestRecord, QaReportDocument, QaVerdict, RepoStoreAttachmentHealth,
+        RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
+        RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, SpecDocument,
+        TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
     };
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::{AppConfigStore, RepoConfig};
@@ -381,6 +383,24 @@ mod tests {
     }
 
     impl TaskStore for TestTaskStore {
+        fn diagnose_repo_store(&self, repo_path: &std::path::Path) -> Result<RepoStoreHealth> {
+            Ok(RepoStoreHealth {
+                category: RepoStoreHealthCategory::Healthy,
+                status: RepoStoreHealthStatus::Ready,
+                is_ready: true,
+                detail: Some("Beads attachment and shared Dolt server are healthy.".to_string()),
+                attachment: RepoStoreAttachmentHealth {
+                    path: Some(repo_path.join(".beads").to_string_lossy().to_string()),
+                    database_name: Some("headless-test".to_string()),
+                },
+                shared_server: RepoStoreSharedServerHealth {
+                    host: Some("127.0.0.1".to_string()),
+                    port: Some(3307),
+                    ownership_state: RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess,
+                },
+            })
+        }
+
         fn ensure_repo_initialized(&self, repo_path: &std::path::Path) -> Result<()> {
             let mut state = self.state.lock().expect("task store lock poisoned");
             state

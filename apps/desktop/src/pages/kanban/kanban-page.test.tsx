@@ -16,6 +16,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  createBeadsCheckFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
@@ -449,11 +450,17 @@ describe("KanbanPage session start modal flow", () => {
         humanRequestChangesTask: humanRequestChangesTaskMock,
       }),
       useChecksState: () => ({
-        beadsCheck: {
-          beadsOk: true,
-          beadsPath: "/tmp/beads.db",
-          beadsError: null,
-        },
+        beadsCheck: createBeadsCheckFixture(
+          {},
+          {
+            beadsPath: "/tmp/beads.db",
+            repoStoreHealth: {
+              attachment: {
+                path: "/tmp/beads.db",
+              },
+            },
+          },
+        ),
       }),
       useDelegationState: () => ({}),
       useSpecState: () => ({}),

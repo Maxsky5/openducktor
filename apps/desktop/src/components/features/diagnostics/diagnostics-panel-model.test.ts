@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeDescriptor, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { BeadsCheck, RuntimeDescriptor, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  createBeadsCheckFixture,
+  type BeadsCheckFixtureOverrides,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 
@@ -68,6 +72,20 @@ const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthC
     mcp,
   };
 };
+
+const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
+  createBeadsCheckFixture(
+    {
+      beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+      repoStoreHealth: {
+        attachment: {
+          path: "/Users/dev/.openducktor/beads/repo/.beads",
+          databaseName: "repo_db",
+        },
+      },
+    },
+    overrides,
+  );
 
 describe("buildDiagnosticsPanelModel", () => {
   test("returns no-repository summary and empty-state messages when no repository is selected", () => {
@@ -144,11 +162,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {},
@@ -184,11 +198,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -207,6 +217,86 @@ describe("buildDiagnosticsPanelModel", () => {
         expect.objectContaining({ label: "Worktree directory", value: "Not available" }),
       ]),
     );
+  });
+
+  test("renders first-class repo store diagnostics rows from structured health", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: makeBeadsCheck({
+        repoStoreHealth: {
+          category: "missing_shared_database",
+          status: "restore_needed",
+          isReady: false,
+          detail: "Shared Dolt database repo_db is missing and restore is required",
+          attachment: {
+            path: "/Users/dev/.openducktor/beads/repo/.beads",
+            databaseName: "repo_db",
+          },
+          sharedServer: {
+            host: "127.0.0.1",
+            port: 36123,
+            ownershipState: "reused_existing_server",
+          },
+        },
+        beadsOk: false,
+        beadsError: "Shared Dolt database repo_db is missing and restore is required",
+      }),
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const beadsSection = model.sections.find((section) => section.key === "beads-store");
+
+    expect(beadsSection?.badge).toEqual({ label: "Restore needed", variant: "warning" });
+    expect(beadsSection?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Status", value: "Restore needed" }),
+        expect.objectContaining({ label: "Health category", value: "Missing Dolt database" }),
+        expect.objectContaining({
+          label: "Beads attachment path",
+          value: "/Users/dev/.openducktor/beads/repo/.beads",
+        }),
+        expect.objectContaining({ label: "Dolt database name", value: "repo_db" }),
+        expect.objectContaining({ label: "Dolt server host", value: "127.0.0.1" }),
+        expect.objectContaining({ label: "Dolt server port", value: "36123" }),
+        expect.objectContaining({
+          label: "Dolt server ownership",
+          value: "Reusing another OpenDucktor-managed Dolt server",
+        }),
+      ]),
+    );
+    expect(beadsSection?.errors).toEqual([
+      "Shared Dolt database repo_db is missing and restore is required",
+    ]);
   });
 
   test("treats repositories using the default worktree path as healthy", () => {
@@ -234,11 +324,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -289,11 +375,14 @@ describe("buildDiagnosticsPanelModel", () => {
         ],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
+      beadsCheck: makeBeadsCheck({
         beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
-        beadsError: null,
-      },
+        repoStoreHealth: {
+          attachment: {
+            path: "/Users/dev/.openducktor/beads/fairnest/.beads",
+          },
+        },
+      }),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -348,11 +437,20 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },
-      beadsCheck: {
+      beadsCheck: makeBeadsCheck({
         beadsOk: false,
         beadsPath: null,
         beadsError: "beads init failed",
-      },
+        repoStoreHealth: {
+          category: "attachment_verification_failed",
+          status: "blocking",
+          isReady: false,
+          detail: "beads init failed",
+          attachment: {
+            path: null,
+          },
+        },
+      }),
       runtimeCheckFailureKind: "error",
       beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {
@@ -385,11 +483,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(
-      expect.arrayContaining([
-        "Runtime CLI checks failing",
-        "runtime failed",
-        "Beads store unavailable",
-      ]),
+      expect.arrayContaining(["Runtime CLI checks failing", "runtime failed", "beads init failed"]),
     );
     expect(model.sections[1]?.errors).toEqual(["opencode not found in PATH"]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
@@ -422,11 +516,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -476,11 +566,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -563,11 +649,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -652,11 +734,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -706,11 +784,20 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["Timed out after 15000ms"],
       },
-      beadsCheck: {
+      beadsCheck: makeBeadsCheck({
         beadsOk: false,
         beadsPath: null,
         beadsError: "Timed out after 15000ms",
-      },
+        repoStoreHealth: {
+          category: "attachment_verification_failed",
+          status: "blocking",
+          isReady: false,
+          detail: "Timed out after 15000ms",
+          attachment: {
+            path: null,
+          },
+        },
+      }),
       runtimeCheckFailureKind: "timeout",
       beadsCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
@@ -756,11 +843,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["Timed out after 15000ms"],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: "timeout",
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -823,11 +906,7 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: ["gh auth missing"],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {

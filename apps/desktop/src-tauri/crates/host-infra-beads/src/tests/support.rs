@@ -32,6 +32,7 @@ pub(super) struct RecordedCall {
 pub(super) struct MockCommandRunner {
     steps: Mutex<VecDeque<MockStep>>,
     calls: Mutex<Vec<RecordedCall>>,
+    uses_real_processes: bool,
 }
 
 impl MockCommandRunner {
@@ -39,6 +40,15 @@ impl MockCommandRunner {
         Arc::new(Self {
             steps: Mutex::new(VecDeque::from(steps)),
             calls: Mutex::new(Vec::new()),
+            uses_real_processes: false,
+        })
+    }
+
+    pub(super) fn with_steps_using_real_processes(steps: Vec<MockStep>) -> Arc<Self> {
+        Arc::new(Self {
+            steps: Mutex::new(VecDeque::from(steps)),
+            calls: Mutex::new(Vec::new()),
+            uses_real_processes: true,
         })
     }
 
@@ -118,7 +128,7 @@ impl Drop for MockCommandRunner {
 
 impl CommandRunner for MockCommandRunner {
     fn uses_real_processes(&self) -> bool {
-        false
+        self.uses_real_processes
     }
 
     fn run_with_env(

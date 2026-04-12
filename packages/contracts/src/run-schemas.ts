@@ -10,6 +10,59 @@ export const runtimeHealthSchema = z.object({
 });
 export type RuntimeHealth = z.infer<typeof runtimeHealthSchema>;
 
+export const repoStoreHealthCategorySchema = z.enum([
+  "initializing",
+  "healthy",
+  "missing_attachment",
+  "missing_shared_database",
+  "attachment_contract_invalid",
+  "attachment_verification_failed",
+  "shared_server_unavailable",
+]);
+export type RepoStoreHealthCategory = z.infer<typeof repoStoreHealthCategorySchema>;
+
+export const repoStoreHealthStatusSchema = z.enum([
+  "initializing",
+  "ready",
+  "degraded",
+  "blocking",
+  "restore_needed",
+]);
+export type RepoStoreHealthStatus = z.infer<typeof repoStoreHealthStatusSchema>;
+
+export const repoStoreSharedServerOwnershipStateSchema = z.enum([
+  "owned_by_current_process",
+  "reused_existing_server",
+  "adopted_orphaned_server",
+  "unavailable",
+]);
+export type RepoStoreSharedServerOwnershipState = z.infer<
+  typeof repoStoreSharedServerOwnershipStateSchema
+>;
+
+export const repoStoreAttachmentHealthSchema = z.object({
+  path: z.string().nullable(),
+  databaseName: z.string().nullable(),
+});
+export type RepoStoreAttachmentHealth = z.infer<typeof repoStoreAttachmentHealthSchema>;
+
+export const repoStoreSharedServerHealthSchema = z.object({
+  host: z.string().nullable(),
+  port: z.number().int().positive().nullable(),
+  ownershipState: repoStoreSharedServerOwnershipStateSchema,
+});
+export type RepoStoreSharedServerHealth = z.infer<typeof repoStoreSharedServerHealthSchema>;
+
+export const repoStoreHealthSchema = z.object({
+  category: repoStoreHealthCategorySchema,
+  status: repoStoreHealthStatusSchema,
+  isReady: z.boolean(),
+  detail: z.string().nullable(),
+  attachment: repoStoreAttachmentHealthSchema,
+  sharedServer: repoStoreSharedServerHealthSchema,
+});
+export type RepoStoreHealth = z.infer<typeof repoStoreHealthSchema>;
+
 export const systemCheckSchema = z.object({
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
@@ -19,6 +72,7 @@ export const systemCheckSchema = z.object({
   ghAuthLogin: z.string().nullable().default(null),
   ghAuthError: z.string().nullable().default(null),
   runtimes: z.array(runtimeHealthSchema).default([]),
+  repoStoreHealth: repoStoreHealthSchema,
   beadsOk: z.boolean(),
   beadsPath: z.string().nullable(),
   beadsError: z.string().nullable(),
@@ -40,6 +94,7 @@ export const runtimeCheckSchema = z.object({
 export type RuntimeCheck = z.infer<typeof runtimeCheckSchema>;
 
 export const beadsCheckSchema = z.object({
+  repoStoreHealth: repoStoreHealthSchema,
   beadsOk: z.boolean(),
   beadsPath: z.string().nullable(),
   beadsError: z.string().nullable(),

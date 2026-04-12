@@ -1,6 +1,90 @@
 use super::*;
+use crate::command_runner::CommandRunner;
 use crate::lifecycle::RepoReadiness;
-use host_infra_system::resolve_repo_beads_attachment_root;
+use host_domain::{
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerOwnershipState,
+};
+use host_infra_system::{
+    is_process_alive, resolve_repo_beads_attachment_root, resolve_server_state_file,
+    SharedDoltServerAcquisition, SharedDoltServerState,
+};
+use std::path::Path;
+use std::sync::{Arc, Condvar, LazyLock, Mutex};
+
+static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+#[derive(Default)]
+struct BlockingInitRunner {
+    state: (Mutex<BlockingInitState>, Condvar),
+}
+
+#[derive(Default)]
+struct BlockingInitState {
+    entered: bool,
+    released: bool,
+}
+
+impl BlockingInitRunner {
+    fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    fn wait_until_entered(&self) {
+        let (lock, condvar) = &self.state;
+        let mut state = lock.lock().expect("blocking init state poisoned");
+        while !state.entered {
+            state = condvar
+                .wait(state)
+                .expect("blocking init wait should not poison");
+        }
+    }
+
+    fn release(&self) {
+        let (lock, condvar) = &self.state;
+        let mut state = lock.lock().expect("blocking init state poisoned");
+        state.released = true;
+        condvar.notify_all();
+    }
+}
+
+impl CommandRunner for BlockingInitRunner {
+    fn uses_real_processes(&self) -> bool {
+        false
+    }
+
+    fn run_with_env(
+        &self,
+        _program: &str,
+        _args: &[&str],
+        _cwd: Option<&Path>,
+        _env: &[(&str, &str)],
+    ) -> Result<String> {
+        panic!("unexpected run_with_env call in blocking init runner");
+    }
+
+    fn run_allow_failure_with_env(
+        &self,
+        _program: &str,
+        args: &[&str],
+        _cwd: Option<&Path>,
+        _env: &[(&str, &str)],
+    ) -> Result<(bool, String, String)> {
+        assert_eq!(args.first().copied(), Some("init"));
+
+        let (lock, condvar) = &self.state;
+        let mut state = lock.lock().expect("blocking init state poisoned");
+        state.entered = true;
+        condvar.notify_all();
+
+        while !state.released {
+            state = condvar
+                .wait(state)
+                .expect("blocking init wait should not poison");
+        }
+
+        Ok((false, String::new(), "init blocked for test".to_string()))
+    }
+}
 
 #[test]
 fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()> {
@@ -57,6 +141,454 @@ fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
             reason: "database \"beads\" not found".to_string(),
         }
     );
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_reports_healthy_attachment_and_server() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-healthy");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )?;
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
+    assert_eq!(health.status, RepoStoreHealthStatus::Ready);
+    assert!(health.is_ready);
+    assert_eq!(
+        health.attachment.path.as_deref(),
+        Some(beads_dir.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        health.attachment.database_name.as_deref(),
+        Some(database_name.as_str())
+    );
+    assert_eq!(health.shared_server.host.as_deref(), Some("127.0.0.1"));
+    assert!(health.shared_server.port.is_some());
+    assert_eq!(
+        health.shared_server.ownership_state,
+        RepoStoreSharedServerOwnershipState::Unavailable
+    );
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_reports_initializing_while_repo_init_is_in_progress() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-initializing");
+    let runner = BlockingInitRunner::new();
+    let store = Arc::new(BeadsTaskStore::with_test_runner(
+        "openducktor",
+        runner.clone(),
+    ));
+    let repo_path = repo.path().to_path_buf();
+    let init_store = store.clone();
+
+    let init_handle = std::thread::spawn(move || init_store.ensure_repo_initialized(&repo_path));
+    runner.wait_until_entered();
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    runner.release();
+    let init_result = init_handle.join().expect("init thread should join");
+
+    assert!(init_result.is_err());
+    assert_eq!(health.category, RepoStoreHealthCategory::Initializing);
+    assert_eq!(health.status, RepoStoreHealthStatus::Initializing);
+    assert!(!health.is_ready);
+    assert!(health
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("initialization is in progress"));
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_does_not_report_reused_owner_for_dead_foreign_pid() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-dead-foreign-owner");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )?;
+
+    let dead_owner_pid = u32::MAX;
+    assert!(!is_process_alive(dead_owner_pid));
+
+    let state_file = resolve_server_state_file()?;
+    if let Some(parent) = state_file.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(
+        &state_file,
+        serde_json::to_string(&SharedDoltServerState {
+            pid: std::process::id(),
+            owner_pid: dead_owner_pid,
+            acquisition: SharedDoltServerAcquisition::StartedByOwner,
+            host: "127.0.0.1".to_string(),
+            user: "root".to_string(),
+            port: 3307,
+            shared_server_root: config_root.join("shared-server"),
+            dolt_data_dir: config_root.join("dolt-data"),
+            started_at: "2026-02-20T12:00:00Z".to_string(),
+        })?,
+    )?;
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
+    assert_eq!(health.status, RepoStoreHealthStatus::Ready);
+    assert!(health.is_ready);
+    assert_eq!(health.shared_server.host.as_deref(), Some("127.0.0.1"));
+    assert_eq!(health.shared_server.port, Some(3307));
+    assert_eq!(
+        health.shared_server.ownership_state,
+        RepoStoreSharedServerOwnershipState::Unavailable
+    );
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_reports_restore_needed_when_shared_database_is_missing() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-restore-needed");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )?;
+    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
+        true,
+        "| information_schema |".to_string(),
+        String::new(),
+    )))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(
+        health.category,
+        RepoStoreHealthCategory::MissingSharedDatabase
+    );
+    assert_eq!(health.status, RepoStoreHealthStatus::RestoreNeeded);
+    assert!(!health.is_ready);
+    assert_eq!(
+        health.attachment.database_name.as_deref(),
+        Some(database_name.as_str())
+    );
+    assert!(health
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("restore is required"));
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_reports_attachment_contract_mismatch() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-contract-mismatch");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3308,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )?;
+    let runner = MockCommandRunner::with_steps(vec![]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(
+        health.category,
+        RepoStoreHealthCategory::AttachmentContractInvalid
+    );
+    assert_eq!(health.status, RepoStoreHealthStatus::Blocking);
+    assert!(!health.is_ready);
+    assert!(health
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Beads attachment port is"));
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_reports_missing_attachment_when_state_and_attachment_are_missing(
+) -> Result<()> {
+    let repo = RepoFixture::new("diagnose-missing-shared-server");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+    let runner = MockCommandRunner::with_steps_using_real_processes(vec![]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(health.category, RepoStoreHealthCategory::MissingAttachment);
+    assert_eq!(health.status, RepoStoreHealthStatus::Blocking);
+    assert!(!health.is_ready);
+    assert_eq!(health.shared_server.host, None);
+    assert_eq!(health.shared_server.port, None);
+    assert!(health
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Beads attachment is missing"));
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_uses_attachment_metadata_when_shared_server_state_is_missing() -> Result<()>
+{
+    let repo = RepoFixture::new("diagnose-missing-state-uses-metadata");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )?;
+    let runner = MockCommandRunner::with_steps_using_real_processes(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
+    assert_eq!(health.status, RepoStoreHealthStatus::Ready);
+    assert!(health.is_ready);
+    assert_eq!(health.shared_server.host.as_deref(), Some("127.0.0.1"));
+    assert_eq!(health.shared_server.port, Some(3307));
+    assert_eq!(
+        health.shared_server.ownership_state,
+        RepoStoreSharedServerOwnershipState::Unavailable
+    );
+    Ok(())
+}
+
+#[test]
+fn diagnose_repo_store_rejects_wrong_database_when_shared_server_state_is_missing() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-missing-state-wrong-database");
+    let _env_lock = ENV_LOCK.lock().expect("env lock poisoned");
+    let config_root = repo.path().join("config-root");
+    let previous_config_dir = std::env::var_os("OPENDUCKTOR_CONFIG_DIR");
+    unsafe {
+        std::env::set_var("OPENDUCKTOR_CONFIG_DIR", &config_root);
+    }
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": format!("{database_name}_wrong"),
+        })
+        .to_string(),
+    )?;
+    let runner = MockCommandRunner::with_steps_using_real_processes(vec![]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    match previous_config_dir {
+        Some(value) => unsafe {
+            std::env::set_var("OPENDUCKTOR_CONFIG_DIR", value);
+        },
+        None => unsafe {
+            std::env::remove_var("OPENDUCKTOR_CONFIG_DIR");
+        },
+    }
+
+    assert_eq!(
+        health.category,
+        RepoStoreHealthCategory::AttachmentContractInvalid
+    );
+    assert_eq!(health.status, RepoStoreHealthStatus::Blocking);
+    assert!(!health.is_ready);
+    assert!(health
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Beads attachment database is"));
     Ok(())
 }
 

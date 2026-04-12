@@ -12,6 +12,7 @@ import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  createBeadsCheckFixture,
   createAgentSessionFixture,
   createDeferred,
   createTaskCardFixture,
@@ -80,11 +81,7 @@ const createHookHarness = (initialProps: HookArgs) => {
             runtimes: [],
             errors: [],
           }),
-          refreshBeadsCheckForRepo: async () => ({
-            beadsOk: true,
-            beadsPath: "/repo/.beads",
-            beadsError: null,
-          }),
+          refreshBeadsCheckForRepo: async () => createBeadsCheckFixture(),
           refreshRepoRuntimeHealthForRepo: async () => ({}),
           clearActiveBeadsCheck: () => {},
           clearActiveRepoRuntimeHealth: () => {},

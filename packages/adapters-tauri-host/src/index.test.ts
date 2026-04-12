@@ -58,6 +58,23 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
   ],
 });
 
+const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => ({
+  category: "healthy",
+  status: "ready",
+  isReady: true,
+  detail: "Beads attachment and shared Dolt server are healthy.",
+  attachment: {
+    path: "/repo/.beads",
+    databaseName: "repo_db",
+  },
+  sharedServer: {
+    host: "127.0.0.1",
+    port: 3307,
+    ownershipState: "owned_by_current_process",
+  },
+  ...overrides,
+});
+
 const createClient = (resolver: (command: string, args?: Record<string, unknown>) => unknown) => {
   const calls: InvokeCall[] = [];
   const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
@@ -117,6 +134,32 @@ describe("TauriHostClient", () => {
     client.tasksList = original;
     const rewrittenAfterReplace = await client.tasksList("/repo");
     expect(rewrittenAfterReplace).toHaveLength(1);
+  });
+
+  test("parses structured repo store diagnostics from beadsCheck", async () => {
+    const { client } = createClient((command) => {
+      if (command === "beads_check") {
+        return {
+          beadsOk: false,
+          beadsPath: "/repo/.beads",
+          beadsError: "Shared Dolt database repo_db is missing and restore is required",
+          repoStoreHealth: makeRepoStoreHealthPayload({
+            category: "missing_shared_database",
+            status: "restore_needed",
+            isReady: false,
+            detail: "Shared Dolt database repo_db is missing and restore is required",
+          }),
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const output = await client.beadsCheck("/repo");
+
+    expect(output.repoStoreHealth?.category).toBe("missing_shared_database");
+    expect(output.repoStoreHealth?.status).toBe("restore_needed");
+    expect(output.repoStoreHealth?.attachment.databaseName).toBe("repo_db");
+    expect(output.repoStoreHealth?.sharedServer.ownershipState).toBe("owned_by_current_process");
   });
 
   test("facade exposes every delegated API method", () => {

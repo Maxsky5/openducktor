@@ -34,7 +34,11 @@ pub use runtime::{
     RuntimeProvisioningMode, RuntimeRole, RuntimeRoute, RuntimeSupportedScope,
 };
 pub use store::TaskStore;
-pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
+pub use system::{
+    BeadsCheck, RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory,
+    RepoStoreHealthStatus, RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
+    RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
+};
 pub use task::{
     CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskDirectMergeResult,
     TaskStatus, UpdateTaskPatch,

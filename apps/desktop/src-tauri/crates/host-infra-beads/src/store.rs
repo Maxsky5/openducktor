@@ -86,6 +86,10 @@ impl BeadsTaskStore {
 }
 
 impl TaskStore for BeadsTaskStore {
+    fn diagnose_repo_store(&self, repo_path: &Path) -> Result<host_domain::RepoStoreHealth> {
+        self.lifecycle.diagnose_repo_store(repo_path)
+    }
+
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {
         self.ensure_repo_initialized_impl(repo_path)
     }

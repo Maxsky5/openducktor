@@ -48,8 +48,4 @@ impl AppService {
 
         Ok(repo_key)
     }
-
-    pub(super) fn ensure_repo_initialized(&self, repo_path: &str) -> Result<()> {
-        self.resolve_initialized_repo_path(repo_path).map(|_| ())
-    }
 }

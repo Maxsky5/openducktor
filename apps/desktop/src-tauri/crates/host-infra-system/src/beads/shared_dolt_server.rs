@@ -35,10 +35,23 @@ const SHARED_DOLT_HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const SHARED_DOLT_TCP_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedDoltServerAcquisition {
+    StartedByOwner,
+    AdoptedOrphanedServer,
+}
+
+fn default_shared_dolt_server_acquisition() -> SharedDoltServerAcquisition {
+    SharedDoltServerAcquisition::StartedByOwner
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedDoltServerState {
     pub pid: u32,
     pub owner_pid: u32,
+    #[serde(default = "default_shared_dolt_server_acquisition")]
+    pub acquisition: SharedDoltServerAcquisition,
     pub host: String,
     pub user: String,
     pub port: u16,
@@ -74,6 +87,7 @@ pub fn ensure_shared_dolt_server_running(owner_pid: u32) -> Result<SharedDoltSer
             if existing.owner_pid != owner_pid && !is_process_alive(existing.owner_pid) {
                 let adopted = SharedDoltServerState {
                     owner_pid,
+                    acquisition: SharedDoltServerAcquisition::AdoptedOrphanedServer,
                     ..existing.clone()
                 };
                 write_server_state(&state_file, &adopted)?;
@@ -448,6 +462,7 @@ fn spawn_shared_dolt_server(
         return Ok(SharedDoltServerState {
             pid: child.id(),
             owner_pid,
+            acquisition: SharedDoltServerAcquisition::StartedByOwner,
             host: SHARED_DOLT_SERVER_HOST.to_string(),
             user: SHARED_DOLT_SERVER_USER.to_string(),
             port,
@@ -627,7 +642,7 @@ fn wait_for_process_exit(pid: u32, timeout: Duration) -> bool {
     !is_process_alive(pid)
 }
 
-pub(crate) fn is_process_alive(pid: u32) -> bool {
+pub fn is_process_alive(pid: u32) -> bool {
     let mut system = System::new_all();
     system.refresh_processes(ProcessesToUpdate::All, true);
     system.process(Pid::from_u32(pid)).is_some()

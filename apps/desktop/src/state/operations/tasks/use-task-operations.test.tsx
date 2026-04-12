@@ -8,6 +8,10 @@ import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  createBeadsCheckFixture as createSharedBeadsCheckFixture,
+  type BeadsCheckFixtureOverrides,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
@@ -98,6 +102,9 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   isLoadingModelCatalog: false,
   ...overrides,
 });
+
+const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
+  createSharedBeadsCheckFixture({}, overrides);
 
 type HookArgs = Parameters<typeof useTaskOperations>[0];
 
@@ -260,11 +267,7 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
 
   const harness = createTaskAndKanbanHarness({
     activeRepo: "/repo",
-    refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-      beadsOk: true,
-      beadsPath: "/repo/.beads",
-      beadsError: null,
-    }),
+    refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
   });
 
   try {
@@ -393,11 +396,18 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> =>
+        makeBeadsCheck({
+          beadsOk: false,
+          beadsPath: null,
+          beadsError: "missing store",
+          repoStoreHealth: {
+            category: "attachment_verification_failed",
+            status: "blocking",
+            isReady: false,
+            detail: "missing store",
+          },
+        }),
     });
 
     try {
@@ -436,11 +446,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -486,11 +492,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -528,11 +530,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -610,11 +608,7 @@ describe("use-task-operations", () => {
       {
         args: {
           activeRepo: "/repo",
-          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-            beadsOk: true,
-            beadsPath: "/repo/.beads",
-            beadsError: null,
-          }),
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
       { wrapper },
@@ -690,11 +684,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -727,11 +717,7 @@ describe("use-task-operations", () => {
     host.tasksList = tasksList;
     host.runsList = runsList;
 
-    const refreshBeadsCheckForRepo = async (): Promise<BeadsCheck> => ({
-      beadsOk: true,
-      beadsPath: "/repo-a/.beads",
-      beadsError: null,
-    });
+    const refreshBeadsCheckForRepo = async (): Promise<BeadsCheck> => makeBeadsCheck();
     const harness = createHookHarness({
       activeRepo: "/repo-a",
       refreshBeadsCheckForRepo,
@@ -808,11 +794,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -840,6 +822,71 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("refreshTasks refreshes Beads diagnostics again after successful task loading", async () => {
+    const repoPullRequestSync = mock(async () => ({ ok: true }));
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const refreshBeadsCheckForRepo = mock(
+      async (_repoPath: string, force = false): Promise<BeadsCheck> =>
+        force
+          ? makeBeadsCheck({ beadsPath: null })
+          : makeBeadsCheck({
+              beadsOk: false,
+              beadsPath: "/repo/.beads",
+              beadsError:
+                "error on line 1 for query show databases: dial tcp 127.0.0.1:38240: connect: connection refused",
+              repoStoreHealth: {
+                category: "shared_server_unavailable",
+                status: "blocking",
+                isReady: false,
+                detail:
+                  "error on line 1 for query show databases: dial tcp 127.0.0.1:38240: connect: connection refused",
+                attachment: {
+                  path: "/repo/.beads",
+                  databaseName: "repo_db",
+                },
+                sharedServer: {
+                  host: "127.0.0.1",
+                  port: 38240,
+                  ownershipState: "unavailable",
+                },
+              },
+            }),
+    );
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      refreshBeadsCheckForRepo.mockClear();
+
+      await harness.run(async (value) => {
+        await value.refreshTasks();
+      });
+
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(1, "/repo", false);
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(2, "/repo", true);
+    } finally {
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
   test("scheduled and manual refresh join the same in-flight repo sync", async () => {
     const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
     const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
@@ -857,11 +904,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -929,11 +972,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -983,6 +1022,79 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("refreshTasks prefers structured repo-store messaging when diagnostics report a blocking store state", async () => {
+    const repoPullRequestSync = mock(async () => {
+      throw new Error("gh auth expired");
+    });
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    const consoleWarn = mock(() => {});
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+      toastError: toast.error,
+      consoleWarn: console.warn,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    console.warn = consoleWarn as unknown as typeof console.warn;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> =>
+        makeBeadsCheck({
+          beadsOk: false,
+          beadsPath: "/repo/.beads",
+          beadsError: "Shared Dolt database repo_db is missing and restore is required",
+          repoStoreHealth: {
+            category: "missing_shared_database",
+            status: "restore_needed",
+            isReady: false,
+            detail: "Shared Dolt database repo_db is missing and restore is required",
+            attachment: {
+              path: "/repo/.beads",
+              databaseName: "repo_db",
+            },
+          },
+        }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.id === "A");
+      toastError.mockClear();
+      consoleWarn.mockClear();
+
+      await harness.run(async (value) => {
+        await value.refreshTasks();
+      });
+
+      expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
+        description:
+          "Task store unavailable. Shared Dolt database repo_db is missing and restore is required Reopen the repository so OpenDucktor can restore the shared database from the attachment backup.",
+      });
+      expect(consoleWarn).toHaveBeenCalledWith(TASK_REFRESH_WARNING, {
+        repoPath: "/repo",
+        trigger: "manual",
+        description:
+          "Task store unavailable. Shared Dolt database repo_db is missing and restore is required Reopen the repository so OpenDucktor can restore the shared database from the attachment backup.",
+        error: "gh auth expired",
+      });
+    } finally {
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.error = original.toastError;
+      console.warn = original.consoleWarn;
+    }
+  });
+
   test("an earlier manual refresh cannot clear a later repo refresh loading state", async () => {
     const repoARefreshDeferred = createDeferred<{ ok: boolean }>();
     const repoBRefreshDeferred = createDeferred<{ ok: boolean }>();
@@ -1017,11 +1129,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo-a/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -1036,11 +1144,7 @@ describe("use-task-operations", () => {
 
       await harness.updateArgs({
         activeRepo: "/repo-b",
-        refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-          beadsOk: true,
-          beadsPath: "/repo-b/.beads",
-          beadsError: null,
-        }),
+        refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
       });
       await harness.waitFor((value) => value.tasks[0]?.id === "B");
       await harness.waitFor((value) => !value.isLoadingTasks);
@@ -1094,11 +1198,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -1179,11 +1279,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -1243,11 +1339,7 @@ describe("use-task-operations", () => {
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -1324,11 +1416,7 @@ describe("use-task-operations", () => {
       {
         args: {
           activeRepo: "/repo",
-          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-            beadsOk: true,
-            beadsPath: "/repo/.beads",
-            beadsError: null,
-          }),
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
       { wrapper },
@@ -1445,11 +1533,7 @@ describe("use-task-operations", () => {
       {
         args: {
           activeRepo: "/repo",
-          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-            beadsOk: true,
-            beadsPath: "/repo/.beads",
-            beadsError: null,
-          }),
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
       { wrapper },
@@ -1543,11 +1627,7 @@ describe("use-task-operations", () => {
       {
         args: {
           activeRepo: "/repo",
-          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-            beadsOk: true,
-            beadsPath: "/repo/.beads",
-            beadsError: null,
-          }),
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
       { wrapper },
@@ -1619,11 +1699,7 @@ describe("use-task-operations", () => {
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1778,11 +1854,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -1840,11 +1912,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -1930,11 +1998,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2008,11 +2072,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2092,11 +2152,7 @@ describe("use-task-operations", () => {
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2162,11 +2218,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2209,11 +2261,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2261,11 +2309,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2303,11 +2347,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: null,
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2348,11 +2388,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2400,11 +2436,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2446,11 +2478,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2502,11 +2530,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     const input: TaskCreateInput = {
@@ -2563,11 +2587,7 @@ describe("use-task-operations", () => {
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     const input: TaskCreateInput = {
@@ -2636,11 +2656,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
@@ -2679,11 +2695,7 @@ describe("use-task-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
-        beadsOk: false,
-        beadsPath: null,
-        beadsError: "missing store",
-      }),
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
     });
 
     try {
