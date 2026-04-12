@@ -13,7 +13,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::command_runner::{CommandRunner, ProcessCommandRunner};
-use crate::constants::{DEFAULT_METADATA_NAMESPACE, TASK_LIST_CACHE_TTL_MS};
+use crate::constants::{
+    DEFAULT_METADATA_NAMESPACE, PULL_REQUEST_SYNC_CANDIDATE_CACHE_TTL_MS, TASK_LIST_CACHE_TTL_MS,
+};
 use crate::lifecycle::BeadsLifecycle;
 use crate::metadata::{metadata_namespace, parse_agent_sessions, parse_metadata_root};
 use crate::model::{MarkdownEntry, QaEntry, RawIssue};

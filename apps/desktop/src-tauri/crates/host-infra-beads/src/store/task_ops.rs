@@ -49,6 +49,24 @@ impl BeadsTaskStore {
         }
     }
 
+    fn list_tasks_from_source_impl(
+        &self,
+        repo_path: &Path,
+        metadata_namespace: &str,
+        repo_key: &str,
+    ) -> Result<Vec<TaskCard>> {
+        let (_, cache_generation) =
+            self.cached_task_list_and_generation(repo_key, metadata_namespace)?;
+        let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
+
+        let mut tasks = Vec::new();
+        let mut seen_task_ids = HashSet::new();
+        self.append_raw_issue_list(value, metadata_namespace, &mut seen_task_ids, &mut tasks)?;
+        Self::finalize_task_cards(&mut tasks);
+        self.cache_task_list_if_generation(repo_key, metadata_namespace, cache_generation, &tasks)?;
+        Ok(tasks)
+    }
+
     pub(super) fn ensure_repo_initialized_impl(&self, repo_path: &Path) -> Result<()> {
         self.lifecycle.ensure_repo_initialized(repo_path)
     }
@@ -56,25 +74,13 @@ impl BeadsTaskStore {
     pub(super) fn list_tasks_impl(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
         let metadata_namespace = self.current_metadata_namespace();
         let repo_key = Self::repo_key(repo_path);
-        let (cached_tasks, cache_generation) =
+        let (cached_tasks, _) =
             self.cached_task_list_and_generation(&repo_key, &metadata_namespace)?;
         if let Some(tasks) = cached_tasks {
             return Ok(tasks);
         }
 
-        let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
-
-        let mut tasks = Vec::new();
-        let mut seen_task_ids = HashSet::new();
-        self.append_raw_issue_list(value, &metadata_namespace, &mut seen_task_ids, &mut tasks)?;
-        Self::finalize_task_cards(&mut tasks);
-
-        self.cache_task_list_if_generation(
-            &repo_key,
-            &metadata_namespace,
-            cache_generation,
-            &tasks,
-        )?;
+        let tasks = self.list_tasks_from_source_impl(repo_path, &metadata_namespace, &repo_key)?;
         Ok(tasks)
     }
 
@@ -91,7 +97,7 @@ impl BeadsTaskStore {
         }
 
         let tasks = self
-            .list_tasks_impl(repo_path)?
+            .list_tasks_from_source_impl(repo_path, &metadata_namespace, &repo_key)?
             .into_iter()
             .filter(Self::is_pull_request_sync_candidate)
             .collect::<Vec<_>>();
@@ -328,7 +334,11 @@ impl BeadsTaskStore {
 
         self.run_bd(repo_path, &args)?;
         self.invalidate_task_list_cache(repo_path)?;
-        self.remove_cached_pull_request_sync_candidate(repo_path, task_id)?;
+        if delete_subtasks {
+            self.clear_cached_pull_request_sync_candidates(repo_path)?;
+        } else {
+            self.remove_cached_pull_request_sync_candidate(repo_path, task_id)?;
+        }
         Ok(true)
     }
 }

@@ -163,7 +163,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -218,7 +217,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData: mock(async () => {}),
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -260,7 +258,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -314,7 +311,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData: mock(async () => {}),
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -356,7 +352,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo-a/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -405,7 +400,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -466,7 +460,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -517,7 +510,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -565,7 +557,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -660,7 +651,6 @@ describe("useAppLifecycle", () => {
         makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
       ),
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
     };
 
@@ -719,7 +709,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -769,7 +758,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -830,7 +818,6 @@ describe("useAppLifecycle", () => {
           makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
         ),
         refreshTaskData,
-        refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
       } satisfies HookArgs,
     });
@@ -886,7 +873,6 @@ describe("useAppLifecycle", () => {
         makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
       ),
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
     };
 
@@ -953,7 +939,6 @@ describe("useAppLifecycle", () => {
         makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
       ),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
     };
 
@@ -1024,7 +1009,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -1219,7 +1203,6 @@ describe("useAppLifecycle", () => {
         makeBeadsCheck({ beadsOk: true, beadsPath: null, beadsError: null }),
       ),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -1276,7 +1259,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 15,
     };
@@ -1338,7 +1320,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };

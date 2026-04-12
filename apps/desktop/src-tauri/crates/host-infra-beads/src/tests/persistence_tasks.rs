@@ -1,5 +1,23 @@
 use super::*;
 
+fn pull_request_metadata(state: &str, number: u32) -> Value {
+    json!({
+        "openducktor": {
+            "pullRequest": {
+                "providerId": "github",
+                "number": number,
+                "url": format!("https://github.com/example/repo/pull/{number}"),
+                "state": state,
+                "createdAt": "2026-02-20T11:00:00Z",
+                "updatedAt": "2026-02-20T12:00:00Z",
+                "lastSyncedAt": null,
+                "mergedAt": null,
+                "closedAt": null
+            }
+        }
+    })
+}
+
 #[test]
 fn get_task_uses_id_flag_when_loading_issue() -> Result<()> {
     let repo = RepoFixture::new("show-with-id-flag");
@@ -996,5 +1014,92 @@ fn delete_task_forwards_cascade_flag() -> Result<()> {
     assert!(calls[0].args.iter().any(|entry| entry == "--cascade"));
     assert!(calls[0].args.iter().any(|entry| entry == "--"));
     assert_eq!(calls[0].args.last().map(String::as_str), Some("task-1"));
+    Ok(())
+}
+
+#[test]
+fn stale_pull_request_sync_candidate_cache_is_reseeded_after_ttl() -> Result<()> {
+    let repo = RepoFixture::new("pr-sync-candidate-cache-ttl");
+    let initial = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let refreshed = json!([issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(pull_request_metadata("open", 12)),
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial.to_string())),
+        MockStep::WithEnv(Ok(refreshed.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let first = store.list_pull_request_sync_candidates(repo.path())?;
+    assert!(first.is_empty());
+
+    let cached = store.list_pull_request_sync_candidates(repo.path())?;
+    assert!(cached.is_empty());
+
+    std::thread::sleep(Duration::from_millis(
+        PULL_REQUEST_SYNC_CANDIDATE_CACHE_TTL_MS + 50,
+    ));
+
+    let refreshed_candidates = store.list_pull_request_sync_candidates(repo.path())?;
+    assert_eq!(refreshed_candidates.len(), 1);
+    assert_eq!(refreshed_candidates[0].id, "task-1");
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
+fn cascade_delete_clears_pull_request_sync_candidate_cache() -> Result<()> {
+    let repo = RepoFixture::new("pr-sync-candidate-cache-cascade-delete");
+    let initial = json!([
+        issue_value(
+            "task-1",
+            "open",
+            "task",
+            None,
+            json!([]),
+            Some(pull_request_metadata("open", 12)),
+        ),
+        issue_value(
+            "task-2",
+            "open",
+            "task",
+            Some("task-1"),
+            json!([]),
+            Some(pull_request_metadata("draft", 13)),
+        ),
+    ]);
+    let refreshed = json!([]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial.to_string())),
+        MockStep::WithEnv(Ok("done".to_string())),
+        MockStep::WithEnv(Ok(refreshed.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let candidates = store.list_pull_request_sync_candidates(repo.path())?;
+    assert_eq!(candidates.len(), 2);
+
+    assert!(store.delete_task(repo.path(), "task-1", true)?);
+
+    let refreshed_candidates = store.list_pull_request_sync_candidates(repo.path())?;
+    assert!(refreshed_candidates.is_empty());
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.first().map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
     Ok(())
 }

@@ -15,7 +15,9 @@ pub use store::BeadsTaskStore;
 #[cfg(test)]
 use command_runner::{CommandRunner, ProcessCommandRunner};
 #[cfg(test)]
-use constants::{CUSTOM_STATUS_VALUES, TASK_LIST_CACHE_TTL_MS};
+use constants::{
+    CUSTOM_STATUS_VALUES, PULL_REQUEST_SYNC_CANDIDATE_CACHE_TTL_MS, TASK_LIST_CACHE_TTL_MS,
+};
 #[cfg(test)]
 use document_storage::{
     encode_markdown_for_storage, next_document_revision, parse_markdown_entries, parse_qa_entries,

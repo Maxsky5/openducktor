@@ -11,7 +11,6 @@ import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/const
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
-import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { prependRunEvent } from "./app-lifecycle-model";
 
@@ -48,7 +47,6 @@ type UseAppLifecycleArgs = {
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  refreshTasksWithOptions?: (options?: TaskRefreshOptions) => Promise<void>;
   clearBranchData: () => void;
   beadsPreparationToastDelayMs?: number;
 };
