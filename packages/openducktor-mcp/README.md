@@ -106,6 +106,10 @@ Optional filters:
     "issueType": "task",
     "aiReviewEnabled": true,
     "labels": ["docs"],
+    "targetBranch": {
+      "remote": "origin",
+      "branch": "main"
+    },
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
     "qaVerdict": "not_reviewed",
@@ -118,7 +122,7 @@ Optional filters:
 }
 ```
 
-Use `odt_read_task` first to discover the task summary object, including task state, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
+Use `odt_read_task` first to discover the task summary object, including task state, optional `targetBranch`, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
 
 Use `odt_read_task_documents` only when you need document bodies:
 

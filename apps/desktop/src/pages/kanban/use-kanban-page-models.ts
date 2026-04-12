@@ -44,7 +44,7 @@ export function useKanbanPageModels({
   onOpenDetails,
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const { activeRepo, branches, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
   const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
   const {
     bootstrapTaskSessions,
@@ -74,6 +74,7 @@ export function useKanbanPageModels({
     resumeDeferredTask,
     humanApproveTask,
     humanRequestChangesTask,
+    setTaskTargetBranch,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
   const reportedKanbanTasksErrorRef = useRef<string | null>(null);
@@ -129,6 +130,7 @@ export function useKanbanPageModels({
 
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeRepo,
+    branches,
     repoSettings,
     tasks: kanbanTasks,
     sessions,
@@ -138,6 +140,7 @@ export function useKanbanPageModels({
     hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
+    setTaskTargetBranch,
     startAgentSession,
     sendAgentMessage,
   });

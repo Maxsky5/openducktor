@@ -177,8 +177,9 @@ describe("buildAgentSystemPrompt", () => {
     expectPromptToContainAll(prompt, [
       "Scenario: Pull request generation.",
       "current Builder session or a fork created from it",
-      "Use the runtime's native git and GitHub tools to inspect branch state",
-      'call odt_set_pull_request exactly once with taskId task-42, providerId "github", and the pull request number.',
+      "Use the runtime's native git and provider-native pull-request tools to inspect source-branch state",
+      "authoritative pull-request base branch",
+      "call odt_set_pull_request exactly once with taskId task-42, the tool's required providerId, and the pull request number.",
     ]);
     expect(prompt).not.toContain("forked Builder worktree");
   });
@@ -368,13 +369,31 @@ describe("kickoff and permission prompts", () => {
       task: {
         taskId: "task-1",
       },
+      git: {
+        targetBranch: "origin/release/2026.04",
+      },
     });
 
     expectPromptToContainAll(prompt, [
       "Focus only on pull request publication work for the current Builder session or fork.",
-      'call odt_set_pull_request with taskId task-1, providerId "github", and the pull request number.',
+      "targetBranch: origin/release/2026.04",
+      "Treat the targetBranch above as the pull-request base branch",
+      "provider-native tooling available in this runtime",
+      "call odt_set_pull_request with taskId task-1, the tool's required providerId, and the pull request number.",
     ]);
     expect(prompt).not.toContain("Builder fork");
+  });
+
+  test("rejects pull request generation kickoff when target branch context is missing", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "build",
+        scenario: "build_pull_request_generation",
+        task: {
+          taskId: "task-1",
+        },
+      }),
+    ).toThrow('Missing required git context for "build_pull_request_generation": targetBranch.');
   });
 
   test("allows enabled empty kickoff override templates", () => {

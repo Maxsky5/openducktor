@@ -1,4 +1,4 @@
-import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
+import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
@@ -47,10 +47,17 @@ export function useAgentStudioBuildToolsReadModel({
     gitPanelContextMode === "repository"
       ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
       : null;
+  const taskTargetBranchError =
+    gitPanelContextMode === "worktree" ? (viewSelectedTask?.targetBranchError ?? null) : null;
+  const taskTargetBranchState = resolveTaskTargetBranchState({
+    taskTargetBranch: viewSelectedTask?.targetBranch,
+    taskTargetBranchError,
+    defaultTargetBranch: repoSettings?.defaultTargetBranch,
+  });
   const diffComparisonTarget =
     gitPanelContextMode === "repository"
       ? { branch: UPSTREAM_TARGET_BRANCH }
-      : (repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
+      : taskTargetBranchState.effectiveTargetBranch;
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
     activeRepo,
     viewRole,
@@ -67,6 +74,9 @@ export function useAgentStudioBuildToolsReadModel({
     sessionRunId: buildToolsBootstrap.sessionRunId,
     runCompletionRecoverySignal,
     defaultTargetBranch: diffComparisonTarget,
+    ...(taskTargetBranchState.validationError
+      ? { preconditionError: taskTargetBranchState.validationError }
+      : {}),
     branchIdentityKey: repositoryBranchIdentityKey,
     enablePolling: buildToolsBootstrap.shouldEnableEventPolling,
   });

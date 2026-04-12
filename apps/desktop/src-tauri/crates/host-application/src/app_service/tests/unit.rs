@@ -100,6 +100,7 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             metadata_get_calls: Vec::new(),
             metadata_spec: None,
             metadata_plan: None,
+            metadata_target_branch: None,
             qa_append_calls: Vec::new(),
             qa_outcome_calls: Vec::new(),
             latest_qa_report: None,
@@ -230,6 +231,7 @@ fn only_epics_can_have_subtasks_and_depth_is_one_level() {
         labels: None,
         assignee: None,
         parent_id: Some(epic.id.clone()),
+        target_branch: None,
     };
     assert!(validate_parent_relationships_for_update(&tasks, &non_epic_parent, &patch).is_ok());
 }

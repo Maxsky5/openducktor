@@ -1,3 +1,4 @@
+import type { GitTargetBranch } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentRole,
@@ -18,6 +19,8 @@ export type SessionStartModalIntent = {
   existingSessionOptions?: SessionStartExistingSessionOption[];
   initialSourceSessionId?: string | null;
   targetWorkingDirectory?: string | null;
+  initialTargetBranch?: GitTargetBranch | null;
+  initialTargetBranchError?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
   selectedModel?: AgentModelSelection | null;

@@ -1,6 +1,7 @@
 import type {
   AgentSessionRecord,
   BuildContinuationTarget,
+  GitTargetBranch,
   RepoPromptOverrides,
   TaskCard,
 } from "@openducktor/contracts";
@@ -83,6 +84,7 @@ export type TaskDependencies = {
 
 export type ModelDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadRepoDefaultTargetBranch?: (repoPath: string) => Promise<GitTargetBranch | null>;
 };
 
 export type RepoDependencies = {

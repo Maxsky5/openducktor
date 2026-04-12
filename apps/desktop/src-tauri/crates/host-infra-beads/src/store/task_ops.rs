@@ -277,6 +277,16 @@ impl BeadsTaskStore {
             self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         }
 
+        if let Some(target_branch) = patch.target_branch {
+            let (mut root, namespace_key, mut namespace_map) =
+                self.load_namespace(repo_path, task_id)?;
+            namespace_map.insert(
+                "targetBranch".to_string(),
+                serde_json::to_value(target_branch)?,
+            );
+            self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        }
+
         self.show_task(repo_path, task_id)
     }
 

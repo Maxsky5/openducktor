@@ -60,6 +60,7 @@ fn task_update_rejects_unauthorized_repo_before_status_validation() {
                 labels: None,
                 assignee: None,
                 parent_id: None,
+                target_branch: None,
             },
         )
         .expect_err("unconfigured repo path should be rejected before patch validation");

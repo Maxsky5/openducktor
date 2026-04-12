@@ -299,6 +299,38 @@ describe("AgentStudioGitPanel", () => {
     mock.module("@/components/layout/theme-provider", () => ({
       useTheme: () => ({ theme: "light", setTheme: () => {} }),
     }));
+    mock.module("@/components/features/repository/branch-selector", () => ({
+      BranchSelector: ({
+        value,
+        options,
+        onValueChange,
+        disabled,
+        className,
+        popoverClassName,
+      }: {
+        value: string;
+        options: { value: string; label: string }[];
+        onValueChange: (value: string) => void;
+        disabled?: boolean;
+        className?: string;
+        popoverClassName?: string;
+      }) =>
+        createElement(
+          "button",
+          {
+            type: "button",
+            disabled,
+            className,
+            "data-testid": "mock-branch-selector",
+            "data-popover-class": popoverClassName,
+            onClick: () => {
+              const fallback = options.find((option) => option.value !== value)?.value ?? value;
+              onValueChange(fallback);
+            },
+          },
+          value,
+        ),
+    }));
     mock.module("@pierre/diffs/react", () => ({
       FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
       Virtualizer: ({ children }: { children: React.ReactNode }) =>
@@ -313,6 +345,10 @@ describe("AgentStudioGitPanel", () => {
       ["@/components/ui/tooltip", () => import("@/components/ui/tooltip")],
       ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
       ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
+      [
+        "@/components/features/repository/branch-selector",
+        () => import("@/components/features/repository/branch-selector"),
+      ],
       ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
     ]);
   });
@@ -363,6 +399,101 @@ describe("AgentStudioGitPanel", () => {
 
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows an invalid task target branch banner without falling back to a repo target label", async () => {
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            targetBranch: "Invalid task target branch",
+            error:
+              "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+            isGitActionsLocked: true,
+            gitActionsLockReason:
+              "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+            showLockReasonBanner: true,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(findByTestId(root, "agent-studio-git-target-branch").children.join("")).toContain(
+      "Invalid task target branch",
+    );
+    expect(hasVisibleText(root, "Invalid openducktor.targetBranch metadata")).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("enters target branch edit mode and saves the selected branch", async () => {
+    const updateTargetBranch = mock(async () => undefined);
+    let renderer: RenderResult | null = null;
+
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            targetBranchOptions: [
+              {
+                value: "refs/remotes/origin/main",
+                label: "origin/main",
+              },
+              {
+                value: "refs/remotes/origin/beta",
+                label: "origin/beta",
+              },
+            ],
+            targetBranchSelectionValue: "refs/remotes/origin/main",
+            onUpdateTargetBranch: updateTargetBranch,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    let root = getRoot(renderer);
+    expect(
+      findByTestId(root, "agent-studio-git-current-branch-display-row").props.className,
+    ).toContain("h-7");
+    expect(
+      findByTestId(root, "agent-studio-git-target-branch-display-row").props.className,
+    ).toContain("h-7");
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-target-branch-edit").props.onClick();
+      await flush();
+    });
+
+    root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-target-branch-editor")).toBe(1);
+    expect(countByTestId(root, "agent-studio-git-target-branch-save")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-target-branch-cancel")).toBe(1);
+    expect(findByTestId(root, "agent-studio-git-target-branch-editor").props.className).toContain(
+      "h-7",
+    );
+    expect(
+      findByTestId(root, "mock-branch-selector").element.getAttribute("data-popover-class"),
+    ).toBe("w-[min(28rem,calc(100vw-2rem))] p-0");
+
+    await act(async () => {
+      findByTestId(root, "mock-branch-selector").props.onClick();
+      await flush();
+    });
+
+    expect(updateTargetBranch).toHaveBeenCalledWith("refs/remotes/origin/beta");
+    root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-target-branch-editor")).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

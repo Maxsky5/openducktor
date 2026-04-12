@@ -87,6 +87,7 @@ pub(crate) struct TaskUpdatePayload {
     labels: Option<Vec<String>>,
     assignee: Option<String>,
     parent_id: Option<String>,
+    target_branch: Option<host_domain::GitTargetBranch>,
 }
 
 #[derive(Debug, Deserialize)]

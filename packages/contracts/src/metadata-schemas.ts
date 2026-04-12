@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { directMergeRecordSchema, pullRequestSchema } from "./git-schemas";
+import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
 export const taskMetadataDocumentSchema = z.object({
@@ -51,6 +51,10 @@ export const taskMetadataPayloadSchema = z.preprocess(
   z.object({
     spec: taskMetadataDocumentSchema,
     plan: taskMetadataDocumentSchema,
+    targetBranch: z.preprocess(
+      (value) => (value === null ? undefined : value),
+      gitTargetBranchSchema.optional(),
+    ),
     qaReport: z.preprocess(
       (value) => (value === null ? undefined : value),
       taskMetadataQaReportSchema.optional(),

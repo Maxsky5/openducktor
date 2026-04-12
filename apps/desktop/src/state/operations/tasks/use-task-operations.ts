@@ -1,5 +1,6 @@
 import type {
   BeadsCheck,
+  GitTargetBranch,
   PullRequest,
   RepoStoreHealth,
   RunSummary,
@@ -52,6 +53,7 @@ type UseTaskOperationsResult = {
   unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
@@ -441,6 +443,20 @@ export function useTaskOperations({
     [runTaskMutation],
   );
 
+  const setTaskTargetBranch = useCallback(
+    async (taskId: string, targetBranch: GitTargetBranch): Promise<void> => {
+      await runTaskMutation({
+        refreshStrategy: { kind: "task", taskId },
+        run: async (repoPath) => {
+          await host.taskUpdate(repoPath, taskId, { targetBranch });
+        },
+        successDescription: taskId,
+        failureTitle: "Failed to update task target branch",
+      });
+    },
+    [runTaskMutation],
+  );
+
   const deleteTask = useCallback(
     async (taskId: string, deleteSubtasks = false): Promise<void> => {
       const taskIdsToRemove = collectTaskDeletionIds(
@@ -656,6 +672,7 @@ export function useTaskOperations({
     unlinkPullRequest,
     createTask,
     updateTask,
+    setTaskTargetBranch,
     deleteTask,
     resetTaskImplementation,
     resetTask,

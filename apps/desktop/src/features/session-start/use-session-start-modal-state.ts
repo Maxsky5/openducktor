@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { GitBranch, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -13,8 +13,14 @@ import {
 } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import {
+  canonicalTargetBranch,
+  effectiveTaskTargetBranch,
+  targetBranchSelectionValue,
+} from "@/lib/target-branch";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { orderStartModesForDisplay } from "./session-start-display";
 import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
 import { useSessionStartModalRuntimeState } from "./session-start-modal-runtime-state";
@@ -31,6 +37,7 @@ export type {
 
 type UseSessionStartModalStateArgs = {
   activeRepo: string | null;
+  branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   runtimeDefinitions: RuntimeDescriptor[];
   initialCatalog?: AgentModelCatalog | null;
@@ -54,18 +61,35 @@ type UseSessionStartModalStateResult = {
   selectedStartMode: AgentSessionStartMode;
   existingSessionOptions: SessionStartExistingSessionOption[];
   selectedSourceSessionId: string;
+  showTargetBranchSelector: boolean;
+  targetBranchOptions: ComboboxOption[];
+  selectedTargetBranch: string;
   openStartModal: (nextIntent: SessionStartModalIntent) => void;
   closeStartModal: () => void;
   handleSelectStartMode: (startMode: AgentSessionStartMode) => void;
   handleSelectSourceSession: (sessionId: string) => void;
+  handleSelectTargetBranch: (branch: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
 
+const supportsTaskTargetBranchSelection = (intent: SessionStartModalIntent | null): boolean => {
+  if (!intent || intent.role !== "build") {
+    return false;
+  }
+
+  return (
+    intent.scenario === "build_implementation_start" ||
+    intent.scenario === "build_after_qa_rejected" ||
+    intent.scenario === "build_after_human_request_changes"
+  );
+};
+
 export function useSessionStartModalState({
   activeRepo,
+  branches = [],
   repoSettings,
   runtimeDefinitions,
   initialCatalog,
@@ -75,6 +99,7 @@ export function useSessionStartModalState({
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
+  const [selectedTargetBranch, setSelectedTargetBranch] = useState("");
   const activeRole = intent?.role ?? null;
   const {
     catalog,
@@ -125,6 +150,7 @@ export function useSessionStartModalState({
 
   const closeStartModal = useCallback(() => {
     setIntent(null);
+    setSelectedTargetBranch("");
     resetSelection();
     resetStartState();
   }, [resetSelection, resetStartState]);
@@ -141,6 +167,14 @@ export function useSessionStartModalState({
       });
       setRequestedRuntimeKind(initialRuntimeKind);
       setIntent(nextIntent);
+      setSelectedTargetBranch(
+        targetBranchSelectionValue(
+          effectiveTaskTargetBranch(
+            nextIntent.initialTargetBranch,
+            repoSettings?.defaultTargetBranch,
+          ),
+        ),
+      );
       initializeStartState(nextIntent);
       initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
     },
@@ -239,6 +273,34 @@ export function useSessionStartModalState({
     return orderStartModesForDisplay(availableStartModes);
   }, [availableStartModes]);
 
+  const showTargetBranchSelector = supportsTaskTargetBranchSelection(intent);
+  const targetBranchOptions = useMemo<ComboboxOption[]>(() => {
+    const effectiveTargetBranch = effectiveTaskTargetBranch(
+      intent?.initialTargetBranch,
+      repoSettings?.defaultTargetBranch,
+    );
+    const configuredTargetBranch = canonicalTargetBranch(effectiveTargetBranch);
+    const configuredTargetBranchValue = targetBranchSelectionValue(effectiveTargetBranch);
+
+    return toBranchSelectorOptions(branches, {
+      valueFormat: "full_ref",
+      includeOptions: configuredTargetBranch
+        ? [
+            {
+              value: configuredTargetBranchValue,
+              label: configuredTargetBranch,
+              secondaryLabel: "configured",
+              searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
+            },
+          ]
+        : [],
+    });
+  }, [branches, intent?.initialTargetBranch, repoSettings?.defaultTargetBranch]);
+
+  const handleSelectTargetBranch = useCallback((branch: string) => {
+    setSelectedTargetBranch(branch);
+  }, []);
+
   return {
     intent,
     isOpen: intent !== null,
@@ -256,10 +318,14 @@ export function useSessionStartModalState({
     selectedStartMode,
     existingSessionOptions,
     selectedSourceSessionId,
+    showTargetBranchSelector,
+    targetBranchOptions,
+    selectedTargetBranch,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
     handleSelectSourceSession,
+    handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,

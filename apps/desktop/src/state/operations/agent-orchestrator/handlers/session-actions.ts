@@ -1,6 +1,7 @@
 import type {
   AgentSessionRecord,
   BuildContinuationTarget,
+  GitTargetBranch,
   RepoPromptOverrides,
   RuntimeKind,
   TaskCard,
@@ -56,6 +57,7 @@ type SessionActionsDependencies = {
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadRepoDefaultTargetBranch?: (repoPath: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
@@ -135,6 +137,7 @@ export const createAgentSessionActions = ({
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
+  loadRepoDefaultTargetBranch,
   loadAgentSessions,
   clearTurnDuration,
   refreshTaskData,
@@ -284,6 +287,7 @@ export const createAgentSessionActions = ({
     },
     model: {
       loadRepoPromptOverrides,
+      ...(loadRepoDefaultTargetBranch ? { loadRepoDefaultTargetBranch } : {}),
     },
   });
 

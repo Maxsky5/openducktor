@@ -96,6 +96,11 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
+  branches: [
+    { name: "main", isCurrent: true, isRemote: false },
+    { name: "origin/main", isCurrent: false, isRemote: true },
+    { name: "origin/release/2026.04", isCurrent: false, isRemote: true },
+  ],
   repoSettings: createRepoSettings(),
   runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
   initialCatalog: CATALOG,
@@ -237,6 +242,79 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
+
+    await harness.unmount();
+  });
+
+  test("shows target branch selection for builder implementation starts and defaults to repo settings", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-5",
+        role: "build",
+        scenario: "build_implementation_start",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().showTargetBranchSelector).toBe(true);
+    expect(harness.getLatest().selectedTargetBranch).toBe("refs/remotes/origin/main");
+
+    await harness.unmount();
+  });
+
+  test("prefills target branch selection from the task target branch when present", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-6",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        initialTargetBranch: {
+          remote: "origin",
+          branch: "release/2026.04",
+        },
+        postStartAction: "none",
+        title: "Resume Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().showTargetBranchSelector).toBe(true);
+    expect(harness.getLatest().selectedTargetBranch).toBe("refs/remotes/origin/release/2026.04");
+
+    await harness.unmount();
+  });
+
+  test("keeps the selected target branch in combobox value format after selection changes", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-7",
+        role: "build",
+        scenario: "build_implementation_start",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectTargetBranch("refs/remotes/origin/beta");
+    });
+
+    expect(harness.getLatest().selectedTargetBranch).toBe("refs/remotes/origin/beta");
 
     await harness.unmount();
   });

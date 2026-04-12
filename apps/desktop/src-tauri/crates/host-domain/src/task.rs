@@ -1,5 +1,5 @@
 use crate::document::{AgentSessionDocument, AgentWorkflows, TaskDocumentSummary};
-use crate::git::{GitConflict, PullRequestRecord};
+use crate::git::{GitConflict, GitTargetBranch, PullRequestRecord};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -127,6 +127,10 @@ pub struct TaskCard {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agent_sessions: Vec<AgentSessionDocument>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_branch: Option<GitTargetBranch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_branch_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_request: Option<PullRequestRecord>,
     pub document_summary: TaskDocumentSummary,
     pub agent_workflows: AgentWorkflows,
@@ -175,6 +179,7 @@ pub struct UpdateTaskPatch {
     pub labels: Option<Vec<String>>,
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
+    pub target_branch: Option<GitTargetBranch>,
 }
 
 #[cfg(test)]

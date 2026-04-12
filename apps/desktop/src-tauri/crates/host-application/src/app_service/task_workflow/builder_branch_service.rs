@@ -1,4 +1,7 @@
-use super::approval_support::normalize_approval_target_branch;
+use super::approval_support::{
+    normalize_approval_target_branch, normalize_recorded_target_branch,
+    publish_recorded_target_branch, publish_target_branch,
+};
 use super::cleanup_plans::{
     is_definitive_non_worktree_git_error, is_task_named_managed_worktree_path,
     normalize_path_for_comparison, path_exists_including_broken_symlink,
@@ -57,12 +60,18 @@ pub(super) enum BuilderBranchContextLoadResult {
     MissingWorktree(MissingBuilderWorktree),
 }
 
-pub(super) struct BuilderBranchService<'a> {
+pub(crate) struct BuilderBranchService<'a> {
     service: &'a AppService,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedTaskTargetBranch {
+    pub(crate) target_branch: GitTargetBranch,
+    pub(crate) has_task_override: bool,
+}
+
 impl<'a> BuilderBranchService<'a> {
-    pub(super) fn new(service: &'a AppService) -> Self {
+    pub(crate) fn new(service: &'a AppService) -> Self {
         Self { service }
     }
 
@@ -141,9 +150,64 @@ impl<'a> BuilderBranchService<'a> {
         ))
     }
 
-    pub(super) fn target_branch_for_repo(&self, repo_path: &str) -> Result<GitTargetBranch> {
+    pub(crate) fn target_branch_for_repo(&self, repo_path: &str) -> Result<GitTargetBranch> {
         let repo_config = self.service.workspace_get_repo_config(repo_path)?;
         normalize_approval_target_branch(&repo_config.default_target_branch)
+    }
+
+    pub(crate) fn task_target_branch_override_for_task(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<Option<GitTargetBranch>> {
+        let metadata = self.service.task_metadata_get(repo_path, task_id)?;
+        metadata
+            .target_branch
+            .as_ref()
+            .map(normalize_recorded_target_branch)
+            .transpose()
+    }
+
+    pub(crate) fn resolve_target_branch_for_task(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<ResolvedTaskTargetBranch> {
+        match self.task_target_branch_override_for_task(repo_path, task_id)? {
+            Some(target_branch) => Ok(ResolvedTaskTargetBranch {
+                target_branch,
+                has_task_override: true,
+            }),
+            None => Ok(ResolvedTaskTargetBranch {
+                target_branch: self.target_branch_for_repo(repo_path)?,
+                has_task_override: false,
+            }),
+        }
+    }
+
+    pub(crate) fn effective_target_branch_for_task(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<GitTargetBranch> {
+        Ok(self
+            .resolve_target_branch_for_task(repo_path, task_id)?
+            .target_branch)
+    }
+
+    pub(crate) fn effective_publish_target_for_task(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<Option<GitTargetBranch>> {
+        let metadata = self.service.task_metadata_get(repo_path, task_id)?;
+        match metadata.target_branch.as_ref() {
+            Some(target_branch) => publish_recorded_target_branch(target_branch),
+            None => {
+                let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+                publish_target_branch(&repo_config.default_target_branch)
+            }
+        }
     }
 
     pub(super) fn latest_cleanup_target(
@@ -836,6 +900,90 @@ mod tests {
             .expect_err("non-worktree cleanup errors should propagate");
         assert!(error.to_string().contains("permission denied"));
 
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn effective_target_branch_for_task_prefers_persisted_task_target_branch() -> Result<()> {
+        let root = unique_temp_path("builder-effective-task-target-branch");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            host_infra_system::RepoConfig {
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                ..Default::default()
+            },
+        )?;
+        task_state
+            .lock()
+            .expect("task state lock poisoned")
+            .metadata_target_branch = Some(host_domain::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "release/2026.04".to_string(),
+        });
+
+        let target_branch = BuilderBranchService::new(&service)
+            .effective_target_branch_for_task(repo_path.as_str(), "task-1")?;
+
+        assert_eq!(target_branch.canonical(), "origin/release/2026.04");
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn effective_target_branch_for_task_falls_back_to_repo_default_when_task_override_is_missing(
+    ) -> Result<()> {
+        let root = unique_temp_path("builder-effective-repo-default-target-branch");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            host_infra_system::RepoConfig {
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "release/2026.05".to_string(),
+                },
+                ..Default::default()
+            },
+        )?;
+
+        let target_branch = BuilderBranchService::new(&service)
+            .effective_target_branch_for_task(repo_path.as_str(), "task-1")?;
+
+        assert_eq!(target_branch.canonical(), "origin/release/2026.05");
         let _ = fs::remove_dir_all(root);
         Ok(())
     }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { knownGitProviderIdSchema, pullRequestSchema } from "./git-schemas";
+import { gitTargetBranchSchema, knownGitProviderIdSchema, pullRequestSchema } from "./git-schemas";
 import {
   issueTypeSchema,
   planSubtaskInputSchema,
@@ -22,6 +22,9 @@ export const publicTaskSchema = z
       .boolean()
       .describe("Whether OpenDucktor QA review is required before human review."),
     labels: z.array(z.string()).describe("Task labels."),
+    targetBranch: gitTargetBranchSchema
+      .optional()
+      .describe("Persisted task target branch override."),
     createdAt: z.string().describe("Task creation timestamp."),
     updatedAt: z.string().describe("Task last update timestamp."),
   })

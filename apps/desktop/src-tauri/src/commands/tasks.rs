@@ -32,6 +32,7 @@ pub(crate) fn map_task_update_payload(patch: TaskUpdatePayload) -> Result<Update
         labels: patch.labels,
         assignee: patch.assignee,
         parent_id: patch.parent_id,
+        target_branch: patch.target_branch,
     })
 }
 
@@ -216,6 +217,7 @@ mod tests {
             labels: None,
             assignee: None,
             parent_id: None,
+            target_branch: None,
         })
         .expect_err("unknown issue type should fail");
 
@@ -233,6 +235,7 @@ mod tests {
             labels: None,
             assignee: None,
             parent_id: None,
+            target_branch: None,
         })?;
 
         assert_eq!(patch.issue_type, Some(IssueType::Feature));

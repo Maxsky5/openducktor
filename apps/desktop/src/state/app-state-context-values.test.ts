@@ -113,6 +113,7 @@ describe("app-state-context-values", () => {
       unlinkPullRequest: async (_taskId: string) => {},
       createTask: async () => {},
       updateTask: async () => {},
+      setTaskTargetBranch: async () => {},
       deleteTask: async () => {},
       resetTaskImplementation: async () => {},
       resetTask: async () => {},

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { getAgentScenarioDefinition } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,6 +40,7 @@ type SessionStartRequestInput = Omit<NewSessionStartRequest, "selectedModel"> & 
 
 type UseAgentStudioSessionStartFlowArgs = {
   activeRepo: string | null;
+  branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
@@ -56,6 +57,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
 };
@@ -72,6 +74,7 @@ type AgentStudioSessionStartRequest = Omit<NewSessionStartRequest, "selectedMode
 
 export function useAgentStudioSessionStartFlow({
   activeRepo,
+  branches = [],
   taskId,
   role,
   scenario,
@@ -88,6 +91,7 @@ export function useAgentStudioSessionStartFlow({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
   humanRequestChangesTask,
+  setTaskTargetBranch,
   updateQuery,
   onContextSwitchIntent,
 }: UseAgentStudioSessionStartFlowArgs): {
@@ -118,6 +122,7 @@ export function useAgentStudioSessionStartFlow({
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
       activeRepo,
+      branches,
       repoSettings,
     });
 
@@ -157,6 +162,12 @@ export function useAgentStudioSessionStartFlow({
         existingSessionOptions.some((option) => option.value === activeSession.sessionId)
           ? activeSession.sessionId
           : (existingSessionOptions[0]?.value ?? null));
+      const initialTargetBranch =
+        request.initialTargetBranch ??
+        (request.taskId === taskId ? (selectedTask?.targetBranch ?? null) : null);
+      const initialTargetBranchError =
+        request.initialTargetBranchError ??
+        (request.taskId === taskId ? (selectedTask?.targetBranchError ?? null) : null);
 
       return runInternalSessionStartRequest(
         {
@@ -165,6 +176,8 @@ export function useAgentStudioSessionStartFlow({
           role: request.role,
           scenario: request.scenario,
           selectedModel: requestedSelection,
+          initialTargetBranch,
+          ...(initialTargetBranchError ? { initialTargetBranchError } : {}),
           ...(request.targetWorkingDirectory !== undefined
             ? { targetWorkingDirectory: request.targetWorkingDirectory }
             : {}),
@@ -181,6 +194,7 @@ export function useAgentStudioSessionStartFlow({
       role,
       runInternalSessionStartRequest,
       selectionForNewSession,
+      selectedTask,
       sessionsForTask,
       taskId,
     ],
@@ -197,6 +211,7 @@ export function useAgentStudioSessionStartFlow({
     isActiveTaskHydrated,
     startAgentSession,
     sendAgentMessage,
+    ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     setStartingActivityCountByContext,
     startingSessionByTaskRef,
     updateQuery,
@@ -223,6 +238,7 @@ export function useAgentStudioSessionStartFlow({
             role: request.role,
             scenario: request.scenario,
             startMode: decision.startMode,
+            ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
             postStartAction: request.postStartAction,
             ...(request.targetWorkingDirectory !== undefined
               ? { targetWorkingDirectory: request.targetWorkingDirectory }
@@ -235,6 +251,7 @@ export function useAgentStudioSessionStartFlow({
           },
           selection: decision.startMode === "reuse" ? null : decision.selectedModel,
           task: request.taskId === taskId ? selectedTask : null,
+          ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
           startAgentSession,
           sendAgentMessage,
           postStartExecution: request.postStartAction === "none" ? "await" : "detached",
@@ -266,6 +283,7 @@ export function useAgentStudioSessionStartFlow({
       queryClient,
       selectedTask,
       sendAgentMessage,
+      setTaskTargetBranch,
       startAgentSession,
       taskId,
       updateQuery,

@@ -68,6 +68,8 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         parent_id: None,
         subtask_ids: Vec::new(),
         agent_sessions: Vec::new(),
+        target_branch: None,
+        target_branch_error: None,
         pull_request: None,
         document_summary: TaskDocumentSummary::default(),
         agent_workflows: AgentWorkflows::default(),
@@ -105,6 +107,7 @@ pub(crate) struct TaskStoreState {
     pub(crate) metadata_get_calls: Vec<String>,
     pub(crate) metadata_spec: Option<SpecDocument>,
     pub(crate) metadata_plan: Option<SpecDocument>,
+    pub(crate) metadata_target_branch: Option<host_domain::GitTargetBranch>,
     pub(crate) qa_append_calls: Vec<(String, String, QaVerdict)>,
     pub(crate) qa_outcome_calls: Vec<(String, TaskStatus, String, QaVerdict)>,
     pub(crate) latest_qa_report: Option<QaReportDocument>,
@@ -215,6 +218,8 @@ impl TaskStore for FakeTaskStore {
             parent_id: input.parent_id,
             subtask_ids: Vec::new(),
             agent_sessions: Vec::new(),
+            target_branch: None,
+            target_branch_error: None,
             pull_request: None,
             document_summary: TaskDocumentSummary::default(),
             agent_workflows: AgentWorkflows::default(),
@@ -256,6 +261,11 @@ impl TaskStore for FakeTaskStore {
         }
         if let Some(parent_id) = patch.parent_id {
             updated.parent_id = Some(parent_id);
+        }
+        if let Some(target_branch) = patch.target_branch {
+            updated.target_branch = Some(target_branch.clone());
+            updated.target_branch_error = None;
+            state.metadata_target_branch = Some(target_branch);
         }
         if let Some(labels) = patch.labels {
             updated.labels = labels;
@@ -572,6 +582,7 @@ impl TaskStore for FakeTaskStore {
         Ok(TaskMetadata {
             spec,
             plan,
+            target_branch: state.metadata_target_branch.clone(),
             qa_report,
             pull_request: state.pull_requests.get(_task_id).cloned(),
             direct_merge: state.direct_merge_records.get(_task_id).cloned(),
@@ -1808,5 +1819,6 @@ pub(crate) fn empty_patch() -> UpdateTaskPatch {
         labels: None,
         assignee: None,
         parent_id: None,
+        target_branch: None,
     }
 }

@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { gitConflictSchema, gitMergeMethodSchema, pullRequestSchema } from "./git-schemas";
+import {
+  gitConflictSchema,
+  gitMergeMethodSchema,
+  gitTargetBranchSchema,
+  pullRequestSchema,
+} from "./git-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
 
 export const taskStatusSchema = z.enum([
@@ -172,6 +177,14 @@ export const taskCardSchema = z.object({
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   subtaskIds: z.array(z.string()).default([]),
   agentSessions: z.array(agentSessionRecordSchema).optional(),
+  targetBranch: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitTargetBranchSchema.optional(),
+  ),
+  targetBranchError: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().optional(),
+  ),
   pullRequest: z.preprocess(
     (value) => (value === null ? undefined : value),
     pullRequestSchema.optional(),
@@ -225,5 +238,9 @@ export const taskUpdatePatchSchema = z.object({
   labels: z.array(z.string()).optional(),
   assignee: z.string().optional(),
   parentId: z.string().optional(),
+  targetBranch: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitTargetBranchSchema.optional(),
+  ),
 });
 export type TaskUpdatePatch = z.infer<typeof taskUpdatePatchSchema>;

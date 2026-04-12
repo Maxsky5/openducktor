@@ -1,5 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { assertAgentKickoffScenario, defaultAgentScenarioForRole } from "@openducktor/core";
+import {
+  assertAgentKickoffScenario,
+  type AgentPromptGitContext,
+  defaultAgentScenarioForRole,
+} from "@openducktor/core";
+import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
@@ -85,17 +90,45 @@ const attachSessionListenerAndGuard = async ({
   });
 };
 
+const resolveKickoffGitContext = async ({
+  kickoffScenario,
+  repoPath,
+  taskCard,
+  model,
+}: {
+  kickoffScenario: ReturnType<typeof assertAgentKickoffScenario>;
+  repoPath: string;
+  taskCard: TaskCard;
+  model: Pick<StartSessionDependencies, "model">["model"];
+}): Promise<AgentPromptGitContext | undefined> => {
+  if (kickoffScenario !== "build_pull_request_generation") {
+    return undefined;
+  }
+
+  const repoDefaultTargetBranch = model.loadRepoDefaultTargetBranch
+    ? await model.loadRepoDefaultTargetBranch(repoPath)
+    : null;
+
+  return {
+    targetBranch: canonicalTargetBranch(
+      effectiveTaskTargetBranch(taskCard.targetBranch, repoDefaultTargetBranch),
+    ),
+  };
+};
+
 const maybeSendKickoff = async ({
   sendKickoff,
   startedCtx,
   task,
   taskCard,
+  model,
   promptOverrides,
 }: {
   sendKickoff: boolean;
   startedCtx: StartedSessionContext;
   task: TaskDependencies;
   taskCard: TaskCard;
+  model: Pick<StartSessionDependencies, "model">["model"];
   promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
 }): Promise<void> => {
   if (!sendKickoff) {
@@ -103,6 +136,12 @@ const maybeSendKickoff = async ({
   }
 
   const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
+  const git = await resolveKickoffGitContext({
+    kickoffScenario,
+    repoPath: startedCtx.repoPath,
+    taskCard,
+    model,
+  });
 
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   await task.sendAgentMessage(startedCtx.summary.sessionId, [
@@ -119,6 +158,7 @@ const maybeSendKickoff = async ({
           qaRequired: taskCard.aiReviewEnabled,
           description: taskCard.description,
         },
+        git,
         promptOverrides,
       ),
     },
@@ -231,6 +271,7 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         task,
         taskCard: startResult.taskCard,
+        model,
         promptOverrides: startResult.promptOverrides,
       });
 

@@ -113,6 +113,7 @@ export type TasksStateContextValue = {
   unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;

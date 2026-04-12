@@ -162,6 +162,26 @@ describe("TauriHostClient", () => {
     expect(output.repoStoreHealth?.sharedServer.ownershipState).toBe("owned_by_current_process");
   });
 
+  test("tasksList preserves task target branch validation errors", async () => {
+    const { client } = createClient((command) => {
+      if (command === "tasks_list") {
+        return [
+          {
+            ...makeTaskCardPayload(),
+            targetBranchError:
+              "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const tasks = await client.tasksList("/repo");
+
+    expect(tasks[0]?.targetBranch).toBeUndefined();
+    expect(tasks[0]?.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
+  });
+
   test("facade exposes every delegated API method", () => {
     const { client } = createClient((command) => {
       throw new Error(`Unexpected command: ${command}`);
@@ -304,6 +324,46 @@ describe("TauriHostClient", () => {
         },
       },
     ]);
+  });
+
+  test("taskUpdate forwards task target branches through IPC", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_update") {
+        return {
+          ...makeTaskCardPayload(),
+          targetBranch: {
+            remote: "origin",
+            branch: "release/2026.04",
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const task = await client.taskUpdate("/repo", "task-1", {
+      targetBranch: {
+        remote: "origin",
+        branch: "release/2026.04",
+      },
+    });
+
+    expect(task.targetBranch).toEqual({
+      remote: "origin",
+      branch: "release/2026.04",
+    });
+    expect(calls).toContainEqual({
+      command: "task_update",
+      args: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        patch: {
+          targetBranch: {
+            remote: "origin",
+            branch: "release/2026.04",
+          },
+        },
+      },
+    });
   });
 
   test("document mutation commands reject malformed updatedAt payloads", async () => {

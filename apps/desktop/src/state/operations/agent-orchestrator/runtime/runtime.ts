@@ -1,5 +1,6 @@
 import type {
   BuildContinuationTarget,
+  GitTargetBranch,
   RepoConfig,
   RepoPromptOverrides,
   RunSummary,
@@ -89,6 +90,13 @@ export const loadTaskDocuments = async (
 
 const loadRepoConfig = (repoPath: string): Promise<RepoConfig> => {
   return loadRepoConfigFromQuery(appQueryClient, repoPath);
+};
+
+export const loadRepoDefaultTargetBranch = async (
+  repoPath: string,
+): Promise<GitTargetBranch | null> => {
+  const config = await loadRepoConfig(repoPath);
+  return config.defaultTargetBranch ?? null;
 };
 
 export const loadRepoDefaultModel = async (

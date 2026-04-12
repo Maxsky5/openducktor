@@ -20,6 +20,10 @@ type StartKanbanSessionFlowInput = {
   queryClient: QueryClient;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+  setTaskTargetBranch?: (
+    taskId: string,
+    targetBranch: import("@openducktor/contracts").GitTargetBranch,
+  ) => Promise<void>;
   openSessionInAgentStudio: (intent: KanbanSessionStartIntent, sessionId: string) => void;
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
@@ -34,6 +38,7 @@ export const startKanbanSessionFlow = async ({
   queryClient,
   startAgentSession,
   humanRequestChangesTask,
+  setTaskTargetBranch,
   openSessionInAgentStudio,
   sendAgentMessage,
 }: StartKanbanSessionFlowInput): Promise<string> => {
@@ -49,6 +54,7 @@ export const startKanbanSessionFlow = async ({
     },
     selection,
     task,
+    ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
     startAgentSession,
     sendAgentMessage,
     humanRequestChangesTask,

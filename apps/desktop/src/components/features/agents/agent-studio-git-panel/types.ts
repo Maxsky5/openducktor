@@ -1,3 +1,4 @@
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type { PullRequest } from "@openducktor/contracts";
 import type {
   AgentStudioPendingForcePush,
@@ -48,5 +49,8 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   askBuilderToResolveGitConflict?: () => Promise<void>;
   pullFromUpstream?: () => Promise<void>;
   onDetectPullRequest?: () => Promise<void> | void;
+  targetBranchOptions?: ComboboxOption[];
+  targetBranchSelectionValue?: string;
+  onUpdateTargetBranch?: (selection: string) => Promise<void>;
   onSendReview?: (message: string) => void;
 };

@@ -1,6 +1,6 @@
 use super::approval_support::{
     ensure_human_approval_status, is_terminal_task_status, normalize_recorded_target_branch,
-    publish_recorded_target_branch, publish_target_branch, to_domain_merge_method,
+    publish_recorded_target_branch, to_domain_merge_method,
 };
 use super::builder_branch_service::{
     BuilderBranchContextLoadResult, BuilderBranchService, MissingBuilderWorktree,
@@ -143,8 +143,9 @@ impl<'a> ApprovalContextService<'a> {
             }
         };
         let target_branch = BuilderBranchService::new(self.service)
-            .target_branch_for_repo(context.repo.repo_path.as_str())?;
-        let publish_target = publish_target_branch(&repo_config.default_target_branch)?;
+            .effective_target_branch_for_task(context.repo.repo_path.as_str(), task_id)?;
+        let publish_target = BuilderBranchService::new(self.service)
+            .effective_publish_target_for_task(context.repo.repo_path.as_str(), task_id)?;
         let worktree_status = self.service.git_port.get_worktree_status_summary(
             Path::new(&builder_context.working_directory),
             target_branch.canonical().as_str(),

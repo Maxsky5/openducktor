@@ -1,8 +1,14 @@
+import type { GitBranch, GitTargetBranch } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { errorMessage } from "@/lib/errors";
+import {
+  INVALID_TASK_TARGET_BRANCH_LABEL,
+  targetBranchFromSelection,
+  taskTargetBranchValidationError,
+} from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
@@ -11,15 +17,18 @@ export type SessionStartModalDecision =
   | {
       startMode: "fresh";
       selectedModel: AgentModelSelection;
+      targetBranch?: GitTargetBranch;
     }
   | {
       startMode: "reuse";
       sourceSessionId: string;
+      targetBranch?: GitTargetBranch;
     }
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
       sourceSessionId: string;
+      targetBranch?: GitTargetBranch;
     };
 
 type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
@@ -66,9 +75,11 @@ const requireSourceSessionId = (
 
 export function useSessionStartModalRunner({
   activeRepo,
+  branches = [],
   repoSettings,
 }: {
   activeRepo: string | null;
+  branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
 }): {
   sessionStartModal: SessionStartModalModel | null;
@@ -98,16 +109,21 @@ export function useSessionStartModalRunner({
     selectedStartMode,
     existingSessionOptions,
     selectedSourceSessionId,
+    showTargetBranchSelector,
+    targetBranchOptions,
+    selectedTargetBranch,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
     handleSelectSourceSession,
+    handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
     activeRepo,
+    branches,
     repoSettings,
   });
 
@@ -134,6 +150,15 @@ export function useSessionStartModalRunner({
     ): Promise<T | undefined> => {
       if (isStarting) {
         throw new Error("A session start is already in progress.");
+      }
+      const targetBranchValidationError = taskTargetBranchValidationError(
+        request.initialTargetBranchError,
+      );
+      if (targetBranchValidationError) {
+        toast.error(INVALID_TASK_TARGET_BRANCH_LABEL, {
+          description: targetBranchValidationError,
+        });
+        return Promise.resolve(undefined);
       }
       resolvePendingRun(undefined);
       openStartModal(request);
@@ -168,16 +193,25 @@ export function useSessionStartModalRunner({
           ? {
               startMode: "reuse",
               sourceSessionId: requireSourceSessionId(input.sourceSessionId, requestContext),
+              ...(input.targetBranch
+                ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
+                : {}),
             }
           : input.startMode === "fork"
             ? {
                 startMode: "fork",
                 selectedModel: requireSelectedModel(selectionRef.current, requestContext),
                 sourceSessionId: requireSourceSessionId(input.sourceSessionId, requestContext),
+                ...(input.targetBranch
+                  ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
+                  : {}),
               }
             : {
                 startMode: "fresh",
                 selectedModel: requireSelectedModel(selectionRef.current, requestContext),
+                ...(input.targetBranch
+                  ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
+                  : {}),
               };
 
       setIsStarting(true);
@@ -225,8 +259,12 @@ export function useSessionStartModalRunner({
       selectedStartMode,
       existingSessionOptions,
       selectedSourceSessionId,
+      showTargetBranchSelector,
+      targetBranchOptions,
+      selectedTargetBranch,
       onSelectStartMode: handleSelectStartMode,
       onSelectSourceSession: handleSelectSourceSession,
+      onSelectTargetBranch: handleSelectTargetBranch,
       onSelectRuntime: handleSelectRuntime,
       onSelectAgent: handleSelectAgent,
       onSelectModel: handleSelectModel,
@@ -251,6 +289,7 @@ export function useSessionStartModalRunner({
     existingSessionOptions,
     handleSelectAgent,
     handleSelectModel,
+    handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectSourceSession,
     handleSelectStartMode,
@@ -262,13 +301,16 @@ export function useSessionStartModalRunner({
     modelOptions,
     resolvePendingRun,
     runtimeOptions,
+    selectedTargetBranch,
     selectedRuntimeKind,
     selectedSourceSessionId,
     selectedStartMode,
+    showTargetBranchSelector,
     selection,
     isStarting,
     supportsProfiles,
     supportsVariants,
+    targetBranchOptions,
     variantOptions,
   ]);
 

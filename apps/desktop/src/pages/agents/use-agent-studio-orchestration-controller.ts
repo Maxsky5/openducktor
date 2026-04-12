@@ -1,3 +1,4 @@
+import type { GitBranch, GitTargetBranch } from "@openducktor/contracts";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -45,11 +46,13 @@ type AgentStudioOrchestrationActionsContext = {
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
+  branches: GitBranch[];
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
   draftStateKey: string;
@@ -203,6 +206,7 @@ export const buildAgentStudioPageModelsArgs = ({
 
 export function useAgentStudioOrchestrationController({
   activeRepo,
+  branches,
   selection,
   readiness,
   draftStateKey,
@@ -237,6 +241,7 @@ export function useAgentStudioOrchestrationController({
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
+    setTaskTargetBranch,
     replyAgentPermission,
     answerAgentQuestion,
   } = actions;
@@ -304,6 +309,7 @@ export function useAgentStudioOrchestrationController({
     handleCreateSession,
   } = useAgentStudioSessionActions({
     activeRepo,
+    branches,
     taskId: viewTaskId,
     role: viewRole,
     scenario: viewScenario,
@@ -321,6 +327,7 @@ export function useAgentStudioOrchestrationController({
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
+    setTaskTargetBranch,
     answerAgentQuestion,
     updateQuery,
     onContextSwitchIntent,

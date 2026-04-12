@@ -1,3 +1,4 @@
+import type { GitTargetBranch } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
@@ -34,6 +35,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   isActiveTaskHydrated: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   updateQuery: (updates: QueryUpdate) => void;
@@ -54,6 +56,7 @@ export function useAgentStudioSessionStartSession({
   isActiveTaskHydrated,
   startAgentSession,
   sendAgentMessage,
+  setTaskTargetBranch,
   setStartingActivityCountByContext,
   startingSessionByTaskRef,
   updateQuery,
@@ -93,6 +96,7 @@ export function useAgentStudioSessionStartSession({
               role,
               scenario,
               startMode: decision.startMode,
+              ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
               ...(decision.startMode === "reuse" || decision.startMode === "fork"
                 ? { sourceSessionId: decision.sourceSessionId }
                 : {}),
@@ -100,6 +104,7 @@ export function useAgentStudioSessionStartSession({
             },
             selection: decision.startMode === "reuse" ? null : decision.selectedModel,
             task: selectedTask,
+            ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
             startAgentSession,
             sendAgentMessage,
             postStartExecution: params.postStartAction === "none" ? "await" : "detached",
@@ -128,6 +133,8 @@ export function useAgentStudioSessionStartSession({
           role,
           scenario,
           reason: params.reason,
+          initialTargetBranch: selectedTask?.targetBranch ?? null,
+          initialTargetBranchError: selectedTask?.targetBranchError ?? null,
         },
         executeStartedSession,
       );
@@ -143,6 +150,7 @@ export function useAgentStudioSessionStartSession({
       selectedTask,
       updateQuery,
       onPostStartActionError,
+      setTaskTargetBranch,
       taskId,
       executeRequestedSessionStart,
     ],

@@ -4,6 +4,7 @@ export { createLoadAgentSessions } from "./lifecycle/load-sessions";
 export {
   createEnsureRuntime,
   loadBuildContinuationTarget,
+  loadRepoDefaultTargetBranch,
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   loadTaskDocuments,

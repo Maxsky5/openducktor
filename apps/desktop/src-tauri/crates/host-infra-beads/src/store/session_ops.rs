@@ -10,7 +10,7 @@ fn parse_direct_merge_record(value: &Value) -> Option<DirectMergeRecord> {
 }
 
 impl BeadsTaskStore {
-    pub(super) fn parse_task_metadata_from_issue(&self, issue: &RawIssue) -> TaskMetadata {
+    pub(super) fn parse_task_metadata_from_issue(&self, issue: &RawIssue) -> Result<TaskMetadata> {
         let metadata_root = parse_metadata_root(issue.metadata.clone());
         let namespace_key = self.current_metadata_namespace();
         let namespace = metadata_namespace(&metadata_root, &namespace_key);
@@ -58,15 +58,20 @@ impl BeadsTaskStore {
                     .and_then(|delivery| delivery.get("directMerge"))
                     .and_then(parse_direct_merge_record)
             });
+        let target_branch = namespace
+            .map(crate::metadata::metadata_target_branch_strict)
+            .transpose()?
+            .flatten();
 
-        TaskMetadata {
+        Ok(TaskMetadata {
             spec,
             plan,
+            target_branch,
             qa_report,
             pull_request,
             direct_merge,
             agent_sessions,
-        }
+        })
     }
 
     fn compact_agent_session_for_storage(
@@ -296,6 +301,6 @@ impl BeadsTaskStore {
         task_id: &str,
     ) -> Result<TaskMetadata> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
-        Ok(self.parse_task_metadata_from_issue(&issue))
+        self.parse_task_metadata_from_issue(&issue)
     }
 }

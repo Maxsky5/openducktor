@@ -1,3 +1,4 @@
+import type { GitBranch } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
   type AgentRole,
@@ -77,6 +78,7 @@ export type SessionStartModalOpenRequest = Omit<
 
 type UseSessionStartModalCoordinatorArgs = {
   activeRepo: string | null;
+  branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   initialCatalog?: AgentModelCatalog | null;
 };
@@ -90,12 +92,14 @@ type UseSessionStartModalCoordinatorResult = Omit<
 
 export function useSessionStartModalCoordinator({
   activeRepo,
+  branches = [],
   repoSettings,
   initialCatalog,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
     activeRepo,
+    branches,
     repoSettings,
     runtimeDefinitions,
     ...(initialCatalog !== undefined ? { initialCatalog } : {}),

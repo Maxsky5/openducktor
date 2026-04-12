@@ -126,6 +126,7 @@ impl AppService {
                 labels: None,
                 assignee: None,
                 parent_id: None,
+                target_branch: None,
             },
         )?;
 
@@ -170,6 +171,7 @@ impl AppService {
                 labels: None,
                 assignee: None,
                 parent_id: None,
+                target_branch: None,
             },
         )?;
 

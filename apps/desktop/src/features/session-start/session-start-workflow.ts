@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentRole,
@@ -7,7 +7,9 @@ import type {
 } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
+import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
+import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import { kickoffPromptForScenario } from "./session-start-prompts";
@@ -25,6 +27,7 @@ export type SessionStartWorkflowIntent = {
   scenario: AgentScenario;
   startMode: AgentSessionStartMode;
   sourceSessionId?: string | null;
+  targetBranch?: GitTargetBranch;
   targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
   message?: string;
@@ -42,6 +45,7 @@ type StartSessionWorkflowArgs = {
   intent: SessionStartWorkflowIntent;
   selection: AgentModelSelection | null;
   task: TaskCard | null;
+  persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
@@ -97,9 +101,21 @@ const buildPostStartMessage = async ({
   const promptOverrides = activeRepo
     ? await loadEffectivePromptOverrides(activeRepo, queryClient)
     : undefined;
+  const git =
+    kickoffScenario === "build_pull_request_generation" && activeRepo
+      ? {
+          targetBranch: canonicalTargetBranch(
+            effectiveTaskTargetBranch(
+              task?.targetBranch,
+              (await loadRepoConfigFromQuery(queryClient, activeRepo)).defaultTargetBranch,
+            ),
+          ),
+        }
+      : undefined;
 
   return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
     overrides: promptOverrides ?? {},
+    ...(git ? { git } : {}),
     task:
       task === null
         ? {}
@@ -116,11 +132,18 @@ const buildPostStartMessage = async ({
 const runBeforeStartAction = async ({
   intent,
   humanRequestChangesTask,
+  persistTaskTargetBranch,
 }: Pick<StartSessionWorkflowArgs, "humanRequestChangesTask"> & {
+  persistTaskTargetBranch?: StartSessionWorkflowArgs["persistTaskTargetBranch"];
   intent: SessionStartWorkflowIntent;
 }): Promise<void> => {
   const beforeStartAction = intent.beforeStartAction;
   if (!beforeStartAction) {
+    if (!intent.targetBranch || !persistTaskTargetBranch) {
+      return;
+    }
+
+    await persistTaskTargetBranch(intent.taskId, intent.targetBranch);
     return;
   }
   if (!humanRequestChangesTask) {
@@ -128,6 +151,10 @@ const runBeforeStartAction = async ({
   }
 
   await humanRequestChangesTask(intent.taskId, beforeStartAction.note);
+
+  if (intent.targetBranch && persistTaskTargetBranch) {
+    await persistTaskTargetBranch(intent.taskId, intent.targetBranch);
+  }
 };
 
 export const startSessionWorkflow = async ({
@@ -136,6 +163,7 @@ export const startSessionWorkflow = async ({
   intent,
   selection,
   task,
+  persistTaskTargetBranch,
   startAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
@@ -144,6 +172,7 @@ export const startSessionWorkflow = async ({
 }: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
   await runBeforeStartAction({
     intent,
+    persistTaskTargetBranch,
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
   });
 
