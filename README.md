@@ -86,7 +86,8 @@ That keeps the workflow task-centric and auditable: agents can act through a con
 - Planned next: Windows and Linux, once OpenDucktor reaches a first stable version
 - [Beads](https://github.com/steveyegge/beads) is the V1 task source of truth
 - Supported runtime today: OpenCode (`opencode`)
-- Planned next: more open-source agent runtimes, with Codex next in line
+  - Planned next: more agent runtimes, with Codex next in line
+  - Despite being the most popular coding agent, Claude Code is currently not planned due to Anthropic lack of clarity on Claude Claude terms of use. See [Matt Pocock's tweet](https://x.com/i/status/2040536403289764275). As soon as it's clear Claude Code can be used within tools like OpenDucktor, we will support it.
 - The project is still early and should be treated as an active prototype
 
 ## Documentation

@@ -13,7 +13,7 @@ body:
         - macOS first
         - OpenCode only today
         - Codex planned next
-        - open source runtimes only
+        - Claude Code is currently not planned due to Anthropic lack of clarity on Claude Claude terms of use. As soon as it's clear Claude Code can be used within tools like OpenDucktor, we will support it.
   - type: textarea
     id: problem
     attributes:
