@@ -17,7 +17,15 @@ It uses [Beads](https://github.com/steveyegge/beads) as the task source of truth
 
 ![Agent Studio placeholder](docs/assets/screenshots/settings-repo-config.png)
 
-![Agent Studio placeholder](docs/assets/screenshots/create-task.png)
+![Agent Studio placeholder](docs/assets/screenshots/settings-autopilot.png)
+
+![Agent Studio placeholder](docs/assets/screenshots/settings-customize-prompts.png)
+
+![Agent Studio placeholder](docs/assets/screenshots/settings-default-models.png)
+
+![Agent Studio placeholder](docs/assets/screenshots/create-task-1.png)
+
+![Agent Studio placeholder](docs/assets/screenshots/create-task-2.png)
 
 </details>
 
