@@ -18,7 +18,6 @@ This guide describes the integration model, not the list of runtimes that are al
 - The only supported runtime today is OpenCode (`opencode`).
 - Codex is the next planned runtime.
 - OpenDucktor will support open-source agent runtimes only.
-- Claude Code is intentionally out of scope.
 
 ## Runtime Vocabulary
 

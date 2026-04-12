@@ -36,4 +36,4 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - OpenDucktor is still early, macOS-first, and not ready for general use yet.
 - The only supported runtime today is OpenCode (`opencode`).
 - Codex is the next planned runtime.
-- OpenDucktor will support open-source agent runtimes only; Claude Code is out of scope.
+- OpenDucktor will support open-source agent runtimes only.
