@@ -1,9 +1,7 @@
-import { Check, Copy } from "lucide-react";
 import { type MouseEvent, type ReactElement, useCallback } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { Button } from "@/components/ui/button";
+import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
@@ -59,30 +57,13 @@ function AgentStudioDocumentCopyButton({ markdown }: { markdown: string }): Reac
   );
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="absolute top-2 right-2 z-10 size-7 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Copy document content"
-            data-testid="copy-agent-studio-document-content"
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          <p>Copy</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <CopyIconButton
+      copied={copied}
+      ariaLabel="Copy document content"
+      dataTestId="copy-agent-studio-document-content"
+      className="absolute top-2 right-2 z-10"
+      onClick={handleCopy}
+    />
   );
 }
 

@@ -8,6 +8,7 @@ import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
 type AgentChatWindowRowProps = {
   row: AgentChatWindowRow;
+  activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
@@ -15,6 +16,7 @@ type AgentChatWindowRowProps = {
 
 export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
+  activeStreamingAssistantMessageId,
   sessionAgentColors,
   sessionRole,
   sessionWorkingDirectory,
@@ -29,6 +31,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
         <div className={cn("flow-root", isUserMessage ? "pt-4" : undefined)}>
           <AgentChatMessageCard
             message={row.message}
+            isStreamingAssistantMessage={row.message.id === activeStreamingAssistantMessageId}
             sessionRole={sessionRole}
             sessionAgentColors={sessionAgentColors}
             sessionWorkingDirectory={sessionWorkingDirectory}

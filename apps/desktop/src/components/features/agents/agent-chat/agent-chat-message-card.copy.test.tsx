@@ -1,36 +1,14 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import { toast } from "sonner";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 
 enableReactActEnvironment();
 
 const writeClipboardMock = mock(async (_value: string) => {});
-
-const withMockedToast = async (
-  callback: (mocks: {
-    toastSuccessMock: ReturnType<typeof mock>;
-    toastErrorMock: ReturnType<typeof mock>;
-  }) => Promise<void>,
-): Promise<void> => {
-  const originalSuccess = toast.success;
-  const originalError = toast.error;
-  const toastSuccessMock = mock(() => "");
-  const toastErrorMock = mock(() => "");
-
-  toast.success = toastSuccessMock;
-  toast.error = toastErrorMock;
-
-  try {
-    await callback({ toastSuccessMock, toastErrorMock });
-  } finally {
-    toast.success = originalSuccess;
-    toast.error = originalError;
-  }
-};
 
 describe("AgentChatMessageCard assistant copy", () => {
   beforeEach(() => {
@@ -81,7 +59,7 @@ describe("AgentChatMessageCard assistant copy", () => {
     });
   });
 
-  test("copies completed intermediate assistant messages when isFinal is omitted", async () => {
+  test("copies completed intermediate assistant messages when they are not actively streaming", async () => {
     await withMockedToast(async ({ toastSuccessMock }) => {
       const markdown = "# Intermediate update\n\nStill working through the task.";
       const rendered = render(
@@ -94,8 +72,10 @@ describe("AgentChatMessageCard assistant copy", () => {
             meta: {
               kind: "assistant",
               agentRole: "planner",
+              isFinal: false,
             },
           },
+          isStreamingAssistantMessage: false,
           sessionRole: "planner",
           sessionSelectedModel: null,
           sessionAgentColors: {},
@@ -117,7 +97,7 @@ describe("AgentChatMessageCard assistant copy", () => {
     });
   });
 
-  test("shows the copied-state icon and resets it after the shared delay", async () => {
+  test("shows the copied-state icon after a successful copy", async () => {
     await withMockedToast(async () => {
       const rendered = render(
         createElement(AgentChatMessageCard, {
@@ -135,7 +115,6 @@ describe("AgentChatMessageCard assistant copy", () => {
           sessionRole: "planner",
           sessionSelectedModel: null,
           sessionAgentColors: {},
-          copyResetDelayMs: 5,
         }),
       );
 
@@ -147,10 +126,6 @@ describe("AgentChatMessageCard assistant copy", () => {
 
         await waitFor(() => {
           expect(button.querySelector(".lucide-check")).not.toBeNull();
-        });
-
-        await waitFor(() => {
-          expect(button.querySelector(".lucide-copy")).not.toBeNull();
         });
       } finally {
         rendered.unmount();

@@ -620,8 +620,10 @@ describe("AgentChatMessageCard tool duration", () => {
           meta: {
             kind: "assistant",
             agentRole: "planner",
+            isFinal: false,
           },
         },
+        isStreamingAssistantMessage: false,
         sessionRole: "planner",
         sessionSelectedModel: null,
         sessionAgentColors: {},
@@ -646,6 +648,7 @@ describe("AgentChatMessageCard tool duration", () => {
             isFinal: false,
           },
         },
+        isStreamingAssistantMessage: true,
         sessionRole: "planner",
         sessionSelectedModel: null,
         sessionAgentColors: {},

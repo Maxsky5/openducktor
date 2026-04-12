@@ -6,20 +6,20 @@ import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-vi
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
+  isStreamingAssistantMessage?: boolean;
   sessionRole: AgentRole | null;
   sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
-  copyResetDelayMs?: number;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
+  isStreamingAssistantMessage = false,
   sessionRole,
   sessionSelectedModel,
   sessionAgentColors,
   sessionWorkingDirectory,
-  copyResetDelayMs,
 }: AgentChatMessageCardProps): ReactElement | null {
   const vm = buildAgentChatMessageCardViewModel({
     message,
@@ -41,10 +41,10 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       <MessageBody
         message={message}
         assistantAccentColor={vm.assistantAccentColor}
+        isStreamingAssistantMessage={isStreamingAssistantMessage}
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
-        {...(copyResetDelayMs === undefined ? {} : { copyResetDelayMs })}
       />
     </article>
   );
