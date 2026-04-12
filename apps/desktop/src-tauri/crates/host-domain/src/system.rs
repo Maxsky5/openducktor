@@ -10,6 +10,63 @@ pub struct RuntimeHealth {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoStoreHealthCategory {
+    Initializing,
+    Healthy,
+    MissingAttachment,
+    MissingSharedDatabase,
+    AttachmentContractInvalid,
+    AttachmentVerificationFailed,
+    SharedServerUnavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoStoreHealthStatus {
+    Initializing,
+    Ready,
+    Degraded,
+    Blocking,
+    RestoreNeeded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoStoreSharedServerOwnershipState {
+    OwnedByCurrentProcess,
+    ReusedExistingServer,
+    AdoptedOrphanedServer,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoStoreAttachmentHealth {
+    pub path: Option<String>,
+    pub database_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoStoreSharedServerHealth {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub ownership_state: RepoStoreSharedServerOwnershipState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoStoreHealth {
+    pub category: RepoStoreHealthCategory,
+    pub status: RepoStoreHealthStatus,
+    pub is_ready: bool,
+    pub detail: Option<String>,
+    pub attachment: RepoStoreAttachmentHealth,
+    pub shared_server: RepoStoreSharedServerHealth,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemCheck {
@@ -21,6 +78,7 @@ pub struct SystemCheck {
     pub gh_auth_login: Option<String>,
     pub gh_auth_error: Option<String>,
     pub runtimes: Vec<RuntimeHealth>,
+    pub repo_store_health: RepoStoreHealth,
     pub beads_ok: bool,
     pub beads_path: Option<String>,
     pub beads_error: Option<String>,
@@ -44,6 +102,7 @@ pub struct RuntimeCheck {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BeadsCheck {
+    pub repo_store_health: RepoStoreHealth,
     pub beads_ok: bool,
     pub beads_path: Option<String>,
     pub beads_error: Option<String>,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type BeadsCheck, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -38,6 +38,28 @@ const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthC
     failureKind: null,
     ...overrides.mcp,
   },
+});
+
+const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
+  beadsOk: true,
+  beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
+  beadsError: null,
+  repoStoreHealth: {
+    category: "healthy",
+    status: "ready",
+    isReady: true,
+    detail: "Beads attachment and shared Dolt server are healthy.",
+    attachment: {
+      path: "/Users/dev/.openducktor/beads/fairnest/.beads",
+      databaseName: "fairnest_db",
+    },
+    sharedServer: {
+      host: "127.0.0.1",
+      port: 3307,
+      ownershipState: "owned_by_current_process",
+    },
+  },
+  ...overrides,
 });
 
 describe("DiagnosticsPanelSections", () => {
@@ -89,11 +111,7 @@ describe("DiagnosticsPanelSections", () => {
         ],
         errors: [],
       },
-      beadsCheck: {
-        beadsOk: true,
-        beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
-        beadsError: null,
-      },
+      beadsCheck: makeBeadsCheck(),
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
@@ -141,7 +159,11 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Server name:");
     expect(html).toContain("Status:");
     expect(html).toContain("Tools detected:");
-    expect(html).toContain("Store path:");
+    expect(html).toContain("Beads attachment path:");
+    expect(html).toContain("Dolt database name:");
+    expect(html).toContain("Dolt server host:");
+    expect(html).toContain("Dolt server port:");
+    expect(html).toContain("Dolt server ownership:");
   });
 
   test("renders error rows when section errors are present", () => {
@@ -169,11 +191,26 @@ describe("DiagnosticsPanelSections", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },
-      beadsCheck: {
+      beadsCheck: makeBeadsCheck({
         beadsOk: false,
         beadsPath: null,
         beadsError: "beads init failed",
-      },
+        repoStoreHealth: {
+          category: "attachment_verification_failed",
+          status: "degraded",
+          isReady: false,
+          detail: "beads init failed",
+          attachment: {
+            path: null,
+            databaseName: "fairnest_db",
+          },
+          sharedServer: {
+            host: "127.0.0.1",
+            port: 3307,
+            ownershipState: "owned_by_current_process",
+          },
+        },
+      }),
       runtimeCheckFailureKind: "error",
       beadsCheckFailureKind: "error",
       runtimeHealthByRuntime: {

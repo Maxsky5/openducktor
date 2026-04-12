@@ -1,5 +1,12 @@
 use anyhow::{anyhow, Context, Result};
-use host_infra_system::compute_beads_database_name;
+use host_domain::{
+    RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
+    RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
+};
+use host_infra_system::{
+    compute_beads_database_name, is_process_alive, read_shared_dolt_server_state,
+    resolve_repo_beads_attachment_dir, SharedDoltServerAcquisition, SHARED_DOLT_SERVER_HOST,
+};
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -54,6 +61,16 @@ struct SharedDoltConnection {
     user: String,
 }
 
+#[derive(Debug, Clone)]
+struct SharedServerSnapshot {
+    host: Option<String>,
+    port: Option<u16>,
+    owner_pid: Option<u32>,
+    acquisition: Option<SharedDoltServerAcquisition>,
+}
+
+type DiagnosticsEnv = (Vec<(String, String)>, SharedServerSnapshot, bool);
+
 impl SharedDoltConnection {
     fn from_env(env: &[(String, String)]) -> Result<Self> {
         Ok(Self {
@@ -93,6 +110,131 @@ enum BdWhereCommandOutput<'a> {
 }
 
 impl BeadsLifecycle {
+    pub(crate) fn diagnose_repo_store(&self, repo_path: &Path) -> Result<RepoStoreHealth> {
+        let repo_key = Self::repo_key(repo_path);
+        let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
+        let attachment_path = beads_dir.to_string_lossy().to_string();
+        let database_name = compute_beads_database_name(repo_path)?;
+        let base_shared_server = self.repo_store_shared_server_snapshot()?;
+
+        if self.is_repo_initializing(&repo_key)? {
+            return Ok(self.build_repo_store_health(
+                RepoStoreHealthCategory::Initializing,
+                RepoStoreHealthStatus::Initializing,
+                Some(format!(
+                    "Beads task store initialization is in progress for {}",
+                    repo_path.display()
+                )),
+                attachment_path,
+                database_name,
+                &base_shared_server,
+            ));
+        }
+
+        if !attachment_dir_exists(&beads_dir)? {
+            return Ok(self.build_repo_store_health(
+                RepoStoreHealthCategory::MissingAttachment,
+                RepoStoreHealthStatus::Blocking,
+                Some(format!("Beads attachment is missing at {attachment_path}")),
+                attachment_path,
+                database_name,
+                &base_shared_server,
+            ));
+        }
+
+        let (env, shared_server, verify_contract) =
+            match self.diagnostics_env_for_repo_store(repo_path, &beads_dir, &base_shared_server) {
+                Ok(Some(values)) => values,
+                Ok(None) => {
+                    let detail = LifecycleError::SharedDoltStateMissing {
+                        repo_path: repo_path.to_path_buf(),
+                    }
+                    .to_string();
+                    return Ok(self.build_repo_store_health(
+                        RepoStoreHealthCategory::SharedServerUnavailable,
+                        RepoStoreHealthStatus::Blocking,
+                        Some(detail),
+                        attachment_path,
+                        database_name,
+                        &base_shared_server,
+                    ));
+                }
+                Err(error) => {
+                    return Ok(self.build_repo_store_health(
+                        RepoStoreHealthCategory::AttachmentContractInvalid,
+                        RepoStoreHealthStatus::Blocking,
+                        Some(error.to_string()),
+                        attachment_path,
+                        database_name,
+                        &base_shared_server,
+                    ));
+                }
+            };
+
+        let detail_from_readiness = |readiness: &RepoReadiness| match readiness {
+            RepoReadiness::Ready => {
+                Some("Beads attachment and shared Dolt server are healthy.".to_string())
+            }
+            RepoReadiness::MissingAttachment => {
+                Some(format!("Beads attachment is missing at {attachment_path}"))
+            }
+            RepoReadiness::BrokenAttachmentContract { reason }
+            | RepoReadiness::SharedDoltUnavailable { reason }
+            | RepoReadiness::AttachmentVerificationFailed { reason } => Some(reason.clone()),
+            RepoReadiness::MissingSharedDatabase { database_name } => Some(format!(
+                "Shared Dolt database {database_name} is missing and restore is required"
+            )),
+        };
+
+        match self.verify_repo_initialized_with_env(repo_path, &beads_dir, &env, verify_contract) {
+            Ok(readiness) => {
+                let (category, status) = match &readiness {
+                    RepoReadiness::Ready => (
+                        RepoStoreHealthCategory::Healthy,
+                        RepoStoreHealthStatus::Ready,
+                    ),
+                    RepoReadiness::MissingAttachment => (
+                        RepoStoreHealthCategory::MissingAttachment,
+                        RepoStoreHealthStatus::Blocking,
+                    ),
+                    RepoReadiness::BrokenAttachmentContract { .. } => (
+                        RepoStoreHealthCategory::AttachmentContractInvalid,
+                        RepoStoreHealthStatus::Blocking,
+                    ),
+                    RepoReadiness::SharedDoltUnavailable { .. } => (
+                        RepoStoreHealthCategory::SharedServerUnavailable,
+                        RepoStoreHealthStatus::Blocking,
+                    ),
+                    RepoReadiness::MissingSharedDatabase { .. } => (
+                        RepoStoreHealthCategory::MissingSharedDatabase,
+                        RepoStoreHealthStatus::RestoreNeeded,
+                    ),
+                    RepoReadiness::AttachmentVerificationFailed { .. } => (
+                        RepoStoreHealthCategory::AttachmentVerificationFailed,
+                        RepoStoreHealthStatus::Degraded,
+                    ),
+                };
+
+                Ok(self.build_repo_store_health(
+                    category,
+                    status,
+                    detail_from_readiness(&readiness),
+                    attachment_path,
+                    database_name,
+                    &shared_server,
+                ))
+            }
+            Err(error) => Ok(self.build_repo_store_health(
+                RepoStoreHealthCategory::AttachmentVerificationFailed,
+                RepoStoreHealthStatus::Degraded,
+                Some(error.to_string()),
+                attachment_path,
+                database_name,
+                &shared_server,
+            )),
+        }
+    }
+
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,
@@ -103,13 +245,25 @@ impl BeadsLifecycle {
         }
 
         let env = self.build_bd_env(repo_path)?;
-        if let Err(error) = self.verify_repo_attachment_contract(repo_path, beads_dir, &env) {
-            return Ok(RepoReadiness::BrokenAttachmentContract {
-                reason: error.to_string(),
-            });
+        self.verify_repo_initialized_with_env(repo_path, beads_dir, &env, true)
+    }
+
+    fn verify_repo_initialized_with_env(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        env: &[(String, String)],
+        verify_contract: bool,
+    ) -> Result<RepoReadiness> {
+        if verify_contract {
+            if let Err(error) = self.verify_repo_attachment_contract(repo_path, beads_dir, env) {
+                return Ok(RepoReadiness::BrokenAttachmentContract {
+                    reason: error.to_string(),
+                });
+            }
         }
 
-        let shared_dolt_connection = SharedDoltConnection::from_env(&env)?;
+        let shared_dolt_connection = SharedDoltConnection::from_env(env)?;
         match self.probe_shared_database_presence(repo_path, &shared_dolt_connection)? {
             SharedDatabaseProbe::Available => {}
             SharedDatabaseProbe::Missing { database_name } => {
@@ -120,7 +274,101 @@ impl BeadsLifecycle {
             }
         }
 
-        self.probe_beads_where(repo_path, beads_dir, &env)
+        self.probe_beads_where(repo_path, beads_dir, env)
+    }
+
+    fn diagnostics_env_for_repo_store(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        shared_server: &SharedServerSnapshot,
+    ) -> Result<Option<DiagnosticsEnv>> {
+        if shared_server.host.is_some() && shared_server.port.is_some() {
+            return Ok(Some((
+                self.build_bd_env(repo_path)?,
+                shared_server.clone(),
+                true,
+            )));
+        }
+
+        if !self.command_runner().uses_real_processes() {
+            return Ok(Some((
+                self.build_bd_env(repo_path)?,
+                shared_server.clone(),
+                true,
+            )));
+        }
+
+        let metadata = Self::read_attachment_metadata(beads_dir)?;
+        Self::validate_attachment_metadata_for_diagnostics(repo_path, &metadata)?;
+        Ok(None)
+    }
+
+    fn read_attachment_metadata(beads_dir: &Path) -> Result<BeadsAttachmentMetadata> {
+        let metadata_path = beads_dir.join("metadata.json");
+        if !metadata_path.is_file() {
+            return Err(anyhow!(
+                "Beads attachment metadata is missing at {}",
+                metadata_path.display()
+            ));
+        }
+
+        let metadata_raw = fs::read_to_string(&metadata_path).with_context(|| {
+            format!(
+                "Failed reading Beads attachment metadata {}",
+                metadata_path.display()
+            )
+        })?;
+        serde_json::from_str(&metadata_raw).with_context(|| {
+            format!(
+                "Failed parsing Beads attachment metadata {}",
+                metadata_path.display()
+            )
+        })
+    }
+
+    fn validate_attachment_metadata_for_diagnostics(
+        repo_path: &Path,
+        metadata: &BeadsAttachmentMetadata,
+    ) -> Result<()> {
+        if metadata.backend.as_deref() != Some("dolt") {
+            return Err(anyhow!(
+                "Beads attachment backend is {:?}, expected dolt",
+                metadata.backend
+            ));
+        }
+        if metadata.dolt_mode.as_deref() != Some("server") {
+            return Err(anyhow!(
+                "Beads attachment mode is {:?}, expected server",
+                metadata.dolt_mode
+            ));
+        }
+
+        metadata
+            .dolt_server_host
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| anyhow!("Beads attachment host is missing from metadata"))?;
+        metadata
+            .dolt_server_port
+            .ok_or_else(|| anyhow!("Beads attachment port is missing from metadata"))?
+            .to_string();
+        metadata
+            .dolt_server_user
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| anyhow!("Beads attachment user is missing from metadata"))?;
+
+        let expected_database = compute_beads_database_name(repo_path)?;
+        if metadata.dolt_database.as_deref() != Some(expected_database.as_str()) {
+            return Err(anyhow!(
+                "Beads attachment database is {:?}, expected {}",
+                metadata.dolt_database,
+                expected_database
+            ));
+        }
+
+        Ok(())
     }
 
     fn probe_beads_where(
@@ -283,6 +531,83 @@ impl BeadsLifecycle {
         let object_index = payload.find('{');
         let array_index = payload.find('[');
         [object_index, array_index].into_iter().flatten().min()
+    }
+
+    fn repo_store_shared_server_snapshot(&self) -> Result<SharedServerSnapshot> {
+        if let Some(server_state) = read_shared_dolt_server_state()? {
+            let owner_pid = (server_state.owner_pid == std::process::id()
+                || is_process_alive(server_state.owner_pid))
+            .then_some(server_state.owner_pid);
+
+            return Ok(SharedServerSnapshot {
+                host: Some(server_state.host),
+                port: Some(server_state.port),
+                owner_pid,
+                acquisition: Some(server_state.acquisition),
+            });
+        }
+
+        if !self.command_runner().uses_real_processes() {
+            return Ok(SharedServerSnapshot {
+                host: Some(SHARED_DOLT_SERVER_HOST.to_string()),
+                port: Some(3307),
+                owner_pid: None,
+                acquisition: None,
+            });
+        }
+
+        Ok(SharedServerSnapshot {
+            host: None,
+            port: None,
+            owner_pid: None,
+            acquisition: None,
+        })
+    }
+
+    fn build_repo_store_health(
+        &self,
+        category: RepoStoreHealthCategory,
+        status: RepoStoreHealthStatus,
+        detail: Option<String>,
+        attachment_path: String,
+        database_name: String,
+        shared_server: &SharedServerSnapshot,
+    ) -> RepoStoreHealth {
+        let ownership_state = match shared_server.owner_pid {
+            Some(owner_pid)
+                if owner_pid != std::process::id()
+                    && !matches!(
+                        category,
+                        RepoStoreHealthCategory::SharedServerUnavailable
+                            | RepoStoreHealthCategory::Initializing
+                    ) =>
+            {
+                RepoStoreSharedServerOwnershipState::ReusedExistingServer
+            }
+            Some(owner_pid) if owner_pid == std::process::id() => match shared_server.acquisition {
+                Some(SharedDoltServerAcquisition::AdoptedOrphanedServer) => {
+                    RepoStoreSharedServerOwnershipState::AdoptedOrphanedServer
+                }
+                _ => RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess,
+            },
+            _ => RepoStoreSharedServerOwnershipState::Unavailable,
+        };
+
+        RepoStoreHealth {
+            category,
+            status: status.clone(),
+            is_ready: matches!(status, RepoStoreHealthStatus::Ready),
+            detail,
+            attachment: RepoStoreAttachmentHealth {
+                path: Some(attachment_path),
+                database_name: Some(database_name),
+            },
+            shared_server: RepoStoreSharedServerHealth {
+                host: shared_server.host.clone(),
+                port: shared_server.port,
+                ownership_state,
+            },
+        }
     }
 
     fn probe_shared_database_presence(

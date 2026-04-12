@@ -2,11 +2,13 @@ use crate::document::{
     AgentSessionDocument, QaReportDocument, QaVerdict, SpecDocument, TaskMetadata,
 };
 use crate::git::{DirectMergeRecord, PullRequestRecord};
+use crate::system::RepoStoreHealth;
 use crate::task::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use anyhow::Result;
 use std::path::Path;
 
 pub trait TaskStore: Send + Sync {
+    fn diagnose_repo_store(&self, repo_path: &Path) -> Result<RepoStoreHealth>;
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()>;
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>>;
     fn get_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard>;

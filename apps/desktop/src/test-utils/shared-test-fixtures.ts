@@ -1,5 +1,38 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { BeadsCheck, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+
+const BASE_BEADS_CHECK_FIXTURE: BeadsCheck = {
+  beadsOk: true,
+  beadsPath: "/repo/.beads",
+  beadsError: null,
+  repoStoreHealth: {
+    category: "healthy",
+    status: "ready",
+    isReady: true,
+    detail: "Beads attachment and shared Dolt server are healthy.",
+    attachment: {
+      path: "/repo/.beads",
+      databaseName: "repo_db",
+    },
+    sharedServer: {
+      host: "127.0.0.1",
+      port: 3307,
+      ownershipState: "owned_by_current_process",
+    },
+  },
+};
+
+type RepoStoreHealthFixtureOverrides = Omit<
+  Partial<BeadsCheck["repoStoreHealth"]>,
+  "attachment" | "sharedServer"
+> & {
+  attachment?: Partial<BeadsCheck["repoStoreHealth"]["attachment"]>;
+  sharedServer?: Partial<BeadsCheck["repoStoreHealth"]["sharedServer"]>;
+};
+
+export type BeadsCheckFixtureOverrides = Omit<Partial<BeadsCheck>, "repoStoreHealth"> & {
+  repoStoreHealth?: RepoStoreHealthFixtureOverrides;
+};
 
 const BASE_TASK_CARD_FIXTURE: TaskCard = {
   id: "task-1",
@@ -72,6 +105,34 @@ export const createDeferred = <T>() => {
     resolve: (value: T) => resolve?.(value),
     reject: (reason?: unknown) => reject?.(reason),
   };
+};
+
+export const createBeadsCheckFixture = (
+  defaults: BeadsCheckFixtureOverrides = {},
+  overrides: BeadsCheckFixtureOverrides = {},
+): BeadsCheck => {
+  const merged = {
+    ...BASE_BEADS_CHECK_FIXTURE,
+    ...defaults,
+    ...overrides,
+    repoStoreHealth: {
+      ...BASE_BEADS_CHECK_FIXTURE.repoStoreHealth,
+      ...defaults.repoStoreHealth,
+      ...overrides.repoStoreHealth,
+      attachment: {
+        ...BASE_BEADS_CHECK_FIXTURE.repoStoreHealth.attachment,
+        ...defaults.repoStoreHealth?.attachment,
+        ...overrides.repoStoreHealth?.attachment,
+      },
+      sharedServer: {
+        ...BASE_BEADS_CHECK_FIXTURE.repoStoreHealth.sharedServer,
+        ...defaults.repoStoreHealth?.sharedServer,
+        ...overrides.repoStoreHealth?.sharedServer,
+      },
+    },
+  } satisfies BeadsCheck;
+
+  return structuredClone(merged);
 };
 
 export const createTaskCardFixture = (

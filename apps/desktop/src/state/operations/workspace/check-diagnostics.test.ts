@@ -52,6 +52,21 @@ describe("check-diagnostics helpers", () => {
     );
 
     expect(buildBeadsCheckErrorState("beads offline")).toEqual({
+      repoStoreHealth: {
+        category: "check_call_failed",
+        status: "degraded",
+        isReady: false,
+        detail: "beads offline",
+        attachment: {
+          path: null,
+          databaseName: null,
+        },
+        sharedServer: {
+          host: null,
+          port: null,
+          ownershipState: "unavailable",
+        },
+      },
       beadsOk: false,
       beadsPath: null,
       beadsError: "beads offline",

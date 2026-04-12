@@ -10,7 +10,11 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import {
+  type BeadsCheckFixtureOverrides,
+  createBeadsCheckFixture,
+  createDeferred,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "../shared/host";
 
@@ -39,12 +43,8 @@ const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck =
   ...overrides,
 });
 
-const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
-  beadsOk: true,
-  beadsPath: "/repo/.beads",
-  beadsError: null,
-  ...overrides,
-});
+const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
+  createBeadsCheckFixture({}, overrides);
 
 type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
   runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
@@ -289,6 +289,62 @@ describe("use-checks", () => {
     }
   });
 
+  test("does not surface Beads failures while backend reports initialization in progress", async () => {
+    const runtimeCheck = mock(
+      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    );
+    const beadsCheck = mock(
+      async (): Promise<BeadsCheck> =>
+        makeBeadsCheck({
+          beadsOk: false,
+          beadsPath: "/repo/.beads",
+          beadsError: "Beads task store initialization is in progress for /repo-a",
+          repoStoreHealth: {
+            category: "initializing",
+            status: "initializing",
+            isReady: false,
+            detail: "Beads task store initialization is in progress for /repo-a",
+            attachment: {
+              path: "/repo/.beads",
+              databaseName: "repo_db",
+            },
+            sharedServer: {
+              host: "127.0.0.1",
+              port: 38240,
+              ownershipState: "unavailable",
+            },
+          },
+        }),
+    );
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (value) => value.runtimeCheck !== null && value.activeBeadsCheck !== null,
+      );
+
+      const current = harness.getLatest();
+      expect(current.activeBeadsCheck?.repoStoreHealth.status).toBe("initializing");
+      expect(current.beadsCheckFailureKind).toBeNull();
+      expect(toastError).not.toHaveBeenCalledWith("Beads store unavailable", expect.anything());
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+    }
+  });
+
   test("refreshRuntimeCheck caches and supports force retries", async () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
@@ -466,6 +522,15 @@ describe("use-checks", () => {
             beadsOk: false,
             beadsPath: null,
             beadsError: "beads offline",
+            repoStoreHealth: {
+              category: "attachment_verification_failed",
+              status: "blocking",
+              isReady: false,
+              detail: "beads offline",
+              attachment: {
+                path: null,
+              },
+            },
           });
     });
 

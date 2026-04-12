@@ -80,6 +80,9 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
     let config_store = AppConfigStore::from_path(unique_temp_path("new-constructor"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: Arc::new(Mutex::new(TaskStoreState {
+            diagnose_calls: Vec::new(),
+            diagnose_error: None,
+            diagnose_health: None,
             ensure_calls: Vec::new(),
             ensure_error: None,
             tasks: Vec::new(),

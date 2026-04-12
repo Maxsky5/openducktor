@@ -8,8 +8,8 @@ use super::{
     resolve_server_lock_file, resolve_server_state_file, resolve_shared_dolt_root,
     resolve_shared_server_root, restore_shared_dolt_database_from_backup,
     stop_shared_dolt_server_for_current_owner, wrap_port_candidate, write_dolt_config_file,
-    SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
-    SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
+    SharedDoltServerAcquisition, SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN,
+    SHARED_DOLT_PORT_RANGE_START, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 use anyhow::{anyhow, Result};
 use host_test_support::{lock_env, EnvVarGuard};
@@ -175,6 +175,7 @@ fn server_state_round_trip_reads_serialized_file() {
     let payload = SharedDoltServerState {
         pid: 12,
         owner_pid: 34,
+        acquisition: SharedDoltServerAcquisition::StartedByOwner,
         host: "127.0.0.1".to_string(),
         user: "root".to_string(),
         port: 36123,
@@ -360,6 +361,7 @@ fn shared_dolt_server_replaces_stale_state_files() -> Result<()> {
         serde_json::to_string(&SharedDoltServerState {
             pid: 999_999,
             owner_pid: 2002,
+            acquisition: SharedDoltServerAcquisition::StartedByOwner,
             host: "127.0.0.1".to_string(),
             user: "root".to_string(),
             port: 39999,
@@ -430,7 +432,15 @@ fn shared_dolt_server_adopts_healthy_state_when_previous_owner_is_gone() -> Resu
     assert_eq!(adopted.pid, first.pid);
     assert_eq!(adopted.port, first.port);
     assert_eq!(adopted.owner_pid, 7007);
+    assert_eq!(
+        adopted.acquisition,
+        SharedDoltServerAcquisition::AdoptedOrphanedServer
+    );
     assert_eq!(persisted.owner_pid, 7007);
+    assert_eq!(
+        persisted.acquisition,
+        SharedDoltServerAcquisition::AdoptedOrphanedServer
+    );
 
     assert!(stop_shared_dolt_server_for_current_owner(7007)?);
     let _ = fs::remove_dir_all(config_root);

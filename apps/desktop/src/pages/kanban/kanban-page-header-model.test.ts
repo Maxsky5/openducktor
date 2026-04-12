@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createBeadsCheckFixture } from "@/test-utils/shared-test-fixtures";
 import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
 
 describe("isKanbanTaskCreationDisabled", () => {
@@ -8,21 +9,42 @@ describe("isKanbanTaskCreationDisabled", () => {
 
   test("disables task creation when beads is unavailable", () => {
     expect(
-      isKanbanTaskCreationDisabled("/repo", {
-        beadsOk: false,
-        beadsPath: null,
-        beadsError: "beads unavailable",
-      }),
+      isKanbanTaskCreationDisabled(
+        "/repo",
+        createBeadsCheckFixture(
+          {},
+          {
+            beadsOk: false,
+            beadsPath: null,
+            beadsError: "beads unavailable",
+            repoStoreHealth: {
+              category: "shared_server_unavailable",
+              status: "blocking",
+              isReady: false,
+              detail: "beads unavailable",
+            },
+          },
+        ),
+      ),
     ).toBe(true);
   });
 
   test("enables task creation when beads is ready", () => {
     expect(
-      isKanbanTaskCreationDisabled("/repo", {
-        beadsOk: true,
-        beadsPath: "/tmp/beads",
-        beadsError: null,
-      }),
+      isKanbanTaskCreationDisabled(
+        "/repo",
+        createBeadsCheckFixture(
+          {},
+          {
+            beadsPath: "/tmp/beads",
+            repoStoreHealth: {
+              attachment: {
+                path: "/tmp/beads",
+              },
+            },
+          },
+        ),
+      ),
     ).toBe(false);
   });
 });

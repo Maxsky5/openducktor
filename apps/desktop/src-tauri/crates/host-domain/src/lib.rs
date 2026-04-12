@@ -34,7 +34,11 @@ pub use runtime::{
     RuntimeProvisioningMode, RuntimeRole, RuntimeRoute, RuntimeSupportedScope,
 };
 pub use store::TaskStore;
-pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
+pub use system::{
+    BeadsCheck, RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory,
+    RepoStoreHealthStatus, RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
+    RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
+};
 pub use task::{
     CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskDirectMergeResult,
     TaskStatus, UpdateTaskPatch,
@@ -125,11 +129,13 @@ mod tests {
             QaReportDocument, QaVerdict, QaWorkflowVerdict, RepoRuntimeHealthCheck,
             RepoRuntimeHealthMcp, RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime,
             RepoRuntimeHealthState, RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind,
-            RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary,
-            RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck,
-            TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary,
-            TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore, UpdateTaskPatch,
-            WorkspaceRecord,
+            RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RepoStoreAttachmentHealth,
+            RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
+            RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RunEvent, RunState,
+            RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument,
+            SystemCheck, TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence,
+            TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore,
+            UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -185,6 +191,12 @@ mod tests {
             RepoRuntimeStartupFailureKind,
             RepoRuntimeStartupStage,
             RepoRuntimeStartupStatus,
+            RepoStoreAttachmentHealth,
+            RepoStoreHealth,
+            RepoStoreHealthCategory,
+            RepoStoreHealthStatus,
+            RepoStoreSharedServerHealth,
+            RepoStoreSharedServerOwnershipState,
             IssueType,
             PlanSubtaskInput,
             QaReportDocument,

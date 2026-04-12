@@ -8,6 +8,7 @@ import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
+  createBeadsCheckFixture,
   createDeferred,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -92,11 +93,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
             runtimes: [],
             errors: [],
           }),
-          refreshBeadsCheckForRepo: async () => ({
-            beadsOk: true,
-            beadsPath: "/repo/.beads",
-            beadsError: null,
-          }),
+          refreshBeadsCheckForRepo: async () => createBeadsCheckFixture(),
           refreshRepoRuntimeHealthForRepo: async () => ({}),
           clearActiveBeadsCheck: () => {},
           clearActiveRepoRuntimeHealth: () => {},

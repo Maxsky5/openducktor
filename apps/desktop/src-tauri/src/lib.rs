@@ -449,7 +449,8 @@ fn startup_phase_build_tauri_app(
             #[cfg(all(feature = "cef", target_os = "macos"))]
             macos_cef_quit::install(app)?;
 
-            let stop_requested = start_task_event_relay(setup_service.clone(), app.handle().clone());
+            let stop_requested =
+                start_task_event_relay(setup_service.clone(), app.handle().clone());
             app.manage(TaskEventRelayState { stop_requested });
             Ok(())
         })

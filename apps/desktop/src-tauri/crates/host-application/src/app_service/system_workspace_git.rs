@@ -8,15 +8,15 @@ use host_domain::{
     GitConflictAbortRequest, GitConflictAbortResult, GitCurrentBranch, GitFileDiff, GitFileStatus,
     GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
     GitRebaseBranchRequest, GitRebaseBranchResult, GitResetWorktreeSelectionRequest,
-    GitResetWorktreeSelectionResult, GitWorktreeSummary, RuntimeCheck, RuntimeHealth, SystemCheck,
-    WorkspaceRecord,
+    GitResetWorktreeSelectionResult, GitWorktreeSummary, RepoStoreAttachmentHealth,
+    RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree,
     remove_worktree_path_if_present, repo_script_fingerprint, resolve_effective_worktree_base_dir,
-    resolve_repo_live_database_dir, run_command, run_command_allow_failure_with_env,
-    version_command, AutopilotSettings, ChatSettings, GlobalGitConfig, HookSet, KanbanSettings,
-    PromptOverrides, RepoConfig,
+    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
+    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -73,6 +73,43 @@ fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String 
 
 fn normalize_path_for_comparison(path: &str) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| Path::new(path).to_path_buf())
+}
+
+fn build_beads_check(repo_store_health: RepoStoreHealth) -> BeadsCheck {
+    let beads_error = (!repo_store_health.is_ready
+        && !matches!(
+            repo_store_health.status,
+            RepoStoreHealthStatus::Initializing
+        ))
+    .then(|| repo_store_health.detail.clone())
+    .flatten();
+
+    BeadsCheck {
+        beads_ok: repo_store_health.is_ready,
+        beads_path: repo_store_health.attachment.path.clone(),
+        beads_error,
+        repo_store_health,
+    }
+}
+
+fn missing_bd_repo_store_health() -> RepoStoreHealth {
+    RepoStoreHealth {
+        category: RepoStoreHealthCategory::AttachmentVerificationFailed,
+        status: RepoStoreHealthStatus::Blocking,
+        is_ready: false,
+        detail: Some(
+            "bd not found in bundled locations, standard install locations, or PATH".to_string(),
+        ),
+        attachment: RepoStoreAttachmentHealth {
+            path: None,
+            database_name: None,
+        },
+        shared_server: RepoStoreSharedServerHealth {
+            host: None,
+            port: None,
+            ownership_state: RepoStoreSharedServerOwnershipState::Unavailable,
+        },
+    }
 }
 
 impl AppService {
@@ -206,39 +243,12 @@ impl AppService {
 
     pub fn beads_check(&self, repo_path: &str) -> Result<BeadsCheck> {
         if !command_exists("bd") {
-            return Ok(BeadsCheck {
-                beads_ok: false,
-                beads_path: None,
-                beads_error: Some(
-                    "bd not found in bundled locations, standard install locations, or PATH"
-                        .to_string(),
-                ),
-            });
+            return Ok(build_beads_check(missing_bd_repo_store_health()));
         }
 
         let repo = Path::new(repo_path);
-        match resolve_repo_live_database_dir(repo) {
-            Ok(path) => {
-                let path_string = path.to_string_lossy().to_string();
-                match self.ensure_repo_initialized(repo_path) {
-                    Ok(()) => Ok(BeadsCheck {
-                        beads_ok: true,
-                        beads_path: Some(path_string),
-                        beads_error: None,
-                    }),
-                    Err(error) => Ok(BeadsCheck {
-                        beads_ok: false,
-                        beads_path: Some(path_string),
-                        beads_error: Some(format!("{error:#}")),
-                    }),
-                }
-            }
-            Err(error) => Ok(BeadsCheck {
-                beads_ok: false,
-                beads_path: None,
-                beads_error: Some(format!("{error:#}")),
-            }),
-        }
+        let repo_store_health = self.task_store.diagnose_repo_store(repo)?;
+        Ok(build_beads_check(repo_store_health))
     }
 
     pub fn system_check(&self, repo_path: &str) -> Result<SystemCheck> {
@@ -258,6 +268,7 @@ impl AppService {
             gh_auth_login: runtime.gh_auth_login,
             gh_auth_error: runtime.gh_auth_error,
             runtimes: runtime.runtimes,
+            repo_store_health: beads.repo_store_health.clone(),
             beads_ok: beads.beads_ok,
             beads_path: beads.beads_path,
             beads_error: beads.beads_error,

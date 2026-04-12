@@ -1,4 +1,10 @@
-import { externalTaskSyncEventSchema, type RunEvent, runEventSchema } from "@openducktor/contracts";
+import {
+  type BeadsCheck,
+  externalTaskSyncEventSchema,
+  type RepoStoreHealth,
+  type RunEvent,
+  runEventSchema,
+} from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
@@ -6,7 +12,7 @@ import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
-import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
@@ -41,13 +47,7 @@ type UseAppLifecycleArgs = {
   refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
-  refreshBeadsCheckForRepo: (
-    repoPath: string,
-    force?: boolean,
-  ) => Promise<{
-    beadsOk: boolean;
-    beadsError?: string | null;
-  }>;
+  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
   refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   clearBranchData: () => void;
@@ -114,7 +114,7 @@ export function useAppLifecycle({
           if (repoPath) {
             void refreshTaskDataRef.current(repoPath).catch((error: unknown) => {
               toast.error("Failed to refresh tasks", {
-                description: summarizeTaskLoadError(error),
+                description: summarizeTaskLoadError({ error }),
               });
             });
           }
@@ -163,7 +163,7 @@ export function useAppLifecycle({
 
           void refreshTaskDataRef.current(activeRepo).catch((error: unknown) => {
             toast.error("Failed to resync tasks after task stream reconnect", {
-              description: summarizeTaskLoadError(error),
+              description: summarizeTaskLoadError({ error }),
             });
           });
           return;
@@ -195,7 +195,7 @@ export function useAppLifecycle({
           .current(parsed.data.repoPath, parsed.data.taskId)
           .catch((error: unknown) => {
             toast.error("Failed to sync external task changes", {
-              description: summarizeTaskLoadError(error),
+              description: summarizeTaskLoadError({ error }),
             });
           });
       })
@@ -230,6 +230,7 @@ export function useAppLifecycle({
     const loadVersion = ++repoLoadVersionRef.current;
     let beadsPreparationToastId: string | number | null = null;
     let beadsPreparationToastShown = false;
+    let hadBeadsPreparationToast = false;
     let beadsPreparationTimer: ReturnType<typeof setTimeout> | null = null;
 
     const clearBeadsPreparationTimer = (): void => {
@@ -247,29 +248,43 @@ export function useAppLifecycle({
       beadsPreparationToastShown = false;
     };
 
+    let repoStoreHealth: RepoStoreHealth | null = null;
+
     const taskLoadPromise = (async () => {
       beadsPreparationTimer = setTimeout(() => {
         if (repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo) {
           return;
         }
         beadsPreparationToastShown = true;
+        hadBeadsPreparationToast = true;
         beadsPreparationToastId = toast.loading("Preparing Beads database", {
           description: "OpenDucktor is initializing the Beads task store for this repository.",
         });
       }, beadsPreparationToastDelayMs);
 
       try {
-        const beads = await refreshBeadsCheckForRepo(activeRepo, false);
-        clearBeadsPreparationTimer();
+        const beadsCheck = await refreshBeadsCheckForRepo(activeRepo, false);
+        repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
+        if (beadsCheck.repoStoreHealth.status !== "initializing") {
+          clearBeadsPreparationTimer();
+          if (beadsPreparationToastShown) {
+            dismissBeadsPreparationToast();
+          }
+        }
 
-        if (!beads.beadsOk) {
-          throw new Error(
-            beads.beadsError ?? "Beads store is not initialized for this repository.",
-          );
+        await refreshTaskData(activeRepo);
+        if (!beadsCheck.repoStoreHealth.isReady) {
+          try {
+            const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepo, true);
+            repoStoreHealth = getBlockingRepoStoreHealth(refreshedBeadsCheck);
+          } catch {
+            // Preserve the main repo-load outcome if the follow-up diagnostics refresh fails.
+          }
         }
 
         if (
-          beadsPreparationToastShown &&
+          !repoStoreHealth &&
+          hadBeadsPreparationToast &&
           repoLoadVersionRef.current === loadVersion &&
           activeRepoRef.current === activeRepo
         ) {
@@ -278,8 +293,6 @@ export function useAppLifecycle({
             description: "The task store is ready for this repository.",
           });
         }
-
-        await refreshTaskData(activeRepo);
       } finally {
         clearBeadsPreparationTimer();
         dismissBeadsPreparationToast();
@@ -306,7 +319,7 @@ export function useAppLifecycle({
 
         if (tasksResult.status === "rejected") {
           toast.error("Repository tasks unavailable", {
-            description: summarizeTaskLoadError(tasksResult.reason),
+            description: summarizeTaskLoadError({ error: tasksResult.reason, repoStoreHealth }),
           });
         }
       })

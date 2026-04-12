@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
+import type { BeadsCheck } from "@openducktor/contracts";
 import { act } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  type BeadsCheckFixtureOverrides,
+  createBeadsCheckFixture,
+} from "@/test-utils/shared-test-fixtures";
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
@@ -35,6 +40,9 @@ const createDeferred = <T,>() => {
     reject: (reason?: unknown) => reject?.(reason),
   };
 };
+
+const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
+  createBeadsCheckFixture({}, overrides);
 
 const createIntervalController = () => {
   let nextIntervalId = 1;
@@ -247,11 +255,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -304,11 +310,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData: mock(async () => {}),
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -348,11 +352,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -404,11 +406,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData: mock(async () => {}),
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -448,11 +448,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo-a/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo-a/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -499,11 +497,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -562,11 +558,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -615,11 +609,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -665,11 +657,9 @@ describe("useAppLifecycle", () => {
         refreshWorkspaces: mock(async () => {}),
         refreshBranches: mock(async () => {}),
         refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () => ({
-          beadsOk: true,
-          beadsPath: "/repo/.beads",
-          beadsError: null,
-        })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
         refreshTaskData,
         refreshTasksWithOptions: mock(async () => {}),
         clearBranchData: mock(() => {}),
@@ -762,11 +752,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck,
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
       refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
@@ -817,11 +805,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => {}),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
       refreshTaskData: mock(async () => {}),
       refreshTasksWithOptions,
       clearBranchData: mock(() => {}),
@@ -897,11 +883,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => {}),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo-a/.beads",
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo-a/.beads", beadsError: null }),
+      ),
       refreshTaskData: mock(async () => {}),
       refreshTasksWithOptions: refreshTasksForRepoA,
       clearBranchData: mock(() => {}),
@@ -957,11 +941,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => {}),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
       refreshTaskData: mock(async () => {}),
       refreshTasksWithOptions,
       clearBranchData: mock(() => {}),
@@ -1026,11 +1008,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck,
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
       refreshTaskData: mock(async () => taskLoadDeferred.promise),
       refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
@@ -1095,11 +1075,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck,
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsPath: "/repo/.beads",
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
       refreshTaskData: mock(async () => taskDeferred.promise),
       refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
@@ -1159,7 +1137,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError: null }>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
     const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
 
@@ -1203,7 +1181,7 @@ describe("useAppLifecycle", () => {
       });
 
       await harness.run(async () => {
-        beadsDeferred.resolve({ beadsOk: true, beadsError: null });
+        beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
         taskDeferred.resolve();
         branchesDeferred.resolve();
       });
@@ -1213,7 +1191,136 @@ describe("useAppLifecycle", () => {
         description: "The task store is ready for this repository.",
       });
     } finally {
-      beadsDeferred.resolve({ beadsOk: true, beadsError: null });
+      beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      taskDeferred.resolve();
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes Beads diagnostics after successful task initialization", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const branchesDeferred = createDeferred<void>();
+    const refreshBeadsCheckForRepo = mock(
+      async (_repoPath: string, force = false): Promise<BeadsCheck> =>
+        force
+          ? makeBeadsCheck({ beadsPath: null })
+          : makeBeadsCheck({
+              beadsOk: false,
+              beadsPath: "/repo/.beads",
+              beadsError:
+                "error on line 1 for query show databases: dial tcp 127.0.0.1:38240: connect: connection refused",
+              repoStoreHealth: {
+                category: "shared_server_unavailable",
+                status: "blocking",
+                isReady: false,
+                detail:
+                  "error on line 1 for query show databases: dial tcp 127.0.0.1:38240: connect: connection refused",
+                attachment: {
+                  path: "/repo/.beads",
+                  databaseName: "repo_db",
+                },
+                sharedServer: {
+                  host: "127.0.0.1",
+                  port: 38240,
+                  ownershipState: "unavailable",
+                },
+              },
+            }),
+    );
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo,
+      refreshTaskData: mock(async () => {}),
+      refreshTasksWithOptions: mock(async () => {}),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await harness.run(async () => {
+        branchesDeferred.resolve();
+      });
+
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(1, "/repo", false);
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(2, "/repo", true);
+    } finally {
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("does not force a second Beads refresh when the first check is already ready", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const taskDeferred = createDeferred<void>();
+    const branchesDeferred = createDeferred<void>();
+    const refreshBeadsCheckForRepo = mock(
+      async (): Promise<BeadsCheck> => makeBeadsCheck({ beadsPath: null }),
+    );
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo,
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await harness.run(async () => {
+        taskDeferred.resolve();
+        branchesDeferred.resolve();
+      });
+
+      expect(refreshBeadsCheckForRepo).toHaveBeenCalledTimes(1);
+      expect(refreshBeadsCheckForRepo).toHaveBeenCalledWith("/repo", false);
+    } finally {
       taskDeferred.resolve();
       branchesDeferred.resolve();
       await harness.unmount();
@@ -1234,10 +1341,9 @@ describe("useAppLifecycle", () => {
       refreshWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-      refreshBeadsCheckForRepo: mock(async () => ({
-        beadsOk: true,
-        beadsError: null,
-      })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: null, beadsError: null }),
+      ),
       refreshTaskData: mock(async () => taskDeferred.promise),
       refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
@@ -1283,7 +1389,8 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
 
     const baseArgs: HookArgs = {
@@ -1294,7 +1401,7 @@ describe("useAppLifecycle", () => {
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
-      refreshTaskData: mock(async () => {}),
+      refreshTaskData: mock(async () => taskDeferred.promise),
       refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 15,
@@ -1318,7 +1425,8 @@ describe("useAppLifecycle", () => {
       });
 
       await harness.run(async () => {
-        beadsDeferred.resolve({ beadsOk: false, beadsError: "init failed" });
+        beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+        taskDeferred.reject(new Error("init failed"));
         branchesDeferred.resolve();
       });
 
@@ -1332,17 +1440,19 @@ describe("useAppLifecycle", () => {
         description: "Task store unavailable. init failed",
       });
     } finally {
-      beadsDeferred.resolve({ beadsOk: true, beadsError: null });
+      beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      taskDeferred.resolve();
       branchesDeferred.resolve();
       await harness.unmount();
     }
   });
 
-  test("dismisses the Beads preparation toast when initialization reports an error after it is shown", async () => {
+  test("dismisses the Beads preparation toast when task loading fails after it is shown", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = Parameters<typeof useAppLifecycle>[0];
 
-    const beadsDeferred = createDeferred<{ beadsOk: boolean; beadsError?: string | null }>();
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
 
     const baseArgs: HookArgs = {
@@ -1353,7 +1463,7 @@ describe("useAppLifecycle", () => {
       refreshBranches: mock(async () => branchesDeferred.promise),
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
-      refreshTaskData: mock(async () => {}),
+      refreshTaskData: mock(async () => taskDeferred.promise),
       refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
@@ -1385,7 +1495,8 @@ describe("useAppLifecycle", () => {
       });
 
       await harness.run(async () => {
-        beadsDeferred.resolve({ beadsOk: false, beadsError: "store failed" });
+        beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+        taskDeferred.reject(new Error("store failed"));
         branchesDeferred.resolve();
       });
 
@@ -1395,7 +1506,151 @@ describe("useAppLifecycle", () => {
         description: "Task store unavailable. store failed",
       });
     } finally {
-      beadsDeferred.resolve({ beadsOk: true, beadsError: null });
+      beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      taskDeferred.resolve();
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("dismisses a shown Beads preparation toast as soon as the first check leaves initializing", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const taskDeferred = createDeferred<void>();
+    const branchesDeferred = createDeferred<void>();
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+
+      expect(toastLoading).toHaveBeenCalledWith("Preparing Beads database", {
+        description: "OpenDucktor is initializing the Beads task store for this repository.",
+      });
+
+      await harness.run(async () => {
+        beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      });
+
+      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
+      expect(toastSuccess).not.toHaveBeenCalled();
+
+      await harness.run(async () => {
+        taskDeferred.resolve();
+        branchesDeferred.resolve();
+      });
+    } finally {
+      beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      taskDeferred.resolve();
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("preserves the thrown repo-load error even when repo-store health is blocking", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+
+    const beadsDeferred = createDeferred<BeadsCheck>();
+    const taskDeferred = createDeferred<void>();
+    const branchesDeferred = createDeferred<void>();
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      refreshTasksWithOptions: mock(async () => {}),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(args);
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+
+      await harness.run(async () => {
+        beadsDeferred.resolve(
+          makeBeadsCheck({
+            beadsOk: false,
+            beadsPath: "/repo/.beads",
+            beadsError: "Shared Dolt database repo_db is missing and restore is required",
+            repoStoreHealth: {
+              category: "missing_shared_database",
+              status: "restore_needed",
+              isReady: false,
+              detail: "Shared Dolt database repo_db is missing and restore is required",
+              attachment: {
+                path: "/repo/.beads",
+                databaseName: "repo_db",
+              },
+            },
+          }),
+        );
+        taskDeferred.reject(new Error("gh auth expired"));
+        branchesDeferred.resolve();
+      });
+
+      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
+      expect(toastSuccess).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
+        description: "Task store unavailable. gh auth expired",
+      });
+    } finally {
+      beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+      taskDeferred.resolve();
       branchesDeferred.resolve();
       await harness.unmount();
     }

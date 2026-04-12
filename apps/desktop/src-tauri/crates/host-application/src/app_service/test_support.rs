@@ -26,7 +26,9 @@ use host_domain::{
     GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
     GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
     GitWorktreeSummary, IssueType, PlanSubtaskInput, PullRequestRecord, QaReportDocument,
-    QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
+    QaVerdict, QaWorkflowVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
     SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
@@ -83,6 +85,9 @@ pub(crate) fn write_private_file(path: &Path, contents: &str) -> Result<()> {
 
 #[derive(Debug, Default)]
 pub(crate) struct TaskStoreState {
+    pub(crate) diagnose_calls: Vec<String>,
+    pub(crate) diagnose_error: Option<String>,
+    pub(crate) diagnose_health: Option<RepoStoreHealth>,
     pub(crate) ensure_calls: Vec<String>,
     pub(crate) ensure_error: Option<String>,
     pub(crate) tasks: Vec<TaskCard>,
@@ -119,7 +124,46 @@ pub(crate) struct FakeTaskStore {
     pub(crate) state: Arc<Mutex<TaskStoreState>>,
 }
 
+fn default_repo_store_health(repo_path: &Path) -> RepoStoreHealth {
+    RepoStoreHealth {
+        category: RepoStoreHealthCategory::Healthy,
+        status: RepoStoreHealthStatus::Ready,
+        is_ready: true,
+        detail: Some("Beads attachment and shared Dolt server are healthy.".to_string()),
+        attachment: RepoStoreAttachmentHealth {
+            path: Some(repo_path.join(".beads").to_string_lossy().to_string()),
+            database_name: Some("test-db".to_string()),
+        },
+        shared_server: RepoStoreSharedServerHealth {
+            host: Some("127.0.0.1".to_string()),
+            port: Some(3307),
+            ownership_state: RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess,
+        },
+    }
+}
+
+fn default_task_store_state(tasks: Vec<TaskCard>) -> TaskStoreState {
+    TaskStoreState {
+        tasks,
+        ..Default::default()
+    }
+}
+
 impl TaskStore for FakeTaskStore {
+    fn diagnose_repo_store(&self, repo_path: &Path) -> Result<RepoStoreHealth> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state
+            .diagnose_calls
+            .push(repo_path.to_string_lossy().to_string());
+        if let Some(message) = state.diagnose_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
+        Ok(state
+            .diagnose_health
+            .clone()
+            .unwrap_or_else(|| default_repo_store_health(repo_path)))
+    }
+
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {
         let mut state = self.state.lock().expect("task store lock poisoned");
         if let Some(message) = state.ensure_error.as_ref() {
@@ -1075,37 +1119,7 @@ pub(crate) fn build_service_with_git_state_enforced(
     branches: Vec<GitBranch>,
     current_branch: GitCurrentBranch,
 ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
-    let task_state = Arc::new(Mutex::new(TaskStoreState {
-        ensure_calls: Vec::new(),
-        ensure_error: None,
-        tasks,
-        get_task_calls: Vec::new(),
-        get_task_error: None,
-        list_error: None,
-        delete_calls: Vec::new(),
-        delete_error: None,
-        created_inputs: Vec::new(),
-        updated_patches: Vec::new(),
-        spec_get_calls: Vec::new(),
-        spec_set_calls: Vec::new(),
-        plan_get_calls: Vec::new(),
-        plan_set_calls: Vec::new(),
-        metadata_get_calls: Vec::new(),
-        metadata_spec: None,
-        metadata_plan: None,
-        qa_append_calls: Vec::new(),
-        qa_outcome_calls: Vec::new(),
-        latest_qa_report: None,
-        agent_sessions: Vec::new(),
-        upserted_sessions: Vec::new(),
-        cleared_session_roles: Vec::new(),
-        clear_agent_sessions_error: None,
-        cleared_workflow_documents: Vec::new(),
-        cleared_qa_reports: Vec::new(),
-        set_delivery_metadata_error: None,
-        pull_requests: HashMap::new(),
-        direct_merge_records: HashMap::new(),
-    }));
+    let task_state = Arc::new(Mutex::new(default_task_store_state(tasks)));
     let git_state = Arc::new(Mutex::new(GitState {
         calls: Vec::new(),
         branches,
@@ -1167,37 +1181,7 @@ pub(crate) fn build_service_with_git_state(
     branches: Vec<GitBranch>,
     current_branch: GitCurrentBranch,
 ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
-    let task_state = Arc::new(Mutex::new(TaskStoreState {
-        ensure_calls: Vec::new(),
-        ensure_error: None,
-        tasks,
-        get_task_calls: Vec::new(),
-        get_task_error: None,
-        list_error: None,
-        delete_calls: Vec::new(),
-        delete_error: None,
-        created_inputs: Vec::new(),
-        updated_patches: Vec::new(),
-        spec_get_calls: Vec::new(),
-        spec_set_calls: Vec::new(),
-        plan_get_calls: Vec::new(),
-        plan_set_calls: Vec::new(),
-        metadata_get_calls: Vec::new(),
-        metadata_spec: None,
-        metadata_plan: None,
-        qa_append_calls: Vec::new(),
-        qa_outcome_calls: Vec::new(),
-        latest_qa_report: None,
-        agent_sessions: Vec::new(),
-        upserted_sessions: Vec::new(),
-        cleared_session_roles: Vec::new(),
-        clear_agent_sessions_error: None,
-        cleared_workflow_documents: Vec::new(),
-        cleared_qa_reports: Vec::new(),
-        set_delivery_metadata_error: None,
-        pull_requests: HashMap::new(),
-        direct_merge_records: HashMap::new(),
-    }));
+    let task_state = Arc::new(Mutex::new(default_task_store_state(tasks)));
     let git_state = Arc::new(Mutex::new(GitState {
         calls: Vec::new(),
         branches,
@@ -1722,37 +1706,7 @@ pub(crate) fn build_service_with_store(
     current_branch: GitCurrentBranch,
     config_store: AppConfigStore,
 ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
-    let task_state = Arc::new(Mutex::new(TaskStoreState {
-        ensure_calls: Vec::new(),
-        ensure_error: None,
-        tasks,
-        get_task_calls: Vec::new(),
-        get_task_error: None,
-        list_error: None,
-        delete_calls: Vec::new(),
-        delete_error: None,
-        created_inputs: Vec::new(),
-        updated_patches: Vec::new(),
-        spec_get_calls: Vec::new(),
-        spec_set_calls: Vec::new(),
-        plan_get_calls: Vec::new(),
-        plan_set_calls: Vec::new(),
-        metadata_get_calls: Vec::new(),
-        metadata_spec: None,
-        metadata_plan: None,
-        qa_append_calls: Vec::new(),
-        qa_outcome_calls: Vec::new(),
-        latest_qa_report: None,
-        agent_sessions: Vec::new(),
-        upserted_sessions: Vec::new(),
-        cleared_session_roles: Vec::new(),
-        clear_agent_sessions_error: None,
-        cleared_workflow_documents: Vec::new(),
-        cleared_qa_reports: Vec::new(),
-        set_delivery_metadata_error: None,
-        pull_requests: HashMap::new(),
-        direct_merge_records: HashMap::new(),
-    }));
+    let task_state = Arc::new(Mutex::new(default_task_store_state(tasks)));
     let git_state = Arc::new(Mutex::new(GitState {
         calls: Vec::new(),
         branches,

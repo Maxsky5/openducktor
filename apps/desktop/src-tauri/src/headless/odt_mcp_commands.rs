@@ -198,7 +198,9 @@ async fn handle_search_tasks(state: &HeadlessState, args: Value) -> CommandResul
         state,
         args,
         "odt_search_tasks",
-        |service, repo_path, input: OdtSearchTasksInput| service.odt_search_tasks(&repo_path, input),
+        |service, repo_path, input: OdtSearchTasksInput| {
+            service.odt_search_tasks(&repo_path, input)
+        },
     )
     .await
 }

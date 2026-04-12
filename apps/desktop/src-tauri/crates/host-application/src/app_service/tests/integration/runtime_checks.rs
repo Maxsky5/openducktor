@@ -3,7 +3,9 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort, PlanSubtaskInput,
-    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
+    QaReportDocument, QaVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
     TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
@@ -33,6 +35,28 @@ use crate::app_service::{
     with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
     RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
+
+fn repo_store_health(
+    category: RepoStoreHealthCategory,
+    status: RepoStoreHealthStatus,
+    detail: &str,
+) -> RepoStoreHealth {
+    RepoStoreHealth {
+        is_ready: matches!(status, RepoStoreHealthStatus::Ready),
+        category,
+        status,
+        detail: Some(detail.to_string()),
+        attachment: RepoStoreAttachmentHealth {
+            path: Some("/tmp/repo/.beads".to_string()),
+            database_name: Some("repo_db".to_string()),
+        },
+        shared_server: RepoStoreSharedServerHealth {
+            host: Some("127.0.0.1".to_string()),
+            port: Some(3307),
+            ownership_state: RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess,
+        },
+    }
+}
 
 #[test]
 fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
@@ -83,10 +107,18 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
     let beads = service.beads_check(repo_path.as_str())?;
     assert!(beads.beads_ok);
     assert!(beads.beads_path.is_some());
+    assert_eq!(
+        beads.repo_store_health.category,
+        RepoStoreHealthCategory::Healthy
+    );
 
     let system = service.system_check(repo_path.as_str())?;
     assert!(system.git_ok);
     assert!(system.beads_ok);
+    assert_eq!(
+        system.repo_store_health.category,
+        RepoStoreHealthCategory::Healthy
+    );
     assert!(system
         .runtimes
         .iter()
@@ -157,7 +189,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
     assert!(records[0].is_active);
 
     let state = task_state.lock().expect("task lock poisoned");
-    assert!(!state.ensure_calls.is_empty());
+    assert!(!state.diagnose_calls.is_empty());
     drop(state);
 
     let _ = fs::remove_dir_all(root);
@@ -165,7 +197,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
 }
 
 #[test]
-fn beads_check_reports_task_store_init_error() -> Result<()> {
+fn beads_check_reports_structured_restore_needed_health() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("beads-error");
     let repo = root.join("repo");
@@ -185,16 +217,31 @@ fn beads_check_reports_task_store_init_error() -> Result<()> {
         },
         config_store,
     );
-    task_state.lock().expect("task lock poisoned").ensure_error = Some("init failed".to_string());
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .diagnose_health = Some(repo_store_health(
+        RepoStoreHealthCategory::MissingSharedDatabase,
+        RepoStoreHealthStatus::RestoreNeeded,
+        "Shared Dolt database repo_db is missing and restore is required",
+    ));
 
     let repo_path = repo.to_string_lossy().to_string();
     let check = service.beads_check(repo_path.as_str())?;
     assert!(!check.beads_ok);
-    let beads_error = check.beads_error.unwrap_or_default();
-    assert!(
-        beads_error.contains("Failed to initialize task store"),
-        "unexpected beads error: {beads_error}"
+    assert_eq!(
+        check.repo_store_health.category,
+        RepoStoreHealthCategory::MissingSharedDatabase
     );
+    assert_eq!(
+        check.repo_store_health.status,
+        RepoStoreHealthStatus::RestoreNeeded
+    );
+    assert!(check
+        .beads_error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("restore is required"));
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
@@ -219,6 +266,10 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
     let beads = service.beads_check("/tmp/does-not-matter")?;
     assert!(!beads.beads_ok);
     assert!(beads.beads_path.is_none());
+    assert_eq!(
+        beads.repo_store_health.category,
+        RepoStoreHealthCategory::AttachmentVerificationFailed
+    );
     assert!(beads
         .beads_error
         .as_deref()

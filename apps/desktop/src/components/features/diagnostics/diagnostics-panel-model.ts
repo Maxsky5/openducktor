@@ -17,6 +17,14 @@ import {
   getRepoRuntimeMcpStatusLabel,
 } from "@/lib/repo-runtime-health";
 import {
+  getRepoStoreCategoryLabel,
+  getRepoStoreDetail,
+  getRepoStoreHealth,
+  getRepoStoreOwnershipLabel,
+  getRepoStoreStatusLabel,
+  isRepoStoreReady,
+} from "@/lib/repo-store-health";
+import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
   hasDiagnosticsRetryingState,
@@ -108,6 +116,113 @@ const buildFailureMessages = ({
   }
 
   return detail ? [detail] : [];
+};
+
+const getRepoStoreFailureBadge = (
+  beadsCheck: BeadsCheck | null,
+  failureKind: RepoRuntimeFailureKind,
+): DiagnosticsSectionModel["badge"] => {
+  if (failureKind === "timeout") {
+    return { label: "Retrying", variant: "warning" };
+  }
+  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  if (repoStoreHealth === null) {
+    return { label: "Checking", variant: "secondary" };
+  }
+
+  switch (repoStoreHealth.status) {
+    case "initializing":
+      return { label: "Preparing", variant: "secondary" };
+    case "ready":
+      return { label: "Ready", variant: "success" };
+    case "degraded":
+      return { label: "Degraded", variant: "warning" };
+    case "restore_needed":
+      return { label: "Restore needed", variant: "warning" };
+    case "blocking":
+      return { label: "Blocked", variant: "danger" };
+  }
+};
+
+const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRowModel[] => {
+  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  if (!repoStoreHealth) {
+    return [];
+  }
+
+  const rows: DiagnosticKeyValueRowModel[] = [
+    {
+      label: "Status",
+      value: getRepoStoreStatusLabel(repoStoreHealth),
+    },
+    {
+      label: "Health category",
+      value: getRepoStoreCategoryLabel(repoStoreHealth),
+    },
+    {
+      label: "Beads attachment path",
+      value: repoStoreHealth.attachment.path ?? "Unavailable",
+      breakAll: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt database name",
+      value: repoStoreHealth.attachment.databaseName ?? "Unavailable",
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt server host",
+      value: repoStoreHealth.sharedServer.host ?? "Unavailable",
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt server port",
+      value:
+        repoStoreHealth.sharedServer.port === null
+          ? "Unavailable"
+          : String(repoStoreHealth.sharedServer.port),
+      mono: true,
+      valueClassName: "text-muted-foreground",
+    },
+    {
+      label: "Dolt server ownership",
+      value: getRepoStoreOwnershipLabel(repoStoreHealth),
+      valueClassName: "text-muted-foreground",
+    },
+  ];
+
+  return rows;
+};
+
+const buildRepoStoreErrors = (
+  beadsCheck: BeadsCheck | null,
+  failureKind: RepoRuntimeFailureKind,
+): string[] => {
+  if (failureKind === "timeout") {
+    const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+    return buildFailureMessages({
+      label: "Beads store",
+      detail: repoStoreHealth ? getRepoStoreDetail(repoStoreHealth) : null,
+      failureKind,
+    });
+  }
+
+  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  if (
+    !repoStoreHealth ||
+    isRepoStoreReady(repoStoreHealth) ||
+    repoStoreHealth.status === "initializing"
+  ) {
+    return [];
+  }
+
+  return buildFailureMessages({
+    label: "Beads store",
+    detail: getRepoStoreDetail(repoStoreHealth),
+    failureKind,
+  });
 };
 
 const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValueRowModel[] => {
@@ -285,6 +400,7 @@ export const buildDiagnosticsPanelModel = (
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
+    const repoStoreHealth = getRepoStoreHealth(beadsCheck);
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
@@ -299,8 +415,12 @@ export const buildDiagnosticsPanelModel = (
         );
       }
     }
-    if (hasBeadsCheckFailure(beadsCheck) && beadsCheckFailureKind !== "timeout") {
-      criticalReasons.push("Beads store unavailable");
+    if (
+      repoStoreHealth &&
+      hasBeadsCheckFailure(beadsCheck) &&
+      beadsCheckFailureKind !== "timeout"
+    ) {
+      criticalReasons.push(getRepoStoreDetail(repoStoreHealth));
     }
   }
 
@@ -315,6 +435,7 @@ export const buildDiagnosticsPanelModel = (
       isLoadingChecks ||
       runtimeCheck === null ||
       beadsCheck === null ||
+      beadsCheck?.repoStoreHealth.status === "initializing" ||
       isRuntimeHealthPending ||
       hasCheckingRuntimeHealth ||
       hasDiagnosticsRetryingState({
@@ -429,28 +550,9 @@ export const buildDiagnosticsPanelModel = (
   const beadsStoreSection: DiagnosticsSectionModel = {
     key: "beads-store",
     title: "Beads Store",
-    badge: getFailureBadge(beadsCheck?.beadsOk ?? null, beadsCheckFailureKind, {
-      healthy: "Ready",
-      timeout: "Retrying",
-      error: "Unavailable",
-      checking: "Checking",
-    }),
-    rows:
-      activeRepo && beadsCheck?.beadsPath
-        ? [
-            {
-              label: "Store path",
-              value: beadsCheck.beadsPath,
-              breakAll: true,
-              valueClassName: "text-muted-foreground",
-            },
-          ]
-        : [],
-    errors: buildFailureMessages({
-      label: "Beads store",
-      detail: beadsCheck?.beadsError ?? null,
-      failureKind: beadsCheckFailureKind,
-    }),
+    badge: getRepoStoreFailureBadge(beadsCheck, beadsCheckFailureKind),
+    rows: activeRepo ? buildRepoStoreRows(beadsCheck) : [],
+    errors: buildRepoStoreErrors(beadsCheck, beadsCheckFailureKind),
     ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
   };
 

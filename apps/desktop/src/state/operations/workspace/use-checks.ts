@@ -7,6 +7,7 @@ import type {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
+import { isRepoStoreReady } from "@/lib/repo-store-health";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -179,7 +180,7 @@ export function useChecks({
       const runtime = runtimeResult.value;
       const beads = beadsResult.value;
 
-      if (runtime && beads && runtime.gitOk && beads.beadsOk) {
+      if (runtime && beads && runtime.gitOk && isRepoStoreReady(beads)) {
         return;
       }
     } finally {
@@ -280,7 +281,7 @@ export function useChecks({
     : null;
   const beadsCheckError = beadsCheckQueryFailure?.message ?? null;
   const beadsCheckFailureKind = beadsCheckQueryFailure?.failureKind ?? null;
-  const activeBeadsCheck = useMemo((): BeadsCheck | null => {
+  const rawBeadsCheck = useMemo((): BeadsCheck | null => {
     if (activeRepo === null) {
       return null;
     }
@@ -303,14 +304,14 @@ export function useChecks({
         runtimeCheck: runtimeCheckState,
         runtimeCheckError,
         runtimeCheckFailureKind,
-        beadsCheck: activeBeadsCheck,
+        beadsCheck: rawBeadsCheck,
         beadsCheckError,
         beadsCheckFailureKind,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
       }),
     [
       activeRepo,
-      activeBeadsCheck,
+      rawBeadsCheck,
       activeRepoRuntimeHealthByRuntime,
       beadsCheckError,
       beadsCheckFailureKind,
@@ -364,7 +365,7 @@ export function useChecks({
   return {
     runtimeCheck: runtimeCheckState,
     runtimeCheckFailureKind,
-    activeBeadsCheck,
+    activeBeadsCheck: rawBeadsCheck,
     beadsCheckFailureKind,
     activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,

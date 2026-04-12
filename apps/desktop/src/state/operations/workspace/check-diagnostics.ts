@@ -1,5 +1,6 @@
 import type { BeadsCheck, RuntimeCheck, RuntimeDescriptor } from "@openducktor/contracts";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
+import { isRepoStoreReady } from "@/lib/repo-store-health";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -89,6 +90,21 @@ export const buildRuntimeCheckErrorState = (
 });
 
 export const buildBeadsCheckErrorState = (beadsCheckError: string): BeadsCheck => ({
+  repoStoreHealth: {
+    category: "check_call_failed",
+    status: "degraded",
+    isReady: false,
+    detail: beadsCheckError,
+    attachment: {
+      path: null,
+      databaseName: null,
+    },
+    sharedServer: {
+      host: null,
+      port: null,
+      ownershipState: "unavailable",
+    },
+  },
   beadsOk: false,
   beadsPath: null,
   beadsError: beadsCheckError,
@@ -105,7 +121,11 @@ export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boole
 };
 
 export const hasBeadsCheckFailure = (beadsCheck: BeadsCheck | null): boolean => {
-  return beadsCheck?.beadsOk === false;
+  return (
+    beadsCheck !== null &&
+    !isRepoStoreReady(beadsCheck) &&
+    beadsCheck.repoStoreHealth.status !== "initializing"
+  );
 };
 
 export const buildRuntimeHealthErrorMap = (
@@ -211,7 +231,9 @@ const getBeadsCheckIssueCandidate = (
   beadsCheckError: string | null,
   beadsCheckFailureKind: RepoRuntimeFailureKind,
 ): DiagnosticsIssueCandidate | null => {
-  const detail = beadsCheckError ?? beadsCheck?.beadsError ?? null;
+  const detail = hasBeadsCheckFailure(beadsCheck)
+    ? (beadsCheck?.repoStoreHealth?.detail ?? beadsCheckError ?? beadsCheck?.beadsError ?? null)
+    : (beadsCheckError ?? beadsCheck?.repoStoreHealth?.detail ?? beadsCheck?.beadsError ?? null);
   const failureKind = beadsCheckFailureKind ?? (hasBeadsCheckFailure(beadsCheck) ? "error" : null);
   return buildDiagnosticsIssueCandidate(BEADS_STORE_ISSUE_META, detail, failureKind);
 };

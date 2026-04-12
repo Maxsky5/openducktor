@@ -12,16 +12,17 @@ pub use repo_paths::{
     resolve_shared_server_root, RepoBeadsPaths,
 };
 pub use shared_dolt_server::{
-    ensure_shared_dolt_server_running, read_shared_dolt_server_state,
+    ensure_shared_dolt_server_running, is_process_alive, read_shared_dolt_server_state,
     restore_shared_dolt_database_from_backup, stop_shared_dolt_server_for_current_owner,
-    SharedDoltServerState, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
+    SharedDoltServerAcquisition, SharedDoltServerState, SHARED_DOLT_SERVER_HOST,
+    SHARED_DOLT_SERVER_USER,
 };
 
 #[cfg(test)]
 pub(crate) use shared_dolt_server::{
-    deterministic_shared_dolt_port_candidate, is_process_alive,
-    process_matches_expected_dolt_server, wrap_port_candidate, write_dolt_config_file,
-    SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
+    deterministic_shared_dolt_port_candidate, process_matches_expected_dolt_server,
+    wrap_port_candidate, write_dolt_config_file, SHARED_DOLT_PORT_RANGE_LEN,
+    SHARED_DOLT_PORT_RANGE_START,
 };
 
 #[cfg(test)]

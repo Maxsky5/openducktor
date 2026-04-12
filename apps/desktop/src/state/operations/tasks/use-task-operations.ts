@@ -1,6 +1,7 @@
 import type {
   BeadsCheck,
   PullRequest,
+  RepoStoreHealth,
   RunSummary,
   TaskCard,
   TaskCreateInput,
@@ -14,7 +15,7 @@ import { errorMessage } from "@/lib/errors";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
-import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { repoTaskDataQueryOptions } from "../../queries/tasks";
 import { host } from "../shared/host";
@@ -109,6 +110,7 @@ export function useTaskOperations({
   const [isManualLoadingTasks, setIsManualLoadingTasks] = useState(false);
   const manualRefreshTokenRef = useRef(0);
   const inFlightTaskRefreshRef = useRef<{ repoPath: string; promise: Promise<void> } | null>(null);
+  const repoStoreHealthByRepoRef = useRef(new Map<string, RepoStoreHealth | null>());
   const lastTaskRefreshToastRef = useRef<{
     repoPath: string;
     description: string;
@@ -155,13 +157,19 @@ export function useTaskOperations({
 
   const runRepoTaskRefresh = useCallback(
     async (repoPath: string): Promise<void> => {
-      const beads = await refreshBeadsCheckForRepo(repoPath, false);
-      if (!beads.beadsOk) {
-        throw new Error(beads.beadsError ?? "Beads store is not initialized for this repository.");
-      }
-
+      const beadsCheck = await refreshBeadsCheckForRepo(repoPath, false);
+      repoStoreHealthByRepoRef.current.set(repoPath, getBlockingRepoStoreHealth(beadsCheck));
       await host.repoPullRequestSync(repoPath);
       await refreshTaskData(repoPath);
+      try {
+        const refreshedBeadsCheck = await refreshBeadsCheckForRepo(repoPath, true);
+        repoStoreHealthByRepoRef.current.set(
+          repoPath,
+          getBlockingRepoStoreHealth(refreshedBeadsCheck),
+        );
+      } catch {
+        // Keep refresh semantics unchanged when the follow-up diagnostics check fails.
+      }
     },
     [refreshBeadsCheckForRepo, refreshTaskData],
   );
@@ -255,7 +263,10 @@ export function useTaskOperations({
         await promise;
         lastTaskRefreshToastRef.current = null;
       } catch (error) {
-        const description = summarizeTaskLoadError(error);
+        const description = summarizeTaskLoadError({
+          error,
+          repoStoreHealth: repoStoreHealthByRepoRef.current.get(repoPath) ?? null,
+        });
         if (!joinedExisting) {
           console.warn(TASK_REFRESH_WARNING, {
             repoPath,
