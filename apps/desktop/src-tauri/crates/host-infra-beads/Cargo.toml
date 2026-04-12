@@ -13,3 +13,6 @@ serde_json = "1"
 thiserror = "2"
 host-domain = { path = "../host-domain" }
 host-infra-system = { path = "../host-infra-system" }
+
+[dev-dependencies]
+host-test-support = { path = "../host-test-support" }
