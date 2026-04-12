@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Context};
 use external_task_sync::{start_task_event_relay, TaskEventRelayState, TASK_EVENT_NAME};
 use host_application::{AppService, DevServerEmitter, RunEmitter};
-use pull_request_sync::start_pull_request_sync_loop;
 #[cfg(test)]
 use host_domain::TaskStatus;
 use host_domain::{DevServerEvent, RunEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RuntimeConfigStore};
+use pull_request_sync::start_pull_request_sync_loop;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -456,7 +456,8 @@ fn startup_phase_build_tauri_app(
             #[cfg(all(feature = "cef", target_os = "macos"))]
             macos_cef_quit::install(app)?;
 
-            let stop_requested = start_task_event_relay(setup_service.clone(), app.handle().clone());
+            let stop_requested =
+                start_task_event_relay(setup_service.clone(), app.handle().clone());
             let pull_request_sync_stop_requested =
                 start_pull_request_sync_loop(setup_service.clone(), {
                     let app_handle = app.handle().clone();

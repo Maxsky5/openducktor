@@ -71,7 +71,6 @@ pub(crate) use service_core::{
     RuntimeCleanupTarget,
 };
 pub use service_core::{AppService, DevServerEmitter, RunEmitter};
-pub use task_workflow::RepoPullRequestSyncResult;
 #[cfg(test)]
 pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
@@ -80,6 +79,7 @@ pub(crate) use startup_metrics::{
     StartupEventContext, StartupEventCorrelation, StartupEventPayload,
     STARTUP_CONFIG_INVALID_REASON,
 };
+pub use task_workflow::RepoPullRequestSyncResult;
 pub(crate) use workflow_rules::{
     derive_agent_workflows, derive_available_actions, validate_transition_without_related_tasks,
 };

@@ -1098,7 +1098,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo,
       refreshTaskData: mock(async () => {}),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -1150,7 +1149,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo,
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -1385,7 +1383,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };
@@ -1450,7 +1447,6 @@ describe("useAppLifecycle", () => {
       refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
       refreshBeadsCheckForRepo: mock(async () => beadsDeferred.promise),
       refreshTaskData: mock(async () => taskDeferred.promise),
-      refreshTasksWithOptions: mock(async () => {}),
       clearBranchData: mock(() => {}),
       beadsPreparationToastDelayMs: 5,
     };

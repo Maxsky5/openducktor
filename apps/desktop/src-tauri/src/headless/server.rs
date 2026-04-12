@@ -1,9 +1,9 @@
 use super::command_registry::{build_registry, dispatch_command};
 use super::command_support::{HeadlessCommandError, HeadlessState};
 use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
+use crate::commands::workspace::is_staged_local_attachment_path;
 use crate::external_task_sync::ExternalTaskSyncEvent;
 use crate::pull_request_sync::start_pull_request_sync_loop;
-use crate::commands::workspace::is_staged_local_attachment_path;
 use crate::{
     startup_phase_service_bootstrap, startup_phase_shutdown_hooks_with_gate, startup_phase_tracing,
 };

@@ -64,6 +64,20 @@ impl<'a> PullRequestSyncService<'a> {
             };
 
             let changed = if updated.record.state == "merged" && task.status != TaskStatus::Closed {
+                tracing::info!(
+                    target: "openducktor.task-sync",
+                    event = "linked_pull_request_merged_detected",
+                    repo_path = repo_path.as_str(),
+                    task_id = task.id.as_str(),
+                    task_status = ?task.status,
+                    previous_pr_state = pull_request.state.as_str(),
+                    pr_provider = updated.record.provider_id.as_str(),
+                    pr_number = updated.record.number,
+                    pr_url = updated.record.url.as_str(),
+                    source_branch = updated.source_branch.as_str(),
+                    target_branch = updated.target_branch.as_str(),
+                    "Detected a merged linked pull request; closing the task"
+                );
                 LinkedPullRequestMergeService::new(self.service).persist_merge_and_close_task(
                     repo_path.as_str(),
                     task.id.as_str(),
