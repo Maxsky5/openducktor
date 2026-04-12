@@ -854,6 +854,7 @@ fn ensure_repo_initialized_initializes_in_attachment_root_with_stealth() -> Resu
 #[test]
 fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Result<()> {
     let repo = RepoFixture::new("existing-no-git-ops");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let attachment_root = resolve_repo_beads_attachment_root(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
@@ -974,6 +975,7 @@ fn verify_repo_initialized_treats_file_attachment_path_as_missing_attachment() -
 #[test]
 fn ensure_repo_initialized_fails_fast_for_broken_metadata() -> Result<()> {
     let repo = RepoFixture::new("broken-metadata");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     fs::create_dir_all(&beads_dir).expect("beads dir should be writable");
     fs::write(beads_dir.join("metadata.json"), "not-json").expect("metadata should be writable");
@@ -1026,6 +1028,7 @@ fn verify_repo_initialized_fails_when_where_path_cannot_be_canonicalized() -> Re
 #[test]
 fn ensure_repo_initialized_fails_fast_for_malformed_where_output() -> Result<()> {
     let repo = RepoFixture::new("malformed-where-output");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
