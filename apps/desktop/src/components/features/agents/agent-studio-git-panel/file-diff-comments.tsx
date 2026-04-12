@@ -11,6 +11,7 @@ import { DIFF_SCOPE_OPTIONS } from "./constants";
 
 const COMMENT_CONTEXT_PREVIEW_CLASS_NAME =
   "overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
+const COMMENT_ANNOTATION_SHELL_CLASS_NAME = "max-w-[95%] py-4 pl-5 sm:max-w-[70%]";
 
 const getDiffScopeLabel = (diffScope: DiffScope): string => {
   return DIFF_SCOPE_OPTIONS.find((option) => option.scope === diffScope)?.label ?? diffScope;
@@ -106,11 +107,15 @@ export const NewCommentForm = ({
         </Button>
         <Button type="button" size="sm" disabled={value.trim().length === 0} onClick={onSave}>
           <Check className="mr-1.5 size-3.5" />
-          Save comment
+          Comment
         </Button>
       </div>
     </section>
   );
+};
+
+export const DiffAnnotationShell = ({ children }: { children: ReactElement }): ReactElement => {
+  return <div className={COMMENT_ANNOTATION_SHELL_CLASS_NAME}>{children}</div>;
 };
 
 export const DraftCommentCard = ({

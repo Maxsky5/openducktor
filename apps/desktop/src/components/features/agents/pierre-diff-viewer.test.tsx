@@ -83,12 +83,12 @@ describe("getRenderableFileDiff", () => {
       {
         side: "additions",
         lineNumber: 1,
-        metadata: { hunkIndex: 0 },
+        metadata: { kind: "hunk-reset", hunkIndex: 0 },
       },
       {
         side: "additions",
         lineNumber: 10,
-        metadata: { hunkIndex: 1 },
+        metadata: { kind: "hunk-reset", hunkIndex: 1 },
       },
     ]);
   });
@@ -110,7 +110,7 @@ describe("getRenderableFileDiff", () => {
       {
         side: "deletions",
         lineNumber: 3,
-        metadata: { hunkIndex: 0 },
+        metadata: { kind: "hunk-reset", hunkIndex: 0 },
       },
     ]);
   });

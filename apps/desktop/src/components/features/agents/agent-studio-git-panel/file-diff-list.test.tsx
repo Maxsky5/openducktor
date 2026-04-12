@@ -22,6 +22,8 @@ const viewerMock = mock(
   ({
     filePath,
     onLineSelectionEnd,
+    lineAnnotations,
+    renderAnnotation,
   }: {
     filePath: string;
     onLineSelectionEnd?:
@@ -35,6 +37,18 @@ const viewerMock = mock(
             language: string | null;
           } | null,
         ) => void)
+      | undefined;
+    lineAnnotations?: Array<{
+      side: "additions" | "deletions";
+      lineNumber: number;
+      metadata: unknown;
+    }>;
+    renderAnnotation?:
+      | ((annotation: {
+          side: "additions" | "deletions";
+          lineNumber: number;
+          metadata: unknown;
+        }) => ReactElement | null)
       | undefined;
   }) => (
     <div>
@@ -59,6 +73,16 @@ const viewerMock = mock(
       >
         Select lines
       </button>
+      <div data-testid="pierre-diff-annotations">
+        {(lineAnnotations ?? []).map((annotation) => (
+          <div
+            key={`${annotation.side}-${annotation.lineNumber}-${JSON.stringify(annotation.metadata)}`}
+            data-testid="pierre-diff-annotation"
+          >
+            {renderAnnotation?.(annotation)}
+          </div>
+        ))}
+      </div>
     </div>
   ),
 );
@@ -204,7 +228,7 @@ describe("FileDiffList", () => {
     fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
 
     expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
-    const saveButton = screen.getByRole("button", { name: "Save comment" });
+    const saveButton = screen.getByRole("button", { name: "Comment" });
     expect(saveButton.getAttribute("disabled")).not.toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
@@ -247,7 +271,7 @@ describe("FileDiffList", () => {
     fireEvent.change(screen.getByPlaceholderText("Add a comment for the Builder"), {
       target: { value: "Please tighten the null handling" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save comment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
 
     const sentSnapshot = useInlineCommentDraftStore
       .getState()

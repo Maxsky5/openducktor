@@ -1,5 +1,5 @@
 import type { FileDiff } from "@openducktor/contracts";
-import type { SelectedLineRange } from "@pierre/diffs";
+import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import {
   AlertTriangle,
   ChevronDown,
@@ -23,7 +23,12 @@ import {
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
 import { FILE_STATUS_COLOR, FILE_STATUS_ICON } from "./constants";
-import { DraftCommentCard, NewCommentForm, SentCommentCard } from "./file-diff-comments";
+import {
+  DiffAnnotationShell,
+  DraftCommentCard,
+  NewCommentForm,
+  SentCommentCard,
+} from "./file-diff-comments";
 
 const areFileDiffsEqual = (left: FileDiff, right: FileDiff): boolean =>
   left.file === right.file &&
@@ -49,6 +54,16 @@ type FileDiffEntryProps = {
   resetDisabledReason: string | null;
   onRequestFileReset?: ((filePath: string) => void) | undefined;
   onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
+};
+
+type GitDiffCommentAnnotationMetadata =
+  | { kind: "new-comment-form" }
+  | { kind: "comment"; commentId: string };
+
+const mapCommentSideToAnnotationSide = (
+  side: InlineCommentDraft["side"],
+): "additions" | "deletions" => {
+  return side === "old" ? "deletions" : "additions";
 };
 
 function FileDiffEntry({
@@ -82,7 +97,10 @@ function FileDiffEntry({
   );
   const fileCommentCount = fileComments.length;
   const draftComments = fileComments.filter((comment) => comment.status !== "sent");
-  const sentComments = fileComments.filter((comment) => comment.status === "sent");
+  const commentsById = useMemo(
+    () => new Map(fileComments.map((comment) => [comment.id, comment])),
+    [fileComments],
+  );
 
   // Keep diff subtrees mounted after first expand in production for cheap reopen,
   // but reset them in tests so assertions stay deterministic.
@@ -129,7 +147,7 @@ function FileDiffEntry({
   const shouldRenderPersistedDiffBody =
     hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
-  const canSelectMoreLines = pendingSelection == null && editingCommentId == null;
+  const hasOpenAnnotationForm = pendingSelection != null || editingCommentId != null;
 
   const clearPendingSelection = useCallback(() => {
     setSelectedLines(null);
@@ -185,6 +203,94 @@ function FileDiffEntry({
     setEditingCommentId(null);
     setEditingText("");
   }, [editingCommentId, editingText, updateDraft]);
+  const lineAnnotations = useMemo<DiffLineAnnotation<GitDiffCommentAnnotationMetadata>[]>(() => {
+    const commentAnnotations = fileComments.map((comment) => ({
+      side: mapCommentSideToAnnotationSide(comment.side),
+      lineNumber: comment.endLine,
+      metadata: {
+        kind: "comment",
+        commentId: comment.id,
+      } satisfies GitDiffCommentAnnotationMetadata,
+    }));
+
+    if (pendingSelection == null) {
+      return commentAnnotations;
+    }
+
+    return [
+      ...commentAnnotations,
+      {
+        side: mapCommentSideToAnnotationSide(pendingSelection.side),
+        lineNumber: pendingSelection.endLine,
+        metadata: { kind: "new-comment-form" } satisfies GitDiffCommentAnnotationMetadata,
+      },
+    ];
+  }, [fileComments, pendingSelection]);
+  const renderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<unknown>): ReactElement | null => {
+      const metadata = annotation.metadata as GitDiffCommentAnnotationMetadata;
+      if (metadata.kind === "new-comment-form") {
+        if (pendingSelection == null) {
+          return null;
+        }
+
+        return (
+          <DiffAnnotationShell>
+            <NewCommentForm
+              diffScope={diffScope}
+              selection={pendingSelection}
+              value={newCommentText}
+              onChange={setNewCommentText}
+              onCancel={clearPendingSelection}
+              onSave={handleSaveNewComment}
+            />
+          </DiffAnnotationShell>
+        );
+      }
+
+      const comment = commentsById.get(metadata.commentId);
+      if (!comment) {
+        return null;
+      }
+
+      if (comment.status === "sent") {
+        return (
+          <DiffAnnotationShell>
+            <SentCommentCard comment={comment} />
+          </DiffAnnotationShell>
+        );
+      }
+
+      return (
+        <DiffAnnotationShell>
+          <DraftCommentCard
+            comment={comment}
+            isEditing={editingCommentId === comment.id}
+            editingText={editingText}
+            onEditingTextChange={setEditingText}
+            onStartEditing={handleStartEditing}
+            onCancelEditing={handleCancelEditing}
+            onSaveEditing={handleSaveEditing}
+            onRemove={removeDraft}
+          />
+        </DiffAnnotationShell>
+      );
+    },
+    [
+      clearPendingSelection,
+      commentsById,
+      diffScope,
+      editingCommentId,
+      editingText,
+      handleCancelEditing,
+      handleSaveEditing,
+      handleSaveNewComment,
+      handleStartEditing,
+      newCommentText,
+      pendingSelection,
+      removeDraft,
+    ],
+  );
 
   return (
     <div className="min-w-0 max-w-full">
@@ -290,9 +396,12 @@ function FileDiffEntry({
                 patch={diff.diff}
                 filePath={diff.file}
                 diffStyle={diffStyle}
-                enableLineSelection={canSelectMoreLines}
+                enableLineSelection={!hasOpenAnnotationForm}
+                enableGutterUtility={!hasOpenAnnotationForm}
                 selectedLines={selectedLines}
                 onLineSelectionEnd={handleLineSelectionEnd}
+                lineAnnotations={lineAnnotations}
+                renderAnnotation={renderAnnotation}
                 enableHunkReset={canReset && onRequestHunkReset != null}
                 isHunkResetDisabled={isResetDisabled}
                 onResetHunk={
@@ -303,46 +412,6 @@ function FileDiffEntry({
                     : undefined
                 }
               />
-
-              {pendingSelection ? (
-                <NewCommentForm
-                  diffScope={diffScope}
-                  selection={pendingSelection}
-                  value={newCommentText}
-                  onChange={setNewCommentText}
-                  onCancel={clearPendingSelection}
-                  onSave={handleSaveNewComment}
-                />
-              ) : null}
-
-              {draftComments.length > 0 ? (
-                <section className="space-y-3" data-testid="agent-studio-git-pending-comments">
-                  {draftComments.map((comment) => {
-                    const isEditing = editingCommentId === comment.id;
-                    return (
-                      <DraftCommentCard
-                        key={comment.id}
-                        comment={comment}
-                        isEditing={isEditing}
-                        editingText={editingText}
-                        onEditingTextChange={setEditingText}
-                        onStartEditing={handleStartEditing}
-                        onCancelEditing={handleCancelEditing}
-                        onSaveEditing={handleSaveEditing}
-                        onRemove={removeDraft}
-                      />
-                    );
-                  })}
-                </section>
-              ) : null}
-
-              {sentComments.length > 0 ? (
-                <section className="space-y-2" data-testid="agent-studio-git-sent-comments">
-                  {sentComments.map((comment) => (
-                    <SentCommentCard key={comment.id} comment={comment} />
-                  ))}
-                </section>
-              ) : null}
             </div>
           ) : (
             <div className="p-3 text-xs italic text-muted-foreground">

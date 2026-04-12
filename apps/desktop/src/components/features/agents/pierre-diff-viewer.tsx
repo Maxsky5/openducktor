@@ -9,7 +9,15 @@ import { getSingularPatch } from "@pierre/diffs";
 import { FileDiff as PierreReactFileDiff, useWorkerPool } from "@pierre/diffs/react";
 import type { DiffRendererInstance } from "@pierre/diffs/worker";
 import { Undo2 } from "lucide-react";
-import { type CSSProperties, memo, type ReactElement, useEffect, useId, useMemo } from "react";
+import {
+  type CSSProperties,
+  memo,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+} from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,11 +48,14 @@ type PierreDiffViewerProps = {
   diffStyle?: PierreDiffStyle;
   /** Enable click-to-select on line numbers. */
   enableLineSelection?: boolean;
+  enableGutterUtility?: boolean;
   enableHunkReset?: boolean;
   isHunkResetDisabled?: boolean;
   onResetHunk?: ((hunkIndex: number) => void) | undefined;
   selectedLines?: SelectedLineRange | null;
   onLineSelectionEnd?: ((selection: PierreDiffSelection | null) => void) | undefined;
+  lineAnnotations?: DiffLineAnnotation<unknown>[];
+  renderAnnotation?: ((annotation: DiffLineAnnotation<unknown>) => ReactElement | null) | undefined;
   /** CSS class applied to the wrapper. */
   className?: string;
 };
@@ -88,6 +99,7 @@ const HUNK_RESET_FLOATING_CSS = `
 `;
 
 type HunkResetAnnotationMetadata = {
+  kind: "hunk-reset";
   hunkIndex: number;
 };
 
@@ -122,7 +134,7 @@ const resolveHunkResetAnchor = (
     return {
       side: "additions",
       lineNumber: lastAdditionLine,
-      metadata: { hunkIndex },
+      metadata: { kind: "hunk-reset", hunkIndex },
     };
   }
 
@@ -130,7 +142,7 @@ const resolveHunkResetAnchor = (
     return {
       side: "deletions",
       lineNumber: lastDeletionLine,
-      metadata: { hunkIndex },
+      metadata: { kind: "hunk-reset", hunkIndex },
     };
   }
 
@@ -381,11 +393,14 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   filePath,
   diffStyle = "split",
   enableLineSelection = false,
+  enableGutterUtility = false,
   enableHunkReset = false,
   isHunkResetDisabled = false,
   onResetHunk,
   selectedLines = null,
   onLineSelectionEnd,
+  lineAnnotations = [],
+  renderAnnotation,
   className,
 }: PierreDiffViewerProps): ReactElement {
   const { theme } = useTheme();
@@ -394,12 +409,12 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     [filePath, patch],
   );
   const lineDiffType: "word-alt" | "none" = diffStyle === "split" ? "word-alt" : "none";
-  const lineAnnotations = useMemo(
+  const mergedLineAnnotations = useMemo(
     () =>
       enableHunkReset && fileDiff != null && onResetHunk != null
-        ? getHunkResetAnnotations(fileDiff)
-        : [],
-    [enableHunkReset, fileDiff, onResetHunk],
+        ? [...lineAnnotations, ...getHunkResetAnnotations(fileDiff)]
+        : lineAnnotations,
+    [enableHunkReset, fileDiff, lineAnnotations, onResetHunk],
   );
   const handleLineSelectionEnd = useMemo(
     () =>
@@ -421,10 +436,54 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       overflow: "wrap" as const,
       disableFileHeader: true,
       enableLineSelection,
+      enableGutterUtility,
       ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : {}),
       ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : {}),
     }),
-    [diffStyle, enableHunkReset, enableLineSelection, handleLineSelectionEnd, lineDiffType, theme],
+    [
+      diffStyle,
+      enableGutterUtility,
+      enableHunkReset,
+      enableLineSelection,
+      handleLineSelectionEnd,
+      lineDiffType,
+      theme,
+    ],
+  );
+  const handleRenderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<unknown>) => {
+      const metadata = annotation.metadata;
+      if (
+        metadata != null &&
+        typeof metadata === "object" &&
+        "kind" in metadata &&
+        metadata.kind === "hunk-reset"
+      ) {
+        const hunkResetMetadata = metadata as HunkResetAnnotationMetadata;
+        return (
+          <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
+            <div className={HUNK_RESET_ANNOTATION_CLASS_NAME}>
+              <Button
+                className={HUNK_RESET_BUTTON_CLASS_NAME}
+                variant="outline"
+                size="sm"
+                aria-label="Reset hunk"
+                title={`Reset hunk in ${filePath}`}
+                data-testid="agent-studio-git-reset-hunk-button"
+                disabled={isHunkResetDisabled}
+                onClick={() => onResetHunk?.(hunkResetMetadata.hunkIndex)}
+              >
+                <Undo2 className="size-3.5" />
+                <span>Reset hunk</span>
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
+      return renderAnnotation?.(annotation) ?? null;
+    },
+    [filePath, isHunkResetDisabled, onResetHunk, renderAnnotation],
   );
 
   let content: ReactElement;
@@ -437,26 +496,8 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
           fileDiff={fileDiff}
           selectedLines={selectedLines}
           options={options}
-          lineAnnotations={lineAnnotations}
-          renderAnnotation={(annotation) => (
-            <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
-              <div className={HUNK_RESET_ANNOTATION_CLASS_NAME}>
-                <Button
-                  className={HUNK_RESET_BUTTON_CLASS_NAME}
-                  variant="outline"
-                  size="sm"
-                  aria-label="Reset hunk"
-                  title={`Reset hunk in ${filePath}`}
-                  data-testid="agent-studio-git-reset-hunk-button"
-                  disabled={isHunkResetDisabled}
-                  onClick={() => onResetHunk?.(annotation.metadata.hunkIndex)}
-                >
-                  <Undo2 className="size-3.5" />
-                  <span>Reset hunk</span>
-                </Button>
-              </div>
-            </div>
-          )}
+          lineAnnotations={mergedLineAnnotations}
+          renderAnnotation={handleRenderAnnotation}
         />
       </div>
     );
