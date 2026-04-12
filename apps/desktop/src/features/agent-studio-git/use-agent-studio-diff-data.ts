@@ -104,10 +104,12 @@ export function useAgentStudioDiffData({
 
     const runRefreshLoop = async (): Promise<void> => {
       const refreshContextKey = requestContextKeyRef.current;
+      const hasSameRefreshContext = (): boolean =>
+        requestContextKeyRef.current === refreshContextKey;
 
       while (refreshQueuedRef.current) {
         refreshQueuedRef.current = false;
-        if (requestContextKeyRef.current !== refreshContextKey) {
+        if (!hasSameRefreshContext()) {
           break;
         }
 
@@ -119,19 +121,27 @@ export function useAgentStudioDiffData({
             targetBranch,
             worktreePath ?? undefined,
           );
+          if (!hasSameRefreshContext()) {
+            break;
+          }
+
           await appQueryClient.invalidateQueries({
             queryKey: gitQueryKeys.branches(effectiveRepoPath),
             exact: true,
             refetchType: "none",
           });
+          if (!hasSameRefreshContext()) {
+            break;
+          }
+
           setRefreshError(null);
           await refreshActiveScope();
         } catch (error) {
-          if (requestContextKeyRef.current === refreshContextKey) {
+          if (hasSameRefreshContext()) {
             setRefreshError(String(error));
           }
         } finally {
-          if (requestContextKeyRef.current === refreshContextKey) {
+          if (hasSameRefreshContext()) {
             setIsRefreshing(false);
           }
         }
