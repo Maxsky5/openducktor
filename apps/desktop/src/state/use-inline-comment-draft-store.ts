@@ -61,8 +61,8 @@ export type InlineCommentDraftStore = {
 };
 
 const DIFF_SCOPE_LABELS: Record<DiffScope, string> = {
-  uncommitted: "Uncommitted changes",
-  target: "Branch changes",
+  uncommitted: "uncommitted",
+  target: "branch",
 };
 
 let nextId = 0;
@@ -103,17 +103,19 @@ const formatLineRange = (startLine: number, endLine: number): string => {
   return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
 };
 
-const formatContextBlock = (
-  codeContext: InlineCommentContextLine[],
-  language: string | null,
-): string => {
-  const fence = typeof language === "string" && language.length > 0 ? language : "text";
-  const lines = codeContext.map(({ lineNumber, text, isSelected }) => {
-    const marker = isSelected ? ">" : " ";
-    return `${marker} ${String(lineNumber).padStart(4, " ")} | ${text}`;
-  });
+const indentBlock = (value: string): string[] => {
+  return value.split("\n").map((line) => `    ${line}`);
+};
 
-  return ["Context:", `\`\`\`${fence}`, ...lines, "```"].join("\n");
+const formatSelectedCodeBlock = (codeContext: InlineCommentContextLine[]): string => {
+  const selectedLines = codeContext.filter((line) => line.isSelected);
+  const lines = (selectedLines.length > 0 ? selectedLines : codeContext).map(
+    ({ lineNumber, text }) => {
+      return `${lineNumber} | ${text}`;
+    },
+  );
+
+  return lines.join("\n");
 };
 
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
@@ -260,20 +262,21 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       return "";
     }
 
-    const sections = drafts.map((draft, index) => {
+    const sections = drafts.map((draft) => {
       const { startLine, endLine } = normalizeLineRange(draft.startLine, draft.endLine);
       return [
-        `### Comment ${index + 1}`,
-        `File: \`${draft.filePath}\``,
-        `Scope: ${DIFF_SCOPE_LABELS[draft.diffScope]}`,
-        `Side: ${draft.side}`,
-        `Lines: ${formatLineRange(startLine, endLine)}`,
-        formatContextBlock(draft.codeContext, draft.language),
-        `Comment: ${draft.text}`,
+        `- path: ${draft.filePath}`,
+        `  scope: ${DIFF_SCOPE_LABELS[draft.diffScope]}`,
+        `  side: ${draft.side}`,
+        `  lines: ${formatLineRange(startLine, endLine)}`,
+        `  note: |`,
+        ...indentBlock(draft.text),
+        `  code: |`,
+        ...indentBlock(formatSelectedCodeBlock(draft.codeContext)),
       ].join("\n");
     });
 
-    return ["## Git Diff Comments", ...sections].join("\n\n");
+    return ["git_diff_comments:", ...sections].join("\n");
   },
 
   formatPendingBatchMessage: () => {

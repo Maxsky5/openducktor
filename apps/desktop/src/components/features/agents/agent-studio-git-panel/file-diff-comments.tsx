@@ -1,37 +1,14 @@
-import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import type { PierreDiffSelection } from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
-import type { DiffScope } from "@/features/agent-studio-git";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
-import { DIFF_SCOPE_OPTIONS } from "./constants";
 
 const COMMENT_BODY_CLASS_NAME = "text-xs leading-5 text-foreground";
 
-const getDiffScopeLabel = (diffScope: DiffScope): string => {
-  return DIFF_SCOPE_OPTIONS.find((option) => option.scope === diffScope)?.label ?? diffScope;
-};
-
-const formatLineRange = (startLine: number, endLine: number): string => {
-  return startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}-${endLine}`;
-};
-
-const CommentMeta = ({
-  diffScope,
-  side,
-  startLine,
-  endLine,
-  status,
-}: {
-  diffScope: DiffScope;
-  side: InlineCommentDraft["side"];
-  startLine: number;
-  endLine: number;
-  status: InlineCommentDraft["status"];
-}): ReactElement => {
+const CommentMeta = ({ status }: { status: InlineCommentDraft["status"] }): ReactElement => {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <Badge variant={status === "sent" ? "outline" : "warning"}>
@@ -43,15 +20,11 @@ const CommentMeta = ({
 };
 
 export const NewCommentForm = ({
-  diffScope,
-  selection,
   value,
   onChange,
   onCancel,
   onSave,
 }: {
-  diffScope: DiffScope;
-  selection: PierreDiffSelection;
   value: string;
   onChange: (value: string) => void;
   onCancel: () => void;
@@ -62,13 +35,7 @@ export const NewCommentForm = ({
       className="rounded-lg border border-border bg-card p-3"
       data-testid="agent-studio-git-new-comment-form"
     >
-      <CommentMeta
-        diffScope={diffScope}
-        side={selection.side}
-        startLine={selection.startLine}
-        endLine={selection.endLine}
-        status="pending"
-      />
+      <CommentMeta status="pending" />
       <Textarea
         value={value}
         placeholder="Add a comment for the Builder"
@@ -118,13 +85,7 @@ export const DraftCommentCard = ({
       className="rounded-lg border border-border bg-card p-3"
       data-testid="agent-studio-git-pending-comment"
     >
-      <CommentMeta
-        diffScope={comment.diffScope}
-        side={comment.side}
-        startLine={comment.startLine}
-        endLine={comment.endLine}
-        status={comment.status}
-      />
+      <CommentMeta status={comment.status} />
       {isEditing ? (
         <>
           <Textarea
@@ -162,6 +123,8 @@ export const DraftCommentCard = ({
               type="button"
               variant="outline"
               size="icon"
+              aria-label="Edit"
+              title="Edit"
               disabled={isSubmitting}
               onClick={() => onStartEditing(comment)}
             >
@@ -171,6 +134,8 @@ export const DraftCommentCard = ({
               type="button"
               variant="destructive"
               size="icon"
+              aria-label="Remove"
+              title="Remove"
               disabled={isSubmitting}
               onClick={() => onRemove(comment.id)}
             >
@@ -194,13 +159,7 @@ export const SentCommentCard = ({ comment }: { comment: InlineCommentDraft }): R
             data-testid="agent-studio-git-sent-comment-trigger"
           >
             <div className="min-w-0">
-              <CommentMeta
-                diffScope={comment.diffScope}
-                side={comment.side}
-                startLine={comment.startLine}
-                endLine={comment.endLine}
-                status="sent"
-              />
+              <CommentMeta status="sent" />
               <p className={`mt-2 truncate ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>
             </div>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" />

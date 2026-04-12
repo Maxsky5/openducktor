@@ -237,8 +237,6 @@ function FileDiffEntry({
         return (
           <DiffAnnotationShell>
             <NewCommentForm
-              diffScope={diffScope}
-              selection={pendingSelection}
               value={newCommentText}
               onChange={setNewCommentText}
               onCancel={clearPendingSelection}
@@ -279,7 +277,6 @@ function FileDiffEntry({
     [
       clearPendingSelection,
       commentsById,
-      diffScope,
       editingCommentId,
       editingText,
       handleCancelEditing,

@@ -224,8 +224,10 @@ describe("useAgentStudioComposerModel", () => {
     });
 
     expect(sentDrafts).toHaveLength(1);
-    expect(sentDrafts[0]).toContain("## Git Diff Comments");
-    expect(sentDrafts[0]).toContain("File: `src/example.ts`");
+    expect(sentDrafts[0]).toContain("git_diff_comments:");
+    expect(sentDrafts[0]).toContain("- path: src/example.ts");
+    expect(sentDrafts[0]).toContain("  note: |");
+    expect(sentDrafts[0]).toContain("  code: |");
     expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(0);
     expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("sent");
 

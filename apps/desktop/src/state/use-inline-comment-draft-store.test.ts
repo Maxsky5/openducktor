@@ -231,7 +231,7 @@ describe("use-inline-comment-draft-store", () => {
     ).toEqual([secondId]);
   });
 
-  test("formats a deterministic pending appendix with scope, side, lines, context, and comment text", () => {
+  test("formats a deterministic agent-oriented appendix with selected lines only", () => {
     Date.now = () => 1_700_000_000_000;
 
     useInlineCommentDraftStore.getState().addDraft({
@@ -263,32 +263,42 @@ describe("use-inline-comment-draft-store", () => {
 
     expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toBe(
       [
-        "## Git Diff Comments",
-        "",
-        "### Comment 1",
-        "File: `apps/desktop/src/alpha.ts`",
-        "Scope: Uncommitted changes",
-        "Side: old",
-        "Lines: 12-15",
-        "Context:",
-        "```ts",
-        ">   12 | removed one",
-        ">   13 | removed two",
-        "```",
-        "Comment: Alpha range comment",
-        "",
-        "### Comment 2",
-        "File: `apps/desktop/src/beta.ts`",
-        "Scope: Branch changes",
-        "Side: new",
-        "Lines: 30",
-        "Context:",
-        "```ts",
-        "    29 | before",
-        ">   30 | selected",
-        "```",
-        "Comment: Beta line comment",
+        "git_diff_comments:",
+        "- path: apps/desktop/src/alpha.ts",
+        "  scope: uncommitted",
+        "  side: old",
+        "  lines: 12-15",
+        "  note: |",
+        "    Alpha range comment",
+        "  code: |",
+        "    12 | removed one",
+        "    13 | removed two",
+        "- path: apps/desktop/src/beta.ts",
+        "  scope: branch",
+        "  side: new",
+        "  lines: 30",
+        "  note: |",
+        "    Beta line comment",
+        "  code: |",
+        "    30 | selected",
       ].join("\n"),
+    );
+  });
+
+  test("formats multiline notes as an indented block", () => {
+    useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "target",
+      startLine: 5,
+      endLine: 5,
+      side: "new",
+      text: "First line\nSecond line",
+      codeContext: [{ lineNumber: 5, text: "target", isSelected: true }],
+      language: "ts",
+    });
+
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
+      ["  note: |", "    First line", "    Second line", "  code: |", "    5 | target"].join("\n"),
     );
   });
 
