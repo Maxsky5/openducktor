@@ -102,8 +102,12 @@ fn fetch_remote_fetches_tracked_upstream_remote() {
         )
         .expect("fetch should succeed for tracked upstream");
 
+    let output = match result {
+        host_domain::GitFetchResult::Fetched { output } => output,
+        other => panic!("expected fetched result, got {other:?}"),
+    };
     assert!(
-        !result.output.trim().is_empty(),
+        !output.trim().is_empty(),
         "successful fetch should include actionable output"
     );
     let fetched_remote_head = run_git_ok(&repo.path, &["rev-parse", "refs/remotes/origin/main"]);
@@ -213,7 +217,7 @@ fn fetch_remote_uses_explicit_compare_target_remote_when_branch_has_no_upstream(
 }
 
 #[test]
-fn fetch_remote_returns_actionable_error_when_no_safe_remote_can_be_resolved() {
+fn fetch_remote_skips_when_no_safe_remote_can_be_resolved() {
     if !git_available() {
         return;
     }
@@ -221,7 +225,7 @@ fn fetch_remote_returns_actionable_error_when_no_safe_remote_can_be_resolved() {
     let repo = setup_repo("fetch-no-safe-remote");
     let git = GitCliPort::new();
 
-    let error = git
+    let result = git
         .fetch_remote(
             &repo.path,
             GitFetchRequest {
@@ -229,11 +233,14 @@ fn fetch_remote_returns_actionable_error_when_no_safe_remote_can_be_resolved() {
                 target_branch: "main".to_string(),
             },
         )
-        .expect_err("fetch should fail when there is no safe remote");
-    let message = format!("{error:#}");
-    assert!(
-        message.contains("no safe remote could be resolved"),
-        "unexpected error: {message}"
+        .expect("fetch should skip when there is no safe remote");
+    assert_eq!(
+        result,
+        host_domain::GitFetchResult::SkippedNoRemote {
+            output:
+                "Skipped git fetch because no applicable remote is configured for this repo or branch."
+                    .to_string(),
+        }
     );
 }
 

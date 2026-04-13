@@ -182,12 +182,6 @@ impl GitCliPort {
             Self::push_unique_remote(&mut remotes, &mut seen, remote);
         }
 
-        if remotes.is_empty() {
-            return Err(anyhow!(
-                "Cannot refresh changes because no safe remote could be resolved from the current branch upstream or compare target"
-            ));
-        }
-
         Ok(remotes)
     }
 
@@ -199,6 +193,11 @@ impl GitCliPort {
         self.ensure_repository(repo_path)?;
         let remotes =
             self.resolve_refresh_fetch_remotes_impl(repo_path, request.target_branch.as_str())?;
+        if remotes.is_empty() {
+            return Ok(GitFetchResult::SkippedNoRemote {
+                output: "Skipped git fetch because no applicable remote is configured for this repo or branch.".to_string(),
+            });
+        }
         let mut outputs = Vec::new();
 
         for remote in remotes {
@@ -215,7 +214,7 @@ impl GitCliPort {
             }
         }
 
-        Ok(GitFetchResult {
+        Ok(GitFetchResult::Fetched {
             output: outputs.join("\n"),
         })
     }

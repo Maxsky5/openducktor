@@ -1200,7 +1200,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
-        fetch_remote_result: GitFetchResult {
+        fetch_remote_result: GitFetchResult::Fetched {
             output: "Fetched origin".to_string(),
         },
         commit_all_result: GitCommitAllResult::Committed {
@@ -1265,7 +1265,7 @@ pub(crate) fn build_service_with_git_state(
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
-        fetch_remote_result: GitFetchResult {
+        fetch_remote_result: GitFetchResult::Fetched {
             output: "Fetched origin".to_string(),
         },
         commit_all_result: GitCommitAllResult::Committed {
@@ -1793,7 +1793,7 @@ pub(crate) fn build_service_with_store(
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
-        fetch_remote_result: GitFetchResult {
+        fetch_remote_result: GitFetchResult::Fetched {
             output: "Fetched origin".to_string(),
         },
         commit_all_result: GitCommitAllResult::Committed {

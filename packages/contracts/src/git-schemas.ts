@@ -216,9 +216,16 @@ export const gitFetchRemoteRequestSchema = z.object({
 });
 export type GitFetchRemoteRequest = z.infer<typeof gitFetchRemoteRequestSchema>;
 
-export const gitFetchRemoteResultSchema = z.object({
-  output: z.string(),
-});
+export const gitFetchRemoteResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("fetched"),
+    output: z.string(),
+  }),
+  z.object({
+    outcome: z.literal("skipped_no_remote"),
+    output: z.string(),
+  }),
+]);
 export type GitFetchRemoteResult = z.infer<typeof gitFetchRemoteResultSchema>;
 
 export const gitPullBranchResultSchema = z.discriminatedUnion("outcome", [

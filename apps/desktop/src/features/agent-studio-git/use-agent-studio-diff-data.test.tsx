@@ -19,10 +19,12 @@ const gitFetchRemoteMock = mock(
     _repoPath: string,
     _targetBranch: string,
     _workingDir?: string,
-  ): Promise<{ output: string }> => ({
+  ): Promise<{ outcome: "fetched" | "skipped_no_remote"; output: string }> => ({
+    outcome: "fetched",
     output: "From origin",
   }),
 );
+type GitFetchRemoteMockResult = Awaited<ReturnType<typeof gitFetchRemoteMock>>;
 const gitGetWorktreeStatusMock = mock(
   async (
     _repoPath: string,
@@ -213,7 +215,7 @@ beforeEach(async () => {
   gitFetchRemoteMock.mockClear();
   gitGetWorktreeStatusMock.mockClear();
   gitGetWorktreeStatusSummaryMock.mockClear();
-  gitFetchRemoteMock.mockResolvedValue({ output: "From origin" });
+  gitFetchRemoteMock.mockResolvedValue({ outcome: "fetched", output: "From origin" });
   gitGetWorktreeStatusMock.mockImplementation(
     async (
       _repoPath: string,
@@ -400,6 +402,37 @@ describe("useAgentStudioDiffData", () => {
       );
       expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
       expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("manual refresh still reloads local status when fetch is skipped for no remote", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockResolvedValueOnce({
+        outcome: "skipped_no_remote",
+        output:
+          "Skipped git fetch because no applicable remote is configured for this repo or branch.",
+      });
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+      expect(harness.getLatest().error).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -2022,8 +2055,8 @@ describe("useAgentStudioDiffData", () => {
   });
 
   test("queues one additional refresh cycle while fetch is in flight", async () => {
-    const firstFetch = createDeferred<{ output: string }>();
-    const secondFetch = createDeferred<{ output: string }>();
+    const firstFetch = createDeferred<GitFetchRemoteMockResult>();
+    const secondFetch = createDeferred<GitFetchRemoteMockResult>();
     const fetchQueue = [firstFetch, secondFetch];
 
     gitFetchRemoteMock.mockImplementation(async () => {
@@ -2048,10 +2081,10 @@ describe("useAgentStudioDiffData", () => {
 
       expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
 
-      firstFetch.resolve({ output: "From origin" });
+      firstFetch.resolve({ outcome: "fetched", output: "From origin" });
       await harness.waitFor(() => gitFetchRemoteMock.mock.calls.length >= 2);
 
-      secondFetch.resolve({ output: "From origin" });
+      secondFetch.resolve({ outcome: "fetched", output: "From origin" });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
 
       expect(gitFetchRemoteMock).toHaveBeenCalledTimes(2);
@@ -2062,7 +2095,7 @@ describe("useAgentStudioDiffData", () => {
   });
 
   test("does not reload a new repo context when an older refresh fetch resolves", async () => {
-    const pendingFetch = createDeferred<{ output: string }>();
+    const pendingFetch = createDeferred<GitFetchRemoteMockResult>();
 
     gitFetchRemoteMock.mockImplementation(async () => pendingFetch.promise);
 
@@ -2094,7 +2127,7 @@ describe("useAgentStudioDiffData", () => {
         undefined,
       );
 
-      pendingFetch.resolve({ output: "From origin" });
+      pendingFetch.resolve({ outcome: "fetched", output: "From origin" });
       await harness.run(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -2108,7 +2141,7 @@ describe("useAgentStudioDiffData", () => {
   });
 
   test("does not reload a new worktree context when an older refresh fetch resolves", async () => {
-    const pendingFetch = createDeferred<{ output: string }>();
+    const pendingFetch = createDeferred<GitFetchRemoteMockResult>();
 
     gitFetchRemoteMock.mockImplementation(async () => pendingFetch.promise);
 
@@ -2152,7 +2185,7 @@ describe("useAgentStudioDiffData", () => {
         "/repo/.worktrees/run-2",
       );
 
-      pendingFetch.resolve({ output: "From origin" });
+      pendingFetch.resolve({ outcome: "fetched", output: "From origin" });
       await harness.run(async () => {
         await Promise.resolve();
         await Promise.resolve();

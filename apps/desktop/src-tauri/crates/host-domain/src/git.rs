@@ -200,9 +200,10 @@ pub struct GitFetchRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct GitFetchResult {
-    pub output: String,
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitFetchResult {
+    Fetched { output: String },
+    SkippedNoRemote { output: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

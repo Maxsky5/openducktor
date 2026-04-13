@@ -412,12 +412,20 @@ describe("runtime schemas", () => {
       workingDir: null,
     });
     const fetchResult = gitFetchRemoteResultSchema.parse({
+      outcome: "fetched",
       output: "From origin\n * [new branch]      main -> origin/main",
+    });
+    const skippedResult = gitFetchRemoteResultSchema.parse({
+      outcome: "skipped_no_remote",
+      output:
+        "Skipped git fetch because no applicable remote is configured for this repo or branch.",
     });
 
     expect(fetchRequest.repoPath).toBe("/repo");
     expect(fetchRequest.workingDir).toBeUndefined();
+    expect(fetchResult.outcome).toBe("fetched");
     expect(fetchResult.output).toContain("origin/main");
+    expect(skippedResult.outcome).toBe("skipped_no_remote");
   });
 
   test("git pull branch result rejects unknown and malformed payloads", () => {
@@ -450,7 +458,15 @@ describe("runtime schemas", () => {
 
     expect(() =>
       gitFetchRemoteResultSchema.parse({
+        outcome: "fetched",
         output: 12,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitFetchRemoteResultSchema.parse({
+        outcome: "unknown",
+        output: "nope",
       }),
     ).toThrow();
   });

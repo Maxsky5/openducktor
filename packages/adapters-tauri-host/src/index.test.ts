@@ -831,7 +831,10 @@ describe("TauriHostClient", () => {
         return { outcome: "aborted", output: "rebase aborted" };
       }
       if (command === "git_fetch_remote") {
-        return { output: "From origin\n * [new branch]      main -> origin/main" };
+        return {
+          outcome: "fetched",
+          output: "From origin\n * [new branch]      main -> origin/main",
+        };
       }
       if (command === "git_pull_branch") {
         return { outcome: "pulled", output: "updated from origin/feature/task-1" };
@@ -941,6 +944,7 @@ describe("TauriHostClient", () => {
     expect(committed.outcome).toBe("no_changes");
     expect(rebased.outcome).toBe("rebased");
     expect(aborted.outcome).toBe("aborted");
+    expect(fetched.outcome).toBe("fetched");
     expect(fetched.output.includes("origin/main")).toBe(true);
     expect(pulled.outcome).toBe("pulled");
     expect(pushed.outcome).toBe("pushed");

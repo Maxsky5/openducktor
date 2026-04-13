@@ -554,7 +554,12 @@ fn git_fetch_remote_forwards_working_dir_and_trimmed_target_branch() -> Result<(
         },
     )?;
 
-    assert_eq!(result.output, "Fetched origin");
+    assert_eq!(
+        result,
+        host_domain::GitFetchResult::Fetched {
+            output: "Fetched origin".to_string()
+        }
+    );
 
     let git_state = git_state.lock().expect("git lock poisoned");
     assert!(git_state.calls.contains(&GitCall::FetchRemote {

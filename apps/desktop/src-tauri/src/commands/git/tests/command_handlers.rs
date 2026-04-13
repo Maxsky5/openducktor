@@ -478,6 +478,7 @@ fn git_fetch_remote_forwards_trimmed_target_branch_and_effective_working_dir() {
     )
     .expect("fetch command should succeed");
 
+    assert_eq!(response["outcome"], json!("fetched"));
     assert_eq!(response["output"], json!("Fetched origin"));
     let expected_worktree = fs::canonicalize(&worktree)
         .expect("worktree should canonicalize")

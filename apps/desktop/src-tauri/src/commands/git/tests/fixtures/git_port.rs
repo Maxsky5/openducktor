@@ -108,7 +108,7 @@ impl CommandGitPort {
                 worktree_status_calls: Vec::new(),
                 worktree_status_summary_result: summary_result,
                 worktree_status_summary_calls: Vec::new(),
-                fetch_remote_result: Ok(GitFetchResult {
+                fetch_remote_result: Ok(GitFetchResult::Fetched {
                     output: "Fetched origin".to_string(),
                 }),
                 fetch_remote_calls: Vec::new(),

@@ -138,7 +138,7 @@ export function useAgentStudioDiffData({
         setIsRefreshing(true);
 
         try {
-          await hostClient.gitFetchRemote(
+          const fetchResult = await hostClient.gitFetchRemote(
             activeRefreshContext.repoPath,
             activeRefreshContext.targetBranch,
             activeRefreshContext.workingDir ?? undefined,
@@ -147,9 +147,11 @@ export function useAgentStudioDiffData({
             break;
           }
 
-          await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
-          if (!hasSameRefreshContext()) {
-            break;
+          if (fetchResult.outcome === "fetched") {
+            await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
+            if (!hasSameRefreshContext()) {
+              break;
+            }
           }
 
           setRefreshError(null);
