@@ -38,7 +38,7 @@ import {
   type ResolvedHydrationRuntime,
   readPersistedRuntimeKind,
 } from "./hydration-runtime-resolution";
-import { runtimeRouteToConnection } from "../runtime/runtime";
+import { requireRuntimeConnectionSupport, runtimeRouteToConnection } from "../runtime/runtime";
 import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createReattachLiveSession } from "./reattach-live-session";
@@ -635,6 +635,11 @@ export const reconcileLiveSessionsStage = async ({
         directories,
       }),
     resumeMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
+      const supportedRuntimeConnection = requireRuntimeConnectionSupport(
+        runtimeKind,
+        runtimeConnection,
+        "resume session",
+      );
       const promptOverrides = await getRepoPromptOverrides();
       if (isStaleRepoOperation()) {
         return;
@@ -655,8 +660,8 @@ export const reconcileLiveSessionsStage = async ({
         externalSessionId: record.externalSessionId ?? record.sessionId,
         repoPath: intent.repoPath,
         runtimeKind,
-        runtimeConnection,
-        workingDirectory: runtimeConnection.workingDirectory,
+        runtimeConnection: supportedRuntimeConnection,
+        workingDirectory: supportedRuntimeConnection.workingDirectory,
         taskId: intent.taskId,
         role: record.role,
         scenario: resolvedScenario,

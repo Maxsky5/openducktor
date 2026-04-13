@@ -3,6 +3,19 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createReattachLiveSession } from "./reattach-live-session";
 
+const localHttpRuntimeResolution = {
+  ok: true as const,
+  runtimeKind: "opencode" as const,
+  runtimeId: "runtime-1",
+  runId: null,
+  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" } as const,
+  runtimeConnection: {
+    type: "local_http" as const,
+    endpoint: "http://127.0.0.1:4444",
+    workingDirectory: "/tmp/repo/worktree",
+  },
+};
+
 const sessionRecordFixture: AgentSessionRecord = {
   sessionId: "session-1",
   externalSessionId: "external-1",
@@ -63,18 +76,7 @@ describe("reattach-live-session", () => {
         attachedSessionId = sessionId;
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => ({
-        ok: true,
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        runId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-        runtimeConnection: {
-          type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       resumeMissingLiveSession: async () => {
         resumed = true;
       },
@@ -119,18 +121,7 @@ describe("reattach-live-session", () => {
       },
       attachSessionListener: () => {},
       promptOverrides: {},
-      resolveHydrationRuntime: async () => ({
-        ok: true,
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        runId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-        runtimeConnection: {
-          type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       resumeMissingLiveSession: async () => {},
       listLiveAgentSessions: async () => [],
       isStaleRepoOperation: () => false,
@@ -164,18 +155,7 @@ describe("reattach-live-session", () => {
         attachedSessionId = sessionId;
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => ({
-        ok: true,
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        runId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-        runtimeConnection: {
-          type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       resumeMissingLiveSession: async () => {
         resumeCalls += 1;
         stale = true;
@@ -221,18 +201,7 @@ describe("reattach-live-session", () => {
         throw new Error("should not attach stale session");
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => ({
-        ok: true,
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        runId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-        runtimeConnection: {
-          type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       resumeMissingLiveSession: async () => {
         resumeCalls += 1;
       },
@@ -259,6 +228,51 @@ describe("reattach-live-session", () => {
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
     expect(reattached).toBe(false);
+    expect(resumeCalls).toBe(0);
+  });
+
+  test("skips live reattachment for unsupported stdio OpenCode runtimes", async () => {
+    let liveLookupCalls = 0;
+    let resumeCalls = 0;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: () => {
+        throw new Error("should not update unsupported session");
+      },
+      attachSessionListener: () => {
+        throw new Error("should not attach unsupported session");
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => ({
+        ok: true,
+        runtimeKind: "opencode",
+        runtimeId: "runtime-stdio",
+        runId: null,
+        runtimeRoute: { type: "stdio" },
+        runtimeConnection: {
+          type: "stdio",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      }),
+      resumeMissingLiveSession: async () => {
+        resumeCalls += 1;
+      },
+      listLiveAgentSessions: async () => {
+        liveLookupCalls += 1;
+        return [];
+      },
+      isStaleRepoOperation: () => false,
+      toLiveSessionState: () => "idle",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(liveLookupCalls).toBe(0);
     expect(resumeCalls).toBe(0);
   });
 });

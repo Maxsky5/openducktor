@@ -139,4 +139,33 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       await harness.unmount();
     }
   });
+
+  test("does not query runtime-backed session data for unsupported stdio OpenCode sessions", async () => {
+    const readSessionModelCatalog = mock(async () => CATALOG);
+    const readSessionTodos = mock(async () => []);
+    const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
+      session: createAgentSessionFixture({
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        runtimeRoute: { type: "stdio" },
+        workingDirectory: "/repo",
+        modelCatalog: null,
+        isLoadingModelCatalog: false,
+      }),
+      agentStudioReadinessState: "ready",
+      readSessionModelCatalog,
+      readSessionTodos,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(readSessionModelCatalog).not.toHaveBeenCalled();
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

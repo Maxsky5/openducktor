@@ -5,6 +5,7 @@ import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import {
+  requireRuntimeConnectionSupport,
   type RuntimeInfo,
   resolveRuntimeConnection,
   runtimeRouteToConnection,
@@ -268,12 +269,17 @@ export const createEnsureSessionReady = ({
       session.selectedModel?.runtimeKind ??
       session.runtimeKind ??
       DEFAULT_RUNTIME_KIND;
+    const runtimeConnection = requireRuntimeConnectionSupport(
+      resolvedRuntimeKind,
+      resolveRuntimeConnection(runtime),
+      "resume session",
+    );
     await adapter.resumeSession({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
       repoPath,
       runtimeKind: resolvedRuntimeKind,
-      runtimeConnection: resolveRuntimeConnection(runtime),
+      runtimeConnection,
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
@@ -301,7 +307,7 @@ export const createEnsureSessionReady = ({
 
     const liveSnapshot = await loadLiveSnapshot({
       runtimeKind: resolvedRuntimeKind,
-      runtimeConnection: resolveRuntimeConnection(runtime),
+      runtimeConnection,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });

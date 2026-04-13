@@ -100,6 +100,32 @@ export const runtimeConnectionTransportKey = (
   }
 };
 
+export const getRuntimeConnectionSupportError = (
+  runtimeKind: RuntimeKind | null | undefined,
+  runtimeConnection: AgentRuntimeConnection | null | undefined,
+  action: string,
+): string | null => {
+  if (!runtimeKind || !runtimeConnection) {
+    return null;
+  }
+  if (runtimeKind !== "opencode" || runtimeConnection.type === "local_http") {
+    return null;
+  }
+  return `Runtime connection type '${runtimeConnection.type}' is unsupported for ${action} in runtime '${runtimeKind}'; local_http is required.`;
+};
+
+export const requireRuntimeConnectionSupport = (
+  runtimeKind: RuntimeKind | null | undefined,
+  runtimeConnection: AgentRuntimeConnection,
+  action: string,
+): AgentRuntimeConnection => {
+  const error = getRuntimeConnectionSupportError(runtimeKind, runtimeConnection, action);
+  if (error) {
+    throw new Error(error);
+  }
+  return runtimeConnection;
+};
+
 export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute | null | undefined): string => {
   if (!runtimeRoute) {
     return "unavailable";
@@ -231,6 +257,24 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     const runtimeKind = options?.runtimeKind?.trim()
       ? options.runtimeKind
       : await loadRepoDefaultRuntimeKind(repoPath, role);
+    const toRuntimeInfo = (input: {
+      runtimeId: string | null;
+      runId: string | null;
+      runtimeRoute: RuntimeRoute;
+      runtimeConnection: AgentRuntimeConnection;
+      workingDirectory: string;
+    }): RuntimeInfo => ({
+      runtimeKind,
+      runtimeId: input.runtimeId,
+      runId: input.runId,
+      runtimeRoute: input.runtimeRoute,
+      runtimeConnection: requireRuntimeConnectionSupport(
+        runtimeKind,
+        input.runtimeConnection,
+        `${role} sessions`,
+      ),
+      workingDirectory: input.workingDirectory,
+    });
 
     if (role === "build") {
       if (targetWorkingDirectory) {
@@ -246,14 +290,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             matchingRun.runtimeRoute,
             matchingRun.worktreePath,
           );
-          return {
-            runtimeKind,
+          return toRuntimeInfo({
             runtimeId: null,
             runId: matchingRun.runId,
             runtimeRoute: matchingRun.runtimeRoute,
             runtimeConnection,
             workingDirectory: matchingRun.worktreePath,
-          };
+          });
         }
 
         const taskRun = runsRef.current.find(
@@ -267,14 +310,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             taskRun.runtimeRoute,
             taskRun.worktreePath,
           );
-          return {
-            runtimeKind,
+          return toRuntimeInfo({
             runtimeId: null,
             runId: taskRun.runId,
             runtimeRoute: taskRun.runtimeRoute,
             runtimeConnection,
             workingDirectory: taskRun.worktreePath,
-          };
+          });
         }
 
         const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
@@ -282,14 +324,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           runtime.runtimeRoute,
           targetWorkingDirectory,
         );
-        return {
-          runtimeKind,
+        return toRuntimeInfo({
           runtimeId: runtime.runtimeId,
           runId: null,
           runtimeRoute: runtime.runtimeRoute,
           runtimeConnection,
           workingDirectory: targetWorkingDirectory,
-        };
+        });
       }
 
       let run = runsRef.current.find(
@@ -310,14 +351,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         run.runtimeRoute,
         run.worktreePath,
       );
-      return {
-        runtimeKind,
+      return toRuntimeInfo({
         runtimeId: null,
         runId: run.runId,
         runtimeRoute: run.runtimeRoute,
         runtimeConnection,
         workingDirectory: run.worktreePath,
-      };
+      });
     }
 
     if (role === "qa") {
@@ -342,14 +382,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           matchingRun.runtimeRoute,
           matchingRun.worktreePath,
         );
-        return {
-          runtimeKind,
+        return toRuntimeInfo({
           runtimeId: null,
           runId: matchingRun.runId,
           runtimeRoute: matchingRun.runtimeRoute,
           runtimeConnection,
           workingDirectory: matchingRun.worktreePath,
-        };
+        });
       }
 
       const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
@@ -357,14 +396,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         runtime.runtimeRoute,
         workingDirectory,
       );
-      return {
-        runtimeKind,
+      return toRuntimeInfo({
         runtimeId: runtime.runtimeId,
         runId: null,
         runtimeRoute: runtime.runtimeRoute,
         runtimeConnection,
         workingDirectory,
-      };
+      });
     }
 
     const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
@@ -373,13 +411,12 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       runtime.runtimeRoute,
       workingDirectory,
     );
-    return {
-      runtimeKind,
+    return toRuntimeInfo({
       runtimeId: runtime.runtimeId,
       runId: null,
       runtimeRoute: runtime.runtimeRoute,
       runtimeConnection,
       workingDirectory,
-    };
+    });
   };
 };

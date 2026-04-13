@@ -688,6 +688,36 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
+  test("rejects unsupported stdio runtime connections for planner sessions", async () => {
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
+    host.runtimeEnsure = async () => ({
+      kind: "opencode",
+      runtimeId: "runtime-stdio",
+      repoPath: "/tmp/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/tmp/repo/shared",
+      runtimeRoute: {
+        type: "stdio",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        runsRef: { current: [] },
+        refreshTaskData: async () => {},
+      });
+
+      await expect(ensureRuntime("/tmp/repo", "task-1", "planner")).rejects.toThrow(
+        "Runtime connection type 'stdio' is unsupported for planner sessions in runtime 'opencode'; local_http is required.",
+      );
+    } finally {
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
+    }
+  });
+
   test("propagates task document loading errors", async () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;

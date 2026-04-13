@@ -1,4 +1,8 @@
-import { runtimeRouteToConnection } from "@/state/operations/agent-orchestrator/runtime/runtime";
+import type { RuntimeKind } from "@openducktor/contracts";
+import {
+  getRuntimeConnectionSupportError,
+  runtimeRouteToConnection,
+} from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const WORKTREE_RUNTIME_ROLES = new Set<AgentSessionState["role"]>(["build", "qa"]);
@@ -23,13 +27,47 @@ export const hasAttachedSessionRuntime = (
 };
 
 export const toAttachedSessionRuntimeConnection = (
-  session: Pick<AgentSessionState, "runtimeRoute" | "workingDirectory"> | null | undefined,
+  session:
+    | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
+    | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
+    | null
+    | undefined,
+  runtimeKind: RuntimeKind | null | undefined,
+  action = "attached session runtime access",
 ) => {
   if (!session?.runtimeRoute) {
     return null;
   }
 
-  return runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory);
+  const runtimeConnection = runtimeRouteToConnection(
+    session.runtimeRoute,
+    session.workingDirectory,
+  );
+  if (getRuntimeConnectionSupportError(runtimeKind, runtimeConnection, action)) {
+    return null;
+  }
+
+  return runtimeConnection;
+};
+
+export const getAttachedSessionRuntimeConnectionError = (
+  session:
+    | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
+    | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
+    | null
+    | undefined,
+  runtimeKind: RuntimeKind | null | undefined,
+  action = "attached session runtime access",
+): string | null => {
+  if (!session?.runtimeRoute) {
+    return null;
+  }
+
+  return getRuntimeConnectionSupportError(
+    runtimeKind,
+    runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory),
+    action,
+  );
 };
 
 export const isWaitingForAttachedWorktreeRuntime = (
