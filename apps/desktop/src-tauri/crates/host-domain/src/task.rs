@@ -90,6 +90,14 @@ impl TaskStatus {
     }
 }
 
+pub fn is_terminal_task_status(status: &TaskStatus) -> bool {
+    matches!(status, TaskStatus::Closed | TaskStatus::Deferred)
+}
+
+pub fn is_syncable_pull_request_state(state: &str) -> bool {
+    matches!(state, "open" | "draft")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskAction {

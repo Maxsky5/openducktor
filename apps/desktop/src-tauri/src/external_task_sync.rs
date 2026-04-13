@@ -31,6 +31,7 @@ struct TaskEventControlPayload {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ExternalTaskSyncEventKind {
     ExternalTaskCreated,
+    TasksUpdated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,7 +40,10 @@ pub(crate) struct ExternalTaskSyncEvent {
     pub(crate) event_id: String,
     pub(crate) kind: ExternalTaskSyncEventKind,
     pub(crate) repo_path: String,
-    pub(crate) task_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) task_ids: Option<Vec<String>>,
     pub(crate) emitted_at: String,
 }
 
@@ -55,7 +59,22 @@ pub(crate) fn build_external_task_created_event(
         event_id: Uuid::new_v4().to_string(),
         kind: ExternalTaskSyncEventKind::ExternalTaskCreated,
         repo_path,
-        task_id,
+        task_id: Some(task_id),
+        task_ids: None,
+        emitted_at: now_rfc3339(),
+    }
+}
+
+pub(crate) fn build_tasks_updated_event(
+    repo_path: String,
+    task_ids: Vec<String>,
+) -> ExternalTaskSyncEvent {
+    ExternalTaskSyncEvent {
+        event_id: Uuid::new_v4().to_string(),
+        kind: ExternalTaskSyncEventKind::TasksUpdated,
+        repo_path,
+        task_id: None,
+        task_ids: Some(task_ids),
         emitted_at: now_rfc3339(),
     }
 }
@@ -234,7 +253,26 @@ mod tests {
 
         assert_eq!(event.kind, ExternalTaskSyncEventKind::ExternalTaskCreated);
         assert_eq!(event.repo_path, "/repo");
-        assert_eq!(event.task_id, "task-1");
+        assert_eq!(event.task_id.as_deref(), Some("task-1"));
+        assert_eq!(event.task_ids, None);
+        assert!(!event.event_id.is_empty());
+        assert!(!event.emitted_at.is_empty());
+    }
+
+    #[test]
+    fn build_tasks_updated_event_sets_expected_payload_shape() {
+        let event = build_tasks_updated_event(
+            "/repo".to_string(),
+            vec!["task-1".to_string(), "task-2".to_string()],
+        );
+
+        assert_eq!(event.kind, ExternalTaskSyncEventKind::TasksUpdated);
+        assert_eq!(event.repo_path, "/repo");
+        assert_eq!(event.task_id, None);
+        assert_eq!(
+            event.task_ids,
+            Some(vec!["task-1".to_string(), "task-2".to_string()])
+        );
         assert!(!event.event_id.is_empty());
         assert!(!event.emitted_at.is_empty());
     }
@@ -312,6 +350,29 @@ mod tests {
                 })
             ]
         );
+    }
+
+    #[test]
+    fn relay_task_event_reader_relays_tasks_updated_payloads() {
+        let event = serde_json::to_string(&build_tasks_updated_event(
+            "/repo".to_string(),
+            vec!["task-1".to_string(), "task-2".to_string()],
+        ))
+        .expect("event should serialize");
+        let stop_requested = AtomicBool::new(false);
+        let mut last_event_id = None;
+        let mut emitted_payloads = Vec::new();
+
+        let stream = Cursor::new(format!("id: 9\ndata: {event}\n\n").into_bytes());
+        relay_task_event_reader(stream, &stop_requested, &mut last_event_id, |payload| {
+            emitted_payloads.push(payload)
+        })
+        .expect("stream should relay");
+
+        assert_eq!(last_event_id, Some(9));
+        assert_eq!(emitted_payloads.len(), 1);
+        assert_eq!(emitted_payloads[0]["kind"], json!("tasks_updated"));
+        assert_eq!(emitted_payloads[0]["taskIds"], json!(["task-1", "task-2"]));
     }
 
     #[test]

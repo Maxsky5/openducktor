@@ -105,6 +105,7 @@ impl CommandRunner for BlockingInitRunner {
 #[test]
 fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()> {
     let repo = RepoFixture::new("where-parse-redaction");
+    let _env_lock = lock_env();
     let sensitive = "secret-path";
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
@@ -132,6 +133,7 @@ fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()
 #[test]
 fn verify_repo_initialized_reads_json_errors_from_nonzero_exit() -> Result<()> {
     let repo = RepoFixture::new("where-json-error");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -545,6 +547,7 @@ fn diagnose_repo_store_rejects_wrong_database_when_shared_server_state_is_missin
 #[test]
 fn verify_repo_initialized_prefers_decodable_stderr_json_over_noisy_stdout() -> Result<()> {
     let repo = RepoFixture::new("where-stderr-json-wins");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -573,6 +576,7 @@ fn verify_repo_initialized_prefers_decodable_stderr_json_over_noisy_stdout() -> 
 #[test]
 fn verify_repo_initialized_accepts_noisy_stdout_before_json_payload() -> Result<()> {
     let repo = RepoFixture::new("where-noisy-stdout-before-json");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -602,6 +606,7 @@ fn verify_repo_initialized_accepts_noisy_stdout_before_json_payload() -> Result<
 #[test]
 fn verify_repo_initialized_does_not_let_unrelated_stderr_json_shadow_stdout() -> Result<()> {
     let repo = RepoFixture::new("where-unrelated-stderr-json");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -629,6 +634,7 @@ fn verify_repo_initialized_does_not_let_unrelated_stderr_json_shadow_stdout() ->
 #[test]
 fn verify_repo_initialized_rejects_where_payloads_with_path_and_error() -> Result<()> {
     let repo = RepoFixture::new("where-path-and-error");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -659,6 +665,7 @@ fn verify_repo_initialized_rejects_where_payloads_with_path_and_error() -> Resul
 #[test]
 fn lifecycle_repo_init_caches_success_only_after_custom_status_configuration() -> Result<()> {
     let repo = RepoFixture::new("lifecycle-config-before-cache");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     let runner = MockCommandRunner::with_steps(vec![
@@ -725,6 +732,7 @@ fn lifecycle_repo_init_caches_success_only_after_custom_status_configuration() -
 #[test]
 fn ensure_repo_initialized_uses_init_for_missing_attachment() -> Result<()> {
     let repo = RepoFixture::new("missing-attachment");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     let effective_port = match read_shared_dolt_server_state()? {
@@ -788,6 +796,7 @@ fn ensure_repo_initialized_uses_init_for_missing_attachment() -> Result<()> {
 #[test]
 fn ensure_repo_initialized_surfaces_stdout_when_init_fails() -> Result<()> {
     let repo = RepoFixture::new("init-failure-stdout");
+    let _env_lock = lock_env();
     let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
         false,
         "init failed from stdout".to_string(),
@@ -809,6 +818,7 @@ fn ensure_repo_initialized_surfaces_stdout_when_init_fails() -> Result<()> {
 #[test]
 fn ensure_repo_initialized_initializes_in_attachment_root_with_stealth() -> Result<()> {
     let repo = RepoFixture::new("init-stealth");
+    let _env_lock = lock_env();
     let attachment_root = resolve_repo_beads_attachment_root(repo.path())?;
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
@@ -923,6 +933,7 @@ fn ensure_repo_initialized_enforces_no_git_ops_for_existing_attachment() -> Resu
 #[test]
 fn ensure_repo_initialized_restores_when_shared_database_is_missing() -> Result<()> {
     let repo = RepoFixture::new("missing-shared-database");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let backup_dir = beads_dir.join("backup");
     let database_name = compute_beads_database_name(repo.path())?;
@@ -968,6 +979,7 @@ fn ensure_repo_initialized_restores_when_shared_database_is_missing() -> Result<
 #[test]
 fn verify_repo_initialized_treats_file_attachment_path_as_missing_attachment() -> Result<()> {
     let repo = RepoFixture::new("attachment-path-is-file");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     fs::create_dir_all(
         beads_dir
@@ -1014,6 +1026,7 @@ fn ensure_repo_initialized_fails_fast_for_broken_metadata() -> Result<()> {
 #[test]
 fn verify_repo_initialized_fails_when_where_path_cannot_be_canonicalized() -> Result<()> {
     let repo = RepoFixture::new("uncanonicalizable-where-path");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -1082,6 +1095,7 @@ fn ensure_repo_initialized_fails_fast_for_malformed_where_output() -> Result<()>
 #[test]
 fn ensure_repo_initialized_fails_fast_for_non_json_where_failure_output() -> Result<()> {
     let repo = RepoFixture::new("non-json-where-failure-output");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -1122,6 +1136,7 @@ fn ensure_repo_initialized_fails_fast_for_non_json_where_failure_output() -> Res
 #[test]
 fn ensure_repo_initialized_treats_bracket_prefixed_stderr_as_plain_text_failure() -> Result<()> {
     let repo = RepoFixture::new("bracket-prefixed-stderr-failure");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
@@ -1152,6 +1167,7 @@ fn ensure_repo_initialized_treats_bracket_prefixed_stderr_as_plain_text_failure(
 #[test]
 fn ensure_repo_initialized_fails_fast_when_shared_dolt_probe_fails() -> Result<()> {
     let repo = RepoFixture::new("shared-dolt-unavailable");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);
     let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
@@ -1183,6 +1199,7 @@ fn ensure_repo_initialized_fails_fast_when_shared_dolt_probe_fails() -> Result<(
 #[test]
 fn ensure_repo_initialized_succeeds_for_healthy_attachment_without_recovery() -> Result<()> {
     let repo = RepoFixture::new("healthy-attachment");
+    let _env_lock = lock_env();
     let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
     let database_name = compute_beads_database_name(repo.path())?;
     write_attachment_metadata(&beads_dir, repo.path(), 3307);

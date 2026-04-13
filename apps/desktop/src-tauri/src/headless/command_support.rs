@@ -20,6 +20,7 @@ pub(super) struct HeadlessState {
     pub(super) events: HeadlessEventBus,
     pub(super) dev_server_events: HeadlessEventBus,
     pub(super) task_events: HeadlessEventBus,
+    pub(super) pull_request_sync_stop_requested: Arc<AtomicBool>,
     pub(super) registry: Arc<CommandRegistry>,
     pub(super) shutdown_signal: Arc<Notify>,
     pub(super) shutdown_started: Arc<AtomicBool>,

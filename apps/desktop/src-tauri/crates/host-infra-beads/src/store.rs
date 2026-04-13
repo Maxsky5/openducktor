@@ -13,7 +13,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::command_runner::{CommandRunner, ProcessCommandRunner};
-use crate::constants::{DEFAULT_METADATA_NAMESPACE, TASK_LIST_CACHE_TTL_MS};
+use crate::constants::{
+    DEFAULT_METADATA_NAMESPACE, PULL_REQUEST_SYNC_CANDIDATE_CACHE_TTL_MS, TASK_LIST_CACHE_TTL_MS,
+};
 use crate::lifecycle::BeadsLifecycle;
 use crate::metadata::{metadata_namespace, parse_agent_sessions, parse_metadata_root};
 use crate::model::{MarkdownEntry, QaEntry, RawIssue};
@@ -25,13 +27,14 @@ mod namespace;
 mod session_ops;
 mod task_ops;
 
-use cache::{KanbanTaskListCacheState, TaskListCacheState};
+use cache::{KanbanTaskListCacheState, PullRequestSyncCandidateCacheState, TaskListCacheState};
 
 pub struct BeadsTaskStore {
     pub(crate) metadata_namespace: Mutex<String>,
     pub(crate) lifecycle: BeadsLifecycle,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
     kanban_task_list_cache: Mutex<HashMap<String, KanbanTaskListCacheState>>,
+    pull_request_sync_candidate_cache: Mutex<HashMap<String, PullRequestSyncCandidateCacheState>>,
 }
 
 impl fmt::Debug for BeadsTaskStore {
@@ -69,6 +72,7 @@ impl BeadsTaskStore {
             lifecycle: BeadsLifecycle::new(command_runner),
             task_list_cache: Mutex::new(HashMap::new()),
             kanban_task_list_cache: Mutex::new(HashMap::new()),
+            pull_request_sync_candidate_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -96,6 +100,10 @@ impl TaskStore for BeadsTaskStore {
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
         self.list_tasks_impl(repo_path)
+    }
+
+    fn list_pull_request_sync_candidates(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
+        self.list_pull_request_sync_candidates_impl(repo_path)
     }
 
     fn get_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {

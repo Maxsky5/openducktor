@@ -17,20 +17,20 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, GitAheadBehind,
-    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflictAbortRequest,
-    GitConflictAbortResult, GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileDiff,
-    GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
-    GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
-    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
-    GitResetWorktreeSelection, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
-    GitWorktreeSummary, IssueType, PlanSubtaskInput, PullRequestRecord, QaReportDocument,
-    QaVerdict, QaWorkflowVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
-    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
-    RepoStoreSharedServerOwnershipState, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
-    SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    is_syncable_pull_request_state, is_terminal_task_status, AgentSessionDocument, AgentWorkflows,
+    CreateTaskInput, DirectMergeRecord, GitAheadBehind, GitBranch, GitCommitAllRequest,
+    GitCommitAllResult, GitConflictAbortRequest, GitConflictAbortResult, GitConflictOperation,
+    GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
+    GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitPort, GitPullRequest,
+    GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot, GitResetWorktreeSelection,
+    GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitUpstreamAheadBehind,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType,
+    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict,
+    RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
+    RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
+    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -93,6 +93,8 @@ pub(crate) struct TaskStoreState {
     pub(crate) ensure_calls: Vec<String>,
     pub(crate) ensure_error: Option<String>,
     pub(crate) tasks: Vec<TaskCard>,
+    pub(crate) list_calls: Vec<String>,
+    pub(crate) list_pull_request_sync_candidate_calls: Vec<String>,
     pub(crate) get_task_calls: Vec<String>,
     pub(crate) get_task_error: Option<String>,
     pub(crate) list_error: Option<String>,
@@ -179,11 +181,43 @@ impl TaskStore for FakeTaskStore {
     }
 
     fn list_tasks(&self, _repo_path: &Path) -> Result<Vec<TaskCard>> {
-        let state = self.state.lock().expect("task store lock poisoned");
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state
+            .list_calls
+            .push(_repo_path.to_string_lossy().to_string());
         if let Some(message) = state.list_error.as_ref() {
             return Err(anyhow!(message.clone()));
         }
         Ok(state.tasks.clone())
+    }
+
+    fn list_pull_request_sync_candidates(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state
+            .list_pull_request_sync_candidate_calls
+            .push(repo_path.to_string_lossy().to_string());
+        if let Some(message) = state.list_error.as_ref() {
+            return Err(anyhow!(message.clone()));
+        }
+
+        let pull_requests = state.pull_requests.clone();
+        Ok(state
+            .tasks
+            .iter()
+            .filter(|task| !is_terminal_task_status(&task.status))
+            .filter_map(|task| {
+                let pull_request = task
+                    .pull_request
+                    .clone()
+                    .or_else(|| pull_requests.get(&task.id).cloned())?;
+                if !is_syncable_pull_request_state(pull_request.state.as_str()) {
+                    return None;
+                }
+                let mut candidate = task.clone();
+                candidate.pull_request = Some(pull_request);
+                Some(candidate)
+            })
+            .collect())
     }
 
     fn get_task(&self, _repo_path: &Path, task_id: &str) -> Result<TaskCard> {

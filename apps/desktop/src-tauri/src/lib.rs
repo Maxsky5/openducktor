@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Context};
-use external_task_sync::{start_task_event_relay, TaskEventRelayState};
+use external_task_sync::{start_task_event_relay, TaskEventRelayState, TASK_EVENT_NAME};
 use host_application::{AppService, DevServerEmitter, RunEmitter};
 #[cfg(test)]
 use host_domain::TaskStatus;
 use host_domain::{DevServerEvent, RunEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RuntimeConfigStore};
+use pull_request_sync::start_pull_request_sync_loop;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +22,7 @@ mod external_task_sync;
 mod headless;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod macos_cef_quit;
+mod pull_request_sync;
 mod sse_relay;
 
 #[cfg(feature = "cef")]
@@ -41,6 +43,10 @@ pub(crate) struct AppState {
     service: Arc<AppService>,
     #[cfg(test)]
     hook_trust_dialog_test_response: Mutex<Option<bool>>,
+}
+
+pub(crate) struct PullRequestSyncLoopState {
+    stop_requested: Arc<AtomicBool>,
 }
 
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
@@ -452,7 +458,23 @@ fn startup_phase_build_tauri_app(
 
             let stop_requested =
                 start_task_event_relay(setup_service.clone(), app.handle().clone());
+            let pull_request_sync_stop_requested =
+                start_pull_request_sync_loop(setup_service.clone(), {
+                    let app_handle = app.handle().clone();
+                    move |event| {
+                        if let Err(error) = app_handle.emit(TASK_EVENT_NAME, event) {
+                            tracing::error!(
+                                target: "openducktor.task-sync",
+                                error = %error,
+                                "Pull request sync loop failed to emit a desktop task event"
+                            );
+                        }
+                    }
+                });
             app.manage(TaskEventRelayState { stop_requested });
+            app.manage(PullRequestSyncLoopState {
+                stop_requested: pull_request_sync_stop_requested,
+            });
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init());
@@ -485,6 +507,10 @@ fn startup_phase_exit_shutdown_handler(
 
             handle
                 .state::<TaskEventRelayState>()
+                .stop_requested
+                .store(true, Ordering::SeqCst);
+            handle
+                .state::<PullRequestSyncLoopState>()
                 .stop_requested
                 .store(true, Ordering::SeqCst);
 

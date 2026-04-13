@@ -11,12 +11,10 @@ import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/const
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
-import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
-const PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
 const MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS = 256;
 
 const rememberProcessedExternalTaskEvent = (
@@ -48,11 +46,9 @@ type UseAppLifecycleArgs = {
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
-  refreshTaskData: (repoPath: string, taskId?: string) => Promise<void>;
-  refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
+  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   clearBranchData: () => void;
   beadsPreparationToastDelayMs?: number;
-  pullRequestSyncIntervalMs?: number;
 };
 
 export function useAppLifecycle({
@@ -64,23 +60,19 @@ export function useAppLifecycle({
   refreshRuntimeCheck,
   refreshBeadsCheckForRepo,
   refreshTaskData,
-  refreshTasksWithOptions,
   clearBranchData,
   beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
-  pullRequestSyncIntervalMs = PULL_REQUEST_SYNC_INTERVAL_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
   const activeRepoRef = useRef(activeRepo);
   const refreshTaskDataRef = useRef(refreshTaskData);
-  const refreshTasksWithOptionsRef = useRef(refreshTasksWithOptions);
   const processedTaskEventIdsRef = useRef(new Set<string>());
   const processedTaskEventOrderRef = useRef<string[]>([]);
 
   useLayoutEffect(() => {
     activeRepoRef.current = activeRepo;
     refreshTaskDataRef.current = refreshTaskData;
-    refreshTasksWithOptionsRef.current = refreshTasksWithOptions;
-  }, [activeRepo, refreshTaskData, refreshTasksWithOptions]);
+  }, [activeRepo, refreshTaskData]);
 
   useEffect(() => {
     let disposed = false;
@@ -191,13 +183,18 @@ export function useAppLifecycle({
           return;
         }
 
-        void refreshTaskDataRef
-          .current(parsed.data.repoPath, parsed.data.taskId)
-          .catch((error: unknown) => {
-            toast.error("Failed to sync external task changes", {
-              description: summarizeTaskLoadError({ error }),
-            });
+        const taskIds =
+          parsed.data.kind === "tasks_updated" ? parsed.data.taskIds : parsed.data.taskId;
+
+        void refreshTaskDataRef.current(parsed.data.repoPath, taskIds).catch((error: unknown) => {
+          const title =
+            parsed.data.kind === "tasks_updated"
+              ? "Failed to sync task updates"
+              : "Failed to sync external task changes";
+          toast.error(title, {
+            description: summarizeTaskLoadError({ error }),
           });
+        });
       })
       .then((cleanup) => {
         if (disposed) {
@@ -342,42 +339,4 @@ export function useAppLifecycle({
     refreshRuntimeCheck,
     refreshTaskData,
   ]);
-
-  useEffect(() => {
-    if (!activeRepo || typeof document === "undefined") {
-      return;
-    }
-
-    let pullRequestSyncIntervalId: ReturnType<typeof setInterval> | null = null;
-
-    const clearPullRequestSyncInterval = (): void => {
-      if (pullRequestSyncIntervalId !== null) {
-        clearInterval(pullRequestSyncIntervalId);
-        pullRequestSyncIntervalId = null;
-      }
-    };
-
-    const restartPullRequestSyncInterval = (): void => {
-      clearPullRequestSyncInterval();
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-
-      pullRequestSyncIntervalId = setInterval(() => {
-        void refreshTasksWithOptionsRef.current({ trigger: "scheduled" });
-      }, pullRequestSyncIntervalMs);
-    };
-
-    const handleVisibilityChange = (): void => {
-      restartPullRequestSyncInterval();
-    };
-
-    restartPullRequestSyncInterval();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      clearPullRequestSyncInterval();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [activeRepo, pullRequestSyncIntervalMs]);
 }
