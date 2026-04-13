@@ -15,7 +15,6 @@ concurrency:
 env:
   BUN_VERSION: 1.3.11
   CARGO_TERM_COLOR: always
-  APPLE_SIGNING_ENABLED: ${{ vars.APPLE_SIGNING_ENABLED || 'false' }}
 
 jobs:
   build-macos:
@@ -164,7 +163,6 @@ jobs:
           ninja --version
 
       - name: Validate release secrets
-        if: env.APPLE_SIGNING_ENABLED == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -188,7 +186,6 @@ jobs:
           fi
 
       - name: Install Apple signing certificate
-        if: env.APPLE_SIGNING_ENABLED == 'true'
         uses: apple-actions/import-codesign-certs@fe74d46e82474f87e1ba79832ad28a4013d0e33a
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
@@ -202,7 +199,6 @@ jobs:
         run: bun run --cwd apps/desktop scripts/resolve-cef-release-env.ts >> "$GITHUB_OUTPUT"
 
       - name: Build and upload signed desktop assets
-        if: env.APPLE_SIGNING_ENABLED == 'true'
         uses: tauri-apps/tauri-action@97cef2bd32ead607bcc2c6af5b40ce2f25d48e77
         timeout-minutes: 60
         env:
@@ -213,24 +209,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        with:
-          tagName: ${{ steps.release_meta.outputs.tag }}
-          projectPath: apps/desktop
-          tauriScript: ${{ steps.cef.outputs.cargo_tauri_path }}
-          args: --target ${{ matrix.target }} --config src-tauri/bundle.sidecars.json --features cef -- --no-default-features
-          releaseDraft: true
-          uploadUpdaterJson: false
-          uploadUpdaterSignatures: false
-          retryAttempts: 2
-
-      - name: Build and upload unsigned desktop assets
-        if: env.APPLE_SIGNING_ENABLED != 'true'
-        uses: tauri-apps/tauri-action@97cef2bd32ead607bcc2c6af5b40ce2f25d48e77
-        timeout-minutes: 60
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CEF_PATH: ${{ steps.cef.outputs.cef_path }}
-          OPENDUCKTOR_PREPARE_SIDECARS: "1"
         with:
           tagName: ${{ steps.release_meta.outputs.tag }}
           projectPath: apps/desktop
@@ -252,7 +230,6 @@ jobs:
     steps:
       - name: Publish workflow summary
         env:
-          APPLE_SIGNING_ENABLED: ${{ env.APPLE_SIGNING_ENABLED }}
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
@@ -264,7 +241,7 @@ jobs:
             echo "- Tag: $TAG"
             echo "- Draft release: $RELEASE_URL"
             echo "- Assets uploaded by tauri-action for macOS arm64 and macOS Intel"
-            echo "- Apple signing enabled: $APPLE_SIGNING_ENABLED"
+            echo "- Signing/notarization: required"
             echo "- Release notes source: GitHub generated notes using .github/release.yml"
             echo "- Next step: smoke-test the draft assets, then publish the draft in GitHub Releases"
           } >> "$GITHUB_STEP_SUMMARY"

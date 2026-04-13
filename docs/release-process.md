@@ -38,15 +38,11 @@ It:
 - verifies that the draft GitHub release already exists
 - installs the packaged Beads sidecar prerequisites on the runner (`bd` and `dolt`)
 - runs the repo's CEF bootstrap step
+- signs and notarizes the macOS bundles
 - builds macOS assets for:
   - Apple Silicon (`aarch64-apple-darwin`)
   - Intel (`x86_64-apple-darwin`)
 - uploads those assets to the draft GitHub release via `tauri-action`
-
-Signing is controlled by the repository variable `APPLE_SIGNING_ENABLED`:
-
-- when `false` or unset, the workflow builds unsigned desktop binaries
-- when `true`, the workflow requires Apple signing credentials and produces signed builds
 
 The release remains a **draft** so maintainers can smoke-test the downloaded assets before publishing.
 
@@ -95,8 +91,8 @@ That keeps release notes simple and reviewable for the first release line.
 Notes:
 
 - `APPLE_CERTIFICATE` must be a base64-encoded `.p12` signing certificate.
-- The Apple secrets are only required when `APPLE_SIGNING_ENABLED=true`.
 - Certificate import is handled by `apple-actions/import-codesign-certs`.
+- Desktop releases are now signed-only; the workflow fails fast if any Apple release secret is missing.
 
 ### MCP publish secrets
 
