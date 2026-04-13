@@ -96,7 +96,7 @@ Notes:
 
 ### MCP publish secrets
 
-- `NPM_TOKEN`
+- None. MCP publishing uses npm Trusted Publisher via GitHub Actions OIDC.
 
 ### Release automation secret
 

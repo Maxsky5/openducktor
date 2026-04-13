@@ -31,6 +31,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Setup Node for npm trusted publishing
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v6.0.2
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
       - name: Validate MCP tag matches package version
         env:
           TAG: ${{ inputs.tag }}
@@ -59,10 +65,7 @@ jobs:
 
       - name: Publish package
         working-directory: packages/openducktor-mcp
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
-        run: bun publish --access public
+        run: npm publish --access public
 
       - name: Publish workflow summary
         env:
