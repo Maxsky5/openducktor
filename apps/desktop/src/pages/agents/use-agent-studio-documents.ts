@@ -22,6 +22,24 @@ type WorkflowDocumentTarget = {
   inputKey: "markdown" | "reportMarkdown";
 };
 
+const shouldReplayWorkflowDocumentMessagesForAliasHydration = ({
+  activeSession,
+  workflowAliasMetadataReady,
+  previousWorkflowAliasMetadataReady,
+}: {
+  activeSession: AgentSessionState | null;
+  workflowAliasMetadataReady: boolean;
+  previousWorkflowAliasMetadataReady: boolean;
+}): boolean => {
+  return Boolean(
+    activeSession &&
+      activeSession.role !== "build" &&
+      activeSession.runtimeKind &&
+      workflowAliasMetadataReady &&
+      !previousWorkflowAliasMetadataReady,
+  );
+};
+
 const resolveWorkflowDocumentTarget = (
   normalizedTool: string | null,
   docs: {
@@ -111,16 +129,16 @@ export function useAgentStudioDocuments({
   }, [documentContextKey]);
 
   useEffect(() => {
-    if (!activeSession || activeSession.role === "build" || !activeSession.runtimeKind) {
-      previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
-      return;
-    }
-
-    const didHydrateWorkflowAliasMetadata =
-      workflowAliasMetadataReady && !previousWorkflowAliasMetadataReadyRef.current;
+    const previousWorkflowAliasMetadataReady = previousWorkflowAliasMetadataReadyRef.current;
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
-    if (didHydrateWorkflowAliasMetadata) {
+    if (
+      shouldReplayWorkflowDocumentMessagesForAliasHydration({
+        activeSession,
+        workflowAliasMetadataReady,
+        previousWorkflowAliasMetadataReady,
+      })
+    ) {
       previousMessagesRef.current = null;
     }
   }, [activeSession, workflowAliasMetadataReady]);

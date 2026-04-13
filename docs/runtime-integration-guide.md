@@ -42,6 +42,23 @@ Descriptors are static metadata. They are not live runtime instances.
 
 `workflowToolAliasesByCanonical` is the runtime-owned map from canonical `odt_*` workflow tool names to exact native runtime tool IDs for that runtime. Shared/core OpenDucktor code keeps canonical `odt_*` identity only and must consume this mapping when a caller needs to interpret runtime-native workflow tool IDs for authorization, tool selection, event refresh, or display.
 
+Example:
+
+```ts
+{
+  odt_set_spec: [
+    "openducktor_odt_set_spec",
+    "functions.openducktor_odt_set_spec",
+  ],
+  odt_build_completed: [
+    "openducktor_odt_build_completed",
+    "functions.openducktor_odt_build_completed",
+  ],
+}
+```
+
+The canonical `odt_*` names stay implicit and do not need to be repeated in this field.
+
 ### `RuntimeInstanceSummary`
 
 Defined in `packages/contracts/src/run-schemas.ts` and mirrored in Rust runtime domain types.
