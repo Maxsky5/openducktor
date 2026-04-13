@@ -7,7 +7,6 @@ import {
   type AgentUserMessageDisplayPart,
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type {
   AgentChatMessage,
   AgentSessionContextUsage,
@@ -19,25 +18,73 @@ import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 
-export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
-  sessionId: session.sessionId,
-  externalSessionId: session.externalSessionId,
-  role: session.role,
-  scenario: session.scenario,
-  startedAt: session.startedAt,
-  runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-  workingDirectory: session.workingDirectory,
-  selectedModel: session.selectedModel
-    ? {
-        runtimeKind:
-          session.selectedModel.runtimeKind ?? session.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-        providerId: session.selectedModel.providerId,
-        modelId: session.selectedModel.modelId,
-        ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
-        ...(session.selectedModel.profileId ? { profileId: session.selectedModel.profileId } : {}),
-      }
-    : null,
-});
+const requirePersistedSessionRuntimeKind = (
+  session: Pick<AgentSessionRecord, "sessionId" | "runtimeKind">,
+): NonNullable<AgentSessionRecord["runtimeKind"]> => {
+  if (session.runtimeKind) {
+    return session.runtimeKind;
+  }
+  throw new Error(`Persisted session '${session.sessionId}' is missing runtime kind metadata.`);
+};
+
+const requirePersistedSelectedModelRuntimeKind = (
+  sessionId: string,
+  selectedModel: NonNullable<AgentSessionRecord["selectedModel"]>,
+): NonNullable<typeof selectedModel.runtimeKind> => {
+  if (selectedModel.runtimeKind) {
+    return selectedModel.runtimeKind;
+  }
+  throw new Error(
+    `Persisted session '${sessionId}' selected model is missing runtime kind metadata.`,
+  );
+};
+
+const requireSessionRuntimeKindForPersistence = (
+  session: Pick<AgentSessionState, "sessionId" | "runtimeKind">,
+): NonNullable<AgentSessionState["runtimeKind"]> => {
+  if (session.runtimeKind) {
+    return session.runtimeKind;
+  }
+  throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+};
+
+const requireSelectedModelRuntimeKindForPersistence = (
+  sessionId: string,
+  selectedModel: NonNullable<AgentSessionState["selectedModel"]>,
+): NonNullable<typeof selectedModel.runtimeKind> => {
+  if (selectedModel.runtimeKind) {
+    return selectedModel.runtimeKind;
+  }
+  throw new Error(`Session '${sessionId}' selected model is missing runtime kind metadata.`);
+};
+
+export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
+  const runtimeKind = requireSessionRuntimeKindForPersistence(session);
+
+  return {
+    sessionId: session.sessionId,
+    externalSessionId: session.externalSessionId,
+    role: session.role,
+    scenario: session.scenario,
+    startedAt: session.startedAt,
+    runtimeKind,
+    workingDirectory: session.workingDirectory,
+    selectedModel: session.selectedModel
+      ? {
+          runtimeKind: requireSelectedModelRuntimeKindForPersistence(
+            session.sessionId,
+            session.selectedModel,
+          ),
+          providerId: session.selectedModel.providerId,
+          modelId: session.selectedModel.modelId,
+          ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
+          ...(session.selectedModel.profileId
+            ? { profileId: session.selectedModel.profileId }
+            : {}),
+        }
+      : null,
+  };
+};
 
 export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
   return defaultAgentScenarioForRole(role);
@@ -47,6 +94,8 @@ export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
 ): AgentSessionState => {
+  const runtimeKind = requirePersistedSessionRuntimeKind(session);
+
   return {
     sessionId: session.sessionId,
     externalSessionId: session.externalSessionId ?? session.sessionId,
@@ -57,7 +106,7 @@ export const fromPersistedSessionRecord = (
     // Live state must always be derived from the runtime on hydration/reconciliation.
     status: "stopped",
     startedAt: session.startedAt,
-    runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     runtimeId: null,
     runId: null,
     runtimeRoute: null,
@@ -73,7 +122,15 @@ export const fromPersistedSessionRecord = (
     pendingQuestions: [],
     todos: [],
     modelCatalog: null,
-    selectedModel: normalizePersistedSelection(session.selectedModel),
+    selectedModel: session.selectedModel
+      ? normalizePersistedSelection({
+          ...session.selectedModel,
+          runtimeKind: requirePersistedSelectedModelRuntimeKind(
+            session.sessionId,
+            session.selectedModel,
+          ),
+        })
+      : null,
     isLoadingModelCatalog: false,
   };
 };

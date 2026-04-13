@@ -3,13 +3,14 @@ import { AUTOPILOT_EVENT_IDS, repoConfigSchema, settingsSnapshotSchema } from ".
 
 describe("config-schemas", () => {
   test("defaults dev servers to an empty array", () => {
-    const parsed = repoConfigSchema.parse({});
+    const parsed = repoConfigSchema.parse({ defaultRuntimeKind: "opencode" });
     expect(parsed.devServers).toEqual([]);
   });
 
   test("requires named dev server commands", () => {
     expect(() =>
       repoConfigSchema.parse({
+        defaultRuntimeKind: "opencode",
         devServers: [
           {
             id: "frontend",
@@ -23,6 +24,7 @@ describe("config-schemas", () => {
 
   test("trims dev server fields and rejects duplicate ids", () => {
     const parsed = repoConfigSchema.parse({
+      defaultRuntimeKind: "opencode",
       devServers: [
         {
           id: " frontend ",
@@ -42,6 +44,7 @@ describe("config-schemas", () => {
 
     expect(() =>
       repoConfigSchema.parse({
+        defaultRuntimeKind: "opencode",
         devServers: [
           { id: "frontend", name: "Frontend", command: "bun run dev" },
           { id: " frontend ", name: "Backend", command: "bun run api" },
@@ -53,9 +56,14 @@ describe("config-schemas", () => {
   test("rejects whitespace-only dev server fields", () => {
     expect(() =>
       repoConfigSchema.parse({
+        defaultRuntimeKind: "opencode",
         devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
       }),
     ).toThrow("Dev server command cannot be blank.");
+  });
+
+  test("requires explicit repo runtime kind", () => {
+    expect(() => repoConfigSchema.parse({})).toThrow();
   });
 
   test("defaults kanban done visibility to one day", () => {

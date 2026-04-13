@@ -36,7 +36,8 @@ impl BeadsTaskStore {
         };
         let mut agent_sessions = namespace
             .and_then(|ns| ns.get("agentSessions"))
-            .and_then(crate::metadata::parse_agent_sessions)
+            .map(crate::metadata::parse_agent_sessions)
+            .transpose()?
             .unwrap_or_default();
         agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
 

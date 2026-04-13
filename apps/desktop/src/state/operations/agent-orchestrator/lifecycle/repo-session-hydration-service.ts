@@ -21,6 +21,7 @@ import {
   liveAgentSessionLookupKey,
   runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
+import { readPersistedRuntimeKind } from "./hydration-runtime-resolution";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 
@@ -137,7 +138,7 @@ export const createRepoSessionHydrationService = ({
 
     for (const { taskId, records } of persistedByTask) {
       for (const record of records) {
-        const runtimeKind = record.runtimeKind ?? record.selectedModel?.runtimeKind;
+        const runtimeKind = readPersistedRuntimeKind(record);
         const externalSessionId = record.externalSessionId ?? record.sessionId;
         if (!runtimeKind || !externalSessionId) {
           continue;

@@ -218,7 +218,7 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
 }
 
 #[test]
-fn load_normalizes_legacy_blank_repo_config_values() {
+fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     let _env_lock = lock_env();
     let harness = TestStoreHarness::new("normalize-legacy");
     let store = harness.store();
@@ -232,6 +232,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
     repos.insert(
         repo_str.clone(),
         json!({
+            "defaultRuntimeKind": " opencode ",
             "worktreeBasePath": "",
             "branchPrefix": "   ",
             "defaultTargetBranch": {
@@ -244,6 +245,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
             },
             "agentDefaults": {
                 "spec": {
+                    "runtimeKind": " claude-code ",
                     "providerId": " openai ",
                     "modelId": " gpt-5 ",
                     "variant": "  ",
@@ -301,6 +303,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
     assert!(repo_config.worktree_base_path.is_none());
     assert_eq!(repo_config.branch_prefix, DEFAULT_BRANCH_PREFIX);
     assert_eq!(repo_config.default_target_branch.canonical(), "origin/main");
+    assert_eq!(repo_config.default_runtime_kind, "opencode");
     assert_eq!(repo_config.hooks.pre_start, vec!["echo pre".to_string()]);
     assert_eq!(
         repo_config.hooks.post_complete,
@@ -308,7 +311,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
     );
 
     let spec = repo_config.agent_defaults.spec.expect("spec default");
-    assert_eq!(spec.runtime_kind, "opencode");
+    assert_eq!(spec.runtime_kind, "claude-code");
     assert_eq!(spec.provider_id, "openai");
     assert_eq!(spec.model_id, "gpt-5");
     assert!(spec.variant.is_none());
@@ -325,6 +328,105 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         .expect("qa review override");
     assert_eq!(qa_review_override.template, "");
     assert_eq!(qa_review_override.base_version, 2);
+}
+
+#[test]
+fn load_rejects_missing_runtime_kinds_in_persisted_repo_config() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("reject-missing-runtime-kinds");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 1,
+        "activeRepo": repo_str,
+        "repos": {
+            repo_str.clone(): {
+                "branchPrefix": "duck",
+                "trustedHooks": false,
+                "hooks": {
+                    "preStart": [],
+                    "postComplete": []
+                },
+                "agentDefaults": {
+                    "spec": {
+                        "providerId": "openai",
+                        "modelId": "gpt-5"
+                    }
+                }
+            }
+        },
+        "recentRepos": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store.load().expect_err("missing runtime kind should fail");
+    assert!(error.to_string().contains("Failed parsing config file"));
+}
+
+#[test]
+fn update_repo_config_rejects_blank_runtime_kinds() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("reject-blank-runtime-kind");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    store.add_workspace(&repo_str).expect("add workspace");
+
+    let blank_repo_runtime_error = store
+        .update_repo_config(
+            &repo_str,
+            RepoConfig {
+                default_runtime_kind: "   ".to_string(),
+                ..RepoConfig::default()
+            },
+        )
+        .expect_err("blank repo runtime kind should fail");
+    assert!(blank_repo_runtime_error
+        .to_string()
+        .contains("Default runtime kind cannot be blank."));
+
+    let blank_agent_runtime_error = store
+        .update_repo_config(
+            &repo_str,
+            RepoConfig {
+                agent_defaults: crate::AgentDefaults {
+                    spec: Some(crate::AgentModelDefault {
+                        runtime_kind: "   ".to_string(),
+                        provider_id: "openai".to_string(),
+                        model_id: "gpt-5".to_string(),
+                        variant: None,
+                        profile_id: None,
+                    }),
+                    ..Default::default()
+                },
+                ..RepoConfig::default()
+            },
+        )
+        .expect_err("blank agent runtime kind should fail");
+    assert!(blank_agent_runtime_error
+        .to_string()
+        .contains("Spec agent default runtime kind cannot be blank"));
 }
 
 #[test]

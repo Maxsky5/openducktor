@@ -1,6 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
@@ -165,6 +164,10 @@ export const createEnsureSessionReady = ({
         let attachedWorkingDirectory = session.workingDirectory;
 
         if (!attachedRuntimeKind || attachedRuntimeRoute === null) {
+          const requestedRuntimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
+          if (!requestedRuntimeKind) {
+            throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+          }
           const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
             targetWorkingDirectory: session.workingDirectory,
             ...(session.selectedModel?.runtimeKind
@@ -173,11 +176,7 @@ export const createEnsureSessionReady = ({
           });
           assertNotStale();
 
-          attachedRuntimeKind =
-            runtime.runtimeKind ??
-            session.selectedModel?.runtimeKind ??
-            session.runtimeKind ??
-            DEFAULT_RUNTIME_KIND;
+          attachedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
           attachedRuntimeId = runtime.runtimeId;
           attachedRunId = runtime.runId;
           attachedRuntimeRoute = runtime.runtimeRoute;
@@ -264,11 +263,11 @@ export const createEnsureSessionReady = ({
         : {}),
     });
     assertNotStale();
-    const resolvedRuntimeKind =
-      runtime.runtimeKind ??
-      session.selectedModel?.runtimeKind ??
-      session.runtimeKind ??
-      DEFAULT_RUNTIME_KIND;
+    const requestedRuntimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
+    if (!requestedRuntimeKind && !runtime.runtimeKind) {
+      throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+    }
+    const resolvedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind!;
     const runtimeConnection = requireRuntimeConnectionSupport(
       resolvedRuntimeKind,
       resolveRuntimeConnection(runtime),

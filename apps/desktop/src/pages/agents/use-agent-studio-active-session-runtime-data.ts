@@ -33,7 +33,7 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
 };
 
 const toRuntimeQueryInput = (session: AgentSessionState | null) => {
-  const runtimeKind = session?.runtimeKind ?? session?.selectedModel?.runtimeKind;
+  const runtimeKind = session?.runtimeKind ?? null;
   const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
   const runtimeConnection = session
     ? toAttachedSessionRuntimeConnection(session, runtimeKind)

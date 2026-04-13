@@ -28,13 +28,11 @@ export type ResolvedHydrationRuntime =
 export const readPersistedRuntimeKind = ({
   sessionId,
   runtimeKind,
-  selectedModel,
-}: Pick<AgentSessionRecord, "sessionId" | "runtimeKind" | "selectedModel">): RuntimeKind => {
-  const resolvedRuntimeKind = runtimeKind ?? selectedModel?.runtimeKind;
-  if (!resolvedRuntimeKind) {
+}: Pick<AgentSessionRecord, "sessionId" | "runtimeKind">): RuntimeKind => {
+  if (!runtimeKind) {
     throw new Error(`Persisted session '${sessionId}' is missing runtime kind metadata.`);
   }
-  return resolvedRuntimeKind;
+  return runtimeKind;
 };
 
 export const createHydrationRuntimeResolver = ({

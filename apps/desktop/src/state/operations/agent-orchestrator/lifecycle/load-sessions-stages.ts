@@ -248,7 +248,7 @@ export const mergeHydratedMessages = (
 const toRequestedHistoryRecordFromSession = (
   session: AgentSessionState,
 ): AgentSessionRecord | null => {
-  const runtimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind ?? null;
+  const runtimeKind = session.runtimeKind ?? null;
   if (!runtimeKind) {
     return null;
   }

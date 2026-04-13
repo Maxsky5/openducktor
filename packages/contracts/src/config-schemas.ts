@@ -72,7 +72,7 @@ export const repoDevServerScriptSchema = z.object({
 export type RepoDevServerScript = z.infer<typeof repoDevServerScriptSchema>;
 
 export const agentModelDefaultSchema = z.object({
-  runtimeKind: runtimeKindSchema.default("opencode"),
+  runtimeKind: runtimeKindSchema,
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   variant: nullableToOptional(z.string().min(1)),
@@ -89,7 +89,7 @@ export const repoAgentDefaultsSchema = z.object({
 export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 
 export const repoConfigSchema = z.object({
-  defaultRuntimeKind: runtimeKindSchema.default("opencode"),
+  defaultRuntimeKind: runtimeKindSchema,
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema.default({ remote: "origin", branch: "main" }),

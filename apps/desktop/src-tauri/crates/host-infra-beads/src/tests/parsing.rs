@@ -148,15 +148,17 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     ]))
     .is_none());
 
-    let sessions = parse_agent_sessions(&json!([
+    let session_error = parse_agent_sessions(&json!([
         {
             "sessionId": "obp-session-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
             "scenario": "spec_initial",
             "startedAt": "2026-02-18T17:20:00Z",
+            "runtimeKind": "opencode",
             "workingDirectory": "/repo",
             "selectedModel": {
+                "runtimeKind": "opencode",
                 "providerId": "openai",
                 "modelId": "gpt-5",
                 "variant": "high",
@@ -165,6 +167,29 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
         },
         {
             "sessionId": 123
+        }
+    ]))
+    .expect_err("invalid agent sessions should fail");
+    assert!(session_error
+        .to_string()
+        .contains("Invalid openducktor.agentSessions[1] metadata"));
+
+    let sessions = parse_agent_sessions(&json!([
+        {
+            "sessionId": "obp-session-1",
+            "externalSessionId": "session-opencode-1",
+            "role": "spec",
+            "scenario": "spec_initial",
+            "startedAt": "2026-02-18T17:20:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": {
+                "runtimeKind": "opencode",
+                "providerId": "openai",
+                "modelId": "gpt-5",
+                "variant": "high",
+                "opencodeAgent": "architect"
+            }
         }
     ]))
     .expect("agent sessions");
@@ -315,6 +340,7 @@ fn metadata_parsing_benchmark_scaffold() {
                     "role": "build",
                     "scenario": "build_default",
                     "startedAt": "2026-02-18T17:20:00Z",
+                    "runtimeKind": "opencode",
                     "workingDirectory": "/repo",
                     "selectedModel": null
                 })

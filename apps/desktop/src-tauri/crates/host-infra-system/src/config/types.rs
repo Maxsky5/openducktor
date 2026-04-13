@@ -291,7 +291,6 @@ fn update_hasher_with_hook_group(hasher: &mut Sha256, group: &[u8], commands: &[
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentModelDefault {
-    #[serde(default = "default_runtime_kind")]
     pub runtime_kind: String,
     pub provider_id: String,
     pub model_id: String,
@@ -332,7 +331,6 @@ const fn default_prompt_override_enabled() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {
-    #[serde(default = "default_runtime_kind")]
     pub default_runtime_kind: String,
     pub worktree_base_path: Option<String>,
     #[serde(default = "default_branch_prefix")]

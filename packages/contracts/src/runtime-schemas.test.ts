@@ -174,6 +174,7 @@ describe("runtime schemas", () => {
 
   test("repo config accepts null worktree base path", () => {
     const parsed = repoConfigSchema.parse({
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: null,
       branchPrefix: "obp",
       trustedHooks: false,
@@ -192,12 +193,14 @@ describe("runtime schemas", () => {
 
   test("repo config parses agent defaults", () => {
     const parsed = repoConfigSchema.parse({
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: true,
       hooks: { preStart: [], postComplete: [] },
       agentDefaults: {
         spec: {
+          runtimeKind: "claude-code",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
@@ -207,6 +210,7 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.agentDefaults.spec?.providerId).toBe("openai");
+    expect(parsed.agentDefaults.spec?.runtimeKind).toBe("claude-code");
     expect(parsed.agentDefaults.spec?.modelId).toBe("gpt-5");
     expect(parsed.agentDefaults.spec?.variant).toBe("high");
     expect(parsed.agentDefaults.spec?.profileId).toBe("build");
@@ -214,6 +218,7 @@ describe("runtime schemas", () => {
 
   test("repo config parses prompt overrides and keeps base version metadata", () => {
     const parsed = repoConfigSchema.parse({
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: false,
@@ -236,6 +241,7 @@ describe("runtime schemas", () => {
 
   test("repo config allows empty prompt override templates", () => {
     const parsed = repoConfigSchema.parse({
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: false,
@@ -255,12 +261,14 @@ describe("runtime schemas", () => {
 
   test("repo config normalizes null agent default fields and entries", () => {
     const parsed = repoConfigSchema.parse({
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: true,
       hooks: { preStart: [], postComplete: [] },
       agentDefaults: {
         spec: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: null,
@@ -923,9 +931,11 @@ describe("runtime schemas", () => {
       updatedAt: "2026-02-18T17:14:00.000Z",
       endedAt: null,
       runtimeId: "runtime-1",
+      runtimeKind: "opencode",
       runId: null,
       workingDirectory: "/repo",
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
@@ -936,22 +946,76 @@ describe("runtime schemas", () => {
     expect(parsed.role).toBe("spec");
     expect(parsed.scenario).toBe("spec_initial");
     expect(parsed.externalSessionId).toBe("session-opencode-1");
+    expect(parsed.runtimeKind).toBe("opencode");
     expect(parsed.selectedModel?.modelId).toBe("gpt-5");
   });
 
-  test("agent session record parses compact persisted payload", () => {
+  test("agent session record parses compact persisted payload with explicit runtime kind", () => {
     const parsed = agentSessionRecordSchema.parse({
       sessionId: "obp-session-2",
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "claude-code",
       workingDirectory: "/repo",
     });
 
     expect(parsed.role).toBe("planner");
     expect(parsed.scenario).toBe("planner_initial");
     expect(parsed.externalSessionId).toBeUndefined();
-    expect(parsed.runtimeKind).toBe("opencode");
+    expect(parsed.runtimeKind).toBe("claude-code");
     expect(parsed.selectedModel).toBeNull();
+  });
+
+  test("repo config rejects missing runtime-bearing defaults", () => {
+    expect(() =>
+      repoConfigSchema.parse({
+        branchPrefix: "obp",
+        trustedHooks: false,
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      repoConfigSchema.parse({
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "obp",
+        trustedHooks: false,
+        hooks: { preStart: [], postComplete: [] },
+        agentDefaults: {
+          spec: {
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  test("agent session record rejects missing runtime metadata", () => {
+    expect(() =>
+      agentSessionRecordSchema.parse({
+        sessionId: "obp-session-3",
+        role: "planner",
+        scenario: "planner_initial",
+        startedAt: "2026-02-18T17:11:00.000Z",
+        workingDirectory: "/repo",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      agentSessionRecordSchema.parse({
+        sessionId: "obp-session-4",
+        role: "planner",
+        scenario: "planner_initial",
+        startedAt: "2026-02-18T17:11:00.000Z",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        selectedModel: {
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      }),
+    ).toThrow();
   });
 });
