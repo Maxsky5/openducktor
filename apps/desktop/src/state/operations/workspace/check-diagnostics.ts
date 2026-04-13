@@ -368,6 +368,8 @@ export const buildDiagnosticsRetryPlan = ({
   const retryRuntimeHealth =
     activeRepo !== null &&
     runtimeDefinitions.length > 0 &&
+    // Transient startup polling now lives in the runtime-health query refetchInterval.
+    // Keep the timeout retry here so stalled probes still force a fresh invalidation.
     hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) &&
     !runtimeHealthFetching;
 

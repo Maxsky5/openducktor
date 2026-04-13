@@ -15,11 +15,21 @@ import type {
 } from "@/types/diagnostics";
 import { host } from "../operations/host";
 
+export type ChecksQueryDependencies = {
+  runtimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
+  beadsCheck: (repoPath: string) => Promise<BeadsCheck>;
+};
+
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const BEADS_CHECK_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_TRANSIENT_REFETCH_INTERVAL_MS = 1_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
+
+const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
+  runtimeCheck: (force = false) => host.runtimeCheck(force),
+  beadsCheck: (repoPath) => host.beadsCheck(repoPath),
+};
 
 const buildRuntimeHealthErrorCheck = (
   runtimeHealthError: string,
@@ -124,17 +134,23 @@ export const checksQueryKeys = {
     ] as const,
 };
 
-export const runtimeCheckQueryOptions = (force = false) =>
+export const runtimeCheckQueryOptions = (
+  force = false,
+  runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
+) =>
   queryOptions({
     queryKey: checksQueryKeys.runtime(),
-    queryFn: (): Promise<RuntimeCheck> => withDiagnosticsQueryTimeout(host.runtimeCheck(force)),
+    queryFn: (): Promise<RuntimeCheck> => withDiagnosticsQueryTimeout(runtimeCheck(force)),
     staleTime: RUNTIME_CHECK_STALE_TIME_MS,
   });
 
-export const beadsCheckQueryOptions = (repoPath: string) =>
+export const beadsCheckQueryOptions = (
+  repoPath: string,
+  beadsCheck: ChecksQueryDependencies["beadsCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.beadsCheck,
+) =>
   queryOptions({
     queryKey: checksQueryKeys.beads(repoPath),
-    queryFn: (): Promise<BeadsCheck> => withDiagnosticsQueryTimeout(host.beadsCheck(repoPath)),
+    queryFn: (): Promise<BeadsCheck> => withDiagnosticsQueryTimeout(beadsCheck(repoPath)),
     staleTime: BEADS_CHECK_STALE_TIME_MS,
   });
 
@@ -176,13 +192,16 @@ export const repoRuntimeHealthQueryOptions = (
     },
   });
 
-export const loadRuntimeCheckFromQuery = (queryClient: QueryClient): Promise<RuntimeCheck> =>
-  queryClient.fetchQuery(runtimeCheckQueryOptions());
+export const loadRuntimeCheckFromQuery = (
+  queryClient: QueryClient,
+  runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
+): Promise<RuntimeCheck> => queryClient.fetchQuery(runtimeCheckQueryOptions(false, runtimeCheck));
 
 export const loadBeadsCheckFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<BeadsCheck> => queryClient.fetchQuery(beadsCheckQueryOptions(repoPath));
+  beadsCheck: ChecksQueryDependencies["beadsCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.beadsCheck,
+): Promise<BeadsCheck> => queryClient.fetchQuery(beadsCheckQueryOptions(repoPath, beadsCheck));
 
 export const loadRepoRuntimeHealthFromQuery = (
   queryClient: QueryClient,

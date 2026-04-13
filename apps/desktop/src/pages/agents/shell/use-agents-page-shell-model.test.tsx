@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import * as appStateContexts from "@/state/app-state-contexts";
@@ -267,6 +267,50 @@ let rightPanelState: RightPanelState = {
 
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
+const mockedModuleResets = [
+  ["react-router-dom", () => import("react-router-dom")],
+  ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+  ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
+  ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
+  [
+    "../use-agent-studio-selection-controller",
+    () => import("../use-agent-studio-selection-controller"),
+  ],
+  [
+    "../use-agent-studio-query-session-sync",
+    () => import("../use-agent-studio-query-session-sync"),
+  ],
+  ["../use-agents-page-readiness", () => import("../use-agents-page-readiness")],
+  [
+    "../use-agent-studio-orchestration-controller",
+    () => import("../use-agent-studio-orchestration-controller"),
+  ],
+  [
+    "../use-agent-studio-rebase-conflict-resolution",
+    () => import("../use-agent-studio-rebase-conflict-resolution"),
+  ],
+  ["../use-agents-page-right-panel-model", () => import("../use-agents-page-right-panel-model")],
+  ["@/components/features/agents", () => import("@/components/features/agents")],
+  [
+    "@/components/features/agents/agent-studio-right-panel",
+    () => import("@/components/features/agents/agent-studio-right-panel"),
+  ],
+  ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
+  ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
+  [
+    "@/features/human-review-feedback/human-review-feedback-modal",
+    () => import("@/features/human-review-feedback/human-review-feedback-modal"),
+  ],
+  [
+    "@/components/features/task-details/task-details-sheet-controller",
+    () => import("@/components/features/task-details/task-details-sheet-controller"),
+  ],
+  [
+    "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
+    () => import("@/components/features/pull-requests/merged-pull-request-confirm-dialog"),
+  ],
+] as const;
+
 const registerModuleMocks = (): void => {
   const stateModule = {
     AppStateProvider: ({ children }: { children: ReactElement }) => children,
@@ -508,6 +552,10 @@ beforeEach(async () => {
     isRightPanelVisible: true,
     rightPanelModel,
   };
+});
+
+afterEach(async () => {
+  await restoreMockedModules(mockedModuleResets);
 });
 
 afterAll(async () => {

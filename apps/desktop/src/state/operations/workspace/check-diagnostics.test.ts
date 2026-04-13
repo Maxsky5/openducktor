@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  createRepoRuntimeHealthFixture,
+  type RepoRuntimeHealthFixtureOverrides,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import {
   buildBeadsCheckErrorState,
@@ -9,53 +13,10 @@ import {
   buildRuntimeHealthErrorMap,
 } from "./check-diagnostics";
 
-type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
-  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
-  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
-};
-
-const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
-  const checkedAt = overrides.checkedAt ?? "2026-02-22T08:00:00.000Z";
-  const runtime: RepoRuntimeHealthCheck["runtime"] = {
-    status: "ready",
-    stage: "runtime_ready",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: checkedAt,
-    elapsedMs: null,
-    attempts: null,
-    detail: null,
-    failureKind: null,
-    failureReason: null,
-    ...overrides.runtime,
-  };
-  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
-    supported: true,
-    status: "connected",
-    serverName: "openducktor",
-    serverStatus: "connected",
-    toolIds: [],
-    detail: null,
-    failureKind: null,
-    ...overrides.mcp,
-  };
-
-  return {
-    status:
-      overrides.status ??
-      (runtime.status === "error" || mcp.status === "error"
-        ? "error"
-        : mcp.status === "checking" ||
-            mcp.status === "reconnecting" ||
-            mcp.status === "waiting_for_runtime"
-          ? "checking"
-          : runtime.status),
-    checkedAt,
-    runtime,
-    mcp,
-  };
-};
+const makeRepoHealth = (
+  overrides: RepoRuntimeHealthFixtureOverrides = {},
+): RepoRuntimeHealthCheck =>
+  createRepoRuntimeHealthFixture({ checkedAt: "2026-02-22T08:00:00.000Z" }, overrides);
 
 describe("check-diagnostics helpers", () => {
   test("projects runtime and beads query failures into concrete error states", () => {

@@ -15,6 +15,7 @@ import type {
 } from "@/types/diagnostics";
 import {
   beadsCheckQueryOptions,
+  type ChecksQueryDependencies,
   checksQueryKeys,
   classifyDiagnosticsQueryError,
   loadBeadsCheckFromQuery,
@@ -32,6 +33,7 @@ import {
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
 import {
+  type DiagnosticsToastApi,
   useDiagnosticsRetryScheduler,
   useDiagnosticsToasts,
 } from "./use-check-diagnostics-effects";
@@ -43,6 +45,9 @@ type UseChecksArgs = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<RepoRuntimeHealthCheck>;
+  runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
+  beadsCheck?: ChecksQueryDependencies["beadsCheck"];
+  toastApi?: DiagnosticsToastApi;
 };
 
 type UseChecksResult = {
@@ -71,12 +76,15 @@ export function useChecks({
   activeRepo,
   runtimeDefinitions,
   checkRepoRuntimeHealth,
+  runtimeCheck,
+  beadsCheck,
+  toastApi,
 }: UseChecksArgs): UseChecksResult {
   const queryClient = useQueryClient();
   const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
-  const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions());
+  const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions(false, runtimeCheck));
   const beadsCheckQuery = useQuery({
-    ...beadsCheckQueryOptions(activeRepo ?? "__disabled__"),
+    ...beadsCheckQueryOptions(activeRepo ?? "__disabled__", beadsCheck),
     enabled: activeRepo !== null,
   });
   const runtimeHealthQuery = useQuery({
@@ -96,12 +104,12 @@ export function useChecks({
           exact: true,
           refetchType: "none",
         });
-        return queryClient.fetchQuery(runtimeCheckQueryOptions(true));
+        return queryClient.fetchQuery(runtimeCheckQueryOptions(true, runtimeCheck));
       }
 
-      return loadRuntimeCheckFromQuery(queryClient);
+      return loadRuntimeCheckFromQuery(queryClient, runtimeCheck);
     },
-    [queryClient],
+    [queryClient, runtimeCheck],
   );
 
   const refreshBeadsCheckForRepo = useCallback(
@@ -115,10 +123,10 @@ export function useChecks({
       }
 
       return force
-        ? queryClient.fetchQuery(beadsCheckQueryOptions(repoPath))
-        : loadBeadsCheckFromQuery(queryClient, repoPath);
+        ? queryClient.fetchQuery(beadsCheckQueryOptions(repoPath, beadsCheck))
+        : loadBeadsCheckFromQuery(queryClient, repoPath, beadsCheck);
     },
-    [queryClient],
+    [beadsCheck, queryClient],
   );
 
   const refreshRepoRuntimeHealthForRepo = useCallback(
@@ -190,9 +198,12 @@ export function useChecks({
 
   const hasCachedBeadsCheck = useCallback(
     (repoPath: string): boolean => {
-      return queryClient.getQueryData(beadsCheckQueryOptions(repoPath).queryKey) !== undefined;
+      return (
+        queryClient.getQueryData(beadsCheckQueryOptions(repoPath, beadsCheck).queryKey) !==
+        undefined
+      );
     },
-    [queryClient],
+    [beadsCheck, queryClient],
   );
 
   const hasCachedRepoRuntimeHealth = useCallback(
@@ -206,8 +217,10 @@ export function useChecks({
   );
 
   const hasRuntimeCheck = useCallback((): boolean => {
-    return queryClient.getQueryData(runtimeCheckQueryOptions().queryKey) !== undefined;
-  }, [queryClient]);
+    return (
+      queryClient.getQueryData(runtimeCheckQueryOptions(false, runtimeCheck).queryKey) !== undefined
+    );
+  }, [queryClient, runtimeCheck]);
 
   const clearActiveBeadsCheck = useCallback(() => {
     setIsManualLoadingChecks(false);
@@ -346,7 +359,7 @@ export function useChecks({
     ],
   );
 
-  useDiagnosticsToasts(diagnosticsToastIssues);
+  useDiagnosticsToasts(diagnosticsToastIssues, toastApi);
   useDiagnosticsRetryScheduler({
     activeRepo,
     retryPlan: diagnosticsRetryPlan,

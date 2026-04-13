@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -8,27 +8,22 @@ import {
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type BeadsCheckFixtureOverrides,
   createBeadsCheckFixture,
   createDeferred,
+  createRepoRuntimeHealthFixture,
+  type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { host } from "../shared/host";
+import type { DiagnosticsToastApi } from "./use-check-diagnostics-effects";
+import { useChecks } from "./use-checks";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-
-const HOST_METHOD_NAMES = ["runtimeCheck", "beadsCheck"] as const;
-type HostMethodName = (typeof HOST_METHOD_NAMES)[number];
-type HostMethodMap = Pick<typeof host, HostMethodName>;
-const originalHostMethods = Object.fromEntries(
-  HOST_METHOD_NAMES.map((name) => [name, host[name]]),
-) as HostMethodMap;
 
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
   gitOk: true,
@@ -46,53 +41,10 @@ const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck =
 const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
   createBeadsCheckFixture({}, overrides);
 
-type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
-  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
-  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
-};
-
-const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
-  const checkedAt = overrides.checkedAt ?? "2026-02-22T08:00:00.000Z";
-  const runtime: RepoRuntimeHealthCheck["runtime"] = {
-    status: "ready",
-    stage: "runtime_ready",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: checkedAt,
-    elapsedMs: null,
-    attempts: null,
-    detail: null,
-    failureKind: null,
-    failureReason: null,
-    ...overrides.runtime,
-  };
-  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
-    supported: true,
-    status: "connected",
-    serverName: "openducktor",
-    serverStatus: "connected",
-    toolIds: ["odt_read_task"],
-    detail: null,
-    failureKind: null,
-    ...overrides.mcp,
-  };
-
-  return {
-    status:
-      overrides.status ??
-      (runtime.status === "error" || mcp.status === "error"
-        ? "error"
-        : mcp.status === "checking" ||
-            mcp.status === "reconnecting" ||
-            mcp.status === "waiting_for_runtime"
-          ? "checking"
-          : runtime.status),
-    checkedAt,
-    runtime,
-    mcp,
-  };
-};
+const makeRepoHealth = (
+  overrides: RepoRuntimeHealthFixtureOverrides = {},
+): RepoRuntimeHealthCheck =>
+  createRepoRuntimeHealthFixture({ mcp: { toolIds: ["odt_read_task"] } }, overrides);
 
 const MOCK_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
   kind: "mock-runtime",
@@ -112,6 +64,14 @@ const toastError = mock(
   (_message: string, _options?: { description?: string; id?: string; duration?: number }) => {},
 );
 const toastDismiss = mock((_toastId?: string | number) => {});
+const testToastApi: DiagnosticsToastApi = {
+  error: (message, options) => toastError(message, options),
+  dismiss: (toastId) => toastDismiss(toastId),
+};
+let runtimeCheckHandler = async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck();
+let beadsCheckHandler = async (_repoPath: string): Promise<BeadsCheck> => makeBeadsCheck();
+const runtimeCheckMock = mock((force?: boolean) => runtimeCheckHandler(force));
+const beadsCheckMock = mock((repoPath: string) => beadsCheckHandler(repoPath));
 let repoHealthHandler = async (
   _repoPath: string,
   _runtimeKind: RuntimeKind,
@@ -126,18 +86,40 @@ type HookResult = ReturnType<UseChecksHook>;
 type HookHarnessArgs = Omit<HookArgs, "checkRepoRuntimeHealth"> & {
   checkRepoRuntimeHealth?: HookArgs["checkRepoRuntimeHealth"];
 };
+type ResolvedHookArgs = HookArgs &
+  Required<Pick<HookArgs, "runtimeCheck" | "beadsCheck" | "toastApi" | "checkRepoRuntimeHealth">>;
 
-let useChecks: UseChecksHook;
+const buildHookArgs = (
+  args: Partial<HookHarnessArgs>,
+  previous?: ResolvedHookArgs,
+): ResolvedHookArgs => {
+  const activeRepo = args.activeRepo !== undefined ? args.activeRepo : previous?.activeRepo;
+  const runtimeDefinitions =
+    args.runtimeDefinitions !== undefined ? args.runtimeDefinitions : previous?.runtimeDefinitions;
 
-const createHookHarness = (initialArgs: HookHarnessArgs) => {
-  let latest: HookResult | null = null;
-  let currentArgs: HookArgs = {
-    ...initialArgs,
+  if (activeRepo === undefined || runtimeDefinitions === undefined) {
+    throw new Error("Hook args must include activeRepo and runtimeDefinitions");
+  }
+
+  return {
+    ...previous,
+    ...args,
+    activeRepo,
+    runtimeDefinitions,
+    runtimeCheck: args.runtimeCheck ?? previous?.runtimeCheck ?? runtimeCheckMock,
+    beadsCheck: args.beadsCheck ?? previous?.beadsCheck ?? beadsCheckMock,
+    toastApi: args.toastApi ?? previous?.toastApi ?? testToastApi,
     checkRepoRuntimeHealth:
-      initialArgs.checkRepoRuntimeHealth ??
+      args.checkRepoRuntimeHealth ??
+      previous?.checkRepoRuntimeHealth ??
       ((repoPath: string, runtimeKind: RuntimeKind) =>
         checkRepoRuntimeHealthMock(repoPath, runtimeKind)),
   };
+};
+
+const createHookHarness = (initialArgs: HookHarnessArgs) => {
+  let latest: HookResult | null = null;
+  let currentArgs = buildHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useChecks(args);
@@ -155,12 +137,7 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
       await sharedHarness.mount();
     },
     updateArgs: async (nextArgs: Partial<HookHarnessArgs>) => {
-      currentArgs = {
-        ...currentArgs,
-        ...nextArgs,
-        checkRepoRuntimeHealth:
-          nextArgs.checkRepoRuntimeHealth ?? currentArgs.checkRepoRuntimeHealth,
-      };
+      currentArgs = buildHookArgs(nextArgs, currentArgs);
       await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: HookResult) => Promise<void> | void) => {
@@ -178,7 +155,7 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
       return latest;
     },
     waitFor: async (predicate: (value: HookResult) => boolean, timeoutMs?: number) => {
-      await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs);
+      await sharedHarness.waitFor(() => latest !== null && predicate(latest), timeoutMs ?? 5000);
     },
     unmount: async () => {
       try {
@@ -214,39 +191,16 @@ const waitForInitialChecksToSettle = async (
   });
 };
 
-beforeAll(async () => {
-  mock.module("sonner", () => ({
-    toast: Object.assign(
-      (message: string, options?: { description?: string; id?: string; duration?: number }) =>
-        toastMessage(message, options),
-      {
-        success: (
-          message: string,
-          options?: { description?: string; id?: string; duration?: number },
-        ) => toastMessage(message, options),
-        error: (
-          message: string,
-          options?: { description?: string; id?: string; duration?: number },
-        ) => toastError(message, options),
-        dismiss: (toastId?: string | number) => toastDismiss(toastId),
-      },
-    ),
-  }));
-  ({ useChecks } = await import("./use-checks"));
-});
-
 beforeEach(async () => {
-  Object.assign(host, originalHostMethods);
   toastMessage.mockClear();
   toastError.mockClear();
   toastDismiss.mockClear();
+  runtimeCheckMock.mockClear();
+  beadsCheckMock.mockClear();
   checkRepoRuntimeHealthMock.mockClear();
+  runtimeCheckHandler = async (_force?: boolean) => makeRuntimeCheck();
+  beadsCheckHandler = async (_repoPath: string) => makeBeadsCheck();
   repoHealthHandler = async () => makeRepoHealth();
-});
-
-afterAll(async () => {
-  Object.assign(host, originalHostMethods);
-  await restoreMockedModules([["sonner", () => import("sonner")]]);
 });
 
 describe("use-checks", () => {
@@ -256,12 +210,8 @@ describe("use-checks", () => {
     );
     const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: null,
@@ -285,10 +235,8 @@ describe("use-checks", () => {
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("does not surface Beads failures while backend reports initialization in progress", async () => {
     const runtimeCheck = mock(
@@ -317,12 +265,8 @@ describe("use-checks", () => {
           },
         }),
     );
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -341,20 +285,15 @@ describe("use-checks", () => {
       expect(toastError).not.toHaveBeenCalledWith("Beads store unavailable", expect.anything());
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("refreshRuntimeCheck caches and supports force retries", async () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
+    runtimeCheckHandler = runtimeCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -375,9 +314,8 @@ describe("use-checks", () => {
       expect(harness.getLatest().hasRuntimeCheck()).toBe(true);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
     }
-  });
+  }, 5000);
 
   test("automatically refreshes runtime health while MCP connectivity is still checking", async () => {
     const runtimeCheck = mock(
@@ -409,12 +347,8 @@ describe("use-checks", () => {
       return makeRepoHealth();
     };
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -439,10 +373,8 @@ describe("use-checks", () => {
       );
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("tracks per-repo cache and projects cached checks when active repo changes", async () => {
     const beadsCheck = mock(
@@ -452,10 +384,7 @@ describe("use-checks", () => {
     repoHealthHandler = async (repoPath: string) =>
       makeRepoHealth({ checkedAt: `${repoPath}-checked`, mcp: { toolIds: [repoPath] } });
 
-    const original = {
-      beadsCheck: host.beadsCheck,
-    };
-    host.beadsCheck = beadsCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -500,9 +429,8 @@ describe("use-checks", () => {
       expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("deduplicates runtime health error toasts across manual refreshes", async () => {
     const runtimeCheck = mock(
@@ -523,12 +451,8 @@ describe("use-checks", () => {
         },
       });
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -556,10 +480,8 @@ describe("use-checks", () => {
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("shows cli and beads toasts for unhealthy successful payloads", async () => {
     let runtimeCallCount = 0;
@@ -600,12 +522,8 @@ describe("use-checks", () => {
           });
     });
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -636,10 +554,8 @@ describe("use-checks", () => {
       );
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("refreshChecks starts independent probes in parallel", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
@@ -661,12 +577,8 @@ describe("use-checks", () => {
       return runtimeHealthCallCount === 1 ? makeRepoHealth() : runtimeHealthDeferred.promise;
     };
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -701,10 +613,8 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.isLoadingChecks === false);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("refreshChecks forces a fresh runtime check and surfaces errors", async () => {
     let callCount = 0;
@@ -722,12 +632,8 @@ describe("use-checks", () => {
     const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
     repoHealthHandler = async () => makeRepoHealth();
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -757,10 +663,8 @@ describe("use-checks", () => {
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
     }
-  });
+  }, 5000);
 
   test("refreshChecks waits for all failed probes before surfacing unavailable diagnostics", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
@@ -782,12 +686,8 @@ describe("use-checks", () => {
       return runtimeHealthCallCount === 1 ? makeRepoHealth() : runtimeHealthDeferred.promise;
     };
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -829,10 +729,14 @@ describe("use-checks", () => {
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
+      void runtimeDeferred.promise.catch(() => {});
+      void beadsDeferred.promise.catch(() => {});
+      void runtimeHealthDeferred.promise.catch(() => {});
+      runtimeDeferred.reject(new Error("cleanup"));
+      beadsDeferred.reject(new Error("cleanup"));
+      runtimeHealthDeferred.reject(new Error("cleanup"));
     }
-  });
+  }, 5000);
 
   test("refreshChecks times out hung probes and clears loading state", async () => {
     let runtimeCallCount = 0;
@@ -851,10 +755,6 @@ describe("use-checks", () => {
     });
     repoHealthHandler = async () => makeRepoHealth();
 
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
     const diagnosticsTimeoutHandlers = new Map<number, () => void>();
@@ -886,8 +786,8 @@ describe("use-checks", () => {
       originalClearTimeout(timeoutId);
     });
 
-    host.runtimeCheck = runtimeCheck;
-    host.beadsCheck = beadsCheck;
+    runtimeCheckHandler = runtimeCheck;
+    beadsCheckHandler = beadsCheck;
     globalThis.setTimeout = setTimeoutMock as unknown as typeof globalThis.setTimeout;
     globalThis.clearTimeout = clearTimeoutMock as unknown as typeof globalThis.clearTimeout;
 
@@ -932,26 +832,21 @@ describe("use-checks", () => {
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
+      void beadsDeferred.promise.catch(() => {});
       beadsDeferred.reject(new Error("cleanup"));
     }
-  });
+  }, 5000);
 
   test("projects runtime and beads query timeouts into concrete states instead of leaving checks pending", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
     const beadsDeferred = createDeferred<BeadsCheck>();
-    const original = {
-      runtimeCheck: host.runtimeCheck,
-      beadsCheck: host.beadsCheck,
-    };
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
 
-    host.runtimeCheck = mock(async () => runtimeDeferred.promise);
-    host.beadsCheck = mock(async () => beadsDeferred.promise);
+    runtimeCheckHandler = mock(async () => runtimeDeferred.promise);
+    beadsCheckHandler = mock(async () => beadsDeferred.promise);
     repoHealthHandler = async () => makeRepoHealth();
 
     globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
@@ -996,14 +891,14 @@ describe("use-checks", () => {
       expect(toastMessage).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      host.runtimeCheck = original.runtimeCheck;
-      host.beadsCheck = original.beadsCheck;
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
+      void runtimeDeferred.promise.catch(() => {});
+      void beadsDeferred.promise.catch(() => {});
       runtimeDeferred.reject(new Error("cleanup"));
       beadsDeferred.reject(new Error("cleanup"));
     }
-  });
+  }, 5000);
 
   test("projects runtime health query failures as unhealthy runtime state", async () => {
     repoHealthHandler = async () => {
