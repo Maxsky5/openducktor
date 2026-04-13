@@ -1,13 +1,13 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import {
-  type AgentModelSelection,
-  type AgentUserMessageDisplayPart,
-  type AgentUserMessagePart,
-  type AgentUserMessageSourceText,
-  serializeAgentUserMessagePartsToText,
+import type {
+  AgentModelSelection,
+  AgentUserMessageDisplayPart,
+  AgentUserMessagePart,
+  AgentUserMessageSourceText,
 } from "@openducktor/core";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
+import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
 
 export const readTextFromParts = (parts: Part[]): string => {
   return parts
@@ -260,7 +260,7 @@ export const readVisibleUserTextFromDisplayParts = (
     return [{ kind: "file_reference", file: part.file }];
   });
 
-  return serializeAgentUserMessagePartsToText(userMessageParts);
+  return buildOpenCodeVisibleText(userMessageParts);
 };
 
 export const readTextFromMessageInfo = (info: unknown): string => {

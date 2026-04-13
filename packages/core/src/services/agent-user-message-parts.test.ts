@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildAgentUserMessagePromptText,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
   serializeAgentUserMessagePartsToText,
@@ -163,72 +162,6 @@ describe("agent-user-message-parts", () => {
         { kind: "text", text: ")." },
       ]),
     ).toBe("check (@src/index.ts).");
-  });
-
-  test("builds upstream prompt text with inline file-reference spans", () => {
-    const file = createFileReference();
-    const attachment = createAttachment();
-
-    expect(
-      buildAgentUserMessagePromptText([
-        { kind: "text", text: "check " },
-        { kind: "file_reference", file },
-        { kind: "text", text: " please" },
-      ]),
-    ).toEqual({
-      text: "check @src/index.ts please",
-      fileReferences: [
-        {
-          file,
-          sourceText: {
-            value: "@src/index.ts",
-            start: 6,
-            end: 19,
-          },
-        },
-      ],
-    });
-
-    expect(
-      buildAgentUserMessagePromptText([
-        { kind: "text", text: "compare " },
-        { kind: "file_reference", file },
-        { kind: "text", text: "and docs" },
-      ]),
-    ).toEqual({
-      text: "compare @src/index.ts and docs",
-      fileReferences: [
-        {
-          file,
-          sourceText: {
-            value: "@src/index.ts",
-            start: 8,
-            end: 21,
-          },
-        },
-      ],
-    });
-
-    expect(
-      buildAgentUserMessagePromptText([
-        { kind: "text", text: "review " },
-        { kind: "attachment", attachment },
-        { kind: "text", text: "with " },
-        { kind: "file_reference", file },
-      ]),
-    ).toEqual({
-      text: "review with @src/index.ts",
-      fileReferences: [
-        {
-          file,
-          sourceText: {
-            value: "@src/index.ts",
-            start: 12,
-            end: 25,
-          },
-        },
-      ],
-    });
   });
 
   test("does not flatten attachments into serialized prompt text", () => {

@@ -2,10 +2,12 @@ import {
   type AgentModelSelection,
   type AgentUserMessageDisplayPart,
   type AgentUserMessagePart,
-  buildAgentUserMessagePromptText,
   normalizeAgentUserMessageParts,
-  serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
+import {
+  buildOpenCodePromptText,
+  buildOpenCodeVisibleText,
+} from "./opencode-user-message-encoding";
 
 type ComparableNonTextPart =
   | {
@@ -64,7 +66,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
   attachmentPathMode: AttachmentPathMode,
 ): string => {
   const normalizedParts = normalizeAgentUserMessageParts(parts);
-  const promptText = buildAgentUserMessagePromptText(normalizedParts);
+  const promptText = buildOpenCodePromptText(normalizedParts);
   const nonTextParts: ComparableNonTextPart[] = [
     ...promptText.fileReferences.map(({ file, sourceText }) => ({
       kind: "file_reference" as const,
@@ -90,7 +92,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
   ];
 
   return buildComparableSignature({
-    visible: serializeAgentUserMessagePartsToText(normalizedParts),
+    visible: buildOpenCodeVisibleText(normalizedParts),
     nonTextParts,
     ...(model ? { model } : {}),
   });
