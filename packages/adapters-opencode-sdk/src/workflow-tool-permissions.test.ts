@@ -65,6 +65,11 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "allow",
     });
+    expect(rules).toContainEqual({
+      permission: "functions.openducktor_odt_set_spec",
+      pattern: "*",
+      action: "allow",
+    });
     expect(rules).not.toContainEqual({
       permission: "openducktor_odt_set_plan",
       pattern: "*",

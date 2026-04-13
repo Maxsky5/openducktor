@@ -1,4 +1,4 @@
-import { agentToolNameValues } from "@openducktor/contracts";
+import { agentToolNameValues, type RuntimeDescriptor } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
@@ -11,65 +11,80 @@ export const ODT_WORKFLOW_READ_TOOL_NAMES = [
   "odt_read_task",
   "odt_read_task_documents",
 ] as const satisfies readonly AgentToolName[];
+type WorkflowToolAliasesByCanonical = RuntimeDescriptor["workflowToolAliasesByCanonical"];
+
+const ODT_WORKFLOW_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_TOOL_NAMES);
 const ODT_WORKFLOW_READ_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_READ_TOOL_NAMES);
 
 export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
   (tool) => !ODT_WORKFLOW_READ_TOOL_SET.has(tool),
 );
 const ODT_WORKFLOW_MUTATION_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_MUTATION_TOOL_NAMES);
-const ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
 
-const createOdtWorkflowRuntimeToolIdMap = (
-  mapToolId: (toolId: string) => string,
-): ReadonlyMap<string, AgentToolName> => {
-  const runtimeToolIdMap = new Map<string, AgentToolName>();
-  for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
-    runtimeToolIdMap.set(mapToolId(workflowTool), workflowTool);
-    for (const prefix of ODT_MCP_TOOL_PREFIXES) {
-      runtimeToolIdMap.set(mapToolId(`${prefix}${workflowTool}`), workflowTool);
-    }
-  }
-  return runtimeToolIdMap;
-};
-
-const ODT_WORKFLOW_AUTHORIZATION_TOOL_ID_MAP = createOdtWorkflowRuntimeToolIdMap(
-  (toolId) => toolId,
-);
-const ODT_WORKFLOW_NORMALIZED_TOOL_ID_MAP = createOdtWorkflowRuntimeToolIdMap((toolId) =>
-  toolId.toLowerCase(),
-);
-
-export const normalizeOdtWorkflowToolName = (toolName: string): AgentToolName | null => {
-  const normalized = toolName.trim().toLowerCase();
-  if (normalized.length === 0) {
+const resolveCanonicalOdtWorkflowToolName = (toolId: string): AgentToolName | null => {
+  if (!ODT_WORKFLOW_TOOL_SET.has(toolId as AgentToolName)) {
     return null;
   }
 
-  return ODT_WORKFLOW_NORMALIZED_TOOL_ID_MAP.get(normalized) ?? null;
+  return toolId as AgentToolName;
 };
 
-export const resolveOdtWorkflowToolNameForAuthorization = (
+const resolveAliasedOdtWorkflowToolName = (
   toolId: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
+): AgentToolName | null => {
+  for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
+    if ((workflowToolAliasesByCanonical?.[workflowTool] ?? []).includes(toolId)) {
+      return workflowTool;
+    }
+  }
+
+  return null;
+};
+
+const resolveOdtWorkflowToolName = (
+  toolId: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
 ): AgentToolName | null => {
   const trimmedToolId = toolId.trim();
   if (trimmedToolId.length === 0) {
     return null;
   }
 
-  return ODT_WORKFLOW_AUTHORIZATION_TOOL_ID_MAP.get(trimmedToolId) ?? null;
+  return (
+    resolveCanonicalOdtWorkflowToolName(trimmedToolId) ??
+    resolveAliasedOdtWorkflowToolName(trimmedToolId, workflowToolAliasesByCanonical)
+  );
 };
 
-export const isOdtWorkflowToolName = (toolName: string): boolean => {
-  return normalizeOdtWorkflowToolName(toolName) !== null;
-};
+export const normalizeOdtWorkflowToolName = (
+  toolName: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
+): AgentToolName | null => resolveOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical);
 
-export const isOdtWorkflowMutationToolName = (toolName: string): boolean => {
-  const normalized = normalizeOdtWorkflowToolName(toolName);
+export const resolveOdtWorkflowToolNameForAuthorization = (
+  toolId: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
+): AgentToolName | null => resolveOdtWorkflowToolName(toolId, workflowToolAliasesByCanonical);
+
+export const isOdtWorkflowToolName = (
+  toolName: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
+): boolean => normalizeOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical) !== null;
+
+export const isOdtWorkflowMutationToolName = (
+  toolName: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
+): boolean => {
+  const normalized = normalizeOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical);
   return normalized ? ODT_WORKFLOW_MUTATION_TOOL_SET.has(normalized) : false;
 };
 
-export const toOdtWorkflowToolDisplayName = (toolName: string): string => {
-  const normalized = normalizeOdtWorkflowToolName(toolName);
+export const toOdtWorkflowToolDisplayName = (
+  toolName: string,
+  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
+): string => {
+  const normalized = normalizeOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical);
   return normalized ? normalized.slice(4) : toolName;
 };
 
@@ -78,6 +93,7 @@ export const buildRoleScopedOdtToolSelection = (
   options?: {
     runtimeToolIds?: readonly string[];
     includeCanonicalDefaults?: boolean;
+    workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical;
   },
 ): Record<string, boolean> => {
   const allowed = new Set(AGENT_ROLE_TOOL_POLICY[role]);
@@ -91,14 +107,14 @@ export const buildRoleScopedOdtToolSelection = (
   }
 
   for (const toolId of options?.runtimeToolIds ?? []) {
-    const normalizedTool = resolveOdtWorkflowToolNameForAuthorization(toolId);
+    const normalizedTool = resolveOdtWorkflowToolNameForAuthorization(
+      toolId,
+      options?.workflowToolAliasesByCanonical,
+    );
     if (!normalizedTool) {
       continue;
     }
     const trimmedToolId = toolId.trim();
-    if (trimmedToolId.length === 0) {
-      continue;
-    }
     selection[trimmedToolId] = allowed.has(normalizedTool);
   }
 

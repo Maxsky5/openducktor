@@ -99,6 +99,7 @@ const MOCK_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
   label: "Mock Runtime",
   description: "Mock runtime descriptor for per-kind health tests.",
   readOnlyRoleBlockedTools: [],
+  workflowToolAliasesByCanonical: {},
   capabilities: {
     ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
   },

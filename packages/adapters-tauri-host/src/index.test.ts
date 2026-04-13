@@ -1256,6 +1256,8 @@ describe("TauriHostClient", () => {
               "ast_grep_replace",
               "lsp_rename",
             ],
+            workflowToolAliasesByCanonical:
+              OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
             capabilities: {
               supportsProfiles: true,
               supportsVariants: true,
@@ -1429,12 +1431,21 @@ describe("TauriHostClient", () => {
     const stopped = await client.runtimeStop("runtime-1");
 
     expect(definitions[0]?.kind).toBe("opencode");
+    expect(definitions[0]?.workflowToolAliasesByCanonical).toEqual(
+      OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+    );
     expect(qaTarget).toEqual({
       workingDirectory: "/repo/worktrees/task-1",
       source: "active_build_run",
     });
     expect(runtimes).toHaveLength(1);
+    expect(runtimes[0]?.descriptor.workflowToolAliasesByCanonical).toEqual(
+      OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+    );
     expect(ensured.runtimeId).toBe("runtime-main");
+    expect(ensured.descriptor.workflowToolAliasesByCanonical).toEqual(
+      OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+    );
     expect(startupStatus.stage).toBe("waiting_for_runtime");
     expect(repoRuntimeHealth.mcp?.status).toBe("connected");
     expect(repoRuntimeHealthStatus.mcp?.status).toBe("checking");

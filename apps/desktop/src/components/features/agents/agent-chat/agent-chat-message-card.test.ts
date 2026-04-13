@@ -1,7 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type ComponentProps, createElement as createReactElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+
+const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
+  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+  loadRepoRuntimeCatalog: async () => {
+    throw new Error("Test runtime catalog loader was not configured.");
+  },
+  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+  loadRepoRuntimeFileSearch: async () => [],
+} satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
+
+const createElement = (
+  _type: typeof AgentChatMessageCard,
+  props: React.ComponentProps<typeof AgentChatMessageCard>,
+) => {
+  return createReactElement(
+    RuntimeDefinitionsContext.Provider,
+    { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
+    createReactElement(AgentChatMessageCard, {
+      sessionRuntimeKind: "opencode",
+      ...props,
+    }),
+  );
+};
 
 const renderToHtml = async (element: ReturnType<typeof createElement>): Promise<string> => {
   const stream = await renderToReadableStream(element);

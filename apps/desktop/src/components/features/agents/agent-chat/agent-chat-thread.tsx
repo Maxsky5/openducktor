@@ -50,6 +50,7 @@ type AgentChatThreadMotionRowProps = {
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
+  sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
 };
 
@@ -66,6 +67,7 @@ type AgentChatTranscriptProps = {
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
+  sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
@@ -144,6 +146,7 @@ const AgentChatThreadMotionRow = memo(
     sessionAgentColors,
     sessionRole,
     sessionWorkingDirectory,
+    sessionRuntimeKind,
     resolveRowRef,
   }: AgentChatThreadMotionRowProps): ReactElement {
     return (
@@ -154,6 +157,7 @@ const AgentChatThreadMotionRow = memo(
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
+          sessionRuntimeKind={sessionRuntimeKind}
         />
       </div>
     );
@@ -161,6 +165,7 @@ const AgentChatThreadMotionRow = memo(
   (previousProps, nextProps) => {
     return (
       previousProps.sessionRole === nextProps.sessionRole &&
+      previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
@@ -176,6 +181,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors,
   sessionRole,
   sessionWorkingDirectory,
+  sessionRuntimeKind,
   resolveRowRef,
   allowTurnContainment,
 }: {
@@ -184,6 +190,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
+  sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   allowTurnContainment: boolean;
 }): ReactElement {
@@ -199,6 +206,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
+          sessionRuntimeKind={sessionRuntimeKind}
           resolveRowRef={resolveRowRef}
         />
       ))}
@@ -219,6 +227,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionAgentColors,
   sessionRole,
   sessionWorkingDirectory,
+  sessionRuntimeKind,
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
@@ -310,6 +319,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionRole={sessionRole}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
+                sessionRuntimeKind={sessionRuntimeKind}
                 resolveRowRef={resolveRowRef}
                 allowTurnContainment={allowTurnContainment}
               />
@@ -593,6 +603,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSessionViewLoading: isTranscriptLoading,
   });
   const sessionRole = session?.role ?? null;
+  const sessionRuntimeKind = session?.runtimeKind ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
   const sessionAccentColor = useMemo(() => {
     const profileId = sessionSelectedModel?.profileId;
@@ -723,6 +734,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionAgentColors={sessionAgentColors}
         sessionRole={sessionRole}
         sessionWorkingDirectory={sessionWorkingDirectory}
+        sessionRuntimeKind={sessionRuntimeKind}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={rows.length > 0 && !hideTranscriptWhileHydrating ? renderedTurns : []}

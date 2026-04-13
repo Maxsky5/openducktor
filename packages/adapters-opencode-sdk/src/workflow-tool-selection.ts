@@ -148,6 +148,7 @@ export const resolveWorkflowToolSelection = async (input: {
   const selection = buildRoleScopedOdtToolSelection(input.role, {
     includeCanonicalDefaults: true,
     runtimeToolIds,
+    workflowToolAliasesByCanonical: input.runtimeDescriptor.workflowToolAliasesByCanonical,
   });
 
   if (isReadOnlyRole(input.role)) {

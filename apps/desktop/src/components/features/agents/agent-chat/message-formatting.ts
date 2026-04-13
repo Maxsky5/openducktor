@@ -1,3 +1,4 @@
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -35,8 +36,11 @@ export const formatRawJsonLikeText = (value: string): string => {
 
 export { stripToolPrefix };
 
-export const toolDisplayName = (tool: string): string => {
-  return toOdtWorkflowToolDisplayName(tool);
+export const toolDisplayName = (
+  tool: string,
+  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"],
+): string => {
+  return toOdtWorkflowToolDisplayName(tool, workflowToolAliasesByCanonical);
 };
 
 export const toSingleLineMarkdown = (value: string): string => {

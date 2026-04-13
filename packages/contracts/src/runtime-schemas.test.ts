@@ -25,6 +25,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
   runEventSchema,
+  runtimeDescriptorSchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
   slashCommandCatalogSchema,
@@ -678,6 +679,90 @@ describe("runtime schemas", () => {
     expect(parsed.descriptor.capabilities.supportsFileSearch).toBe(true);
     expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
     expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
+    expect(parsed.descriptor.workflowToolAliasesByCanonical.odt_set_spec).toEqual([
+      "openducktor_odt_set_spec",
+      "functions.openducktor_odt_set_spec",
+    ]);
+  });
+
+  test("runtime descriptor rejects workflow alias collisions across canonical tools", () => {
+    expect(() =>
+      runtimeDescriptorSchema.parse({
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        workflowToolAliasesByCanonical: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+          odt_set_spec: ["openducktor_odt_set_spec"],
+          odt_set_plan: ["openducktor_odt_set_spec"],
+        },
+      }),
+    ).toThrow('assigned to canonical tool \\"odt_set_spec\\"');
+  });
+
+  test("runtime descriptor rejects canonical odt tool ids inside workflow alias metadata", () => {
+    expect(() =>
+      runtimeDescriptorSchema.parse({
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        workflowToolAliasesByCanonical: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+          odt_set_spec: ["odt_set_spec"],
+        },
+      }),
+    ).toThrow("Runtime workflow aliases must not repeat canonical odt_* tool IDs.");
+  });
+
+  test("runtime descriptor reports only the canonical-id validation issue for repeated canonical aliases", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      workflowToolAliasesByCanonical: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        odt_set_spec: ["odt_set_spec"],
+        odt_set_plan: ["odt_set_spec"],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toHaveLength(2);
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ["workflowToolAliasesByCanonical", "odt_set_spec", 0],
+          message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
+        }),
+        expect.objectContaining({
+          path: ["workflowToolAliasesByCanonical", "odt_set_plan", 0],
+          message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
+        }),
+      ]),
+    );
+  });
+
+  test("runtime descriptor rejects unknown workflow alias keys", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      workflowToolAliasesByCanonical: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        odt_set_specc: ["openducktor_odt_set_spec"],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unrecognized_keys",
+          keys: ["odt_set_specc"],
+          path: ["workflowToolAliasesByCanonical"],
+        }),
+      ]),
+    );
   });
 
   test("slash command catalog parses runtime command metadata", () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentRole } from "./agent-workflow-schemas";
+import { type AgentToolName, agentToolNameValues } from "./agent-workflow-schemas";
 
 export const knownRuntimeKindValues = ["opencode"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
@@ -129,11 +130,56 @@ const runtimeReadOnlyRoleBlockedToolsSchema = z
     message: "Read-only blocked runtime tool IDs must be unique.",
   });
 
+const runtimeWorkflowToolAliasesSchema = z
+  .array(runtimeToolIdSchema)
+  .min(1, { message: "Workflow tool alias lists must not be empty." })
+  .refine((toolIds) => new Set(toolIds).size === toolIds.length, {
+    message: "Workflow tool aliases for a canonical tool must be unique.",
+  });
+
+const runtimeWorkflowToolAliasesByCanonicalShape = Object.fromEntries(
+  agentToolNameValues.map((toolName) => [toolName, runtimeWorkflowToolAliasesSchema.optional()]),
+) as Record<AgentToolName, z.ZodOptional<typeof runtimeWorkflowToolAliasesSchema>>;
+
+const runtimeWorkflowToolAliasesByCanonicalSchema = z
+  .object(runtimeWorkflowToolAliasesByCanonicalShape)
+  .strict()
+  .superRefine((aliasesByCanonical, context) => {
+    const canonicalByAlias = new Map<string, AgentToolName>();
+
+    for (const canonicalTool of agentToolNameValues) {
+      const aliases = aliasesByCanonical[canonicalTool] ?? [];
+      for (const [index, alias] of aliases.entries()) {
+        if (agentToolNameValues.includes(alias as AgentToolName)) {
+          context.addIssue({
+            code: "custom",
+            path: [canonicalTool, index],
+            message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
+          });
+          continue;
+        }
+
+        const existingCanonicalTool = canonicalByAlias.get(alias);
+        if (existingCanonicalTool && existingCanonicalTool !== canonicalTool) {
+          context.addIssue({
+            code: "custom",
+            path: [canonicalTool, index],
+            message: `Runtime workflow alias "${alias}" is already assigned to canonical tool "${existingCanonicalTool}".`,
+          });
+          continue;
+        }
+
+        canonicalByAlias.set(alias, canonicalTool);
+      }
+    }
+  });
+
 export const runtimeDescriptorSchema = z.object({
   kind: runtimeKindSchema,
   label: z.string().min(1),
   description: z.string().min(1),
   readOnlyRoleBlockedTools: runtimeReadOnlyRoleBlockedToolsSchema,
+  workflowToolAliasesByCanonical: runtimeWorkflowToolAliasesByCanonicalSchema,
   capabilities: runtimeCapabilitiesSchema,
 });
 export type RuntimeDescriptor = z.infer<typeof runtimeDescriptorSchema>;

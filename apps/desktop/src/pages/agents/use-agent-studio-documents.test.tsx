@@ -3,6 +3,8 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
+  createDefaultRuntimeDefinitions,
+  createRuntimeDefinitionsContextValue,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -98,8 +100,15 @@ let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
 type AgentMessage = AgentChatMessage;
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioDocuments, initialProps);
+const createHookHarness = (
+  initialProps: HookArgs,
+  options?: {
+    runtimeDefinitionsContext?: ReturnType<typeof createRuntimeDefinitionsContextValue>;
+    runtimeDefinitionsContextRef?: {
+      current: ReturnType<typeof createRuntimeDefinitionsContextValue>;
+    };
+  },
+) => createSharedHookHarness(useAgentStudioDocuments, initialProps, options);
 
 const createBaseArgs = (): HookArgs => ({
   activeRepo: "/repo",
@@ -296,6 +305,134 @@ describe("useAgentStudioDocuments", () => {
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
       expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
         markdown: "# Updated spec",
+        updatedAt: "2026-02-22T09:00:00.000Z",
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("applies optimistic updates from trusted runtime workflow aliases", async () => {
+    setTaskDocumentsState({
+      specDoc: createDocumentState({
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+      }),
+    });
+
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-runtime-alias",
+      messages: [
+        createCompletedToolMessage({
+          tool: "openducktor_odt_set_spec",
+          input: { markdown: "# Updated spec from alias" },
+          output: "completed 2026-02-22T09:00:00.000Z",
+        }),
+      ],
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
+        markdown: "# Updated spec from alias",
+        updatedAt: "2026-02-22T09:00:00.000Z",
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ignores incorrect-case runtime aliases for document refresh", async () => {
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-bad-case",
+      messages: [
+        createCompletedToolMessage({
+          tool: "OpenDucktor_ODT_SET_SPEC",
+          input: { markdown: "# Should not apply" },
+          output: "completed 2026-02-22T09:00:00.000Z",
+        }),
+      ],
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reprocesses mounted runtime aliases after runtime definitions hydrate", async () => {
+    setTaskDocumentsState({
+      specDoc: createDocumentState({
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+      }),
+    });
+
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-hydrated-aliases",
+      messages: [
+        createCompletedToolMessage({
+          tool: "openducktor_odt_set_spec",
+          input: { markdown: "# Updated spec after hydration" },
+          output: "completed 2026-02-22T09:00:00.000Z",
+        }),
+      ],
+    });
+    const hookArgs = {
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    };
+    const runtimeDefinitionsContextRef = {
+      current: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [],
+        isLoadingRuntimeDefinitions: true,
+      }),
+    };
+    const harness = createHookHarness(hookArgs, { runtimeDefinitionsContextRef });
+
+    try {
+      await harness.mount();
+
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
+
+      runtimeDefinitionsContextRef.current = createRuntimeDefinitionsContextValue({
+        ...runtimeDefinitionsContextRef.current,
+        runtimeDefinitions: createDefaultRuntimeDefinitions(),
+        isLoadingRuntimeDefinitions: false,
+      });
+
+      await harness.update(hookArgs);
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
+        markdown: "# Updated spec after hydration",
         updatedAt: "2026-02-22T09:00:00.000Z",
       });
       expect(reloadDocumentMock).toHaveBeenCalledTimes(1);

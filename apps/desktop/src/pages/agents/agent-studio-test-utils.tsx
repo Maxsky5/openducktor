@@ -1,4 +1,8 @@
-import type { TaskCard } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
+  type TaskCard,
+} from "@openducktor/contracts";
 import {
   type ComponentProps,
   createElement,
@@ -20,6 +24,10 @@ type ReactActEnvironment = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 
+type RuntimeDefinitionsContextValue = NonNullable<
+  ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
+>;
+
 export const enableReactActEnvironment = (): void => {
   (globalThis as ReactActEnvironment).IS_REACT_ACT_ENVIRONMENT = true;
 };
@@ -36,17 +44,48 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
   workingDirectory: "/repo",
 };
 
-const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
-  runtimeDefinitions: [],
-  isLoadingRuntimeDefinitions: false,
-  runtimeDefinitionsError: null,
-  refreshRuntimeDefinitions: async () => [],
-  loadRepoRuntimeCatalog: async () => {
-    throw new Error("Test runtime catalog loader was not configured.");
+export const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
+  ...descriptor,
+  readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],
+  workflowToolAliasesByCanonical: Object.fromEntries(
+    Object.entries(descriptor.workflowToolAliasesByCanonical).map(([toolName, aliases]) => [
+      toolName,
+      aliases ? [...aliases] : aliases,
+    ]),
+  ) as RuntimeDescriptor["workflowToolAliasesByCanonical"],
+  capabilities: {
+    ...descriptor.capabilities,
+    supportedScopes: [...descriptor.capabilities.supportedScopes],
   },
-  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-  loadRepoRuntimeFileSearch: async () => [],
-} satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
+});
+
+export const createDefaultRuntimeDefinitions = (): RuntimeDescriptor[] => [
+  cloneRuntimeDescriptor(OPENCODE_RUNTIME_DESCRIPTOR),
+];
+
+export const createRuntimeDefinitionsContextValue = (
+  overrides: Partial<RuntimeDefinitionsContextValue> = {},
+): RuntimeDefinitionsContextValue => {
+  const defaultRuntimeDefinitions = createDefaultRuntimeDefinitions();
+
+  return {
+    runtimeDefinitions: overrides.runtimeDefinitions
+      ? overrides.runtimeDefinitions.map(cloneRuntimeDescriptor)
+      : defaultRuntimeDefinitions,
+    isLoadingRuntimeDefinitions: overrides.isLoadingRuntimeDefinitions ?? false,
+    runtimeDefinitionsError: overrides.runtimeDefinitionsError ?? null,
+    refreshRuntimeDefinitions:
+      overrides.refreshRuntimeDefinitions ?? (async () => createDefaultRuntimeDefinitions()),
+    loadRepoRuntimeCatalog:
+      overrides.loadRepoRuntimeCatalog ??
+      (async () => {
+        throw new Error("Test runtime catalog loader was not configured.");
+      }),
+    loadRepoRuntimeSlashCommands:
+      overrides.loadRepoRuntimeSlashCommands ?? (async () => ({ commands: [] })),
+    loadRepoRuntimeFileSearch: overrides.loadRepoRuntimeFileSearch ?? (async () => []),
+  };
+};
 
 const TEST_CHECKS_OPERATIONS_CONTEXT = {
   refreshRuntimeCheck: async () => ({
@@ -85,13 +124,16 @@ export const createAgentSessionFixture = (
 export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,
   initialProps: Props,
+  options?: {
+    runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
+    runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
+  },
 ) => {
   const checksOperationsContext = {
     ...TEST_CHECKS_OPERATIONS_CONTEXT,
   };
-  const runtimeDefinitionsContext = {
-    ...TEST_RUNTIME_DEFINITIONS_CONTEXT,
-    runtimeDefinitions: [...TEST_RUNTIME_DEFINITIONS_CONTEXT.runtimeDefinitions],
+  const runtimeDefinitionsContextRef = options?.runtimeDefinitionsContextRef ?? {
+    current: options?.runtimeDefinitionsContext ?? createRuntimeDefinitionsContextValue(),
   };
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
@@ -101,10 +143,11 @@ export const createHookHarness = <Props, State>(
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: runtimeDefinitionsContext,
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          { value: runtimeDefinitionsContextRef.current },
           children,
-        }),
+        ),
       ),
     );
 

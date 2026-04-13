@@ -55,10 +55,13 @@ export const resolveToolRefreshDecision = (
   part: ToolPart,
   status: ToolPartStatus,
   previousStatus: ToolPartStatus | undefined,
+  workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1],
 ): ToolRefreshDecision => {
   const transitionedToCompleted = status === "completed" && previousStatus !== "completed";
   return {
-    shouldRefreshTaskData: isOdtWorkflowMutationToolName(part.tool) && transitionedToCompleted,
+    shouldRefreshTaskData:
+      isOdtWorkflowMutationToolName(part.tool, workflowToolAliasesByCanonical) &&
+      transitionedToCompleted,
   };
 };
 
@@ -134,6 +137,7 @@ const composeToolPartSessionUpdate = ({
   error,
   todoUpdateFromTool,
   timestamp,
+  workflowToolAliasesByCanonical,
 }: {
   current: AgentSessionState;
   prepareCurrent: PrepareCurrent;
@@ -146,6 +150,7 @@ const composeToolPartSessionUpdate = ({
   error: string | undefined;
   todoUpdateFromTool: ReturnType<typeof resolveTodoUpdateFromTool>;
   timestamp: string;
+  workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1];
 }): ToolPartSessionUpdate => {
   const prepared = prepareCurrent(current);
   const fallbackMessageId = `tool:${streamMessageKey}`;
@@ -162,7 +167,12 @@ const composeToolPartSessionUpdate = ({
   const existing = findSessionMessageById(prepared, messageId);
   const previousStatus = existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
   const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
-  const refreshDecision = resolveToolRefreshDecision(part, status, previousStatus);
+  const refreshDecision = resolveToolRefreshDecision(
+    part,
+    status,
+    previousStatus,
+    workflowToolAliasesByCanonical,
+  );
   const timingMeta = composeToolTimingMeta(
     existingToolMeta,
     observedEventTimestampMs,
@@ -208,7 +218,13 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  const taskId = context.store.sessionsRef.current[context.store.sessionId]?.taskId;
+  const activeSession = context.store.sessionsRef.current[context.store.sessionId] ?? null;
+  const taskId = activeSession?.taskId;
+  const runtimeDescriptor =
+    activeSession?.runtimeKind && context.refresh.resolveRuntimeDefinition
+      ? context.refresh.resolveRuntimeDefinition(activeSession.runtimeKind)
+      : null;
+  const workflowToolAliasesByCanonical = runtimeDescriptor?.workflowToolAliasesByCanonical;
 
   context.store.updateSession(
     context.store.sessionId,
@@ -225,6 +241,7 @@ export const handleToolPart = (
         error,
         todoUpdateFromTool,
         timestamp: event.timestamp,
+        workflowToolAliasesByCanonical,
       });
 
       shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;

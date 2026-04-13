@@ -33,11 +33,31 @@ It is the stable definition of a runtime kind:
 - `label`
 - `description`
 - `readOnlyRoleBlockedTools`
+- `workflowToolAliasesByCanonical`
 - `capabilities`
 
 Descriptors are static metadata. They are not live runtime instances.
 
 `readOnlyRoleBlockedTools` is the runtime-owned list of native tool IDs that must be denied for read-only OpenDucktor roles (`spec`, `planner`, `qa`). This list is runtime-specific. OpenDucktor must not hardcode another runtime's tool names in generic orchestration code or in a different runtime adapter.
+
+`workflowToolAliasesByCanonical` is the runtime-owned map from canonical `odt_*` workflow tool names to exact native runtime tool IDs for that runtime. Shared/core OpenDucktor code keeps canonical `odt_*` identity only and must consume this mapping when a caller needs to interpret runtime-native workflow tool IDs for authorization, tool selection, event refresh, or display.
+
+Example:
+
+```ts
+{
+  odt_set_spec: [
+    "openducktor_odt_set_spec",
+    "functions.openducktor_odt_set_spec",
+  ],
+  odt_build_completed: [
+    "openducktor_odt_build_completed",
+    "functions.openducktor_odt_build_completed",
+  ],
+}
+```
+
+The canonical `odt_*` names stay implicit and do not need to be repeated in this field.
 
 ### `RuntimeInstanceSummary`
 
@@ -160,7 +180,9 @@ Rules:
 
 - `AGENT_ROLE_TOOL_POLICY` continues to define which `odt_*` workflow tools each role may call.
 - Each runtime descriptor must declare `readOnlyRoleBlockedTools` for that runtime's native mutating tool IDs.
+- Each runtime descriptor must declare `workflowToolAliasesByCanonical` for any native workflow tool IDs that differ from canonical `odt_*` names.
 - Runtime adapters must consume `readOnlyRoleBlockedTools` both when constructing runtime permission rules and when building the runtime `tools` selection sent on prompt turns for `spec`, `planner`, and `qa`.
+- Runtime adapters and desktop workflow-tool consumers must resolve native workflow tool IDs through `workflowToolAliasesByCanonical` instead of hardcoded runtime prefixes in shared code.
 - Do not hardcode OpenCode tool IDs in generic orchestration code or assume another runtime uses the same tool names.
 - Do not block `bash` generically for read-only roles. Read-only roles still need shell access for inspections, tests, and lint commands; mutation control for shell commands remains a runtime/permission-flow concern.
 
@@ -177,6 +199,7 @@ A runtime is represented through:
 - a stable `runtimeKind`,
 - a `RuntimeDescriptor` that describes its implemented capabilities,
 - a runtime-owned `readOnlyRoleBlockedTools` list for native mutating tools,
+- a runtime-owned `workflowToolAliasesByCanonical` map for native workflow tool IDs,
 - a live `RuntimeRoute` compatible with current host-visible route schemas,
 - a request-scoped `RuntimeConnection`,
 - persisted session records that keep `runtimeKind`, `externalSessionId`, and `workingDirectory`.
@@ -256,6 +279,7 @@ What to add:
 - the new `runtimeKind` in any curated constant lists,
 - a descriptor constant whose capabilities describe implemented behavior,
 - a descriptor-level `readOnlyRoleBlockedTools` list for that runtime's native mutating tool IDs,
+- a descriptor-level `workflowToolAliasesByCanonical` map for native workflow tool IDs that are not already canonical `odt_*` names,
 - any new route or transport schema support if the runtime is not `local_http`,
 - config/session schema support for runtime-aware model defaults.
 
