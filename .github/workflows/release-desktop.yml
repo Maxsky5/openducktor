@@ -203,7 +203,7 @@ jobs:
 
       - name: Build and upload signed desktop assets
         if: env.APPLE_SIGNING_ENABLED == 'true'
-        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
+        uses: tauri-apps/tauri-action@97cef2bd32ead607bcc2c6af5b40ce2f25d48e77
         timeout-minutes: 60
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -225,7 +225,7 @@ jobs:
 
       - name: Build and upload unsigned desktop assets
         if: env.APPLE_SIGNING_ENABLED != 'true'
-        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
+        uses: tauri-apps/tauri-action@97cef2bd32ead607bcc2c6af5b40ce2f25d48e77
         timeout-minutes: 60
         env:
           GITHUB_TOKEN: ${{ github.token }}
