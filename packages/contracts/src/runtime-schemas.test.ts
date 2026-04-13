@@ -740,6 +740,31 @@ describe("runtime schemas", () => {
     );
   });
 
+  test("runtime descriptor rejects unknown workflow alias keys", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      workflowToolAliasesByCanonical: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        odt_set_specc: ["openducktor_odt_set_spec"],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unrecognized_keys",
+          keys: ["odt_set_specc"],
+          path: ["workflowToolAliasesByCanonical"],
+        }),
+      ]),
+    );
+  });
+
   test("slash command catalog parses runtime command metadata", () => {
     const parsed = slashCommandCatalogSchema.parse({
       commands: [

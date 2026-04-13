@@ -115,9 +115,6 @@ export const buildRoleScopedOdtToolSelection = (
       continue;
     }
     const trimmedToolId = toolId.trim();
-    if (trimmedToolId.length === 0) {
-      continue;
-    }
     selection[trimmedToolId] = allowed.has(normalizedTool);
   }
 

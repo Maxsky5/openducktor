@@ -143,6 +143,7 @@ const runtimeWorkflowToolAliasesByCanonicalShape = Object.fromEntries(
 
 const runtimeWorkflowToolAliasesByCanonicalSchema = z
   .object(runtimeWorkflowToolAliasesByCanonicalShape)
+  .strict()
   .superRefine((aliasesByCanonical, context) => {
     const canonicalByAlias = new Map<string, AgentToolName>();
 

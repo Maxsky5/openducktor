@@ -81,6 +81,8 @@ impl AgentRuntimeKind {
     }
 }
 
+// Keep this list in sync with `agentToolNameValues` in
+// `packages/contracts/src/agent-workflow-schemas.ts`.
 const ODT_WORKFLOW_TOOL_NAMES: [&str; 10] = [
     "odt_read_task",
     "odt_read_task_documents",
