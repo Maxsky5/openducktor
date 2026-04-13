@@ -11,17 +11,26 @@ export const requireRuntimeConnection = (
   return runtimeConnection;
 };
 
-export const requireRuntimeEndpoint = (
+export const requireLocalHttpRuntimeConnection = (
   runtimeConnection: AgentRuntimeConnection | null | undefined,
   action: string,
-): string => {
+): Extract<AgentRuntimeConnection, { type: "local_http" }> => {
   const connection = requireRuntimeConnection(runtimeConnection, action);
-  const endpoint = connection.endpoint?.trim() ?? "";
+  if (connection.type !== "local_http") {
+    throw new Error(
+      `Runtime connection type '${connection.type}' is unsupported for ${action}; local_http is required.`,
+    );
+  }
+
+  const endpoint = connection.endpoint.trim();
   if (endpoint.length === 0) {
     throw new Error(`Runtime connection endpoint is required to ${action}.`);
   }
 
-  return endpoint;
+  return {
+    ...connection,
+    endpoint,
+  };
 };
 
 export const requireRuntimeWorkingDirectory = (
@@ -36,11 +45,3 @@ export const requireRuntimeWorkingDirectory = (
 
   return workingDirectory;
 };
-
-export const toRuntimeClientInput = (
-  runtimeConnection: AgentRuntimeConnection | null | undefined,
-  action: string,
-): { runtimeEndpoint: string; workingDirectory: string } => ({
-  runtimeEndpoint: requireRuntimeEndpoint(runtimeConnection, action),
-  workingDirectory: requireRuntimeWorkingDirectory(runtimeConnection, action),
-});

@@ -164,8 +164,11 @@ describe("runtime-catalog", () => {
     expect(ensureRuntime).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableModels).toHaveBeenCalledWith({
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
-      workingDirectory: "/tmp/repo/worktree",
+      runtimeConnection: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      },
     });
   });
 
@@ -186,8 +189,11 @@ describe("runtime-catalog", () => {
     expect(ensureRuntime).not.toHaveBeenCalled();
     expect(listAvailableSlashCommands).toHaveBeenCalledWith({
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
-      workingDirectory: "/tmp/repo/worktree",
+      runtimeConnection: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      },
     });
   });
 
@@ -204,8 +210,11 @@ describe("runtime-catalog", () => {
     ).resolves.toEqual(fileSearchResultsFixture);
     expect(searchFiles).toHaveBeenCalledWith({
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
-      workingDirectory: "/tmp/repo/worktree",
+      runtimeConnection: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      },
       query: "src",
     });
   });

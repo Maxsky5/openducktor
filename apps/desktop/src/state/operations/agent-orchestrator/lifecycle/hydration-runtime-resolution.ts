@@ -3,9 +3,10 @@ import type {
   RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
+  RuntimeRoute,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
-import { resolveRuntimeRouteConnection } from "../runtime/runtime";
+import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 
@@ -15,7 +16,7 @@ export type ResolvedHydrationRuntime =
       runtimeKind: RuntimeKind;
       runtimeId: string | null;
       runId: string | null;
-      runtimeEndpoint: string;
+      runtimeRoute: RuntimeRoute;
       runtimeConnection: AgentRuntimeConnection;
     }
   | {
@@ -94,7 +95,7 @@ export const createHydrationRuntimeResolver = ({
     if (record.role === "build" || record.role === "qa") {
       const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
       if (run) {
-        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+        const { runtimeConnection } = resolveRuntimeRouteConnection(
           run.runtimeRoute,
           workingDirectory,
         );
@@ -103,7 +104,7 @@ export const createHydrationRuntimeResolver = ({
           runtimeKind,
           runtimeId: null,
           runId: run.runId,
-          runtimeEndpoint,
+          runtimeRoute: run.runtimeRoute,
           runtimeConnection,
         };
       }
@@ -111,7 +112,7 @@ export const createHydrationRuntimeResolver = ({
 
     const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
     if (runtime) {
-      const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+      const { runtimeConnection } = resolveRuntimeRouteConnection(
         runtime.runtimeRoute,
         workingDirectory,
       );
@@ -120,7 +121,7 @@ export const createHydrationRuntimeResolver = ({
         runtimeKind,
         runtimeId: runtime.runtimeId,
         runId: null,
-        runtimeEndpoint,
+        runtimeRoute: runtime.runtimeRoute,
         runtimeConnection,
       };
     }
@@ -134,7 +135,7 @@ export const createHydrationRuntimeResolver = ({
         runtimeKind,
         runtimeId: null,
         runId: null,
-        runtimeEndpoint: preloadedRuntimeConnection.endpoint ?? "",
+        runtimeRoute: runtimeConnectionToRoute(preloadedRuntimeConnection),
         runtimeConnection: preloadedRuntimeConnection,
       };
     }
@@ -155,7 +156,7 @@ export const createHydrationRuntimeResolver = ({
         reason: `Runtime ${runtimeKind} is unavailable for session hydration.`,
       };
     }
-    const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+    const { runtimeConnection } = resolveRuntimeRouteConnection(
       workspaceRuntime.runtimeRoute,
       workingDirectory,
     );
@@ -164,7 +165,7 @@ export const createHydrationRuntimeResolver = ({
       runtimeKind,
       runtimeId: workspaceRuntime.runtimeId,
       runId: null,
-      runtimeEndpoint,
+      runtimeRoute: workspaceRuntime.runtimeRoute,
       runtimeConnection,
     };
   };

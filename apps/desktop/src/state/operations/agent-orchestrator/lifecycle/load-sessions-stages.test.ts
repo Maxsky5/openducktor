@@ -29,7 +29,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   runtimeKind: "opencode",
   runtimeId: null,
   runId: null,
-  runtimeEndpoint: "",
+  runtimeRoute: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -149,7 +149,9 @@ const createRuntime = (
 
 describe("load-sessions-stages", () => {
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
-    const existingSession = createSession({ runtimeEndpoint: "http://127.0.0.1:4444" });
+    const existingSession = createSession({
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+    });
     const stateHarness = createStateHarness({ "session-1": existingSession });
     let persistedLoads = 0;
     let setCalls = 0;
@@ -263,6 +265,63 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
   });
 
+  test("fails requested-history hydration before adapter history loads for unsupported stdio OpenCode runtimes", async () => {
+    const stateHarness = createStateHarness({ "session-1": createSession() });
+    let historyLoads = 0;
+
+    await expect(
+      hydrateSessionRecordsStage({
+        adapter: {
+          hasSession: () => false,
+          listLiveAgentSessionSnapshots: async () => [],
+          loadSessionHistory: async () => {
+            historyLoads += 1;
+            return [];
+          },
+          resumeSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
+        },
+        setSessionsById: stateHarness.setSessionsById,
+        updateSession: stateHarness.updateSession,
+        isStaleRepoOperation: () => false,
+        recordsToHydrate: [createRecord()],
+        historyHydrationSessionIds: new Set(["session-1"]),
+        runtimePlanner: {
+          readCurrentHydratedRuntimeResolution: () => null,
+          resolveHydrationRuntime: async () => ({
+            ok: true,
+            runtimeKind: "opencode",
+            runtimeId: "runtime-stdio",
+            runId: null,
+            runtimeRoute: { type: "stdio" },
+            runtimeConnection: {
+              type: "stdio",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          }),
+          loadLiveAgentSessionSnapshot: async () => null,
+        },
+        promptAssembler: {
+          buildHydrationPreludeMessages: async () => [],
+          buildHydrationSystemPrompt: async () => "",
+        },
+        getRepoPromptOverrides: async () => ({}),
+      }),
+    ).rejects.toThrow(
+      "Runtime connection type 'stdio' is unsupported for load session history in runtime 'opencode'; local_http is required.",
+    );
+
+    expect(historyLoads).toBe(0);
+    expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
+  });
+
   test("skips requested-history failure updates when the repo becomes stale during runtime resolution", async () => {
     let stale = false;
     const initialSession = createSession({ historyHydrationState: "hydrating" });
@@ -344,8 +403,9 @@ describe("load-sessions-stages", () => {
             runtimeKind: "opencode",
             runtimeId: "runtime-1",
             runId: null,
-            runtimeEndpoint: "http://127.0.0.1:4444",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             runtimeConnection: {
+              type: "local_http",
               endpoint: "http://127.0.0.1:4444",
               workingDirectory: "/tmp/repo/worktree",
             },
@@ -370,7 +430,7 @@ describe("load-sessions-stages", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
         runId: "run-current",
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory,
       }),
     });
@@ -402,12 +462,16 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeConnectionsByKey: new Map([
           [
             runtimeWorkingDirectoryKey("opencode", workingDirectory),
-            { endpoint: "http://127.0.0.1:4444", workingDirectory },
+            { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
           ],
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
           [
-            liveAgentSessionLookupKey("opencode", "http://127.0.0.1:4444", workingDirectory),
+            liveAgentSessionLookupKey(
+              "opencode",
+              { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
+              workingDirectory,
+            ),
             [liveSnapshot],
           ],
         ]),
@@ -444,8 +508,9 @@ describe("load-sessions-stages", () => {
       runtimeKind: "opencode",
       runtimeId: "runtime-current",
       runId: "run-current",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       runtimeConnection: {
+        type: "local_http",
         endpoint: "http://127.0.0.1:4444",
         workingDirectory,
       },
@@ -458,8 +523,9 @@ describe("load-sessions-stages", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
         runId: "run-current",
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory,
         },

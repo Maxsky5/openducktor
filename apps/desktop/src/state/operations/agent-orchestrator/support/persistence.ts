@@ -60,7 +60,7 @@ export const fromPersistedSessionRecord = (
     runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     runtimeId: null,
     runId: null,
-    runtimeEndpoint: "",
+    runtimeRoute: null,
     workingDirectory: session.workingDirectory,
     historyHydrationState: "not_requested",
     messages: [],

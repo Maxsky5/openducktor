@@ -1,8 +1,13 @@
+import type { RuntimeKind } from "@openducktor/contracts";
+import {
+  getRuntimeConnectionSupportError,
+  runtimeRouteToConnection,
+} from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const WORKTREE_RUNTIME_ROLES = new Set<AgentSessionState["role"]>(["build", "qa"]);
 
-type RuntimeAttachmentState = Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeEndpoint">;
+type RuntimeAttachmentState = Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeRoute">;
 type WorktreeRuntimeRole = Pick<AgentSessionState, "role">;
 
 export const requiresLiveWorktreeRuntime = (
@@ -18,10 +23,50 @@ export const hasAttachedSessionRuntime = (
     return false;
   }
 
-  return (
-    session.runId !== null ||
-    session.runtimeId !== null ||
-    session.runtimeEndpoint.trim().length > 0
+  return session.runId !== null || session.runtimeId !== null || session.runtimeRoute !== null;
+};
+
+export const toAttachedSessionRuntimeConnection = (
+  session:
+    | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
+    | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
+    | null
+    | undefined,
+  runtimeKind: RuntimeKind | null | undefined,
+  action = "attached session runtime access",
+) => {
+  if (!session?.runtimeRoute) {
+    return null;
+  }
+
+  const runtimeConnection = runtimeRouteToConnection(
+    session.runtimeRoute,
+    session.workingDirectory,
+  );
+  if (getRuntimeConnectionSupportError(runtimeKind, runtimeConnection, action)) {
+    return null;
+  }
+
+  return runtimeConnection;
+};
+
+export const getAttachedSessionRuntimeConnectionError = (
+  session:
+    | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
+    | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
+    | null
+    | undefined,
+  runtimeKind: RuntimeKind | null | undefined,
+  action = "attached session runtime access",
+): string | null => {
+  if (!session?.runtimeRoute) {
+    return null;
+  }
+
+  return getRuntimeConnectionSupportError(
+    runtimeKind,
+    runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory),
+    action,
   );
 };
 

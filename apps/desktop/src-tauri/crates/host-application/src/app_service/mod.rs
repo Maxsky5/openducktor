@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
     DevServerEvent, DevServerGroupState, GitPort, RunEvent, RunSummary, RuntimeCheck,
-    RuntimeInstanceSummary, RuntimeRole, TaskCard, TaskStore,
+    RuntimeInstanceSummary, RuntimeRole, RuntimeRoute, TaskCard, TaskStore,
 };
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig, RuntimeConfigStore};
 use serde::{Deserialize, Serialize};
@@ -106,3 +106,26 @@ pub(crate) use workflow_rules::allows_transition;
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) fn require_opencode_local_http_endpoint<'a>(
+    runtime_route: &'a RuntimeRoute,
+    action: &str,
+) -> Result<&'a str> {
+    match runtime_route {
+        RuntimeRoute::LocalHttp { endpoint } => Ok(endpoint.as_str()),
+        RuntimeRoute::Stdio => Err(anyhow!(
+            "OpenCode {action} requires a local_http runtime route"
+        )),
+    }
+}
+
+pub(crate) fn require_opencode_local_http_port(
+    runtime_route: &RuntimeRoute,
+    action: &str,
+) -> Result<u16> {
+    runtime_route.local_http_port().ok_or_else(|| {
+        anyhow!(
+            "OpenCode {action} requires a local_http runtime route with a port"
+        )
+    })
+}

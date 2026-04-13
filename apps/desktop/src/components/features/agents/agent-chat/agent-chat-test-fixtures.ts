@@ -98,7 +98,7 @@ const baseSession: AgentSessionState = {
   startedAt: "2026-02-20T10:00:30.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  runtimeEndpoint: "http://127.0.0.1:49480",
+  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:49480" },
   workingDirectory: "/repo",
   messages: [baseMessage],
   draftAssistantText: "",

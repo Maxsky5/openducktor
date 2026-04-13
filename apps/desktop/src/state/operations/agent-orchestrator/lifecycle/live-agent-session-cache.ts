@@ -4,19 +4,29 @@ import type {
   AgentRuntimeConnection,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
+import { runtimeConnectionTransportKey } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 
-export const getLiveAgentSessionCacheKey = (runtimeKind: string, endpoint: string): string =>
-  `${runtimeKind}::${endpoint}`;
+export const getLiveAgentSessionCacheKey = (
+  runtimeKind: string,
+  runtimeConnection: AgentRuntimeConnection,
+): string => {
+  const connectionKey =
+    runtimeConnection.type === "stdio"
+      ? `${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`
+      : runtimeConnectionTransportKey(runtimeConnection);
+  return `${runtimeKind}::${connectionKey}`;
+};
 
 export const runtimeWorkingDirectoryKey = (runtimeKind: string, workingDirectory: string): string =>
   `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
 
 export const liveAgentSessionLookupKey = (
   runtimeKind: string,
-  endpoint: string,
+  runtimeConnection: AgentRuntimeConnection,
   workingDirectory: string,
-): string => `${runtimeKind}::${endpoint}::${normalizeWorkingDirectory(workingDirectory)}`;
+): string =>
+  `${getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection)}::${normalizeWorkingDirectory(workingDirectory)}`;
 
 type LiveAgentSessionScanner = Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
 
@@ -40,7 +50,7 @@ export class LiveAgentSessionCache {
           .filter((directory) => directory.length > 0),
       ),
     ).sort();
-    const key = `${input.runtimeKind}::${input.runtimeConnection.endpoint}::${normalizedDirectories.join("|")}`;
+    const key = `${getLiveAgentSessionCacheKey(input.runtimeKind, input.runtimeConnection)}::${normalizedDirectories.join("|")}`;
     const cached = this.scansByKey.get(key);
     if (cached) {
       return cached;
@@ -49,11 +59,7 @@ export class LiveAgentSessionCache {
     const [singleDirectory] = normalizedDirectories;
     if (singleDirectory && this.preloadedByKey) {
       const preloaded = this.preloadedByKey.get(
-        liveAgentSessionLookupKey(
-          input.runtimeKind,
-          input.runtimeConnection.endpoint ?? "",
-          singleDirectory,
-        ),
+        liveAgentSessionLookupKey(input.runtimeKind, input.runtimeConnection, singleDirectory),
       );
       if (preloaded) {
         this.scansByKey.set(key, preloaded);

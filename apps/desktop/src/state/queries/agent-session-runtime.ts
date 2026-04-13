@@ -8,13 +8,12 @@ import type {
 } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { runtimeConnectionTransportKey } from "@/state/operations/agent-orchestrator/runtime/runtime";
 
 export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
-
-const normalizeRuntimeEndpoint = (runtimeEndpoint: string): string => runtimeEndpoint.trim();
 
 const agentSessionRuntimeQueryKeys = {
   all: ["agent-session-runtime"] as const,
@@ -23,7 +22,7 @@ const agentSessionRuntimeQueryKeys = {
       ...agentSessionRuntimeQueryKeys.all,
       "model-catalog",
       runtimeKind,
-      normalizeRuntimeEndpoint(runtimeConnection.endpoint ?? ""),
+      runtimeConnectionTransportKey(runtimeConnection),
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
     ] as const,
   slashCommands: (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
@@ -31,7 +30,7 @@ const agentSessionRuntimeQueryKeys = {
       ...agentSessionRuntimeQueryKeys.all,
       "slash-commands",
       runtimeKind,
-      normalizeRuntimeEndpoint(runtimeConnection.endpoint ?? ""),
+      runtimeConnectionTransportKey(runtimeConnection),
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
     ] as const,
   fileSearch: (
@@ -43,7 +42,7 @@ const agentSessionRuntimeQueryKeys = {
       ...agentSessionRuntimeQueryKeys.all,
       "file-search",
       runtimeKind,
-      normalizeRuntimeEndpoint(runtimeConnection.endpoint ?? ""),
+      runtimeConnectionTransportKey(runtimeConnection),
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
       query,
     ] as const,
@@ -56,7 +55,7 @@ const agentSessionRuntimeQueryKeys = {
       ...agentSessionRuntimeQueryKeys.all,
       "todos",
       runtimeKind,
-      normalizeRuntimeEndpoint(runtimeConnection.endpoint ?? ""),
+      runtimeConnectionTransportKey(runtimeConnection),
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
       externalSessionId,
     ] as const,

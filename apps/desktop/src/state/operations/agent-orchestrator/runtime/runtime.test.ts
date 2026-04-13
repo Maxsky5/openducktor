@@ -61,8 +61,8 @@ describe("agent-orchestrator-runtime", () => {
         "/tmp/repo/worktree",
       ),
     ).toEqual({
-      runtimeEndpoint: "http://127.0.0.1:4555",
       runtimeConnection: {
+        type: "local_http",
         endpoint: "http://127.0.0.1:4555",
         workingDirectory: "/tmp/repo/worktree",
       },
@@ -93,10 +93,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: null,
         runId: "run-1",
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(buildStartCalls).toBe(0);
@@ -187,10 +188,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: null,
         runId: "run-1",
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       });
       await expect(runtimePromise).resolves.toEqual({
@@ -198,10 +200,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: null,
         runId: "run-1",
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       });
     } finally {
@@ -252,10 +255,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: null,
         runId: "run-1",
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(buildStartCalls).toBe(0);
@@ -308,10 +312,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: "runtime-shared",
         runId: null,
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4666",
           workingDirectory: "/tmp/repo/conflict-worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4666",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4666" },
         workingDirectory: "/tmp/repo/conflict-worktree",
       });
       expect(buildStartCalls).toBe(0);
@@ -358,10 +363,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: null,
         runId: "run-1",
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(repoRuntimeEnsureCalls).toBe(0);
@@ -582,10 +588,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: null,
         runId: "run-1",
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       });
     } finally {
@@ -627,10 +634,11 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: "runtime-shared",
         runId: null,
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4666",
           workingDirectory: "/tmp/repo/worktrees/task-1",
         },
-        runtimeEndpoint: "http://127.0.0.1:4666",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4666" },
         workingDirectory: "/tmp/repo/worktrees/task-1",
       });
     } finally {
@@ -668,12 +676,43 @@ describe("agent-orchestrator-runtime", () => {
         runtimeId: "runtime-shared",
         runId: null,
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4666",
           workingDirectory: "/tmp/repo/shared",
         },
-        runtimeEndpoint: "http://127.0.0.1:4666",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4666" },
         workingDirectory: "/tmp/repo/shared",
       });
+    } finally {
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
+    }
+  });
+
+  test("rejects unsupported stdio runtime connections for planner sessions", async () => {
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
+    host.runtimeEnsure = async () => ({
+      kind: "opencode",
+      runtimeId: "runtime-stdio",
+      repoPath: "/tmp/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/tmp/repo/shared",
+      runtimeRoute: {
+        type: "stdio",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        runsRef: { current: [] },
+        refreshTaskData: async () => {},
+      });
+
+      await expect(ensureRuntime("/tmp/repo", "task-1", "planner")).rejects.toThrow(
+        "Runtime connection type 'stdio' is unsupported for planner sessions in runtime 'opencode'; local_http is required.",
+      );
     } finally {
       host.runtimeEnsure = originalRepoRuntimeEnsure;
     }

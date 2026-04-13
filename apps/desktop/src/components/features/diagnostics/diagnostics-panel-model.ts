@@ -2,7 +2,6 @@ import type {
   BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
-  RuntimeRoute,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
@@ -24,6 +23,7 @@ import {
   getRepoStoreStatusLabel,
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
+import { describeRuntimeRoute } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
@@ -241,8 +241,8 @@ const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValue
         valueClassName: "text-muted-foreground",
       },
       {
-        label: "Endpoint",
-        value: resolveRuntimeEndpoint(instance.runtimeRoute),
+        label: "Route",
+        value: describeRuntimeRoute(instance.runtimeRoute),
         mono: true,
         valueClassName: "text-muted-foreground",
       },
@@ -568,14 +568,4 @@ export const buildDiagnosticsPanelModel = (
     criticalReasons,
     sections: [repositorySection, cliToolsSection, ...runtimeSections, beadsStoreSection],
   };
-};
-
-const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute | undefined): string => {
-  if (!runtimeRoute) {
-    return "unavailable";
-  }
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return runtimeRoute.endpoint;
-  }
 };

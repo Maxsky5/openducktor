@@ -31,6 +31,10 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  getAttachedSessionRuntimeConnectionError,
+  toAttachedSessionRuntimeConnection,
+} from "./agent-studio-session-runtime";
+import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
   isSameSelection,
@@ -107,30 +111,32 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
 const toRuntimeQueryInput = (
   session: {
     runtimeKind: RuntimeKind | null;
-    runtimeEndpoint: string;
+    runtimeRoute: AgentSessionState["runtimeRoute"];
     workingDirectory: string;
   } | null,
+  runtimeKind: RuntimeKind | null,
+  action = "active session runtime queries",
 ): {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
 } | null => {
-  const runtimeKind = session?.runtimeKind ?? null;
-  const runtimeEndpoint = session?.runtimeEndpoint?.trim() ?? "";
-  const workingDirectory = session?.workingDirectory?.trim() ?? "";
-  if (
-    !session ||
-    runtimeKind == null ||
-    runtimeEndpoint.length === 0 ||
-    workingDirectory.length === 0
-  ) {
+  const runtimeConnection =
+    session === null
+      ? null
+      : toAttachedSessionRuntimeConnection(
+          {
+            runtimeRoute: session.runtimeRoute,
+            workingDirectory: session.workingDirectory,
+          },
+          runtimeKind,
+          action,
+        );
+  if (!session || runtimeKind == null || runtimeConnection === null) {
     return null;
   }
   return {
     runtimeKind,
-    runtimeConnection: {
-      endpoint: runtimeEndpoint,
-      workingDirectory,
-    },
+    runtimeConnection,
   };
 };
 
@@ -179,7 +185,7 @@ export function useAgentStudioModelSelection({
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
   const activeSessionModelCatalog = activeSession?.modelCatalog ?? null;
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
-  const activeSessionRuntimeEndpoint = activeSession?.runtimeEndpoint?.trim() ?? "";
+  const activeSessionRuntimeRoute = activeSession?.runtimeRoute ?? null;
   const activeSessionWorkingDirectory = activeSession?.workingDirectory?.trim() ?? "";
   const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
   const activeSessionLiveContextUsage = activeSession?.contextUsage ?? null;
@@ -209,14 +215,35 @@ export function useAgentStudioModelSelection({
         hasActiveSession
           ? {
               runtimeKind: activeSessionRuntimeKind,
-              runtimeEndpoint: activeSessionRuntimeEndpoint,
+              runtimeRoute: activeSessionRuntimeRoute,
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
+        activeSessionRuntimeKind,
+        "active session runtime queries",
       ),
     [
-      activeSessionRuntimeEndpoint,
       activeSessionRuntimeKind,
+      activeSessionRuntimeRoute,
+      activeSessionWorkingDirectory,
+      hasActiveSession,
+    ],
+  );
+  const activeSessionRuntimeQueryError = useMemo(
+    () =>
+      hasActiveSession
+        ? getAttachedSessionRuntimeConnectionError(
+            {
+              runtimeRoute: activeSessionRuntimeRoute,
+              workingDirectory: activeSessionWorkingDirectory,
+            },
+            activeSessionRuntimeKind,
+            "active session runtime queries",
+          )
+        : null,
+    [
+      activeSessionRuntimeKind,
+      activeSessionRuntimeRoute,
       activeSessionWorkingDirectory,
       hasActiveSession,
     ],
@@ -390,9 +417,10 @@ export function useAgentStudioModelSelection({
   const slashCommands = slashCommandCatalog?.commands ?? [];
   const slashCommandsError = supportsSlashCommands
     ? activeSession
-      ? activeSessionSlashCommandsQuery.error instanceof Error
-        ? activeSessionSlashCommandsQuery.error.message
-        : null
+      ? (activeSessionRuntimeQueryError ??
+        (activeSessionSlashCommandsQuery.error instanceof Error
+          ? activeSessionSlashCommandsQuery.error.message
+          : null))
       : repoSlashCommandsQuery.error instanceof Error
         ? repoSlashCommandsQuery.error.message
         : null
@@ -408,6 +436,9 @@ export function useAgentStudioModelSelection({
         return [];
       }
       if (hasActiveSession) {
+        if (activeSessionRuntimeQueryError) {
+          throw new Error(activeSessionRuntimeQueryError);
+        }
         if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
           throw new Error(
             "Active session file search is unavailable until the session runtime connection is ready.",
@@ -438,6 +469,7 @@ export function useAgentStudioModelSelection({
       activeRepo,
       hasActiveSession,
       activeSessionRuntimeQueryInput,
+      activeSessionRuntimeQueryError,
       composerRuntimeKind,
       loadFileSearchForRepo,
       queryClient,

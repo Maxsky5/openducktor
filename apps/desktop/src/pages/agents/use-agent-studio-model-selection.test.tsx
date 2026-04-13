@@ -359,7 +359,7 @@ describe("useAgentStudioModelSelection", () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const activeSession = createActiveSession({
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
@@ -385,11 +385,41 @@ describe("useAgentStudioModelSelection", () => {
       expect(readSessionFileSearch).toHaveBeenCalledWith(
         "opencode",
         {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/repo/session-worktree",
         },
         "",
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not query session slash commands for unsupported stdio OpenCode sessions", async () => {
+    const readSessionSlashCommands = mock(async () => ({
+      commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
+    }));
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: createActiveSession({
+          runtimeKind: "opencode",
+          runtimeRoute: { type: "stdio" },
+          workingDirectory: "/repo/session-worktree",
+        }),
+        readSessionSlashCommands,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+
+      expect(readSessionSlashCommands).not.toHaveBeenCalled();
+      expect(harness.getLatest().slashCommandsError).toContain("local_http is required");
     } finally {
       await harness.unmount();
     }
@@ -420,6 +450,33 @@ describe("useAgentStudioModelSelection", () => {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
         "Active session file search is unavailable until the session runtime connection is ready.",
+      );
+      expect(readSessionFileSearch).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails fast when active session file search uses an unsupported stdio OpenCode session", async () => {
+    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: createActiveSession({
+          runtimeKind: "opencode",
+          runtimeRoute: { type: "stdio" },
+          workingDirectory: "/repo/session-worktree",
+        }),
+        readSessionFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
+        "local_http is required",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {

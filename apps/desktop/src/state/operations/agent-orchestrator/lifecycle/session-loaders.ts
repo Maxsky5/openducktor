@@ -6,6 +6,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { runtimeConnectionTransportKey } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import {
   coerceSessionSelectionToCatalog,
@@ -27,47 +28,13 @@ type CreateSessionLoadersArgs = {
   updateSession: UpdateSession;
 };
 
-const LOCAL_RUNTIME_HOSTS = new Set(["127.0.0.1", "localhost"]);
-
-const validateLocalRuntimeBaseUrl = (runtimeEndpoint: string): string => {
-  const trimmedBaseUrl = runtimeEndpoint.trim();
-  if (trimmedBaseUrl.length === 0) {
-    throw new Error("Session runtime runtimeEndpoint is required.");
+const validateLocalHttpRuntimeEndpoint = (runtimeEndpoint: string): string => {
+  const trimmedEndpoint = runtimeEndpoint.trim();
+  if (trimmedEndpoint.length === 0) {
+    throw new Error("Session runtime local_http endpoint is required.");
   }
 
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmedBaseUrl);
-  } catch {
-    throw new Error(`Session runtime runtimeEndpoint is invalid: ${trimmedBaseUrl}`);
-  }
-
-  if (parsed.protocol !== "http:") {
-    throw new Error("Session runtime runtimeEndpoint must use the http protocol.");
-  }
-
-  if (!LOCAL_RUNTIME_HOSTS.has(parsed.hostname)) {
-    throw new Error("Session runtime runtimeEndpoint must target localhost or 127.0.0.1.");
-  }
-
-  const numericPort = Number(parsed.port);
-  if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65_535) {
-    throw new Error("Session runtime runtimeEndpoint must include a valid port.");
-  }
-
-  if (
-    parsed.pathname !== "/" ||
-    parsed.search.length > 0 ||
-    parsed.hash.length > 0 ||
-    parsed.username.length > 0 ||
-    parsed.password.length > 0
-  ) {
-    throw new Error(
-      "Session runtime runtimeEndpoint must not include credentials, query, hash, or path.",
-    );
-  }
-
-  return trimmedBaseUrl;
+  return trimmedEndpoint;
 };
 
 const validateWorkingDirectory = (workingDirectory: string): string => {
@@ -96,16 +63,29 @@ const validateWorkingDirectory = (workingDirectory: string): string => {
 
 const validateRuntimeConnection = (
   runtimeConnection: AgentRuntimeConnection,
-): AgentRuntimeConnection => ({
-  endpoint: validateLocalRuntimeBaseUrl(runtimeConnection.endpoint ?? ""),
-  workingDirectory: validateWorkingDirectory(runtimeConnection.workingDirectory),
-});
+): AgentRuntimeConnection => {
+  const workingDirectory = validateWorkingDirectory(runtimeConnection.workingDirectory);
+
+  switch (runtimeConnection.type) {
+    case "local_http":
+      return {
+        type: "local_http",
+        endpoint: validateLocalHttpRuntimeEndpoint(runtimeConnection.endpoint),
+        workingDirectory,
+      };
+    case "stdio":
+      return {
+        type: "stdio",
+        workingDirectory,
+      };
+  }
+};
 
 const toRuntimeLoadKey = (
   runtimeKind: RuntimeKind,
   runtimeConnection: AgentRuntimeConnection,
 ): string =>
-  `${runtimeKind}::${runtimeConnection.endpoint ?? ""}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`;
+  `${runtimeKind}::${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`;
 
 export const createLoadSessionModelCatalog = ({
   adapter,

@@ -36,7 +36,7 @@ export const buildInitialSession = ({
   startedAt: startedCtx.summary.startedAt,
   runtimeId: runtime.runtimeId,
   runId: runtime.runId,
-  runtimeEndpoint: runtime.runtimeEndpoint,
+  runtimeRoute: runtime.runtimeRoute,
   workingDirectory: runtime.workingDirectory,
   historyHydrationState: "hydrated",
   messages:

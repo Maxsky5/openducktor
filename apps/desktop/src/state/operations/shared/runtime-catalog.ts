@@ -2,12 +2,12 @@ import type {
   RuntimeDescriptor,
   RuntimeInstanceSummary,
   RuntimeKind,
-  RuntimeRoute,
 } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentRuntimeConnection,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
@@ -16,12 +16,12 @@ import { appQueryClient } from "@/lib/query-client";
 import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import { resolveRuntimeRouteConnection } from "../agent-orchestrator/runtime/runtime";
 import { host } from "./host";
 
 type ListCatalogInput = {
   runtimeKind: RuntimeKind;
-  runtimeEndpoint: string;
-  workingDirectory: string;
+  runtimeConnection: AgentRuntimeConnection;
 };
 
 export type RuntimeCatalogAdapter = Pick<
@@ -61,8 +61,8 @@ const toRuntimeInput = (
   runtimeKind: RuntimeKind,
 ): ListCatalogInput => ({
   runtimeKind,
-  runtimeEndpoint: resolveRuntimeEndpoint(runtime.runtimeRoute),
-  workingDirectory: runtime.workingDirectory,
+  runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, runtime.workingDirectory)
+    .runtimeConnection,
 });
 
 const selectCatalogRuntime = (
@@ -252,33 +252,17 @@ export const createHostRuntimeCatalogOperations = (
     listAvailableModels: (input) =>
       getAdapter(input.runtimeKind).listAvailableModels({
         runtimeKind: input.runtimeKind,
-        runtimeConnection: {
-          endpoint: input.runtimeEndpoint,
-          workingDirectory: input.workingDirectory,
-        },
+        runtimeConnection: input.runtimeConnection,
       }),
     listAvailableSlashCommands: (input) =>
       getAdapter(input.runtimeKind).listAvailableSlashCommands({
         runtimeKind: input.runtimeKind,
-        runtimeConnection: {
-          endpoint: input.runtimeEndpoint,
-          workingDirectory: input.workingDirectory,
-        },
+        runtimeConnection: input.runtimeConnection,
       }),
     searchFiles: (input) =>
       getAdapter(input.runtimeKind).searchFiles({
         runtimeKind: input.runtimeKind,
-        runtimeConnection: {
-          endpoint: input.runtimeEndpoint,
-          workingDirectory: input.workingDirectory,
-        },
+        runtimeConnection: input.runtimeConnection,
         query: input.query,
       }),
   });
-
-const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return runtimeRoute.endpoint;
-  }
-};

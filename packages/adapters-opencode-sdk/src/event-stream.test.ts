@@ -53,6 +53,7 @@ const makeSessionInput = (): SessionInput => ({
   repoPath: "/repo",
   runtimeKind: "opencode",
   runtimeConnection: {
+    type: "local_http",
     endpoint: "http://127.0.0.1:12345",
     workingDirectory: "/repo",
   },

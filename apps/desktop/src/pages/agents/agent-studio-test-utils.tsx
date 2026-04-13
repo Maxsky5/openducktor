@@ -40,7 +40,7 @@ const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 
 const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
   startedAt: "2026-02-22T10:00:00.000Z",
-  runtimeEndpoint: "http://localhost:4000",
+  runtimeRoute: { type: "local_http", endpoint: "http://localhost:4000" },
   workingDirectory: "/repo",
 };
 

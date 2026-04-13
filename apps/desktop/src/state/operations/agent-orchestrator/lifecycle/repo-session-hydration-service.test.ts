@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeInstanceSummary,
+  type TaskCard,
+} from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { host } from "../../shared/host";
@@ -61,6 +65,49 @@ const taskWithSession = (taskId: string, externalSessionId: string): TaskCard =>
     },
   ],
 });
+
+const taskWithSessionAt = (
+  taskId: string,
+  externalSessionId: string,
+  workingDirectory: string,
+): TaskCard => {
+  const task = taskWithSession(taskId, externalSessionId);
+  const session = task.agentSessions?.[0];
+  if (!session) {
+    throw new Error("Expected seeded task session");
+  }
+  task.agentSessions = [{ ...session, workingDirectory }];
+  return task;
+};
+
+const createRuntimeInstance = ({
+  runtimeId = "runtime-1",
+  workingDirectory = worktreePath,
+  runtimeRoute = {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4555",
+  } as RuntimeInstanceSummary["runtimeRoute"],
+}: {
+  runtimeId?: string;
+  workingDirectory?: string;
+  runtimeRoute?: RuntimeInstanceSummary["runtimeRoute"];
+} = {}): RuntimeInstanceSummary => ({
+  kind: "opencode",
+  runtimeId,
+  repoPath,
+  taskId: null,
+  role: "workspace",
+  workingDirectory,
+  runtimeRoute,
+  startedAt: "2026-02-22T08:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+});
+
+const stdioRuntimeConnection = (workingDirectory: string) =>
+  ({
+    type: "stdio",
+    workingDirectory,
+  }) as const;
 
 describe("repo-session-hydration-service", () => {
   const originalRuntimeList = host.runtimeList;
@@ -124,22 +171,7 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [
-      {
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath,
-        taskId: null,
-        role: "workspace",
-        workingDirectory: worktreePath,
-        runtimeRoute: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4555",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
+    host.runtimeList = async () => [createRuntimeInstance()];
 
     const service = createRepoSessionHydrationService({
       agentEngine: {
@@ -196,12 +228,176 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore.readSnapshot({
         repoPath,
         runtimeKind: "opencode",
-        runtimeEndpoint: "http://127.0.0.1:4555",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4555",
+          workingDirectory: worktreePath,
+        },
         workingDirectory: worktreePath,
         externalSessionId: "external-1",
       })?.externalSessionId,
     ).toBe("external-1");
     expect(reconcileCalls.sort()).toEqual(["task-1", "task-2"]);
+    service.dispose();
+  });
+
+  test("reconcile keeps stdio runtimes for different worktrees on separate scan keys", async () => {
+    const worktreeA = "/tmp/repo/worktree-a";
+    const worktreeB = "/tmp/repo/worktree-b";
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-a",
+        workingDirectory: worktreeA,
+        runtimeRoute: { type: "stdio" },
+      }),
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-b",
+        workingDirectory: worktreeB,
+        runtimeRoute: { type: "stdio" },
+      }),
+    ];
+
+    const taskOne = taskWithSessionAt("task-1", "external-1", worktreeA);
+    const taskTwo = taskWithSessionAt("task-2", "external-2", worktreeB);
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            {
+              externalSessionId:
+                input.runtimeConnection.workingDirectory === worktreeA
+                  ? "external-1"
+                  : "external-2",
+              title: "Task",
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskOne, taskTwo],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: stdioRuntimeConnection(worktreeA),
+        directories: [worktreeA],
+      },
+      {
+        runtimeConnection: stdioRuntimeConnection(worktreeB),
+        directories: [worktreeB],
+      },
+    ]);
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: stdioRuntimeConnection(worktreeA),
+        workingDirectory: worktreeA,
+        externalSessionId: "external-1",
+      })?.externalSessionId,
+    ).toBe("external-1");
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: stdioRuntimeConnection(worktreeB),
+        workingDirectory: worktreeB,
+        externalSessionId: "external-2",
+      })?.externalSessionId,
+    ).toBe("external-2");
+    service.dispose();
+  });
+
+  test("reconcile preloads stdio runtime snapshots into the live session store", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [
+      createRuntimeInstance({ runtimeId: "runtime-stdio", runtimeRoute: { type: "stdio" } }),
+    ];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            {
+              externalSessionId: "external-1",
+              title: "Task 1",
+              workingDirectory: worktreePath,
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskWithSession("task-1", "external-1")],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: stdioRuntimeConnection(worktreePath),
+        directories: [worktreePath],
+      },
+    ]);
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: stdioRuntimeConnection(worktreePath),
+        workingDirectory: worktreePath,
+        externalSessionId: "external-1",
+      })?.externalSessionId,
+    ).toBe("external-1");
     service.dispose();
   });
 
@@ -229,25 +425,8 @@ describe("repo-session-hydration-service", () => {
       };
     };
 
-    const taskOne = taskWithSession("task-1", "external-1");
-    const taskTwo = taskWithSession("task-2", "external-2");
-    const taskOneSession = taskOne.agentSessions?.[0];
-    const taskTwoSession = taskTwo.agentSessions?.[0];
-    if (!taskOneSession || !taskTwoSession) {
-      throw new Error("Expected seeded task sessions");
-    }
-    taskOne.agentSessions = [
-      {
-        ...taskOneSession,
-        workingDirectory: "/tmp/repo/worktree-a",
-      },
-    ];
-    taskTwo.agentSessions = [
-      {
-        ...taskTwoSession,
-        workingDirectory: "/tmp/repo/worktree-b",
-      },
-    ];
+    const taskOne = taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a");
+    const taskTwo = taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b");
 
     const service = createRepoSessionHydrationService({
       agentEngine: {
@@ -278,6 +457,67 @@ describe("repo-session-hydration-service", () => {
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([
       {
         directories: ["/tmp/repo/worktree-a", "/tmp/repo/worktree-b"],
+      },
+    ]);
+    service.dispose();
+  });
+
+  test("reconcile fans missing stdio worktrees out by per-directory scan identity", async () => {
+    let runtimeEnsureCalls = 0;
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [];
+    host.runtimeEnsure = async () => {
+      runtimeEnsureCalls += 1;
+      return createRuntimeInstance({
+        runtimeId: "runtime-stdio-root",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio" },
+      });
+    };
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: [...input.directories].sort() } : {}),
+          });
+          return [];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a"),
+        taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b"),
+      ],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(runtimeEnsureCalls).toBe(1);
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: stdioRuntimeConnection("/tmp/repo/worktree-a"),
+        directories: ["/tmp/repo/worktree-a"],
+      },
+      {
+        runtimeConnection: stdioRuntimeConnection("/tmp/repo/worktree-b"),
+        directories: ["/tmp/repo/worktree-b"],
       },
     ]);
     service.dispose();

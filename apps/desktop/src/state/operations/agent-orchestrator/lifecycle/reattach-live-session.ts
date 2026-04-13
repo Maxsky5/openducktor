@@ -1,6 +1,7 @@
 import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { getRuntimeConnectionSupportError } from "../runtime/runtime";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
@@ -64,6 +65,15 @@ export const createReattachLiveSession = ({
     if (!runtimeResolution.ok) {
       return false;
     }
+    if (
+      getRuntimeConnectionSupportError(
+        runtimeResolution.runtimeKind,
+        runtimeResolution.runtimeConnection,
+        "live session discovery",
+      )
+    ) {
+      return false;
+    }
 
     const externalSessionId = record.externalSessionId ?? record.sessionId;
     const attachedExistingSession = adapter.hasSession(record.sessionId);
@@ -113,7 +123,7 @@ export const createReattachLiveSession = ({
         runtimeKind: runtimeResolution.runtimeKind,
         runtimeId: runtimeResolution.runtimeId,
         runId: runtimeResolution.runId,
-        runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+        runtimeRoute: runtimeResolution.runtimeRoute,
         workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
         status: nextStatus,
         pendingPermissions: liveSession.pendingPermissions,

@@ -4,7 +4,12 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
+import {
+  type RuntimeInfo,
+  requireRuntimeConnectionSupport,
+  resolveRuntimeConnection,
+  runtimeRouteToConnection,
+} from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import {
   createRepoStaleGuard,
@@ -117,28 +122,21 @@ export const createEnsureSessionReady = ({
 
     const loadLiveSnapshot = async ({
       runtimeKind,
-      runtimeEndpoint,
+      runtimeConnection,
       workingDirectory,
       externalSessionId,
     }: {
       runtimeKind: AgentSessionState["runtimeKind"];
-      runtimeEndpoint: string;
+      runtimeConnection: import("@openducktor/core").AgentRuntimeConnection | null;
       workingDirectory: string;
       externalSessionId: string;
     }) => {
-      if (
-        !runtimeKind ||
-        runtimeEndpoint.trim().length === 0 ||
-        workingDirectory.trim().length === 0
-      ) {
+      if (!runtimeKind || runtimeConnection === null || workingDirectory.trim().length === 0) {
         return null;
       }
       const snapshots = await adapter.listLiveAgentSessionSnapshots({
         runtimeKind,
-        runtimeConnection: {
-          endpoint: runtimeEndpoint,
-          workingDirectory,
-        },
+        runtimeConnection,
         directories: [workingDirectory],
       });
       return snapshots.find((entry) => entry.externalSessionId === externalSessionId) ?? null;
@@ -163,10 +161,10 @@ export const createEnsureSessionReady = ({
         let attachedRuntimeKind = session.runtimeKind;
         let attachedRuntimeId = session.runtimeId;
         let attachedRunId = session.runId;
-        let attachedRuntimeEndpoint = session.runtimeEndpoint;
+        let attachedRuntimeRoute = session.runtimeRoute;
         let attachedWorkingDirectory = session.workingDirectory;
 
-        if (!attachedRuntimeKind || attachedRuntimeEndpoint.trim().length === 0) {
+        if (!attachedRuntimeKind || attachedRuntimeRoute === null) {
           const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
             targetWorkingDirectory: session.workingDirectory,
             ...(session.selectedModel?.runtimeKind
@@ -182,7 +180,7 @@ export const createEnsureSessionReady = ({
             DEFAULT_RUNTIME_KIND;
           attachedRuntimeId = runtime.runtimeId;
           attachedRunId = runtime.runId;
-          attachedRuntimeEndpoint = runtime.runtimeEndpoint;
+          attachedRuntimeRoute = runtime.runtimeRoute;
           attachedWorkingDirectory = runtime.workingDirectory;
 
           updateSession(
@@ -191,7 +189,7 @@ export const createEnsureSessionReady = ({
               ...current,
               runtimeId: attachedRuntimeId,
               runId: attachedRunId,
-              runtimeEndpoint: attachedRuntimeEndpoint,
+              runtimeRoute: attachedRuntimeRoute,
               workingDirectory: attachedWorkingDirectory,
               ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
             }),
@@ -201,7 +199,10 @@ export const createEnsureSessionReady = ({
 
         const liveSnapshot = await loadLiveSnapshot({
           runtimeKind: attachedRuntimeKind,
-          runtimeEndpoint: attachedRuntimeEndpoint,
+          runtimeConnection:
+            attachedRuntimeRoute === null
+              ? null
+              : runtimeRouteToConnection(attachedRuntimeRoute, attachedWorkingDirectory),
           workingDirectory: attachedWorkingDirectory,
           externalSessionId: session.externalSessionId,
         });
@@ -215,7 +216,7 @@ export const createEnsureSessionReady = ({
             status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
             runtimeId: attachedRuntimeId,
             runId: attachedRunId,
-            runtimeEndpoint: attachedRuntimeEndpoint,
+            runtimeRoute: attachedRuntimeRoute,
             workingDirectory: attachedWorkingDirectory,
             pendingPermissions,
             pendingQuestions,
@@ -268,12 +269,17 @@ export const createEnsureSessionReady = ({
       session.selectedModel?.runtimeKind ??
       session.runtimeKind ??
       DEFAULT_RUNTIME_KIND;
+    const runtimeConnection = requireRuntimeConnectionSupport(
+      resolvedRuntimeKind,
+      resolveRuntimeConnection(runtime),
+      "resume session",
+    );
     await adapter.resumeSession({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
       repoPath,
       runtimeKind: resolvedRuntimeKind,
-      runtimeConnection: resolveRuntimeConnection(runtime),
+      runtimeConnection,
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
@@ -301,7 +307,7 @@ export const createEnsureSessionReady = ({
 
     const liveSnapshot = await loadLiveSnapshot({
       runtimeKind: resolvedRuntimeKind,
-      runtimeEndpoint: runtime.runtimeEndpoint,
+      runtimeConnection,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
@@ -315,7 +321,7 @@ export const createEnsureSessionReady = ({
       runtimeKind: resolvedRuntimeKind,
       runtimeId: runtime.runtimeId,
       runId: runtime.runId,
-      runtimeEndpoint: runtime.runtimeEndpoint,
+      runtimeRoute: runtime.runtimeRoute,
       workingDirectory: runtime.workingDirectory,
       promptOverrides: promptContext.promptOverrides,
       pendingPermissions,

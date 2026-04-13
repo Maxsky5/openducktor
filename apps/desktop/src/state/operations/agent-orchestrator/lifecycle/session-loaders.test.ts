@@ -49,7 +49,7 @@ const createSession = (
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  runtimeEndpoint: "http://127.0.0.1:4444",
+  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",
@@ -90,6 +90,7 @@ const createStateHarness = (session: AgentSessionState) => {
 };
 
 const runtimeConnection = {
+  type: "local_http",
   endpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo",
 } as const;
@@ -170,7 +171,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);
   });
 
-  test("rejects invalid model catalog runtime runtimeEndpoint before adapter call", async () => {
+  test("rejects empty local_http model catalog endpoints before adapter call", async () => {
     const harness = createStateHarness(createSession());
     let listAvailableModelsCalled = false;
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
@@ -186,15 +187,42 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
 
     await expect(
       loadSessionModelCatalog("session-1", "opencode", {
-        endpoint: "https://example.com:4444",
+        type: "local_http",
+        endpoint: "   ",
         workingDirectory: "/tmp/repo",
       }),
-    ).rejects.toThrow("Session runtime runtimeEndpoint must use the http protocol.");
+    ).rejects.toThrow("Session runtime local_http endpoint is required.");
 
     const session = harness.getState()["session-1"];
     expect(listAvailableModelsCalled).toBe(false);
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
+  });
+
+  test("accepts stdio model catalog connections without forcing an endpoint", async () => {
+    const harness = createStateHarness(createSession({ runtimeRoute: { type: "stdio" } }));
+    let receivedConnection: unknown = null;
+    const loadSessionModelCatalog = createLoadSessionModelCatalog({
+      adapter: {
+        listAvailableModels: async ({ runtimeConnection }) => {
+          receivedConnection = runtimeConnection;
+          return catalogFixture;
+        },
+        loadSessionTodos: async () => [],
+      },
+      updateSession: harness.updateSession,
+    });
+
+    await loadSessionModelCatalog("session-1", "opencode", {
+      type: "stdio",
+      workingDirectory: "/tmp/repo",
+    });
+
+    expect(receivedConnection).toEqual({
+      type: "stdio",
+      workingDirectory: "/tmp/repo",
+    });
+    expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);
   });
 
   test("loads todos and merges while preserving existing order", async () => {
@@ -245,6 +273,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
         "session-1",
         "opencode",
         {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/../escape",
         },

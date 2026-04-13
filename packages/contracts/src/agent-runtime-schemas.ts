@@ -184,10 +184,21 @@ export const runtimeDescriptorSchema = z.object({
 });
 export type RuntimeDescriptor = z.infer<typeof runtimeDescriptorSchema>;
 
-export const runtimeTransportSchema = z.object({
-  endpoint: z.string().min(1).optional(),
-  workingDirectory: z.string().min(1),
-});
+export const runtimeTransportSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("local_http"),
+      endpoint: z.string().trim().min(1),
+      workingDirectory: z.string().trim().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("stdio"),
+      workingDirectory: z.string().trim().min(1),
+    })
+    .strict(),
+]);
 export type RuntimeTransport = z.infer<typeof runtimeTransportSchema>;
 
 export const runtimeDescriptorCatalogSchema = z.object({

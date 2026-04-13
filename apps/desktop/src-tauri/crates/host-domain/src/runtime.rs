@@ -240,17 +240,19 @@ impl RuntimeDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeRoute {
     LocalHttp { endpoint: String },
+    Stdio,
 }
 
 impl RuntimeRoute {
-    pub fn port(&self) -> Option<u16> {
+    pub fn local_http_port(&self) -> Option<u16> {
         match self {
             Self::LocalHttp { endpoint } => Url::parse(endpoint).ok()?.port(),
+            Self::Stdio => None,
         }
     }
 }
@@ -307,7 +309,7 @@ pub struct RunSummary {
     pub task_id: String,
     pub branch: String,
     pub worktree_path: String,
-    pub port: u16,
+    pub port: Option<u16>,
     pub state: RunState,
     pub last_message: Option<String>,
     pub started_at: String,
@@ -726,7 +728,7 @@ mod tests {
             endpoint: "http://127.0.0.1:4321/api/runtime".to_string(),
         };
 
-        assert_eq!(route.port(), Some(4321));
+        assert_eq!(route.local_http_port(), Some(4321));
     }
 
     #[test]
@@ -735,6 +737,19 @@ mod tests {
             endpoint: "127.0.0.1:4321".to_string(),
         };
 
-        assert_eq!(route.port(), None);
+        assert_eq!(route.local_http_port(), None);
+    }
+
+    #[test]
+    fn stdio_route_serializes_without_endpoint_fields() {
+        let json = serde_json::to_value(RuntimeRoute::Stdio).expect("route should serialize");
+
+        assert_eq!(json["type"], "stdio");
+        assert!(json.get("endpoint").is_none());
+    }
+
+    #[test]
+    fn stdio_route_has_no_http_port() {
+        assert_eq!(RuntimeRoute::Stdio.local_http_port(), None);
     }
 }

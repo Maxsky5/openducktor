@@ -35,7 +35,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/repo",
         status: "starting",
         modelCatalog: null,
@@ -66,7 +66,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: true,
@@ -99,7 +99,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       sessionId: "session-1",
       externalSessionId: "external-1",
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/repo",
       modelCatalog: null,
       isLoadingModelCatalog: true,
@@ -134,6 +134,35 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(harness.getLatest()?.modelCatalog).toEqual(CATALOG);
+      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not query runtime-backed session data for unsupported stdio OpenCode sessions", async () => {
+    const readSessionModelCatalog = mock(async () => CATALOG);
+    const readSessionTodos = mock(async () => []);
+    const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
+      session: createAgentSessionFixture({
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        runtimeRoute: { type: "stdio" },
+        workingDirectory: "/repo",
+        modelCatalog: null,
+        isLoadingModelCatalog: false,
+      }),
+      agentStudioReadinessState: "ready",
+      readSessionModelCatalog,
+      readSessionTodos,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(readSessionModelCatalog).not.toHaveBeenCalled();
+      expect(readSessionTodos).not.toHaveBeenCalled();
       expect(harness.getLatest()?.isLoadingModelCatalog).toBe(false);
     } finally {
       await harness.unmount();

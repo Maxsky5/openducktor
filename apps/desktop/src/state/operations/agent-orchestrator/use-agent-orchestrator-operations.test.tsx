@@ -2041,7 +2041,9 @@ describe("use-agent-orchestrator-operations", () => {
         ] as Awaited<ReturnType<typeof host.runtimeList>>;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async (input) => {
         listLiveAgentSessionSnapshotsCalls += 1;
-        scannedEndpoints.push(input.runtimeConnection.endpoint ?? "");
+        scannedEndpoints.push(
+          input.runtimeConnection.type === "local_http" ? input.runtimeConnection.endpoint : "",
+        );
         return [
           {
             externalSessionId: "external-1",

@@ -678,7 +678,7 @@ fn task_delete_rejects_active_builder_runs() {
                 task_id: "parent-1".to_string(),
                 branch: "obp/parent-1-cleanup".to_string(),
                 worktree_path: worktree_path.to_string(),
-                port,
+                port: Some(port),
                 state: RunState::Running,
                 last_message: None,
                 started_at: "2026-02-20T12:00:00Z".to_string(),

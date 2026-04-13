@@ -8,7 +8,7 @@ export type AgentStudioReadinessState = "ready" | "checking" | "blocked";
 
 type TaskHydrationSessionState = Pick<
   AgentSessionState,
-  "sessionId" | "role" | "runId" | "runtimeId" | "runtimeEndpoint"
+  "sessionId" | "role" | "runId" | "runtimeId" | "runtimeRoute"
 >;
 
 type GetAgentStudioTaskHydrationDecisionArgs = {

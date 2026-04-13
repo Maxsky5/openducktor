@@ -49,7 +49,7 @@ fn run_summary_fixture(repo_path: &str, task_id: &str, worktree_path: &str) -> R
         task_id: task_id.to_string(),
         branch: format!("obp/{task_id}"),
         worktree_path: worktree_path.to_string(),
-        port: 4444,
+        port: Some(4444),
         state: RunState::Running,
         last_message: None,
         started_at: "2026-02-22T08:00:00.000Z".to_string(),
