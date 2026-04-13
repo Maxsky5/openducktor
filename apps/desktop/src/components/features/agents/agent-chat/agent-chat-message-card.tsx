@@ -1,5 +1,8 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { memo, type ReactElement } from "react";
+import { memo, type ReactElement, useContext } from "react";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
@@ -11,6 +14,7 @@ type AgentChatMessageCardProps = {
   sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
+  sessionRuntimeKind?: RuntimeKind | null | undefined;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
@@ -20,12 +24,19 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionSelectedModel,
   sessionAgentColors,
   sessionWorkingDirectory,
+  sessionRuntimeKind,
 }: AgentChatMessageCardProps): ReactElement | null {
+  const runtimeDefinitionsContext = useContext(RuntimeDefinitionsContext);
+  const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
+  const workflowToolAliasesByCanonical = sessionRuntimeKind
+    ? findRuntimeDefinition(runtimeDefinitions, sessionRuntimeKind)?.workflowToolAliasesByCanonical
+    : undefined;
   const vm = buildAgentChatMessageCardViewModel({
     message,
     sessionRole,
     sessionSelectedModel: sessionSelectedModel ?? null,
     sessionAgentColors,
+    workflowToolAliasesByCanonical,
   });
 
   return (
@@ -45,6 +56,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
+        workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
       />
     </article>
   );

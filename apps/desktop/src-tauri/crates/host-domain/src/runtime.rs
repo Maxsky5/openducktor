@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use url::Url;
 
@@ -40,6 +41,7 @@ impl AgentRuntimeKind {
                     "ast_grep_replace".to_string(),
                     "lsp_rename".to_string(),
                 ],
+                workflow_tool_aliases_by_canonical: opencode_workflow_tool_aliases_by_canonical(),
                 capabilities: RuntimeCapabilities {
                     supports_profiles: true,
                     supports_variants: true,
@@ -77,6 +79,36 @@ impl AgentRuntimeKind {
             endpoint: self.endpoint_for_port(port),
         }
     }
+}
+
+const ODT_WORKFLOW_TOOL_NAMES: [&str; 10] = [
+    "odt_read_task",
+    "odt_read_task_documents",
+    "odt_set_spec",
+    "odt_set_plan",
+    "odt_build_blocked",
+    "odt_build_resumed",
+    "odt_build_completed",
+    "odt_set_pull_request",
+    "odt_qa_approved",
+    "odt_qa_rejected",
+];
+
+const OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES: [&str; 2] = ["openducktor_", "functions.openducktor_"];
+
+fn opencode_workflow_tool_aliases_by_canonical() -> BTreeMap<String, Vec<String>> {
+    ODT_WORKFLOW_TOOL_NAMES
+        .iter()
+        .map(|tool_name| {
+            (
+                (*tool_name).to_string(),
+                OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES
+                    .iter()
+                    .map(|prefix| format!("{prefix}{tool_name}"))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect()
 }
 
 impl fmt::Display for AgentRuntimeKind {
@@ -174,6 +206,7 @@ pub struct RuntimeDescriptor {
     pub label: String,
     pub description: String,
     pub read_only_role_blocked_tools: Vec<String>,
+    pub workflow_tool_aliases_by_canonical: BTreeMap<String, Vec<String>>,
     pub capabilities: RuntimeCapabilities,
 }
 
@@ -577,6 +610,16 @@ mod tests {
         assert!(!descriptor
             .read_only_role_blocked_tools
             .contains(&"bash".to_string()));
+        assert_eq!(
+            descriptor
+                .workflow_tool_aliases_by_canonical
+                .get("odt_set_spec")
+                .cloned(),
+            Some(vec![
+                "openducktor_odt_set_spec".to_string(),
+                "functions.openducktor_odt_set_spec".to_string(),
+            ])
+        );
         assert!(descriptor.capabilities.supports_all_workflow_scopes());
     }
 
@@ -587,6 +630,7 @@ mod tests {
             label: "OpenCode".to_string(),
             description: "desc".to_string(),
             read_only_role_blocked_tools: vec![],
+            workflow_tool_aliases_by_canonical: BTreeMap::new(),
             capabilities: RuntimeCapabilities {
                 supports_profiles: true,
                 supports_variants: true,

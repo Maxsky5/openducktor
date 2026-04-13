@@ -54,11 +54,10 @@ export const buildRoleScopedPermissionRules = (input: {
     if (!allowedTools.has(toolName)) {
       continue;
     }
-    for (const permission of [
+    for (const permission of new Set([
       toolName,
-      `openducktor_${toolName}`,
-      `functions.openducktor_${toolName}`,
-    ]) {
+      ...(runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? []),
+    ])) {
       rules.push({
         permission,
         pattern: "*",

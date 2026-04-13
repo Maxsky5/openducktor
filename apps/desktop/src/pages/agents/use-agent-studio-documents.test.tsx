@@ -305,6 +305,76 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
+  test("applies optimistic updates from trusted runtime workflow aliases", async () => {
+    setTaskDocumentsState({
+      specDoc: createDocumentState({
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+      }),
+    });
+
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-runtime-alias",
+      messages: [
+        createCompletedToolMessage({
+          tool: "openducktor_odt_set_spec",
+          input: { markdown: "# Updated spec from alias" },
+          output: "completed 2026-02-22T09:00:00.000Z",
+        }),
+      ],
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
+        markdown: "# Updated spec from alias",
+        updatedAt: "2026-02-22T09:00:00.000Z",
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ignores incorrect-case runtime aliases for document refresh", async () => {
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-bad-case",
+      messages: [
+        createCompletedToolMessage({
+          tool: "OpenDucktor_ODT_SET_SPEC",
+          input: { markdown: "# Should not apply" },
+          output: "completed 2026-02-22T09:00:00.000Z",
+        }),
+      ],
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    });
+
+    try {
+      await harness.mount();
+
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reloads section when completion timestamp is unavailable", async () => {
     setTaskDocumentsState({
       planDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),

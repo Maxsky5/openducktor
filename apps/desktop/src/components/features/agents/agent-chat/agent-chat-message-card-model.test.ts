@@ -1,3 +1,4 @@
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
@@ -76,7 +77,13 @@ describe("agent-chat-message-card-model", () => {
 
     test("maps odt tool names to display names", () => {
       expect(toolDisplayName("odt_set_plan")).toBe("set_plan");
-      expect(toolDisplayName("openducktor_odt_set_plan")).toBe("set_plan");
+      expect(toolDisplayName("openducktor_odt_set_plan")).toBe("openducktor_odt_set_plan");
+      expect(
+        toolDisplayName(
+          "openducktor_odt_set_plan",
+          OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        ),
+      ).toBe("set_plan");
       expect(toolDisplayName("bash")).toBe("bash");
     });
   });

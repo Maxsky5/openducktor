@@ -1,6 +1,7 @@
 import type { AgentSessionRecord, RunSummary, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
@@ -267,6 +268,8 @@ export function useAgentOrchestratorOperations({
         resolveTurnDurationMs,
         clearTurnDuration,
         refreshTaskData,
+        resolveRuntimeDefinition: (runtimeKind) =>
+          findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind),
       });
 
       unsubscribersRef.current.set(sessionId, unsubscribe);

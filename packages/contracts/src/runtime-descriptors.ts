@@ -3,6 +3,7 @@ import {
   type RuntimeDescriptor,
   requiredRuntimeSupportedScopes,
 } from "./agent-runtime-schemas";
+import { agentToolNameValues } from "./agent-workflow-schemas";
 
 const OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
   "edit",
@@ -11,6 +12,20 @@ const OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
   "ast_grep_replace",
   "lsp_rename",
 ] as const;
+const OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
+
+const createOpencodeWorkflowToolAliasesByCanonical =
+  (): RuntimeDescriptor["workflowToolAliasesByCanonical"] => {
+    const aliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
+
+    for (const toolName of agentToolNameValues) {
+      aliasesByCanonical[toolName] = OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES.map(
+        (prefix) => `${prefix}${toolName}`,
+      );
+    }
+
+    return aliasesByCanonical;
+  };
 
 export const OPENCODE_RUNTIME_CAPABILITIES = {
   supportsProfiles: true,
@@ -35,5 +50,6 @@ export const OPENCODE_RUNTIME_DESCRIPTOR = {
   label: "OpenCode",
   description: "OpenCode local runtime with OpenDucktor MCP integration.",
   readOnlyRoleBlockedTools: [...OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS],
+  workflowToolAliasesByCanonical: createOpencodeWorkflowToolAliasesByCanonical(),
   capabilities: OPENCODE_RUNTIME_CAPABILITIES,
 } as const satisfies RuntimeDescriptor;

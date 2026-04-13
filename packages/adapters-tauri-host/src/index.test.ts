@@ -1256,6 +1256,8 @@ describe("TauriHostClient", () => {
               "ast_grep_replace",
               "lsp_rename",
             ],
+            workflowToolAliasesByCanonical:
+              OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
             capabilities: {
               supportsProfiles: true,
               supportsVariants: true,

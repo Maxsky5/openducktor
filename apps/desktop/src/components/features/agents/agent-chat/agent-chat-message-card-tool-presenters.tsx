@@ -1,3 +1,4 @@
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import {
   Bot,
@@ -120,12 +121,14 @@ type WorkflowToolMessageProps = {
   meta: ToolMeta;
   messageTimestamp: string;
   sessionWorkingDirectory?: string | null | undefined;
+  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
 };
 
 export const WorkflowToolMessage = ({
   meta,
   messageTimestamp,
   sessionWorkingDirectory,
+  workflowToolAliasesByCanonical,
 }: WorkflowToolMessageProps): ReactElement => {
   const durationMs = getToolDuration(meta, messageTimestamp);
   const hasInput = hasNonEmptyInput(meta.input);
@@ -161,7 +164,7 @@ export const WorkflowToolMessage = ({
                     : "text-pending-surface-foreground",
           )}
         >
-          {toolDisplayName(meta.tool)}
+          {toolDisplayName(meta.tool, workflowToolAliasesByCanonical)}
         </p>
         {statusLabel ? (
           <span
@@ -220,6 +223,7 @@ type RegularToolMessageProps = {
   messageTimestamp: string;
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
+  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
 };
 
 export const RegularToolMessage = ({
@@ -228,6 +232,7 @@ export const RegularToolMessage = ({
   messageTimestamp,
   timeLabel,
   sessionWorkingDirectory,
+  workflowToolAliasesByCanonical,
 }: RegularToolMessageProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
@@ -274,7 +279,9 @@ export const RegularToolMessage = ({
       >
         {toolIcon(meta.tool)}
       </span>
-      <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
+      <p className="shrink-0 font-medium text-current">
+        {toolDisplayName(meta.tool, workflowToolAliasesByCanonical)}
+      </p>
       {summaryText.length > 0 ? (
         <p className="truncate text-muted-foreground">{summaryText}</p>
       ) : null}

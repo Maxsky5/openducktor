@@ -1,3 +1,4 @@
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -466,6 +467,7 @@ type MessageBodyProps = {
   timeLabel: string;
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
+  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
 };
 
 export const MessageBody = ({
@@ -475,6 +477,7 @@ export const MessageBody = ({
   timeLabel,
   systemPromptBody,
   sessionWorkingDirectory,
+  workflowToolAliasesByCanonical,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
 
@@ -483,12 +486,13 @@ export const MessageBody = ({
   }
 
   if (meta?.kind === "tool") {
-    if (isOdtWorkflowMutationToolName(meta.tool)) {
+    if (isOdtWorkflowMutationToolName(meta.tool, workflowToolAliasesByCanonical)) {
       return (
         <WorkflowToolMessage
           meta={meta}
           messageTimestamp={message.timestamp}
           sessionWorkingDirectory={sessionWorkingDirectory}
+          workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
         />
       );
     }
@@ -499,6 +503,7 @@ export const MessageBody = ({
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
+        workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
       />
     );
   }

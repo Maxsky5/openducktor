@@ -1,3 +1,4 @@
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   type AgentModelSelection,
   type AgentRole,
@@ -26,6 +27,7 @@ type AgentChatMessageCardViewModelInput = {
   sessionRole: AgentRole | null;
   sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors: Record<string, string> | undefined;
+  workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
 };
 
 type AgentChatMessageCardViewModel = {
@@ -135,6 +137,7 @@ export const buildAgentChatMessageCardViewModel = ({
   sessionRole,
   sessionSelectedModel: _sessionSelectedModel,
   sessionAgentColors,
+  workflowToolAliasesByCanonical,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
@@ -143,7 +146,9 @@ export const buildAgentChatMessageCardViewModel = ({
   const isUserMessage = message.role === "user";
   const isQueuedUserMessage = isUserMessage && meta?.kind === "user" && meta.state === "queued";
   const isToolMessage = meta?.kind === "tool";
-  const isWorkflowToolMessage = meta?.kind === "tool" && isOdtWorkflowMutationToolName(meta.tool);
+  const isWorkflowToolMessage =
+    meta?.kind === "tool" &&
+    isOdtWorkflowMutationToolName(meta.tool, workflowToolAliasesByCanonical);
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
   const isSubtaskMessage = meta?.kind === "subtask";
   const isSessionNoticeMessage = meta?.kind === "session_notice";

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contracts";
 import {
   type ComponentProps,
   createElement,
@@ -37,10 +37,10 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
 };
 
 const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
-  runtimeDefinitions: [],
+  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
-  refreshRuntimeDefinitions: async () => [],
+  refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
   loadRepoRuntimeCatalog: async () => {
     throw new Error("Test runtime catalog loader was not configured.");
   },
