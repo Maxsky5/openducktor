@@ -1,4 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  type ComponentProps,
+  createElement,
+  type PropsWithChildren,
+  type ReactElement,
+} from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { createHookHarness as createRawHookHarness } from "@/test-utils/react-hook-harness";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
@@ -97,9 +107,46 @@ let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
 type AgentMessage = AgentChatMessage;
+type RuntimeDefinitionsContextValue = NonNullable<
+  ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
+>;
+
+const cloneRuntimeDescriptor = (): RuntimeDescriptor => ({
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  readOnlyRoleBlockedTools: [...OPENCODE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools],
+  workflowToolAliasesByCanonical: Object.fromEntries(
+    Object.entries(OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical).map(
+      ([toolName, aliases]) => [toolName, aliases ? [...aliases] : aliases],
+    ),
+  ) as RuntimeDescriptor["workflowToolAliasesByCanonical"],
+  capabilities: {
+    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+    supportedScopes: [...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.supportedScopes],
+  },
+});
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioDocuments, initialProps);
+
+const createHookHarnessWithRuntimeDefinitions = (
+  initialProps: HookArgs,
+  runtimeDefinitionsRef: {
+    current: RuntimeDefinitionsContextValue;
+  },
+) => {
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(
+      QueryProvider,
+      { useIsolatedClient: true },
+      createElement(
+        RuntimeDefinitionsContext.Provider,
+        { value: runtimeDefinitionsRef.current },
+        children,
+      ),
+    );
+
+  return createRawHookHarness(useAgentStudioDocuments, initialProps, { wrapper });
+};
 
 const createBaseArgs = (): HookArgs => ({
   activeRepo: "/repo",
@@ -370,6 +417,77 @@ describe("useAgentStudioDocuments", () => {
 
       expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
       expect(reloadDocumentMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reprocesses mounted runtime aliases after runtime definitions hydrate", async () => {
+    setTaskDocumentsState({
+      specDoc: createDocumentState({
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+      }),
+    });
+
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      sessionId: "session-hydrated-aliases",
+      messages: [
+        createCompletedToolMessage({
+          tool: "openducktor_odt_set_spec",
+          input: { markdown: "# Updated spec after hydration" },
+          output: "completed 2026-02-22T09:00:00.000Z",
+        }),
+      ],
+    });
+    const hookArgs = {
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    };
+    const runtimeDefinitionsRef: { current: RuntimeDefinitionsContextValue } = {
+      current: {
+        runtimeDefinitions: [],
+        isLoadingRuntimeDefinitions: true,
+        runtimeDefinitionsError: null,
+        refreshRuntimeDefinitions: async () => [cloneRuntimeDescriptor()],
+        loadRepoRuntimeCatalog: async () => {
+          throw new Error("Test runtime catalog loader was not configured.");
+        },
+        loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+        loadRepoRuntimeFileSearch: async () => [],
+      },
+    };
+    const harness = createHookHarnessWithRuntimeDefinitions(hookArgs, runtimeDefinitionsRef);
+
+    try {
+      await harness.mount();
+
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
+
+      const previousRuntimeDefinitionsContext = runtimeDefinitionsRef.current;
+      runtimeDefinitionsRef.current = {
+        runtimeDefinitions: [cloneRuntimeDescriptor()],
+        isLoadingRuntimeDefinitions: false,
+        runtimeDefinitionsError: null,
+        refreshRuntimeDefinitions: async () => [cloneRuntimeDescriptor()],
+        loadRepoRuntimeCatalog: previousRuntimeDefinitionsContext.loadRepoRuntimeCatalog,
+        loadRepoRuntimeSlashCommands:
+          previousRuntimeDefinitionsContext.loadRepoRuntimeSlashCommands,
+        loadRepoRuntimeFileSearch: previousRuntimeDefinitionsContext.loadRepoRuntimeFileSearch,
+      };
+
+      await harness.update(hookArgs);
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
+        markdown: "# Updated spec after hydration",
+        updatedAt: "2026-02-22T09:00:00.000Z",
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
     } finally {
       await harness.unmount();
     }

@@ -83,6 +83,8 @@ export function useAgentStudioDocuments({
   const refreshedTaskVersionsRef = useRef(new Set<string>());
   const previousSessionIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
+  const previousWorkflowAliasMetadataReadyRef = useRef(false);
+  const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
   const taskDocumentVersionKey =
     taskId && selectedTask
       ? [
@@ -105,7 +107,23 @@ export function useAgentStudioDocuments({
     refreshedTaskVersionsRef.current.clear();
     previousSessionIdRef.current = null;
     previousMessagesRef.current = null;
+    previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
   }, [documentContextKey]);
+
+  useEffect(() => {
+    if (!activeSession || activeSession.role === "build" || !activeSession.runtimeKind) {
+      previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
+      return;
+    }
+
+    const didHydrateWorkflowAliasMetadata =
+      workflowAliasMetadataReady && !previousWorkflowAliasMetadataReadyRef.current;
+    previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
+
+    if (didHydrateWorkflowAliasMetadata) {
+      previousMessagesRef.current = null;
+    }
+  }, [activeSession, workflowAliasMetadataReady]);
 
   useEffect(() => {
     if (!taskId || taskDocumentVersionKey === null) {
