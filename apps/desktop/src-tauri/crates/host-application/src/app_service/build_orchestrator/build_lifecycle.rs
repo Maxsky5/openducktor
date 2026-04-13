@@ -417,11 +417,61 @@ impl AppService {
     }
 }
 
+fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
+    (session.started_at.as_str(), session.session_id.as_str())
+}
+
+fn is_active_build_session(session: &AgentSessionDocument) -> bool {
+    session
+        .external_session_id
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn normalize_path_for_comparison(path: &str) -> PathBuf {
+    let path = path.trim();
+    let mut normalized = PathBuf::new();
+    for component in PathBuf::from(path).components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        PathBuf::from(path)
+    } else {
+        normalized
+    }
+}
+
+fn parse_http_status_code(status_line: &str) -> Result<u16> {
+    let trimmed = status_line.trim();
+    let status_code = trimmed
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| anyhow!("OpenCode abort response missing HTTP status code"))?;
+    status_code
+        .parse::<u16>()
+        .with_context(|| format!("Invalid OpenCode abort HTTP status code: {status_code}"))
+}
+
+fn extract_http_response_body(response: &str) -> String {
+    response
+        .split_once("\r\n\r\n")
+        .or_else(|| response.split_once("\n\n"))
+        .map(|(_, body)| body.trim().to_string())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app_service::test_support::{build_service_with_state, make_emitter, make_task};
-    use host_domain::{GitTargetBranch, TaskStatus};
+    use host_domain::{GitTargetBranch, RuntimeRole, TaskStatus};
     use host_infra_system::RepoConfig;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -432,7 +482,7 @@ mod tests {
             runtime_id: "runtime-1".to_string(),
             repo_path: "/tmp/repo".to_string(),
             task_id: None,
-            role: super::super::RuntimeRole::Workspace,
+            role: RuntimeRole::Workspace,
             working_directory: "/tmp/repo".to_string(),
             runtime_route: RuntimeRoute::Stdio,
             started_at: "2026-04-13T00:00:00Z".to_string(),
@@ -496,54 +546,4 @@ mod tests {
             "OpenCode build session abort requires a local_http runtime route with a port"
         ));
     }
-}
-
-fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (session.started_at.as_str(), session.session_id.as_str())
-}
-
-fn is_active_build_session(session: &AgentSessionDocument) -> bool {
-    session
-        .external_session_id
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-}
-
-fn normalize_path_for_comparison(path: &str) -> PathBuf {
-    let path = path.trim();
-    let mut normalized = PathBuf::new();
-    for component in PathBuf::from(path).components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            other => normalized.push(other.as_os_str()),
-        }
-    }
-
-    if normalized.as_os_str().is_empty() {
-        PathBuf::from(path)
-    } else {
-        normalized
-    }
-}
-
-fn parse_http_status_code(status_line: &str) -> Result<u16> {
-    let trimmed = status_line.trim();
-    let status_code = trimmed
-        .split_whitespace()
-        .nth(1)
-        .ok_or_else(|| anyhow!("OpenCode abort response missing HTTP status code"))?;
-    status_code
-        .parse::<u16>()
-        .with_context(|| format!("Invalid OpenCode abort HTTP status code: {status_code}"))
-}
-
-fn extract_http_response_body(response: &str) -> String {
-    response
-        .split_once("\r\n\r\n")
-        .or_else(|| response.split_once("\n\n"))
-        .map(|(_, body)| body.trim().to_string())
-        .unwrap_or_default()
 }

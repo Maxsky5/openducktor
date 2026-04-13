@@ -577,7 +577,7 @@ mod tests {
     };
     use crate::app_service::test_support::build_service_with_state;
     use anyhow::Result;
-    use host_domain::AgentRuntimeKind;
+    use host_domain::{AgentRuntimeKind, RuntimeRoute};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
