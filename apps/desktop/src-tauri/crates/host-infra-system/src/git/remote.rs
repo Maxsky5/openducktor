@@ -167,7 +167,6 @@ impl GitCliPort {
 
     fn resolve_target_remote_name_impl(
         &self,
-        repo_path: &Path,
         target_branch: &str,
         available_remotes: &HashSet<String>,
     ) -> Result<Option<String>> {
@@ -233,11 +232,9 @@ impl GitCliPort {
             ));
         }
 
-        if let Some(remote) = self.resolve_target_remote_name_impl(
-            repo_path,
-            target_branch.as_str(),
-            &available_remotes,
-        )? {
+        if let Some(remote) =
+            self.resolve_target_remote_name_impl(target_branch.as_str(), &available_remotes)?
+        {
             Self::push_unique_remote(&mut remotes, &mut seen, remote);
         }
 
