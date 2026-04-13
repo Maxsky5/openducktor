@@ -141,7 +141,7 @@ const noopOpenSession = (
 ): void => {};
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
-  const { activeRepo, activeBranch } = useWorkspaceState();
+  const { activeRepo, activeBranch, branches } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
@@ -160,6 +160,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
     unlinkingPullRequestTaskId,
+    setTaskTargetBranch,
   } = useTasksState();
   const {
     bootstrapTaskSessions,
@@ -327,6 +328,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const orchestration = useAgentStudioOrchestrationController({
     activeRepo,
+    branches,
     selection: {
       ...selection,
       contextSwitchVersion,
@@ -347,6 +349,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,
+      setTaskTargetBranch,
       replyAgentPermission,
       answerAgentQuestion,
     },
@@ -412,6 +415,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       />
       <AgentsPageRightPanelRuntime
         activeRepo={activeRepo}
+        branches={branches}
         activeBranch={activeBranch}
         viewRole={selection.viewRole}
         session={rightPanelSession}
@@ -423,6 +427,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         repoSettings={orchestration.repoSettings}
         runCompletionRecoverySignal={runCompletionRecoverySignal}
         runs={runs}
+        setTaskTargetBranch={setTaskTargetBranch}
         detectingPullRequestTaskId={detectingPullRequestTaskId}
         onDetectPullRequest={handleDetectPullRequest}
         onResolveGitConflict={handleResolveRebaseConflict}

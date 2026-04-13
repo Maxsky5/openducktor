@@ -19,6 +19,8 @@ export type KanbanSessionStartIntent = {
   role: AgentRole;
   scenario: AgentScenario;
   initialStartMode?: AgentSessionStartMode;
+  initialTargetBranch?: GitTargetBranch | null;
+  initialTargetBranchError?: string | null;
   targetWorkingDirectory?: string | null;
   sourceSessionId?: string | null;
   existingSessionOptions?: Array<{
@@ -37,6 +39,7 @@ export type KanbanSessionStartIntent = {
 
 export type KanbanResolvedSessionStartIntent = KanbanSessionStartIntent & {
   startMode: AgentSessionStartMode;
+  targetBranch?: GitTargetBranch;
 };
 
 export type TaskApprovalMode = "direct_merge" | "pull_request";

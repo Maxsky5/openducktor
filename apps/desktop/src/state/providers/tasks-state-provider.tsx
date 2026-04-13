@@ -35,6 +35,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     unlinkPullRequest,
     createTask,
     updateTask,
+    setTaskTargetBranch,
     deleteTask,
     resetTaskImplementation,
     resetTask,
@@ -67,6 +68,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
         unlinkPullRequest,
         createTask,
         updateTask,
+        setTaskTargetBranch,
         deleteTask,
         resetTaskImplementation,
         resetTask,
@@ -101,6 +103,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       tasks,
       transitionTask,
       updateTask,
+      setTaskTargetBranch,
     ],
   );
 

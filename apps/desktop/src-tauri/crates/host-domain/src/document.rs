@@ -1,4 +1,4 @@
-use crate::git::{DirectMergeRecord, PullRequestRecord};
+use crate::git::{DirectMergeRecord, GitTargetBranch, PullRequestRecord};
 use serde::{Deserialize, Serialize};
 
 pub const ODT_SET_SPEC_SOURCE_TOOL: &str = "odt_set_spec";
@@ -168,6 +168,7 @@ fn default_runtime_kind() -> String {
 pub struct TaskMetadata {
     pub spec: SpecDocument,
     pub plan: SpecDocument,
+    pub target_branch: Option<GitTargetBranch>,
     pub qa_report: Option<QaReportDocument>,
     pub pull_request: Option<PullRequestRecord>,
     pub direct_merge: Option<DirectMergeRecord>,

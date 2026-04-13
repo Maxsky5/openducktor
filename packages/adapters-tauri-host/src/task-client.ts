@@ -132,6 +132,7 @@ export class TauriTaskClient {
       taskId,
       patch: updatePatch,
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
 

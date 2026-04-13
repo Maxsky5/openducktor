@@ -3,6 +3,7 @@ import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/co
 import { LoaderCircle } from "lucide-react";
 import type { FormEvent, ReactElement } from "react";
 import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
+import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
 import {
@@ -22,6 +23,7 @@ type SessionStartModalConfirmInput =
       runInBackground: boolean;
       startMode: AgentSessionStartMode;
       sourceSessionId: string | null;
+      targetBranch?: string;
     };
 
 export type SessionStartModalModel = {
@@ -45,8 +47,12 @@ export type SessionStartModalModel = {
   selectedStartMode: AgentSessionStartMode;
   existingSessionOptions: ComboboxOption[];
   selectedSourceSessionId: string;
+  showTargetBranchSelector?: boolean;
+  targetBranchOptions?: ComboboxOption[];
+  selectedTargetBranch?: string;
   onSelectStartMode: (startMode: AgentSessionStartMode) => void;
   onSelectSourceSession: (sessionId: string) => void;
+  onSelectTargetBranch?: (branch: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
@@ -79,8 +85,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     selectedStartMode,
     existingSessionOptions,
     selectedSourceSessionId,
+    showTargetBranchSelector = false,
+    targetBranchOptions = [],
+    selectedTargetBranch = "",
     onSelectStartMode,
     onSelectSourceSession,
+    onSelectTargetBranch,
     onSelectRuntime,
     onSelectAgent,
     onSelectModel,
@@ -124,6 +134,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
       runInBackground: false,
       startMode: selectedStartMode,
       sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+      ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
     });
   };
 
@@ -201,6 +212,27 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                     disabled={isStarting || !hasExistingSessionOptions}
                     className="sm:min-w-[28rem]"
                     onValueChange={onSelectSourceSession}
+                  />
+                </div>
+              ) : null}
+
+              {showTargetBranchSelector ? (
+                <div className="grid gap-1.5" data-testid="session-start-target-branch-field">
+                  <label
+                    className="text-sm font-medium text-foreground"
+                    htmlFor="session-start-target-branch"
+                  >
+                    Target branch
+                  </label>
+                  <BranchSelector
+                    value={selectedTargetBranch}
+                    options={targetBranchOptions}
+                    placeholder={
+                      targetBranchOptions.length > 0 ? "Select branch..." : "Branches unavailable"
+                    }
+                    disabled={isStarting || targetBranchOptions.length === 0}
+                    className="sm:min-w-[28rem]"
+                    onValueChange={(branch) => onSelectTargetBranch?.(branch)}
                   />
                 </div>
               ) : null}
@@ -312,6 +344,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                       runInBackground: true,
                       startMode: selectedStartMode,
                       sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+                      ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
                     })
                   }
                 >

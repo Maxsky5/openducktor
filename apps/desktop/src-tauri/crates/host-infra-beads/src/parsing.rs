@@ -2,7 +2,8 @@ use anyhow::Result;
 use host_domain::{AgentWorkflows, PullRequestRecord, TaskCard};
 
 use crate::metadata::{
-    metadata_bool_qa_required, metadata_document_summary, metadata_namespace, parse_metadata_root,
+    metadata_bool_qa_required, metadata_document_summary, metadata_namespace,
+    metadata_target_branch_strict, parse_metadata_root,
 };
 use crate::model::RawIssue;
 use crate::normalize::{
@@ -26,6 +27,13 @@ impl BeadsTaskStore {
             .unwrap_or_else(|| default_ai_review_enabled(&issue_type));
         let document_summary = metadata_document_summary(namespace);
         let pull_request = parse_pull_request_metadata(namespace);
+        let (target_branch, target_branch_error) = match namespace {
+            Some(namespace) => match metadata_target_branch_strict(namespace) {
+                Ok(target_branch) => (target_branch, None),
+                Err(error) => (None, Some(error.to_string())),
+            },
+            None => (None, None),
+        };
         let mut agent_sessions = namespace
             .and_then(|ns| ns.get("agentSessions"))
             .and_then(crate::metadata::parse_agent_sessions)
@@ -59,6 +67,8 @@ impl BeadsTaskStore {
             parent_id,
             subtask_ids: Vec::new(),
             agent_sessions,
+            target_branch,
+            target_branch_error,
             pull_request,
             document_summary,
             agent_workflows: AgentWorkflows::default(),

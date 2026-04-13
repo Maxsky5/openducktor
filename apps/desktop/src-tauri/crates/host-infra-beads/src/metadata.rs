@@ -1,5 +1,7 @@
+use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentSessionDocument, TaskDocumentPresence, TaskDocumentSummary, TaskQaDocumentPresence,
+    AgentSessionDocument, GitTargetBranch, TaskDocumentPresence, TaskDocumentSummary,
+    TaskQaDocumentPresence,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -27,6 +29,29 @@ pub(crate) fn metadata_namespace<'a>(
 
 pub(crate) fn metadata_bool_qa_required(namespace: &Map<String, Value>) -> Option<bool> {
     namespace.get("qaRequired").and_then(Value::as_bool)
+}
+
+fn parse_target_branch_value(value: &Value) -> Result<GitTargetBranch> {
+    serde_json::from_value(value.clone()).map_err(|error| {
+        anyhow!(
+            "Invalid openducktor.targetBranch metadata: {error}. Fix the saved task metadata or choose a valid target branch again."
+        )
+    })
+}
+
+pub(crate) fn metadata_target_branch(namespace: &Map<String, Value>) -> Option<GitTargetBranch> {
+    namespace
+        .get("targetBranch")
+        .and_then(|value| parse_target_branch_value(value).ok())
+}
+
+pub(crate) fn metadata_target_branch_strict(
+    namespace: &Map<String, Value>,
+) -> Result<Option<GitTargetBranch>> {
+    namespace
+        .get("targetBranch")
+        .map(parse_target_branch_value)
+        .transpose()
 }
 
 pub(crate) fn markdown_document_presence(value: Option<&Value>) -> TaskDocumentPresence {

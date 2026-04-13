@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +36,7 @@ const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
+  branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
@@ -45,6 +46,7 @@ type UseKanbanSessionStartFlowArgs = {
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
@@ -138,6 +140,7 @@ export const resolveKanbanBuildStartScenario = (
 
 export function useKanbanSessionStartFlow({
   activeRepo,
+  branches = [],
   repoSettings,
   tasks,
   sessions,
@@ -147,6 +150,7 @@ export function useKanbanSessionStartFlow({
   hydrateRequestedTaskSessionHistory,
   loadAgentSessions: _loadAgentSessions,
   humanRequestChangesTask,
+  setTaskTargetBranch,
   startAgentSession,
   sendAgentMessage,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
@@ -161,6 +165,7 @@ export function useKanbanSessionStartFlow({
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
     activeRepo,
+    branches,
     repoSettings,
   });
 
@@ -213,8 +218,19 @@ export function useKanbanSessionStartFlow({
 
   const startSessionIntent = useCallback(
     async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
+      const selectedTask = tasksRef.current.find((task) => task.id === intent.taskId) ?? null;
       return runSessionStartRequest(
         {
+          ...(intent.initialTargetBranch === undefined
+            ? {
+                initialTargetBranch: selectedTask?.targetBranch ?? null,
+              }
+            : { initialTargetBranch: intent.initialTargetBranch }),
+          ...(intent.initialTargetBranchError === undefined
+            ? {
+                initialTargetBranchError: selectedTask?.targetBranchError ?? null,
+              }
+            : { initialTargetBranchError: intent.initialTargetBranchError }),
           source: "kanban",
           taskId: intent.taskId,
           role: intent.role,
@@ -239,6 +255,7 @@ export function useKanbanSessionStartFlow({
             role: intent.role,
             scenario: intent.scenario,
             startMode: decision.startMode,
+            ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
             postStartAction: intent.postStartAction,
             ...(intent.targetWorkingDirectory !== undefined
               ? { targetWorkingDirectory: intent.targetWorkingDirectory }
@@ -260,6 +277,7 @@ export function useKanbanSessionStartFlow({
             queryClient,
             startAgentSession,
             humanRequestChangesTask,
+            ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
             openSessionInAgentStudio,
             sendAgentMessage,
           });
@@ -274,6 +292,7 @@ export function useKanbanSessionStartFlow({
       queryClient,
       runSessionStartRequest,
       sendAgentMessage,
+      setTaskTargetBranch,
       startAgentSession,
     ],
   );

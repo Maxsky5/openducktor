@@ -19,6 +19,10 @@ const summaryPayload = {
     issueType: "task",
     aiReviewEnabled: true,
     labels: [],
+    targetBranch: {
+      remote: "origin",
+      branch: "main",
+    },
     createdAt: "2026-04-09T00:00:00.000Z",
     updatedAt: "2026-04-09T00:00:00.000Z",
     qaVerdict: "not_reviewed",

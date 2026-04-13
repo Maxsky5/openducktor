@@ -294,6 +294,11 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           rebaseOntoTarget={model.rebaseOntoTarget ?? null}
           pullFromUpstream={model.pullFromUpstream ?? null}
           onDetectPullRequest={model.onDetectPullRequest ?? null}
+          targetBranchOptions={model.targetBranchOptions ?? []}
+          targetBranchSelectionValue={model.targetBranchSelectionValue ?? ""}
+          {...(model.onUpdateTargetBranch
+            ? { onUpdateTargetBranch: model.onUpdateTargetBranch }
+            : {})}
           setDiffScope={handleDiffScopeChange}
           onRefresh={model.refresh}
         />

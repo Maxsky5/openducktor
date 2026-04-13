@@ -2200,6 +2200,29 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("blocks diff loading and reports actionable error when task target branch metadata is invalid", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      preconditionError:
+        "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.error ===
+          "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+      );
+
+      expect(runsListMock).not.toHaveBeenCalled();
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().worktreePath).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refresh retries failed worktree resolution before loading diff data", async () => {
     let resolveAttempt = 0;
     runsListMock.mockImplementation(async () => {

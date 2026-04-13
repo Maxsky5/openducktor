@@ -270,10 +270,18 @@ impl BeadsTaskStore {
             self.invalidate_task_list_cache(repo_path)?;
         }
 
-        if let Some(ai_review_enabled) = patch.ai_review_enabled {
+        if patch.ai_review_enabled.is_some() || patch.target_branch.is_some() {
             let (mut root, namespace_key, mut namespace_map) =
                 self.load_namespace(repo_path, task_id)?;
-            namespace_map.insert("qaRequired".to_string(), Value::Bool(ai_review_enabled));
+            if let Some(ai_review_enabled) = patch.ai_review_enabled {
+                namespace_map.insert("qaRequired".to_string(), Value::Bool(ai_review_enabled));
+            }
+            if let Some(target_branch) = patch.target_branch {
+                namespace_map.insert(
+                    "targetBranch".to_string(),
+                    serde_json::to_value(target_branch)?,
+                );
+            }
             self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         }
 

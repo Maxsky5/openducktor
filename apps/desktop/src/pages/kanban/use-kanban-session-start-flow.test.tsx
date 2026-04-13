@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
@@ -132,6 +133,11 @@ const createDefaultRepoSettings = (): RepoSettingsInput => ({
 
 const createBaseArgs = (): HookArgs => ({
   activeRepo: "/repo",
+  branches: [
+    { name: "main", isCurrent: true, isRemote: false },
+    { name: "origin/main", isCurrent: false, isRemote: true },
+    { name: "origin/release/2026.04", isCurrent: false, isRemote: true },
+  ],
   repoSettings: null,
   tasks: [createTaskCardFixture({ id: "TASK-1", status: "human_review" })],
   sessions: [
@@ -172,6 +178,7 @@ const createBaseArgs = (): HookArgs => ({
   hydrateRequestedTaskSessionHistory: async () => {},
   loadAgentSessions: async () => {},
   humanRequestChangesTask: async () => {},
+  setTaskTargetBranch: async () => {},
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
 });
@@ -228,6 +235,73 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("blocks builder start when the persisted task target branch is invalid", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      tasks: [
+        createTaskCardFixture({
+          id: "TASK-1",
+          status: "ready_for_dev",
+          targetBranchError:
+            "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+        }),
+      ],
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        state.onDelegate("TASK-1");
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().sessionStartModal).toBeNull();
+      expect(toastError).toHaveBeenCalledWith("Invalid task target branch", {
+        description:
+          "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+      });
+    } finally {
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      await harness.unmount();
+    }
+  });
+
+  test("does not block QA start when a task has an invalid build target branch", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      tasks: [
+        createTaskCardFixture({
+          id: "TASK-1",
+          status: "ready_for_dev",
+          targetBranchError:
+            "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+        }),
+      ],
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        state.onQaStart("TASK-1");
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().sessionStartModal?.title).toBe("Start QA Session");
+      expect(toastError).not.toHaveBeenCalled();
+    } finally {
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      await harness.unmount();
+    }
+  });
+
   test("opens the shared session start modal for pull request generation with reuse as the default builder flow", async () => {
     const harness = createHookHarness(createBaseArgs());
     let startPromise: Promise<string | undefined> | undefined;
@@ -271,7 +345,21 @@ describe("useKanbanSessionStartFlow", () => {
   test("pull request generation resolves with the started builder session id using reuse by default", async () => {
     const startAgentSession = mock(async () => "builder-session-pr");
     const args = createBaseArgs();
-    args.repoSettings = createDefaultRepoSettings();
+    args.repoSettings = {
+      ...createDefaultRepoSettings(),
+      agentDefaults: {
+        spec: null,
+        planner: null,
+        build: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "default",
+          profileId: "builder",
+        },
+        qa: null,
+      },
+    };
     args.startAgentSession = startAgentSession;
 
     const harness = createHookHarness(args);
@@ -283,7 +371,12 @@ describe("useKanbanSessionStartFlow", () => {
       startPromise = state.onPullRequestGenerate("TASK-1");
     });
 
-    await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+    await harness.waitFor((state) => state.sessionStartModal != null);
+
+    await harness.run((state) => {
+      state.sessionStartModal?.onSelectAgent("builder");
+      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+    });
 
     await harness.run(async (state) => {
       state.sessionStartModal?.onConfirm({
@@ -305,6 +398,64 @@ describe("useKanbanSessionStartFlow", () => {
         sourceSessionId: "builder-session-2",
       }),
     );
+
+    await harness.unmount();
+  });
+
+  test("build starts persist the selected task target branch before starting the session", async () => {
+    const callOrder: string[] = [];
+    const setTaskTargetBranch = mock(async () => {
+      callOrder.push("target-branch");
+    });
+    const startAgentSession = mock(async () => {
+      callOrder.push("start-session");
+      return "builder-session-new";
+    });
+    const args = createBaseArgs();
+    args.repoSettings = {
+      ...createDefaultRepoSettings(),
+      agentDefaults: {
+        spec: null,
+        planner: null,
+        build: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "default",
+          profileId: "builder",
+        },
+        qa: null,
+      },
+    };
+    args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })];
+    args.setTaskTargetBranch = setTaskTargetBranch;
+    args.startAgentSession = startAgentSession;
+
+    const harness = createHookHarness(args);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.onDelegate("TASK-1");
+    });
+
+    await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+
+    await harness.run(async (state) => {
+      state.sessionStartModal?.onConfirm({
+        runInBackground: false,
+        startMode: "fresh",
+        sourceSessionId: null,
+        targetBranch: "refs/remotes/origin/release/2026.04",
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setTaskTargetBranch).toHaveBeenCalledWith("TASK-1", {
+      remote: "origin",
+      branch: "release/2026.04",
+    });
+    expect(callOrder).toEqual(["target-branch", "start-session"]);
 
     await harness.unmount();
   });

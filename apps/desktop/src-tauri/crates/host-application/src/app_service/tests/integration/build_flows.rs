@@ -288,6 +288,101 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
 }
 
 #[test]
+fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local_branch_exists(
+) -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-task-target-branch-unavailable");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+
+    let remote = root.join("remote.git");
+    let remote_path = remote.to_string_lossy().to_string();
+    run_command_in(
+        root.as_path(),
+        "git",
+        &["init", "--bare", remote_path.as_str()],
+    )?;
+    run_command_in(
+        repo.as_path(),
+        "git",
+        &["remote", "add", "origin", remote_path.as_str()],
+    )?;
+    run_command_in(repo.as_path(), "git", &["push", "-u", "origin", "main"])?;
+
+    run_command_in(repo.as_path(), "git", &["checkout", "-b", "develop"])?;
+    fs::write(repo.join("develop-only.txt"), "develop\n")?;
+    run_command_in(repo.as_path(), "git", &["add", "develop-only.txt"])?;
+    run_command_in(repo.as_path(), "git", &["commit", "-m", "develop base"])?;
+    run_command_in(repo.as_path(), "git", &["push", "-u", "origin", "develop"])?;
+
+    run_command_in(repo.as_path(), "git", &["checkout", "main"])?;
+    run_command_in(
+        repo.as_path(),
+        "git",
+        &["branch", "-D", "-r", "origin/develop"],
+    )?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+    task_state.lock().expect("task state lock poisoned").tasks[0].target_branch =
+        Some(host_domain::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "develop".to_string(),
+        });
+
+    let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
+    let emitter = make_emitter(events);
+    let error = service
+        .build_start(repo_path.as_str(), "task-1", "opencode", emitter)
+        .expect_err("missing recorded remote-tracking branch should fail");
+
+    assert!(error
+        .to_string()
+        .contains("Configured target branch is unavailable for build worktree creation"));
+    assert!(error.to_string().contains("origin/develop"));
+    assert!(!worktree_base.join("task-1").exists());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("build-copy-configured-files");

@@ -113,6 +113,7 @@ export type TasksStateContextValue = {
   unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
@@ -198,6 +199,7 @@ export type AgentStateContextValue = {
           runtimeKind?: RuntimeKind;
           scenario?: AgentScenario;
           sendKickoff?: boolean;
+          kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "reuse";
           sourceSessionId: string;
         }
@@ -208,6 +210,7 @@ export type AgentStateContextValue = {
           scenario?: AgentScenario;
           selectedModel: AgentModelSelection;
           sendKickoff?: boolean;
+          kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fresh";
           targetWorkingDirectory?: string | null;
         }
@@ -218,6 +221,7 @@ export type AgentStateContextValue = {
           scenario?: AgentScenario;
           selectedModel: AgentModelSelection;
           sendKickoff?: boolean;
+          kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fork";
           sourceSessionId: string;
         },

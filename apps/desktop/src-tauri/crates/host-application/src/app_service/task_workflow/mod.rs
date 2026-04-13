@@ -1,7 +1,7 @@
 mod approval_context_service;
 mod approval_service;
 mod approval_support;
-mod builder_branch_service;
+pub(crate) mod builder_branch_service;
 mod builder_cleanup_service;
 mod cleanup_plans;
 mod direct_merge_workflow_service;

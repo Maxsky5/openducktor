@@ -39,6 +39,7 @@ export type BuildAgentKickoffPromptInput = {
     qaRequired?: boolean;
     description?: string;
   };
+  git?: AgentPromptGitContext;
   overrides?: RepoPromptOverrides;
 };
 
@@ -504,12 +505,13 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
     builtinVersion: 2,
     template: joinPromptBlocks(
       "Scenario: Pull request generation.",
-      bulletSection("Objective", [
-        "Create or update the canonical pull request for this task from the current Builder session or a fork created from it.",
-      ]),
+      bulletSection("Objective", ["Create or update the canonical pull request for this task."]),
       bulletSection("Required sequence", [
-        "Use the runtime's native git and GitHub tools to inspect branch state, push the source branch if needed, and create or update the pull request.",
-        'After the pull request exists, call odt_set_pull_request exactly once with taskId {{task.id}}, providerId "github", and the pull request number.',
+        "Use the runtime's native git and provider-native pull-request tools (ex: `gh` or `glab` CLI) to inspect source-branch state, remote publication state, and existing pull-request state before creating anything new.",
+        "Treat the task target branch as the authoritative pull-request base branch. Do not silently substitute a repo default or another inferred branch when task context provides a target branch.",
+        "If a pull request already exists for the relevant source branch and base branch, ask the user if he wants to reuse it or create a new one.",
+        "Write the pull request title and body from the task, spec, plan, and actual diff so the summary explains why the change exists and what changed at a high level.",
+        "After the pull request exists, call odt_set_pull_request exactly once with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
         "OpenDucktor will resolve and persist the canonical pull request metadata itself.",
       ]),
       bulletSection("Stop condition", [
@@ -595,9 +597,20 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 2,
-    template:
-      'Focus only on pull request publication work for the current Builder session or fork.\nInspect branch and remote state, create or update the GitHub pull request, then call odt_set_pull_request with taskId {{task.id}}, providerId "github", and the pull request number.\nUse taskId {{task.id}} for every odt_* tool call.',
+    builtinVersion: 4,
+    template: joinPromptBlocks(
+      "Focus only on pull request publication work for the current Builder session.",
+      lineSection("Pull request context", ["- targetBranch: {{git.targetBranch}}"]),
+      bulletSection("Publication workflow", [
+        "Treat the targetBranch above as the pull-request base branch for this task.",
+        "Inspect the current source branch, remote branch, and existing pull-request state before deciding whether to create a new pull request or update an existing one.",
+        "Always rebase on targetBranch before pushing the source branch.",
+        "Then create or update the pull request against the exact targetBranch above using the provider-native tooling available.",
+        "Write a pull request title and body grounded in the task, spec, plan, and actual implementation diff.",
+        "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
+      ]),
+      "Use taskId {{task.id}} for every odt_* tool call.",
+    ),
   },
   "kickoff.qa_review": {
     id: "kickoff.qa_review",
@@ -845,10 +858,20 @@ export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
 export const buildAgentKickoffPromptBundle = (
   input: BuildAgentKickoffPromptInput,
 ): BuiltAgentPrompt => {
+  if (input.scenario === "build_pull_request_generation") {
+    const targetBranch = input.git?.targetBranch?.trim();
+    if (!targetBranch) {
+      throw new Error(
+        'Missing required git context for "build_pull_request_generation": targetBranch.',
+      );
+    }
+  }
+
   return buildPromptFromTemplates({
     templateIds: [toKickoffTemplateId(input.scenario)],
     role: input.role,
     task: input.task,
+    ...(input.git ? { git: input.git } : {}),
     overrides: input.overrides,
   });
 };

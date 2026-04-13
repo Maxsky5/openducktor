@@ -22,6 +22,7 @@ type TaskPromptContext = {
 type SessionStartPromptOptions = {
   overrides?: RepoPromptOverrides;
   task?: TaskPromptContext;
+  git?: AgentPromptGitContext;
 };
 
 export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
@@ -66,6 +67,7 @@ export const kickoffPromptForScenario = (
       taskId,
       ...(options?.task ?? {}),
     },
+    ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
   });
 };

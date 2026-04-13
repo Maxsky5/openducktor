@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -54,6 +54,7 @@ export type AgentSessionActionState = Pick<
 
 type UseAgentStudioSessionActionsArgs = {
   activeRepo: string | null;
+  branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
@@ -71,6 +72,7 @@ type UseAgentStudioSessionActionsArgs = {
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -78,6 +80,7 @@ type UseAgentStudioSessionActionsArgs = {
 
 export function useAgentStudioSessionActions({
   activeRepo,
+  branches = [],
   taskId,
   role,
   scenario,
@@ -95,6 +98,7 @@ export function useAgentStudioSessionActions({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
   humanRequestChangesTask,
+  setTaskTargetBranch,
   answerAgentQuestion,
   updateQuery,
   onContextSwitchIntent,
@@ -196,6 +200,7 @@ export function useAgentStudioSessionActions({
     handleCreateSession,
   } = useAgentStudioSessionStartFlow({
     activeRepo,
+    branches,
     taskId,
     role,
     scenario,
@@ -212,6 +217,7 @@ export function useAgentStudioSessionActions({
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
+    ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
   });

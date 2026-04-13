@@ -115,6 +115,7 @@ type AgentsPageShellModelState = {
 let workspaceState = {
   activeRepo: "/repo",
   activeBranch: "main",
+  branches: [],
 };
 let checksState = {
   runtimeHealthByRuntime: {},
@@ -134,6 +135,7 @@ let tasksState: TasksStateContextValue = {
   unlinkPullRequest: mock(async () => undefined),
   createTask: mock(async () => undefined),
   updateTask: mock(async () => undefined),
+  setTaskTargetBranch: mock(async () => undefined),
   deleteTask: mock(async () => undefined),
   resetTaskImplementation: mock(async () => undefined),
   resetTask: mock(async () => undefined),
@@ -386,6 +388,7 @@ beforeEach(async () => {
   workspaceState = {
     activeRepo: "/repo",
     activeBranch: "main",
+    branches: [],
   };
   checksState = {
     runtimeHealthByRuntime: {},
@@ -405,6 +408,7 @@ beforeEach(async () => {
     unlinkPullRequest: mock(async () => undefined),
     createTask: mock(async () => undefined),
     updateTask: mock(async () => undefined),
+    setTaskTargetBranch: mock(async () => undefined),
     deleteTask: mock(async () => undefined),
     resetTaskImplementation: mock(async () => undefined),
     resetTask: mock(async () => undefined),

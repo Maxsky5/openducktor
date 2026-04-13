@@ -233,6 +233,43 @@ fn malformed_plan_collection_surfaces_document_error() -> Result<()> {
 }
 
 #[test]
+fn invalid_target_branch_metadata_does_not_block_document_reads() -> Result<()> {
+    let repo = RepoFixture::new("docs-ignore-invalid-target-branch");
+    let issue = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "targetBranch": {
+                    "remote": "origin"
+                },
+                "documents": {
+                    "spec": [{
+                        "markdown": "# Spec",
+                        "updatedAt": "2026-02-20T12:00:00Z",
+                        "updatedBy": "planner-agent",
+                        "sourceTool": ODT_SET_SPEC_SOURCE_TOOL,
+                        "revision": 1
+                    }]
+                }
+            }
+        })),
+    );
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let spec = store.get_spec(repo.path(), "task-1")?;
+
+    assert_eq!(spec.markdown, "# Spec");
+    assert!(spec.error.is_none());
+    Ok(())
+}
+
+#[test]
 fn set_spec_trims_markdown_and_increments_revision() -> Result<()> {
     let repo = RepoFixture::new("set-spec");
     let current = issue_value(

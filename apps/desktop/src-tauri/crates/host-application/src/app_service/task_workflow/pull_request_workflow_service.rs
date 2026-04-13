@@ -101,7 +101,7 @@ impl<'a> PullRequestWorkflowService<'a> {
             "Pull request detection",
         )?;
         let target_branch = BuilderBranchService::new(self.service)
-            .target_branch_for_repo(context.repo.repo_path.as_str())?
+            .effective_target_branch_for_task(context.repo.repo_path.as_str(), task_id)?
             .checkout_branch();
         let repo_path = self.service.resolve_task_repo_path(repo_path)?;
         let provider_service = PullRequestProviderService::new(self.service);
@@ -204,7 +204,7 @@ impl<'a> PullRequestWorkflowService<'a> {
             "Pull request linking",
         )?;
         let target_branch = BuilderBranchService::new(self.service)
-            .target_branch_for_repo(repo_path)?
+            .effective_target_branch_for_task(repo_path, task_id)?
             .checkout_branch();
 
         Ok(LinkedPullRequestMergeCleanup::BuilderBranches {

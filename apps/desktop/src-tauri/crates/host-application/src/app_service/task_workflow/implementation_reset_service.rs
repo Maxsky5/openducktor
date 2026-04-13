@@ -228,6 +228,7 @@ impl<'a> ImplementationResetService<'a> {
                     labels: None,
                     assignee: None,
                     parent_id: None,
+                    target_branch: None,
                 },
             )
             .with_context(|| format!("Failed to reset implementation for {task_id}"))

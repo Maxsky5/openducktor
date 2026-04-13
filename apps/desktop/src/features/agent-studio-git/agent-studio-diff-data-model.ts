@@ -13,6 +13,7 @@ export type UseAgentStudioDiffDataInput = {
   sessionWorkingDirectory: string | null;
   sessionRunId: string | null;
   defaultTargetBranch: GitTargetBranch;
+  preconditionError?: string | null;
   branchIdentityKey?: string | null;
   enablePolling: boolean;
   runCompletionRecoverySignal?: number;

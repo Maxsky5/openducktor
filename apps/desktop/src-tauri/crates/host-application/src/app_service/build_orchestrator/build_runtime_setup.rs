@@ -2,8 +2,9 @@ use super::super::{
     run_parsed_hook_command_allow_failure, validate_hook_trust,
     validate_transition_without_related_tasks, AppService,
 };
+use crate::app_service::task_workflow::builder_branch_service::BuilderBranchService;
 use anyhow::{anyhow, Context, Result};
-use host_domain::TaskStatus;
+use host_domain::{GitTargetBranch, TaskStatus};
 use host_infra_system::{
     build_branch_name, copy_configured_worktree_files, remove_worktree,
     resolve_effective_worktree_base_dir, run_command, RepoConfig,
@@ -24,6 +25,8 @@ fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
 pub(super) struct BuildPrerequisites {
     pub(super) repo_path: String,
     pub(super) repo_config: RepoConfig,
+    pub(super) target_branch: GitTargetBranch,
+    pub(super) allow_local_branch_fallback: bool,
     pub(super) branch: String,
     pub(super) worktree_base: String,
 }
@@ -50,14 +53,17 @@ fn git_reference_exists(repo_path_ref: &Path, reference: &str) -> Result<bool> {
 fn resolve_build_start_point(
     repo_path_ref: &Path,
     configured_target_branch: &str,
+    allow_local_branch_fallback: bool,
 ) -> Result<String> {
     if git_reference_exists(repo_path_ref, configured_target_branch)? {
         return Ok(configured_target_branch.to_string());
     }
 
-    if let Some(local_branch) = configured_target_branch.strip_prefix("origin/") {
-        if git_reference_exists(repo_path_ref, local_branch)? {
-            return Ok(local_branch.to_string());
+    if allow_local_branch_fallback {
+        if let Some(local_branch) = configured_target_branch.strip_prefix("origin/") {
+            if git_reference_exists(repo_path_ref, local_branch)? {
+                return Ok(local_branch.to_string());
+            }
         }
     }
 
@@ -105,10 +111,14 @@ impl AppService {
         validate_transition_without_related_tasks(&task, &task.status, &TaskStatus::InProgress)?;
 
         let branch = build_branch_name(&repo_config.branch_prefix, task_id, &task.title);
+        let resolved_target_branch = BuilderBranchService::new(self)
+            .resolve_target_branch_for_task(repo_path.as_str(), task_id)?;
 
         Ok(BuildPrerequisites {
             repo_path,
             repo_config,
+            target_branch: resolved_target_branch.target_branch,
+            allow_local_branch_fallback: !resolved_target_branch.has_task_override,
             branch,
             worktree_base,
         })
@@ -138,11 +148,8 @@ impl AppService {
         let repo_path_ref = Path::new(prerequisites.repo_path.as_str());
         let start_point = resolve_build_start_point(
             repo_path_ref,
-            prerequisites
-                .repo_config
-                .default_target_branch
-                .canonical()
-                .as_str(),
+            prerequisites.target_branch.canonical().as_str(),
+            prerequisites.allow_local_branch_fallback,
         )?;
         host_infra_system::run_command(
             "git",

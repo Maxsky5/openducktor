@@ -1,6 +1,13 @@
+import type { GitBranch } from "@openducktor/contracts";
 import { useMemo } from "react";
+import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsReadModel } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-read-model";
+import {
+  canonicalTargetBranch,
+  resolveTaskTargetBranchState,
+  targetBranchFromSelection,
+} from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
@@ -12,6 +19,7 @@ import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel"
 
 export type UseAgentsPageRightPanelModelArgs = {
   activeRepo: string | null;
+  branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
   session: BuildToolsSessionDescriptor;
@@ -23,6 +31,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   runCompletionRecoverySignal: number;
   runs: ReturnType<typeof useTasksState>["runs"];
+  setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
@@ -30,6 +39,7 @@ export type UseAgentsPageRightPanelModelArgs = {
 
 export function useAgentsPageRightPanelModel({
   activeRepo,
+  branches = [],
   activeBranch,
   viewRole,
   session,
@@ -41,6 +51,7 @@ export function useAgentsPageRightPanelModel({
   repoSettings,
   runCompletionRecoverySignal,
   runs,
+  setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
   onResolveGitConflict,
@@ -82,12 +93,48 @@ export function useAgentsPageRightPanelModel({
     isBuilderSessionWorking: isActiveBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
-  const diffModel = useMemo(
-    () => ({
+  const diffModel = useMemo(() => {
+    const taskTargetBranchState = resolveTaskTargetBranchState({
+      taskTargetBranch: viewSelectedTask?.targetBranch,
+      taskTargetBranchError: viewSelectedTask?.targetBranchError ?? null,
+      defaultTargetBranch: repoSettings?.defaultTargetBranch,
+    });
+    const configuredTargetBranch = canonicalTargetBranch(
+      taskTargetBranchState.effectiveTargetBranch,
+    );
+    const targetBranchOptions = toBranchSelectorOptions(branches, {
+      valueFormat: "full_ref",
+      includeOptions: configuredTargetBranch
+        ? [
+            {
+              value: taskTargetBranchState.selectionValue,
+              label: configuredTargetBranch,
+              secondaryLabel: "configured",
+              searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
+            },
+          ]
+        : [],
+    });
+
+    return {
       ...diffData,
       contextMode: gitPanelContextMode,
       branch: resolvedGitPanelBranch,
+      ...(taskTargetBranchState.validationError
+        ? {
+            targetBranch: taskTargetBranchState.displayTargetBranch,
+          }
+        : {}),
       pullRequest: viewSelectedTask?.pullRequest ?? null,
+      ...(viewSelectedTask && setTaskTargetBranch
+        ? {
+            targetBranchOptions,
+            targetBranchSelectionValue: taskTargetBranchState.selectionValue,
+            onUpdateTargetBranch: async (selection: string) => {
+              await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
+            },
+          }
+        : {}),
       ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
         ? { isDetectingPullRequest: true }
         : {}),
@@ -99,18 +146,27 @@ export function useAgentsPageRightPanelModel({
           }
         : {}),
       ...gitActions,
-    }),
-    [
-      diffData,
-      gitActions,
-      gitPanelContextMode,
-      onDetectPullRequest,
-      detectingPullRequestTaskId,
-      resolvedGitPanelBranch,
-      runs,
-      viewSelectedTask,
-    ],
-  );
+      ...(taskTargetBranchState.validationError
+        ? {
+            isGitActionsLocked: true,
+            gitActionsLockReason: taskTargetBranchState.validationError,
+            showLockReasonBanner: true,
+          }
+        : {}),
+    };
+  }, [
+    branches,
+    diffData,
+    gitActions,
+    gitPanelContextMode,
+    onDetectPullRequest,
+    detectingPullRequestTaskId,
+    repoSettings?.defaultTargetBranch,
+    resolvedGitPanelBranch,
+    runs,
+    setTaskTargetBranch,
+    viewSelectedTask,
+  ]);
 
   const rightPanelModel = useMemo(
     () =>

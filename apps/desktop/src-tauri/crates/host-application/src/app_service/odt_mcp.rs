@@ -35,6 +35,8 @@ mod tests {
             parent_id: None,
             subtask_ids: Vec::new(),
             agent_sessions: Vec::new(),
+            target_branch: None,
+            target_branch_error: None,
             pull_request: None,
             document_summary: TaskDocumentSummary {
                 spec: TaskDocumentPresence::default(),

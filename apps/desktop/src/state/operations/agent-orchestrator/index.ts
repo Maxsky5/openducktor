@@ -5,6 +5,7 @@ export {
   createEnsureRuntime,
   loadBuildContinuationTarget,
   loadRepoDefaultModel,
+  loadRepoDefaultTargetBranch,
   loadRepoPromptOverrides,
   loadTaskDocuments,
 } from "./runtime/runtime";

@@ -234,6 +234,7 @@ impl TaskStore for CommandTaskStore {
         Ok(TaskMetadata {
             spec: empty_spec_document(),
             plan: empty_spec_document(),
+            target_branch: None,
             qa_report: None,
             pull_request: None,
             direct_merge: None,

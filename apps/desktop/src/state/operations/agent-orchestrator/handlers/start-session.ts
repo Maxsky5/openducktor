@@ -1,5 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { assertAgentKickoffScenario, defaultAgentScenarioForRole } from "@openducktor/core";
+import {
+  type AgentPromptGitContext,
+  assertAgentKickoffScenario,
+  defaultAgentScenarioForRole,
+} from "@openducktor/core";
+import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
@@ -85,17 +90,61 @@ const attachSessionListenerAndGuard = async ({
   });
 };
 
+const resolveKickoffGitContext = async ({
+  kickoffScenario,
+  repoPath,
+  kickoffTargetBranch,
+  taskCard,
+  model,
+}: {
+  kickoffScenario: ReturnType<typeof assertAgentKickoffScenario>;
+  repoPath: string;
+  kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
+  taskCard: TaskCard;
+  model: Pick<StartSessionDependencies, "model">["model"];
+}): Promise<AgentPromptGitContext | undefined> => {
+  if (kickoffScenario !== "build_pull_request_generation") {
+    return undefined;
+  }
+
+  if (kickoffTargetBranch) {
+    return {
+      targetBranch: canonicalTargetBranch(kickoffTargetBranch),
+    };
+  }
+
+  if (taskCard.targetBranchError) {
+    throw new Error(
+      `Task "${taskCard.id}" has invalid target branch metadata: ${taskCard.targetBranchError}`,
+    );
+  }
+
+  const repoDefaultTargetBranch = model.loadRepoDefaultTargetBranch
+    ? await model.loadRepoDefaultTargetBranch(repoPath)
+    : null;
+
+  return {
+    targetBranch: canonicalTargetBranch(
+      effectiveTaskTargetBranch(taskCard.targetBranch, repoDefaultTargetBranch),
+    ),
+  };
+};
+
 const maybeSendKickoff = async ({
   sendKickoff,
   startedCtx,
+  kickoffTargetBranch,
   task,
   taskCard,
+  model,
   promptOverrides,
 }: {
   sendKickoff: boolean;
   startedCtx: StartedSessionContext;
+  kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
   task: TaskDependencies;
   taskCard: TaskCard;
+  model: Pick<StartSessionDependencies, "model">["model"];
   promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
 }): Promise<void> => {
   if (!sendKickoff) {
@@ -103,6 +152,13 @@ const maybeSendKickoff = async ({
   }
 
   const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
+  const git = await resolveKickoffGitContext({
+    kickoffScenario,
+    repoPath: startedCtx.repoPath,
+    kickoffTargetBranch,
+    taskCard,
+    model,
+  });
 
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   await task.sendAgentMessage(startedCtx.summary.sessionId, [
@@ -119,6 +175,7 @@ const maybeSendKickoff = async ({
           qaRequired: taskCard.aiReviewEnabled,
           description: taskCard.description,
         },
+        git,
         promptOverrides,
       ),
     },
@@ -179,7 +236,10 @@ export const createStartAgentSession = ({
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
       input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
-    const inFlightKey = [
+    const kickoffTargetBranchKey = input.kickoffTargetBranch
+      ? canonicalTargetBranch(input.kickoffTargetBranch)
+      : "";
+    const inFlightKeyParts = [
       repoPath,
       taskId,
       role,
@@ -189,7 +249,11 @@ export const createStartAgentSession = ({
       selectedModelKey,
       effectiveScenario,
       sendKickoff ? "kickoff" : "no-kickoff",
-    ].join("::");
+    ];
+    const inFlightKeySuffix = sendKickoff ? "kickoff" : "no-kickoff";
+    const inFlightKey = kickoffTargetBranchKey
+      ? [...inFlightKeyParts.slice(0, -1), kickoffTargetBranchKey, inFlightKeySuffix].join("::")
+      : inFlightKeyParts.join("::");
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
@@ -229,8 +293,10 @@ export const createStartAgentSession = ({
       await maybeSendKickoff({
         sendKickoff,
         startedCtx: startResult.ctx,
+        kickoffTargetBranch: input.kickoffTargetBranch,
         task,
         taskCard: startResult.taskCard,
+        model,
         promptOverrides: startResult.promptOverrides,
       });
 

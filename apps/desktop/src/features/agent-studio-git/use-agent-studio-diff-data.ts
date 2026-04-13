@@ -10,11 +10,13 @@ export function useAgentStudioDiffData({
   sessionWorkingDirectory,
   sessionRunId,
   defaultTargetBranch,
+  preconditionError = null,
   branchIdentityKey = null,
   enablePolling,
   runCompletionRecoverySignal,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const targetBranch = canonicalTargetBranch(defaultTargetBranch);
+  const effectiveRepoPath = preconditionError ? null : repoPath;
   const {
     worktreePath,
     worktreeResolutionRunId,
@@ -23,21 +25,21 @@ export function useAgentStudioDiffData({
     worktreeResolutionError,
     retryWorktreeResolution,
   } = useAgentStudioWorktreeResolution({
-    repoPath,
+    repoPath: effectiveRepoPath,
     sessionWorkingDirectory,
     sessionRunId,
     ...(runCompletionRecoverySignal == null ? {} : { runCompletionRecoverySignal }),
   });
 
   const requestContextKey = useMemo(() => {
-    if (!repoPath) {
+    if (!effectiveRepoPath) {
       return null;
     }
 
-    return `${repoPath}::${targetBranch}::${worktreePath ?? ""}::${worktreeResolutionRunId ?? ""}::${
+    return `${effectiveRepoPath}::${targetBranch}::${worktreePath ?? ""}::${worktreeResolutionRunId ?? ""}::${
       branchIdentityKey ?? ""
     }`;
-  }, [branchIdentityKey, repoPath, targetBranch, worktreePath, worktreeResolutionRunId]);
+  }, [branchIdentityKey, effectiveRepoPath, targetBranch, worktreePath, worktreeResolutionRunId]);
 
   const {
     activeScopeState,
@@ -47,15 +49,19 @@ export function useAgentStudioDiffData({
     state,
     statusSnapshotKey,
   } = useAgentStudioDiffController({
-    repoPath,
+    repoPath: effectiveRepoPath,
     targetBranch,
     workingDir: worktreePath,
     requestContextKey,
     enablePolling,
-    shouldBlockDiffLoading,
+    shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
   });
 
   const refresh = useCallback((): void => {
+    if (preconditionError != null) {
+      return;
+    }
+
     if (worktreeResolutionError != null) {
       retryWorktreeResolution();
       return;
@@ -68,12 +74,13 @@ export function useAgentStudioDiffData({
     refreshActiveScope();
   }, [
     refreshActiveScope,
+    preconditionError,
     retryWorktreeResolution,
     shouldBlockDiffLoading,
     worktreeResolutionError,
   ]);
 
-  const displayError = worktreeResolutionError ?? activeScopeState.error;
+  const displayError = preconditionError ?? worktreeResolutionError ?? activeScopeState.error;
   const isLoading = state.isLoading || isWorktreeResolutionResolving;
 
   return useMemo<DiffDataState>(

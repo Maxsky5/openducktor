@@ -62,6 +62,7 @@ fn task_update_rejects_direct_status_changes() {
                 labels: None,
                 assignee: None,
                 parent_id: None,
+                target_branch: None,
             },
         )
         .expect_err("direct status updates should fail");

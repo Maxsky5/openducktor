@@ -13,6 +13,10 @@ describe("document contracts", () => {
         markdown: "# Plan",
         updatedAt: null,
       },
+      targetBranch: {
+        remote: "origin",
+        branch: "release/2026.04",
+      },
       qaReport: {
         markdown: "",
         verdict: "not_reviewed",
@@ -24,6 +28,7 @@ describe("document contracts", () => {
     });
 
     expect(parsed.spec.error).toContain("invalid base64 payload");
+    expect(parsed.targetBranch).toEqual({ remote: "origin", branch: "release/2026.04" });
     expect(parsed.qaReport?.verdict).toBe("not_reviewed");
     expect(parsed.qaReport?.error).toContain("invalid gzip payload");
   });

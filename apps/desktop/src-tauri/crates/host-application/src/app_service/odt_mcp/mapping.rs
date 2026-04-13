@@ -23,6 +23,7 @@ pub(super) fn map_public_task(task: &TaskCard) -> OdtPublicTask {
         issue_type: task.issue_type.clone(),
         ai_review_enabled: task.ai_review_enabled,
         labels: task.labels.clone(),
+        target_branch: task.target_branch.clone(),
         created_at: task.created_at.clone(),
         updated_at: task.updated_at.clone(),
     }

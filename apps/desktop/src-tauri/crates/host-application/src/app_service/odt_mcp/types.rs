@@ -1,4 +1,4 @@
-use host_domain::{IssueType, PullRequestRecord, QaWorkflowVerdict, TaskStatus};
+use host_domain::{GitTargetBranch, IssueType, PullRequestRecord, QaWorkflowVerdict, TaskStatus};
 use serde::{Deserialize, Serialize};
 
 const fn default_search_limit() -> usize {
@@ -16,6 +16,8 @@ pub struct OdtPublicTask {
     pub issue_type: IssueType,
     pub ai_review_enabled: bool,
     pub labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_branch: Option<GitTargetBranch>,
     pub created_at: String,
     pub updated_at: String,
 }

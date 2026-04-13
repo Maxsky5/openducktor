@@ -1,6 +1,7 @@
 import type {
   AgentSessionRecord,
   BuildContinuationTarget,
+  GitTargetBranch,
   RepoPromptOverrides,
   TaskCard,
 } from "@openducktor/contracts";
@@ -21,6 +22,7 @@ export type StartAgentSessionInput =
       scenario?: AgentScenario;
       selectedModel?: never;
       sendKickoff?: boolean;
+      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "reuse";
       sourceSessionId: string;
     }
@@ -30,6 +32,7 @@ export type StartAgentSessionInput =
       scenario?: AgentScenario;
       selectedModel: AgentModelSelection;
       sendKickoff?: boolean;
+      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
     }
@@ -39,6 +42,7 @@ export type StartAgentSessionInput =
       scenario?: AgentScenario;
       selectedModel: AgentModelSelection;
       sendKickoff?: boolean;
+      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fork";
       sourceSessionId: string;
     };
@@ -83,6 +87,7 @@ export type TaskDependencies = {
 
 export type ModelDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadRepoDefaultTargetBranch?: (repoPath: string) => Promise<GitTargetBranch | null>;
 };
 
 export type RepoDependencies = {

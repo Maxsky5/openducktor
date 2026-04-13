@@ -275,6 +275,41 @@ fn list_tasks_treats_encoded_empty_documents_as_missing_content() -> Result<()> 
 }
 
 #[test]
+fn list_tasks_surfaces_invalid_task_target_branch_errors_without_falling_back() -> Result<()> {
+    let repo = RepoFixture::new("list-invalid-target-branch");
+    let payload = json!([issue_value(
+        "task-invalid-target-branch",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "targetBranch": {
+                    "remote": "origin"
+                }
+            }
+        })),
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let tasks = store.list_tasks(repo.path())?;
+    assert_eq!(tasks.len(), 1);
+
+    let task = &tasks[0];
+    assert!(task.target_branch.is_none());
+    assert!(task.target_branch_error.is_some());
+    assert!(task
+        .target_branch_error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Invalid openducktor.targetBranch metadata"));
+
+    Ok(())
+}
+
+#[test]
 fn list_tasks_uses_short_lived_repo_cache() -> Result<()> {
     let repo = RepoFixture::new("list-cache-hit");
     let payload = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
@@ -337,6 +372,7 @@ fn list_tasks_cache_is_invalidated_after_update_mutation() -> Result<()> {
             labels: None,
             assignee: None,
             parent_id: None,
+            target_branch: None,
         },
     )?;
     assert_eq!(updated.status, TaskStatus::Blocked);
@@ -788,6 +824,7 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
             ]),
             assignee: Some("alice".to_string()),
             parent_id: Some(" parent-1 ".to_string()),
+            target_branch: None,
         },
     )?;
     assert_eq!(task.status, TaskStatus::Blocked);
@@ -844,6 +881,7 @@ fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
             labels: None,
             assignee: None,
             parent_id: None,
+            target_branch: None,
         },
     )?;
     assert!(task.ai_review_enabled);
@@ -856,6 +894,91 @@ fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
     assert_eq!(
         metadata_root["openducktor"]["qaRequired"],
         Value::Bool(true)
+    );
+    Ok(())
+}
+
+#[test]
+fn update_task_persists_task_target_branch_under_openducktor_metadata() -> Result<()> {
+    let repo = RepoFixture::new("update-task-target-branch");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "qaRequired": true,
+                "customKey": "preserve-me"
+            }
+        })),
+    );
+    let updated = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "qaRequired": true,
+                "customKey": "preserve-me",
+                "targetBranch": {
+                    "remote": "origin",
+                    "branch": "release/2026.04"
+                }
+            }
+        })),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([updated]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let task = store.update_task(
+        repo.path(),
+        "task-1",
+        UpdateTaskPatch {
+            title: None,
+            description: None,
+            notes: None,
+            status: None,
+            priority: None,
+            issue_type: None,
+            ai_review_enabled: None,
+            labels: None,
+            assignee: None,
+            parent_id: None,
+            target_branch: Some(host_domain::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "release/2026.04".to_string(),
+            }),
+        },
+    )?;
+
+    assert_eq!(
+        task.target_branch,
+        Some(host_domain::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "release/2026.04".to_string(),
+        })
+    );
+
+    let calls = runner.take_calls();
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert_eq!(
+        metadata_root["openducktor"]["targetBranch"],
+        json!({
+            "remote": "origin",
+            "branch": "release/2026.04"
+        })
+    );
+    assert_eq!(
+        metadata_root["openducktor"]["customKey"],
+        Value::String("preserve-me".to_string())
     );
     Ok(())
 }

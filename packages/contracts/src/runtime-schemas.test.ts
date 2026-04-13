@@ -47,6 +47,8 @@ describe("runtime schemas", () => {
     expect(parsed.aiReviewEnabled).toBe(true);
     expect(parsed.availableActions).toEqual([]);
     expect(parsed.notes).toBe("");
+    expect(parsed.targetBranch).toBeUndefined();
+    expect(parsed.targetBranchError).toBeUndefined();
     expect(parsed.documentSummary.spec.has).toBe(false);
     expect(parsed.documentSummary.plan.has).toBe(false);
     expect(parsed.documentSummary.qaReport.has).toBe(false);
@@ -108,6 +110,46 @@ describe("runtime schemas", () => {
     expect(parsed.documentSummary.qaReport.has).toBe(true);
     expect(parsed.documentSummary.qaReport.verdict).toBe("approved");
     expect(parsed.agentWorkflows.spec.completed).toBe(true);
+  });
+
+  test("task card parses persisted task target branches from host payloads", () => {
+    const parsed = taskCardSchema.parse({
+      id: "task-4",
+      title: "Branch override",
+      status: "in_progress",
+      priority: 2,
+      issueType: "task",
+      labels: [],
+      targetBranch: {
+        remote: "origin",
+        branch: "release/2026.04",
+      },
+      updatedAt: "2026-02-20T13:00:00.000Z",
+      createdAt: "2026-02-20T12:00:00.000Z",
+    });
+
+    expect(parsed.targetBranch).toEqual({
+      remote: "origin",
+      branch: "release/2026.04",
+    });
+  });
+
+  test("task card parses invalid task target branch errors from host payloads", () => {
+    const parsed = taskCardSchema.parse({
+      id: "task-5",
+      title: "Broken branch override",
+      status: "in_progress",
+      priority: 2,
+      issueType: "task",
+      labels: [],
+      targetBranchError:
+        "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
+      updatedAt: "2026-02-20T13:00:00.000Z",
+      createdAt: "2026-02-20T12:00:00.000Z",
+    });
+
+    expect(parsed.targetBranch).toBeUndefined();
+    expect(parsed.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
   });
 
   test("permission_required event accepts null command", () => {
