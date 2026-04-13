@@ -1,7 +1,7 @@
 {
   "$schema": "./gen/schemas/desktop-schema.json",
   "productName": "OpenDucktor",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "identifier": "dev.openducktor.desktop",
   "build": {
     "beforeDevCommand": "cd .. && bun run dev",
