@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { DiffScope } from "@/features/agent-studio-git";
 
 export type InlineCommentSide = "old" | "new";
-export type InlineCommentStatus = "pending" | "submitting" | "sent";
+export type InlineCommentStatus = "pending" | "submitting";
 
 export type InlineCommentContextLine = {
   lineNumber: number;
@@ -24,7 +24,6 @@ export type InlineCommentDraft = {
   submissionId: string | null;
   createdAt: number;
   updatedAt: number;
-  sentAt: number | null;
   status: InlineCommentStatus;
 };
 
@@ -50,7 +49,7 @@ export type InlineCommentDraftStore = {
   clearAll: () => void;
   beginSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => string | null;
   restoreSubmittingDrafts: (submissionId: string) => void;
-  markSubmittingDraftsAsSent: (submissionId: string) => void;
+  completeSubmittingDrafts: (submissionId: string) => void;
   setDraftStateKey: (draftStateKey: string) => void;
   resetForContext: (draftStateKey: string) => void;
   getPendingDrafts: () => InlineCommentDraft[];
@@ -153,7 +152,6 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
       submissionId: null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      sentAt: null,
       status: "pending",
     };
     set((state) => ({ drafts: [...state.drafts, newDraft] }));
@@ -238,17 +236,14 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     }));
   },
 
-  markSubmittingDraftsAsSent: (submissionId) => {
+  completeSubmittingDrafts: (submissionId) => {
     if (submissionId.length === 0) {
       return;
     }
 
-    const sentAt = Date.now();
     set((state) => ({
-      drafts: state.drafts.map((draft) =>
-        draft.status === "submitting" && draft.submissionId === submissionId
-          ? { ...draft, status: "sent", submissionId: null, sentAt }
-          : draft,
+      drafts: state.drafts.filter(
+        (draft) => !(draft.status === "submitting" && draft.submissionId === submissionId),
       ),
     }));
   },

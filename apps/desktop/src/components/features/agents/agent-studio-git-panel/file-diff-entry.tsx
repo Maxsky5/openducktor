@@ -23,12 +23,7 @@ import {
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
 import { FILE_STATUS_COLOR, FILE_STATUS_ICON } from "./constants";
-import {
-  DiffAnnotationShell,
-  DraftCommentCard,
-  NewCommentForm,
-  SentCommentCard,
-} from "./file-diff-comments";
+import { DiffAnnotationShell, DraftCommentCard, NewCommentForm } from "./file-diff-comments";
 
 const areFileDiffsEqual = (left: FileDiff, right: FileDiff): boolean =>
   left.file === right.file &&
@@ -103,7 +98,6 @@ function FileDiffEntry({
   void fileCommentStateKey;
   const fileComments = useInlineCommentDraftStore.getState().getDraftsForFile(diff.file, diffScope);
   const fileCommentCount = fileComments.length;
-  const draftComments = fileComments.filter((comment) => comment.status !== "sent");
   const commentsById = useMemo(
     () => new Map(fileComments.map((comment) => [comment.id, comment])),
     [fileComments],
@@ -140,11 +134,11 @@ function FileDiffEntry({
       return;
     }
 
-    const editingComment = draftComments.find((comment) => comment.id === editingCommentId);
+    const editingComment = fileComments.find((comment) => comment.id === editingCommentId);
     if (editingComment?.status === "submitting") {
       setEditingCommentId(null);
     }
-  }, [draftComments, editingCommentId]);
+  }, [fileComments, editingCommentId]);
 
   const shouldRenderPersistedDiffBody =
     hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
@@ -246,14 +240,6 @@ function FileDiffEntry({
       const comment = commentsById.get(metadata.commentId);
       if (!comment) {
         return null;
-      }
-
-      if (comment.status === "sent") {
-        return (
-          <DiffAnnotationShell>
-            <SentCommentCard comment={comment} />
-          </DiffAnnotationShell>
-        );
       }
 
       return (

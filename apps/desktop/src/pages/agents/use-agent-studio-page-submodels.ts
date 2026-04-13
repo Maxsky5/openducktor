@@ -397,7 +397,7 @@ export const useAgentStudioComposerModel = ({
         }
 
         if (didSend) {
-          useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
+          useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
         } else {
           useInlineCommentDraftStore.getState().restoreSubmittingDrafts(submissionId);
         }

@@ -230,7 +230,7 @@ describe("useAgentStudioComposerModel", () => {
     expect(sentDrafts[0]).toContain("Change: added");
     expect(sentDrafts[0]).toContain("Instruction: Please tighten the null handling");
     expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(0);
-    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("sent");
+    expect(useInlineCommentDraftStore.getState().drafts).toEqual([]);
 
     await act(async () => {
       await harness.unmount();
@@ -238,7 +238,7 @@ describe("useAgentStudioComposerModel", () => {
     resetInlineComments();
   });
 
-  test("locks the submitted comment snapshot while send is pending and preserves it as sent on success", async () => {
+  test("locks the submitted comment snapshot while send is pending and clears it on success", async () => {
     let commentId = "";
     await act(async () => {
       resetInlineComments();
@@ -297,10 +297,7 @@ describe("useAgentStudioComposerModel", () => {
 
     expect(sentDrafts[0]).toContain("Initial pending comment");
     expect(sentDrafts[0]).not.toContain("Edited after the send snapshot was captured");
-    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("sent");
-    expect(
-      useInlineCommentDraftStore.getState().drafts.some((draft) => draft.status === "submitting"),
-    ).toBe(false);
+    expect(useInlineCommentDraftStore.getState().drafts).toEqual([]);
 
     await act(async () => {
       await harness.unmount();
@@ -496,12 +493,7 @@ describe("useAgentStudioComposerModel", () => {
       await Promise.all([firstSendPromise, secondSendPromise]);
     });
 
-    expect(
-      useInlineCommentDraftStore.getState().drafts.every((draft) => draft.status === "sent"),
-    ).toBe(true);
-    expect(
-      useInlineCommentDraftStore.getState().drafts.some((draft) => draft.status === "submitting"),
-    ).toBe(false);
+    expect(useInlineCommentDraftStore.getState().drafts).toEqual([]);
 
     await act(async () => {
       await harness.unmount();

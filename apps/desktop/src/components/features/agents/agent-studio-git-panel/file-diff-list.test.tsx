@@ -221,7 +221,7 @@ describe("FileDiffList", () => {
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
   });
 
-  test("creates inline comments, updates file counters, and shows sent comments after send success", () => {
+  test("creates inline comments, updates file counters, and clears them after send success", () => {
     render(<FileDiffListHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle diff for src/example.ts" }));
@@ -254,12 +254,11 @@ describe("FileDiffList", () => {
       if (!submissionId) {
         throw new Error("Expected submission id");
       }
-      useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
+      useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
     });
 
     expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
-    fireEvent.click(screen.getByTestId("agent-studio-git-sent-comment-trigger"));
-    expect(screen.getByText("Please tighten the null handling")).toBeDefined();
+    expect(screen.queryByTestId("agent-studio-git-file-comment-count")).toBeNull();
   });
 
   test("disables edit and remove actions for submitted comments while send is in flight", () => {

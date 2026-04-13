@@ -1,8 +1,7 @@
-import { Check, ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { Check, Pencil, Trash2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
 
@@ -11,9 +10,7 @@ const COMMENT_BODY_CLASS_NAME = "text-xs leading-5 text-foreground";
 const CommentMeta = ({ status }: { status: InlineCommentDraft["status"] }): ReactElement => {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <Badge variant={status === "sent" ? "outline" : "warning"}>
-        {status === "sent" ? "Sent" : "Pending"}
-      </Badge>
+      <Badge variant="warning">Pending</Badge>
       {status === "submitting" ? <Badge variant="outline">Sending</Badge> : null}
     </div>
   );
@@ -151,29 +148,5 @@ export const DraftCommentCard = ({
         </>
       )}
     </div>
-  );
-};
-
-export const SentCommentCard = ({ comment }: { comment: InlineCommentDraft }): ReactElement => {
-  return (
-    <Collapsible defaultOpen={false}>
-      <div className="rounded-lg border border-border bg-card">
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left cursor-pointer"
-            data-testid="agent-studio-git-sent-comment-trigger"
-          >
-            <div className="min-w-0">
-              <CommentMeta status="sent" />
-            </div>
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="border-t border-border px-3 py-3">
-          <p className={`whitespace-pre-wrap ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
   );
 };

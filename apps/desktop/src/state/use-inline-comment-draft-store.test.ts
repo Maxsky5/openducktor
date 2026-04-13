@@ -28,7 +28,7 @@ describe("use-inline-comment-draft-store", () => {
     resetStore();
   });
 
-  test("tracks pending and sent comments while keeping per-file counts across both states", () => {
+  test("drops submitted comments from the store after a successful send", () => {
     Date.now = () => 1_700_000_000_000;
 
     const firstId = useInlineCommentDraftStore.getState().addDraft({
@@ -82,21 +82,15 @@ describe("use-inline-comment-draft-store", () => {
     if (submissionId == null) {
       throw new Error("Expected submission id");
     }
-    useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
+    useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
 
-    const sentState = useInlineCommentDraftStore.getState();
-    expect(sentState.getDraftCount()).toBe(0);
-    expect(sentState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(2);
-    expect(sentState.drafts.every((draft) => draft.status === "sent")).toBe(true);
-    expect(sentState.drafts.every((draft) => draft.sentAt === 1_700_000_000_100)).toBe(true);
-
-    sentState.removeDraft(secondId);
-    expect(
-      useInlineCommentDraftStore.getState().getFileDraftCount("apps/desktop/src/file-a.ts"),
-    ).toBe(1);
+    const submittedState = useInlineCommentDraftStore.getState();
+    expect(submittedState.getDraftCount()).toBe(0);
+    expect(submittedState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(0);
+    expect(submittedState.drafts).toEqual([]);
   });
 
-  test("marks only the submitted snapshot as sent when a pending draft changes in flight", () => {
+  test("removes only the submitted snapshot when another pending draft changes in flight", () => {
     Date.now = () => 1_700_000_000_000;
 
     const firstId = useInlineCommentDraftStore.getState().addDraft({
@@ -135,13 +129,11 @@ describe("use-inline-comment-draft-store", () => {
     if (submissionId == null) {
       throw new Error("Expected submission id");
     }
-    useInlineCommentDraftStore.getState().markSubmittingDraftsAsSent(submissionId);
+    useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
 
     const drafts = useInlineCommentDraftStore.getState().drafts;
     expect(drafts.find((draft) => draft.id === firstId)?.status).toBe("pending");
-    expect(drafts.find((draft) => draft.filePath === "apps/desktop/src/file-b.ts")?.status).toBe(
-      "sent",
-    );
+    expect(drafts.some((draft) => draft.filePath === "apps/desktop/src/file-b.ts")).toBe(false);
   });
 
   test("rejects editing or removing a comment while that exact draft is being sent", () => {
