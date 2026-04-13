@@ -101,6 +101,7 @@ Internal workflow tools remain on the same MCP server:
 - `odt_build_blocked`
 - `odt_build_resumed`
 - `odt_build_completed`
+- `odt_set_pull_request`
 - `odt_qa_approved`
 - `odt_qa_rejected`
 
