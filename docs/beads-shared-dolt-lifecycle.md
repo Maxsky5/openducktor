@@ -10,6 +10,8 @@ That means OpenDucktor needs two things to work well:
 - a Beads attachment for each repository
 - a Dolt database that Beads can read and write
 
+In the desktop architecture, the Rust host is the only owner of that storage lifecycle. MCP clients and agent runtimes never receive Beads attachment paths, Dolt connection details, or metadata-namespace control as part of their startup contract.
+
 The important design choice is that OpenDucktor does **not** run one Dolt process per repository.
 Instead, it runs **one shared local Dolt server per OpenDucktor config directory** and gives each repository its own database inside that server.
 
@@ -336,6 +338,8 @@ When OpenDucktor launches its MCP sidecar for OpenCode, it passes only the host 
 The Rust host owns the Beads attachment directory, shared Dolt connection details, attachment verification, repair, and all task reads and writes.
 
 The MCP sidecar no longer connects to Dolt or runs Beads directly. In desktop-managed mode the host injects a loopback `ODT_HOST_URL`, and the MCP forwards task, document, and workflow calls back to the running host. Standalone MCP use auto-discovers running host bridge ports from the local registry and can still use `ODT_HOST_URL` as an explicit override.
+
+That keeps Beads and Dolt modeled as storage infrastructure, not as an agent runtime concern.
 
 ## What Happens On App Exit
 

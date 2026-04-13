@@ -73,12 +73,9 @@ At a high level:
 
 Under the hood, OpenDucktor exposes its own MCP server, `openducktor`.
 
-- Desktop-managed agent sessions use that MCP internally to read tasks and persist workflow updates.
-- The same MCP surface can also be used outside the desktop app through `@openducktor/mcp`.
-- Public MCP tools cover task access such as `odt_create_task`, `odt_search_tasks`, `odt_read_task`, and `odt_read_task_documents`.
-- Internal workflow tools such as `odt_set_spec`, `odt_set_plan`, `odt_build_*`, and `odt_qa_*` let agent sessions write progress back into the canonical task workflow.
+Desktop-managed sessions use that MCP internally, and the same task surface is also available outside the app through `@openducktor/mcp`.
 
-That keeps the workflow task-centric and auditable: agents can act through a controlled tool surface, while OpenDucktor remains the place where task state, documents, approvals, and delivery history come together.
+That keeps the workflow task-centric and auditable: agents act through a controlled task interface, while OpenDucktor keeps task state, documents, approvals, and delivery history connected in one place.
 
 ## Current Scope
 

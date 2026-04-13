@@ -11,6 +11,8 @@ Both desktop-managed and standalone MCP paths now route task operations through 
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 - Startup fails if the host bridge is unhealthy or does not expose the required ODT tool surface.
 
+The MCP package is transport and validation only. The Rust host remains the owner of Beads attachment readiness, shared Dolt lifecycle, workflow transitions, and metadata persistence.
+
 For the full Beads and shared Dolt lifecycle, including why the Rust host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
 
 Package name:
@@ -64,6 +66,8 @@ Startup contract:
 6. Call `odt_mcp_ready` through the loopback host API.
 7. Refuse startup if any required ODT tool name is missing.
 
+Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it.
+
 ## Public Tools
 
 Public external tools:
@@ -80,6 +84,7 @@ Internal workflow tools remain on the same MCP server:
 - `odt_build_blocked`
 - `odt_build_resumed`
 - `odt_build_completed`
+- `odt_set_pull_request`
 - `odt_qa_approved`
 - `odt_qa_rejected`
 
@@ -292,3 +297,4 @@ Output:
 - The Rust host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
 - The Rust host also owns document compression and decompression for Beads metadata.
 - The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.
+- Beads and Dolt stay modeled as storage infrastructure. They are not part of the MCP runtime contract beyond the host-owned bridge being healthy.

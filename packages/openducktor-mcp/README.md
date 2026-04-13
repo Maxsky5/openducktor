@@ -6,10 +6,11 @@ The MCP package is a thin client of the running Rust host.
 
 The published package is intentionally a standalone CLI/server package. It does not expose a supported JavaScript or TypeScript library API from `@openducktor/mcp`.
 
+Desktop-managed sessions launch this same package as a sidecar. In both desktop-managed and standalone use, the package validates `odt_*` inputs and forwards them to the Rust host bridge instead of talking to Beads or Dolt directly.
+
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
 - Standalone use auto-discovers a running host bridge from the local registry.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
-- Legacy direct `bd` / `dolt` startup parameters are rejected.
 
 For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
 
@@ -52,6 +53,8 @@ Startup behavior:
 - It checks the host bridge `/health` endpoint.
 - It calls `odt_mcp_ready` before serving requests.
 - Startup fails if the host does not expose the full ODT tool surface.
+
+The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
 
 ## Public Tools
 
