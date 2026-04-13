@@ -83,7 +83,13 @@ const inputFixture: RepoSettingsInput = {
     },
     planner: null,
     build: { providerId: "", modelId: "", variant: "", profileId: "" },
-    qa: { providerId: "anthropic", modelId: "claude-4", variant: "", profileId: "" },
+    qa: {
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-4",
+      variant: "",
+      profileId: "",
+    },
   },
 };
 
@@ -517,6 +523,50 @@ describe("use-repo-settings-operations", () => {
           devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
         }),
       ).rejects.toThrow("Dev server commands cannot be blank.");
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+    }
+  });
+
+  test("saveRepoSettings rejects configured agent defaults without runtime kind", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+
+    const original = {
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
+    };
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await expect(
+        harness.getLatest().saveRepoSettings({
+          ...inputFixture,
+          agentDefaults: {
+            ...inputFixture.agentDefaults,
+            spec: {
+              ...(inputFixture.agentDefaults.spec ?? {
+                providerId: "openai",
+                modelId: "gpt-5",
+                variant: "",
+                profileId: "",
+              }),
+              runtimeKind: "   ",
+            },
+          },
+        }),
+      ).rejects.toThrow(
+        "Specification agent default runtime kind is required when provider and model are configured.",
+      );
       expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();

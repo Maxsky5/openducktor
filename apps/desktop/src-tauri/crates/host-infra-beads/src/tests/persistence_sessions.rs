@@ -182,18 +182,19 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                 "agentSessions": [{
                     "sessionId": "session-1",
                     "externalSessionId": "ext-1",
-                    "taskId": "task-1",
-                    "role": "build",
-                    "scenario": "default",
-                    "status": "completed",
-                    "startedAt": "2026-02-20T09:00:00Z",
-                    "updatedAt": "2026-02-20T10:00:00Z",
-                    "endedAt": "2026-02-20T10:00:00Z",
-                    "runtimeId": "runtime-1",
-                    "runId": "run-1",
-                    "baseUrl": "http://localhost:8080",
-                    "workingDirectory": "/tmp/work",
-                    "selectedModel": null
+                "taskId": "task-1",
+                "role": "build",
+                "scenario": "default",
+                "status": "completed",
+                "startedAt": "2026-02-20T09:00:00Z",
+                "updatedAt": "2026-02-20T10:00:00Z",
+                "endedAt": "2026-02-20T10:00:00Z",
+                "runtimeId": "runtime-1",
+                "runtimeKind": "opencode",
+                "runId": "run-1",
+                "baseUrl": "http://localhost:8080",
+                "workingDirectory": "/tmp/work",
+                "selectedModel": null
                 }]
             }
         })),

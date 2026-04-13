@@ -8,7 +8,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import {
   loadRepoConfigFromQuery,
@@ -19,6 +18,13 @@ import {
 } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "../tasks/task-operations-model";
+
+const AGENT_DEFAULT_LABELS = {
+  spec: "Specification",
+  planner: "Planner",
+  build: "Builder",
+  qa: "QA",
+} as const;
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;
@@ -55,21 +61,29 @@ export function useRepoSettingsOperations({
     [queryClient],
   );
 
-  const toConfigDefault = useCallback((entry: RepoAgentDefaultInput | null) => {
-    if (!entry?.providerId.trim() || !entry.modelId.trim()) {
-      return undefined;
-    }
+  const toConfigDefault = useCallback(
+    (role: keyof RepoSettingsInput["agentDefaults"], entry: RepoAgentDefaultInput | null) => {
+      if (!entry?.providerId.trim() || !entry.modelId.trim()) {
+        return undefined;
+      }
 
-    const runtimeKind = entry.runtimeKind?.trim() || DEFAULT_RUNTIME_KIND;
+      const runtimeKind = entry.runtimeKind?.trim();
+      if (!runtimeKind) {
+        throw new Error(
+          `${AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`,
+        );
+      }
 
-    return {
-      runtimeKind,
-      providerId: entry.providerId.trim(),
-      modelId: entry.modelId.trim(),
-      ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
-      ...(entry.profileId.trim() ? { profileId: entry.profileId.trim() } : {}),
-    };
-  }, []);
+      return {
+        runtimeKind,
+        providerId: entry.providerId.trim(),
+        modelId: entry.modelId.trim(),
+        ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
+        ...(entry.profileId.trim() ? { profileId: entry.profileId.trim() } : {}),
+      };
+    },
+    [],
+  );
 
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
     const repo = requireActiveRepo(activeRepo);
@@ -82,10 +96,10 @@ export function useRepoSettingsOperations({
     async (input: RepoSettingsInput) => {
       const repo = requireActiveRepo(activeRepo);
 
-      const specDefault = toConfigDefault(input.agentDefaults.spec);
-      const plannerDefault = toConfigDefault(input.agentDefaults.planner);
-      const buildDefault = toConfigDefault(input.agentDefaults.build);
-      const qaDefault = toConfigDefault(input.agentDefaults.qa);
+      const specDefault = toConfigDefault("spec", input.agentDefaults.spec);
+      const plannerDefault = toConfigDefault("planner", input.agentDefaults.planner);
+      const buildDefault = toConfigDefault("build", input.agentDefaults.build);
+      const qaDefault = toConfigDefault("qa", input.agentDefaults.qa);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
