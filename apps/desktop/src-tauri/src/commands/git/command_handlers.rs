@@ -408,6 +408,28 @@ pub async fn git_pull_branch(
 }
 
 #[tauri::command]
+pub async fn git_fetch_remote(
+    state: State<'_, AppState>,
+    repo_path: String,
+    target_branch: String,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitFetchResult, String> {
+    let scope = authorize_git_scope(&state, &repo_path, working_dir.as_deref())?;
+    let trimmed_target = require_target_branch(&target_branch)?.to_string();
+
+    let request = host_domain::GitFetchRequest {
+        working_dir: Some(scope.effective_working_dir),
+        target_branch: trimmed_target,
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_fetch_remote", move || {
+        service.git_fetch_remote(&scope.repo_path, request)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
 pub async fn git_rebase_branch(
     state: State<'_, AppState>,
     repo_path: String,

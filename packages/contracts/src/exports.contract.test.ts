@@ -37,6 +37,8 @@ import type {
   GitConflictOperation,
   GitCurrentBranch,
   GitDiffScope,
+  GitFetchRemoteRequest,
+  GitFetchRemoteResult,
   GitFileStatusCounts,
   GitPullBranchRequest,
   GitPullBranchResult,
@@ -185,6 +187,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "createTaskResultSchema",
   "directMergeRecordSchema",
   "gitDiffScopeSchema",
+  "gitFetchRemoteRequestSchema",
+  "gitFetchRemoteResultSchema",
   "gitMergeMethodSchema",
   "gitProviderAvailabilitySchema",
   "gitProviderConfigSchema",
@@ -379,6 +383,8 @@ type ExportedTypeContract = {
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
   GitDiffScope: GitDiffScope;
+  GitFetchRemoteRequest: GitFetchRemoteRequest;
+  GitFetchRemoteResult: GitFetchRemoteResult;
   GitPullBranchRequest: GitPullBranchRequest;
   GitPullBranchResult: GitPullBranchResult;
   GitRebaseBranchRequest: GitRebaseBranchRequest;

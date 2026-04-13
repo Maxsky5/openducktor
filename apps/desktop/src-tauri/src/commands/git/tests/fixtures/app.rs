@@ -111,6 +111,7 @@ pub(crate) fn setup_command_git_fixture_with_summary(
             super::super::super::command_handlers::git_get_worktree_status,
             super::super::super::command_handlers::git_get_worktree_status_summary,
             super::super::super::command_handlers::git_reset_worktree_selection,
+            super::super::super::command_handlers::git_fetch_remote,
             super::super::super::command_handlers::git_create_worktree,
             super::super::super::command_handlers::git_remove_worktree
         ])

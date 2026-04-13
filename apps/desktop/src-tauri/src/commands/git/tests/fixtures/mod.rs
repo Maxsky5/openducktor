@@ -8,7 +8,7 @@ pub(super) use app::{
     setup_command_git_fixture_with_summary,
 };
 pub(super) use git_port::{
-    ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
+    FetchRemoteCall, ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
     WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
 };
 pub(super) use repo::{

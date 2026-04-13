@@ -193,6 +193,20 @@ pub struct GitPullRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFetchRequest {
+    pub working_dir: Option<String>,
+    pub target_branch: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitFetchResult {
+    Fetched { output: String },
+    SkippedNoRemote { output: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum GitPullResult {
     Pulled {
@@ -480,6 +494,7 @@ pub trait GitPort: Send + Sync {
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushResult>;
+    fn fetch_remote(&self, repo_path: &Path, request: GitFetchRequest) -> Result<GitFetchResult>;
     fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult>;
     fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
     fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;

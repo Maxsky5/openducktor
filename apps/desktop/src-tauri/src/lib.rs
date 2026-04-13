@@ -373,6 +373,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         git_get_worktree_status_summary,
         git_commit_all,
         git_reset_worktree_selection,
+        git_fetch_remote,
         git_pull_branch,
         git_rebase_branch,
         git_rebase_abort,

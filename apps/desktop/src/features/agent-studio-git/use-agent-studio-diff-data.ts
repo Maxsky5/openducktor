@@ -1,9 +1,20 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hostClient } from "@/lib/host-client";
+import { appQueryClient } from "@/lib/query-client";
 import { canonicalTargetBranch } from "@/lib/target-branch";
+import { invalidateRepoBranchesQuery } from "@/state/queries/git";
 import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
 import type { DiffDataState } from "./contracts";
 import { useAgentStudioDiffController } from "./use-agent-studio-diff-controller";
 import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
+
+type RefreshContext = {
+  requestContextKey: string;
+  repoPath: string;
+  targetBranch: string;
+  workingDir: string | null;
+  scope: DiffDataState["diffScope"];
+};
 
 export function useAgentStudioDiffData({
   repoPath,
@@ -56,6 +67,49 @@ export function useAgentStudioDiffData({
     enablePolling,
     shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
   });
+  const refreshContext = useMemo<RefreshContext | null>(() => {
+    if (requestContextKey == null || effectiveRepoPath == null) {
+      return null;
+    }
+
+    return {
+      requestContextKey,
+      repoPath: effectiveRepoPath,
+      targetBranch,
+      workingDir: worktreePath,
+      scope: diffScope,
+    };
+  }, [diffScope, effectiveRepoPath, requestContextKey, targetBranch, worktreePath]);
+  const refreshContextKey = refreshContext?.requestContextKey ?? null;
+
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
+  const queuedRefreshContextRef = useRef<RefreshContext | null>(null);
+  const refreshContextRef = useRef<RefreshContext | null>(refreshContext);
+  refreshContextRef.current = refreshContext;
+  const previousIsLoadingRef = useRef(state.isLoading);
+
+  useEffect(() => {
+    // Skip cleanup from stale renders if a newer refresh context won the race to commit.
+    if (refreshContextKey !== (refreshContextRef.current?.requestContextKey ?? null)) {
+      return;
+    }
+
+    setRefreshError(null);
+    queuedRefreshContextRef.current = null;
+    refreshPromiseRef.current = null;
+    setIsRefreshing(false);
+  }, [refreshContextKey]);
+
+  useEffect(() => {
+    const wasLoading = previousIsLoadingRef.current;
+    previousIsLoadingRef.current = state.isLoading;
+
+    if (refreshError != null && wasLoading && !state.isLoading && activeScopeState.error == null) {
+      setRefreshError(null);
+    }
+  }, [activeScopeState.error, refreshError, state.isLoading]);
 
   const refresh = useCallback((): void => {
     if (preconditionError != null) {
@@ -71,7 +125,71 @@ export function useAgentStudioDiffData({
       return;
     }
 
-    refreshActiveScope();
+    const nextRefreshContext = refreshContextRef.current;
+    if (nextRefreshContext == null) {
+      return;
+    }
+
+    queuedRefreshContextRef.current = nextRefreshContext;
+    if (refreshPromiseRef.current != null) {
+      return;
+    }
+
+    const runRefreshLoop = async (): Promise<void> => {
+      while (queuedRefreshContextRef.current != null) {
+        const activeRefreshContext = queuedRefreshContextRef.current;
+        queuedRefreshContextRef.current = null;
+        const hasSameRefreshContext = (): boolean =>
+          refreshContextRef.current?.requestContextKey === activeRefreshContext.requestContextKey;
+
+        if (!hasSameRefreshContext()) {
+          break;
+        }
+
+        setIsRefreshing(true);
+
+        try {
+          const fetchResult = await hostClient.gitFetchRemote(
+            activeRefreshContext.repoPath,
+            activeRefreshContext.targetBranch,
+            activeRefreshContext.workingDir ?? undefined,
+          );
+          if (!hasSameRefreshContext()) {
+            break;
+          }
+
+          if (fetchResult.outcome === "fetched") {
+            await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
+            if (!hasSameRefreshContext()) {
+              break;
+            }
+          }
+
+          setRefreshError(null);
+          await refreshActiveScope({
+            repoPath: activeRefreshContext.repoPath,
+            targetBranch: activeRefreshContext.targetBranch,
+            workingDir: activeRefreshContext.workingDir,
+            scope: activeRefreshContext.scope,
+          });
+        } catch (error) {
+          if (hasSameRefreshContext()) {
+            setRefreshError(String(error));
+          }
+        } finally {
+          if (hasSameRefreshContext()) {
+            setIsRefreshing(false);
+          }
+        }
+      }
+    };
+
+    const refreshPromise = runRefreshLoop().finally(() => {
+      if (refreshPromiseRef.current === refreshPromise) {
+        refreshPromiseRef.current = null;
+      }
+    });
+    refreshPromiseRef.current = refreshPromise;
   }, [
     refreshActiveScope,
     preconditionError,
@@ -80,8 +198,9 @@ export function useAgentStudioDiffData({
     worktreeResolutionError,
   ]);
 
-  const displayError = preconditionError ?? worktreeResolutionError ?? activeScopeState.error;
-  const isLoading = state.isLoading || isWorktreeResolutionResolving;
+  const displayError =
+    preconditionError ?? worktreeResolutionError ?? refreshError ?? activeScopeState.error;
+  const isLoading = state.isLoading || isWorktreeResolutionResolving || isRefreshing;
 
   return useMemo<DiffDataState>(
     () => ({

@@ -12,6 +12,8 @@ import {
   type GitConflictAbortResult,
   type GitConflictOperation,
   type GitCurrentBranch,
+  type GitFetchRemoteRequest,
+  type GitFetchRemoteResult,
   type GitPullBranchRequest,
   type GitPullBranchResult,
   type GitPushBranchResult,
@@ -29,6 +31,7 @@ import {
   gitConflictAbortResultSchema,
   gitCurrentBranchSchema,
   gitDiffScopeSchema,
+  gitFetchRemoteResultSchema,
   gitPullBranchResultSchema,
   gitPushBranchResultSchema,
   gitRebaseAbortResultSchema,
@@ -139,6 +142,25 @@ const gitPullBranch = async (
     workingDir: request.workingDir ?? null,
   });
   return gitPullBranchResultSchema.parse(payload);
+};
+
+const gitFetchRemote = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  targetBranch: string,
+  workingDir?: string,
+): Promise<GitFetchRemoteResult> => {
+  const request: GitFetchRemoteRequest = {
+    repoPath,
+    targetBranch,
+    workingDir,
+  };
+  const payload = await invokeFn("git_fetch_remote", {
+    repoPath: request.repoPath,
+    targetBranch: request.targetBranch,
+    workingDir: request.workingDir ?? null,
+  });
+  return gitFetchRemoteResultSchema.parse(payload);
 };
 
 const gitGetStatus = async (
@@ -352,6 +374,14 @@ export class TauriGitClient {
 
   async gitPullBranch(repoPath: string, workingDir?: string): Promise<GitPullBranchResult> {
     return gitPullBranch(this.invokeFn, repoPath, workingDir);
+  }
+
+  async gitFetchRemote(
+    repoPath: string,
+    targetBranch: string,
+    workingDir?: string,
+  ): Promise<GitFetchRemoteResult> {
+    return gitFetchRemote(this.invokeFn, repoPath, targetBranch, workingDir);
   }
 
   async gitGetStatus(repoPath: string, workingDir?: string): Promise<FileStatus[]> {

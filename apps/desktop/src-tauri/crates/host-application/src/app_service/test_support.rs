@@ -20,9 +20,9 @@ use host_domain::{
     is_syncable_pull_request_state, is_terminal_task_status, AgentSessionDocument, AgentWorkflows,
     CreateTaskInput, DirectMergeRecord, GitAheadBehind, GitBranch, GitCommitAllRequest,
     GitCommitAllResult, GitConflictAbortRequest, GitConflictAbortResult, GitConflictOperation,
-    GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
-    GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitPort, GitPullRequest,
-    GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitCurrentBranch, GitDiffScope, GitFetchRequest, GitFetchResult, GitFileDiff, GitFileStatus,
+    GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitPort,
+    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
     GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot, GitResetWorktreeSelection,
     GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitUpstreamAheadBehind,
     GitWorktreeStatusData, GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType,
@@ -668,6 +668,11 @@ pub(crate) enum GitCall {
         repo_path: String,
         working_dir: Option<String>,
     },
+    FetchRemote {
+        repo_path: String,
+        working_dir: Option<String>,
+        target_branch: String,
+    },
     CommitAll {
         repo_path: String,
         working_dir: Option<String>,
@@ -741,6 +746,7 @@ pub(crate) struct GitState {
     pub(crate) last_push_remote: Option<String>,
     pub(crate) push_branch_result: GitPushResult,
     pub(crate) pull_branch_result: GitPullResult,
+    pub(crate) fetch_remote_result: GitFetchResult,
     pub(crate) commit_all_result: GitCommitAllResult,
     pub(crate) reset_worktree_selection_result: GitResetWorktreeSelectionResult,
     pub(crate) rebase_branch_result: GitRebaseBranchResult,
@@ -880,6 +886,16 @@ impl GitPort for FakeGitPort {
             working_dir: request.working_dir,
         });
         Ok(state.pull_branch_result.clone())
+    }
+
+    fn fetch_remote(&self, repo_path: &Path, request: GitFetchRequest) -> Result<GitFetchResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::FetchRemote {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            target_branch: request.target_branch,
+        });
+        Ok(state.fetch_remote_result.clone())
     }
 
     fn commit_all(
@@ -1184,6 +1200,9 @@ pub(crate) fn build_service_with_git_state_enforced(
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
+        fetch_remote_result: GitFetchResult::Fetched {
+            output: "Fetched origin".to_string(),
+        },
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),
@@ -1245,6 +1264,9 @@ pub(crate) fn build_service_with_git_state(
         },
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
+        },
+        fetch_remote_result: GitFetchResult::Fetched {
+            output: "Fetched origin".to_string(),
         },
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
@@ -1770,6 +1792,9 @@ pub(crate) fn build_service_with_store(
         },
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
+        },
+        fetch_remote_result: GitFetchResult::Fetched {
+            output: "Fetched origin".to_string(),
         },
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),

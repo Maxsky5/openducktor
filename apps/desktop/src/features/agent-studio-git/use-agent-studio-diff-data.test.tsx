@@ -14,6 +14,17 @@ if (typeof document === "undefined") {
 }
 
 const runsListMock = mock(async (): Promise<Array<{ runId: string; worktreePath: string }>> => []);
+const gitFetchRemoteMock = mock(
+  async (
+    _repoPath: string,
+    _targetBranch: string,
+    _workingDir?: string,
+  ): Promise<{ outcome: "fetched" | "skipped_no_remote"; output: string }> => ({
+    outcome: "fetched",
+    output: "From origin",
+  }),
+);
+type GitFetchRemoteMockResult = Awaited<ReturnType<typeof gitFetchRemoteMock>>;
 const gitGetWorktreeStatusMock = mock(
   async (
     _repoPath: string,
@@ -85,6 +96,7 @@ const gitGetWorktreeStatusSummaryMock = mock(
 mock.module("@/state/operations/host", () => ({
   host: {
     runsList: runsListMock,
+    gitFetchRemote: gitFetchRemoteMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
     gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
   },
@@ -93,6 +105,7 @@ mock.module("@/state/operations/host", () => ({
 mock.module("@/lib/host-client", () => ({
   hostClient: {
     runsList: runsListMock,
+    gitFetchRemote: gitFetchRemoteMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
     gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
   },
@@ -199,8 +212,10 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearAppQueryClient();
   runsListMock.mockClear();
+  gitFetchRemoteMock.mockClear();
   gitGetWorktreeStatusMock.mockClear();
   gitGetWorktreeStatusSummaryMock.mockClear();
+  gitFetchRemoteMock.mockResolvedValue({ outcome: "fetched", output: "From origin" });
   gitGetWorktreeStatusMock.mockImplementation(
     async (
       _repoPath: string,
@@ -341,7 +356,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("manual refresh updates active scope without extra background scope call", async () => {
+  test("manual refresh fetches remote before reloading the active scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
     try {
@@ -353,6 +368,8 @@ describe("useAgentStudioDiffData", () => {
       });
 
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitFetchRemoteMock).toHaveBeenNthCalledWith(1, "/repo", "origin/main", undefined);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
         2,
         "/repo",
@@ -360,6 +377,88 @@ describe("useAgentStudioDiffData", () => {
         "uncommitted",
         undefined,
       );
+      expect(gitFetchRemoteMock.mock.invocationCallOrder[0]).toBeLessThan(
+        gitGetWorktreeStatusMock.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("manual refresh surfaces fetch failures and does not reload status", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockRejectedValueOnce(new Error("Cannot resolve safe remote for refresh"));
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      await harness.waitFor(
+        (state) => state.error === "Error: Cannot resolve safe remote for refresh",
+      );
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("manual refresh still reloads local status when fetch is skipped for no remote", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockResolvedValueOnce({
+        outcome: "skipped_no_remote",
+        output:
+          "Skipped git fetch because no applicable remote is configured for this repo or branch.",
+      });
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+      expect(harness.getLatest().error).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("successful non-refresh loads clear a stale refresh error", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockRejectedValueOnce(new Error("Cannot resolve safe remote for refresh"));
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+      await harness.waitFor(
+        (state) => state.error === "Error: Cannot resolve safe remote for refresh",
+      );
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+
+      await harness.waitFor((state) => state.diffScope === "target");
+      await harness.waitFor((state) => state.error === null);
     } finally {
       await harness.unmount();
     }
@@ -1976,6 +2075,150 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor((state) => state.branch === "feature/second");
 
       expect(harness.getLatest().fileDiffs[0]?.file).toBe("src/second.ts");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("queues one additional refresh cycle while fetch is in flight", async () => {
+    const firstFetch = createDeferred<GitFetchRemoteMockResult>();
+    const secondFetch = createDeferred<GitFetchRemoteMockResult>();
+    const fetchQueue = [firstFetch, secondFetch];
+
+    gitFetchRemoteMock.mockImplementation(async () => {
+      const deferred = fetchQueue.shift();
+      if (!deferred) {
+        throw new Error("No deferred fetch response left");
+      }
+
+      return deferred.promise;
+    });
+
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.refresh();
+        state.refresh();
+      });
+
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+
+      firstFetch.resolve({ outcome: "fetched", output: "From origin" });
+      await harness.waitFor(() => gitFetchRemoteMock.mock.calls.length >= 2);
+
+      secondFetch.resolve({ outcome: "fetched", output: "From origin" });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(2);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not reload a new repo context when an older refresh fetch resolves", async () => {
+    const pendingFetch = createDeferred<GitFetchRemoteMockResult>();
+
+    gitFetchRemoteMock.mockImplementation(async () => pendingFetch.promise);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      repoPath: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        repoPath: "/repo-b",
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo-b",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+
+      pendingFetch.resolve({ outcome: "fetched", output: "From origin" });
+      await harness.run(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not reload a new worktree context when an older refresh fetch resolves", async () => {
+    const pendingFetch = createDeferred<GitFetchRemoteMockResult>();
+
+    gitFetchRemoteMock.mockImplementation(async () => pendingFetch.promise);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionWorkingDirectory: "/repo/.worktrees/run-1",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        1,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        "/repo/.worktrees/run-1",
+      );
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitFetchRemoteMock).toHaveBeenNthCalledWith(
+        1,
+        "/repo",
+        "origin/main",
+        "/repo/.worktrees/run-1",
+      );
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionWorkingDirectory: "/repo/.worktrees/run-2",
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        "/repo/.worktrees/run-2",
+      );
+
+      pendingFetch.resolve({ outcome: "fetched", output: "From origin" });
+      await harness.run(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

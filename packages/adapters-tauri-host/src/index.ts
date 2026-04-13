@@ -103,6 +103,7 @@ const GIT_METHODS = [
   "gitRemoveWorktree",
   "gitPushBranch",
   "gitPullBranch",
+  "gitFetchRemote",
   "gitCommitAll",
   "gitRebaseBranch",
   "gitRebaseAbort",

@@ -5,12 +5,13 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
-    GitConflictAbortRequest, GitConflictAbortResult, GitCurrentBranch, GitFileDiff, GitFileStatus,
-    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitResetWorktreeSelectionRequest,
-    GitResetWorktreeSelectionResult, GitWorktreeSummary, RepoStoreAttachmentHealth,
-    RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
-    RepoStoreSharedServerOwnershipState, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
+    GitConflictAbortRequest, GitConflictAbortResult, GitCurrentBranch, GitFetchRequest,
+    GitFetchResult, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushResult,
+    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitWorktreeSummary,
+    RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
+    RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RuntimeCheck, RuntimeHealth,
+    SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, remove_worktree,
@@ -598,6 +599,28 @@ impl AppService {
             resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
         self.git_port
             .pull_branch(Path::new(&execution_path), request)
+    }
+
+    pub fn git_fetch_remote(
+        &self,
+        repo_path: &str,
+        request: GitFetchRequest,
+    ) -> Result<GitFetchResult> {
+        let repo_path = self.resolve_authorized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
+        let target_branch = request.target_branch.trim();
+        if target_branch.is_empty() {
+            return Err(anyhow!("target branch cannot be empty"));
+        }
+
+        self.git_port.fetch_remote(
+            Path::new(&execution_path),
+            GitFetchRequest {
+                working_dir: request.working_dir,
+                target_branch: target_branch.to_string(),
+            },
+        )
     }
 
     pub fn git_commit_all(

@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
-use host_domain::{GitPullResult, GitPushResult};
+use host_domain::{GitFetchRequest, GitFetchResult, GitPullResult, GitPushResult};
+use std::collections::HashSet;
 use std::path::Path;
 
 use super::util::{combine_output, normalize_merge_ref, normalize_non_empty, resolve_upstream_ref};
@@ -10,6 +11,8 @@ struct UpstreamTargetConfig {
     merge_ref: String,
     upstream_ref: String,
 }
+
+const UPSTREAM_TARGET_BRANCH: &str = "@{upstream}";
 
 impl GitCliPort {
     fn matches_remote_branch_name(remote_ref: &str, branch: &str) -> bool {
@@ -70,6 +73,206 @@ impl GitCliPort {
             .lines()
             .any(|line| line.contains("[rejected]") && line.contains("non-fast-forward"))
             || (output.contains("rejected") && output.contains("non-fast-forward"))
+    }
+
+    fn remote_name_from_tracking_ref(target_ref: &str) -> Option<String> {
+        let remainder = target_ref.strip_prefix("refs/remotes/")?;
+        let (remote, _) = remainder.split_once('/')?;
+        Some(remote.to_string())
+    }
+
+    fn list_remotes_impl(&self, repo_path: &Path) -> Result<HashSet<String>> {
+        let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &["remote"])?;
+        if !ok {
+            return Err(anyhow!(
+                "Failed to list git remotes: {}",
+                combine_output(stdout, stderr)
+            ));
+        }
+
+        Ok(stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect())
+    }
+
+    fn push_fallback_remote_for_branch_impl(
+        &self,
+        repo_path: &Path,
+        branch_name: &str,
+        remotes: &mut Vec<String>,
+        seen: &mut HashSet<String>,
+    ) -> Result<bool> {
+        let Some(fallback_remote_ref) =
+            self.resolve_fallback_remote_ref_for_branch_impl(repo_path, branch_name)?
+        else {
+            return Ok(false);
+        };
+        let Some(remote) = Self::remote_name_from_tracking_ref(fallback_remote_ref.as_str()) else {
+            return Ok(false);
+        };
+
+        Self::push_unique_remote(remotes, seen, remote);
+        Ok(true)
+    }
+
+    fn resolve_current_branch_fetch_remote_impl(
+        &self,
+        repo_path: &Path,
+        current_branch_name: Option<&str>,
+        available_remotes: &HashSet<String>,
+        remotes: &mut Vec<String>,
+        seen: &mut HashSet<String>,
+    ) -> Result<bool> {
+        if let Some(upstream_target) =
+            self.resolve_upstream_target_config_for_branch_impl(repo_path, current_branch_name)?
+        {
+            if upstream_target.remote != "." {
+                if !available_remotes.contains(upstream_target.remote.as_str()) {
+                    return Err(anyhow!(
+                        "Cannot refresh changes because the current branch upstream uses unknown remote `{}`",
+                        upstream_target.remote
+                    ));
+                }
+
+                Self::push_unique_remote(remotes, seen, upstream_target.remote);
+                return Ok(true);
+            }
+
+            if let Some(branch_name) = current_branch_name {
+                return self.push_fallback_remote_for_branch_impl(
+                    repo_path,
+                    branch_name,
+                    remotes,
+                    seen,
+                );
+            }
+
+            return Ok(false);
+        }
+
+        if let Some(branch_name) = current_branch_name {
+            return self.push_fallback_remote_for_branch_impl(
+                repo_path,
+                branch_name,
+                remotes,
+                seen,
+            );
+        }
+
+        Ok(false)
+    }
+
+    fn resolve_target_remote_name_impl(
+        &self,
+        target_branch: &str,
+        available_remotes: &HashSet<String>,
+    ) -> Result<Option<String>> {
+        if target_branch == UPSTREAM_TARGET_BRANCH {
+            return Ok(None);
+        }
+
+        if let Some(remainder) = target_branch.strip_prefix("refs/remotes/") {
+            let Some((remote, _)) = remainder.split_once('/') else {
+                return Ok(None);
+            };
+            if available_remotes.contains(remote) {
+                return Ok(Some(remote.to_string()));
+            }
+            return Err(anyhow!(
+                "Cannot refresh changes because compare target `{target_branch}` uses unknown remote `{remote}`"
+            ));
+        }
+
+        let Some((remote, _)) = target_branch.split_once('/') else {
+            return Ok(None);
+        };
+        if available_remotes.contains(remote) {
+            return Ok(Some(remote.to_string()));
+        }
+
+        // Short-form `foo/bar` targets are ambiguous: they may be remote refs or local branches
+        // with slashes, so only explicit `refs/remotes/...` targets hard-fail on unknown remotes.
+        Ok(None)
+    }
+
+    fn push_unique_remote(remotes: &mut Vec<String>, seen: &mut HashSet<String>, remote: String) {
+        if seen.insert(remote.clone()) {
+            remotes.push(remote);
+        }
+    }
+
+    fn resolve_refresh_fetch_remotes_impl(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<Vec<String>> {
+        let target_branch = normalize_non_empty(target_branch, "target branch")?;
+        let current_branch = self.get_current_branch_unchecked(repo_path)?;
+        let current_branch_name = current_branch.name.as_deref();
+        let available_remotes = self.list_remotes_impl(repo_path)?;
+        let mut remotes = Vec::new();
+        let mut seen = HashSet::new();
+        let has_current_branch_remote = self.resolve_current_branch_fetch_remote_impl(
+            repo_path,
+            current_branch_name,
+            &available_remotes,
+            &mut remotes,
+            &mut seen,
+        )?;
+
+        if target_branch == UPSTREAM_TARGET_BRANCH
+            && !has_current_branch_remote
+            && !available_remotes.is_empty()
+        {
+            return Err(anyhow!(
+                "Cannot refresh changes because compare target `@{{upstream}}` requires an upstream remote for the current branch"
+            ));
+        }
+
+        if let Some(remote) =
+            self.resolve_target_remote_name_impl(target_branch.as_str(), &available_remotes)?
+        {
+            Self::push_unique_remote(&mut remotes, &mut seen, remote);
+        }
+
+        Ok(remotes)
+    }
+
+    pub(super) fn fetch_remote_impl(
+        &self,
+        repo_path: &Path,
+        request: GitFetchRequest,
+    ) -> Result<GitFetchResult> {
+        self.ensure_repository(repo_path)?;
+        let remotes =
+            self.resolve_refresh_fetch_remotes_impl(repo_path, request.target_branch.as_str())?;
+        if remotes.is_empty() {
+            return Ok(GitFetchResult::SkippedNoRemote {
+                output: "Skipped git fetch because no applicable remote is configured for this repo or branch.".to_string(),
+            });
+        }
+        let mut outputs = Vec::new();
+
+        for remote in remotes {
+            let fetch_args = ["fetch", "--prune", "--", remote.as_str()];
+            let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &fetch_args)?;
+            let output = combine_output(stdout, stderr);
+            if !ok {
+                return Err(anyhow!("git fetch --prune {remote} failed: {output}"));
+            }
+            if output.is_empty() {
+                outputs.push(format!("Fetched {remote}"));
+            } else {
+                outputs.push(output);
+            }
+        }
+
+        Ok(GitFetchResult::Fetched {
+            output: outputs.join("\n"),
+        })
     }
 
     pub(super) fn push_branch_impl(

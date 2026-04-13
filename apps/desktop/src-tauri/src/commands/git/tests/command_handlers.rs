@@ -6,7 +6,7 @@ use super::fixtures::{
     init_repo, invoke_json, run_git, sample_worktree_status_data,
     sample_worktree_status_summary_data, setup_command_git_fixture,
     setup_command_git_fixture_with_mutations, setup_command_git_fixture_with_summary,
-    ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
+    FetchRemoteCall, ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
     WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
 };
 use host_domain::{
@@ -398,6 +398,104 @@ fn git_reset_worktree_selection_propagates_backend_failure() {
     assert!(
         error.to_string().contains("apply failed"),
         "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn git_fetch_remote_rejects_unauthorized_repo() {
+    let fixture = setup_command_git_fixture_with_mutations(
+        "git-fetch-command-unauthorized",
+        WorktreeStatusResult::Ok(sample_worktree_status_data(
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 0,
+                behind: 0,
+            },
+        )),
+        false,
+    );
+
+    let error = invoke_json(
+        &fixture.webview,
+        "git_fetch_remote",
+        json!({
+            "repoPath": fixture.repo_path.as_str(),
+            "targetBranch": "origin/main",
+        }),
+    )
+    .expect_err("unauthorized repo should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("Repository path is not in the configured workspace allowlist"),
+        "unexpected error: {error}"
+    );
+    let state = fixture
+        .git_state
+        .lock()
+        .expect("command git state lock should not be poisoned");
+    assert!(
+        state.fetch_remote_calls.is_empty(),
+        "fetch path should not run when authorization fails"
+    );
+}
+
+#[test]
+fn git_fetch_remote_forwards_trimmed_target_branch_and_effective_working_dir() {
+    let fixture = setup_command_git_fixture_with_mutations(
+        "git-fetch-command-success",
+        WorktreeStatusResult::Ok(sample_worktree_status_data(
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 0,
+                behind: 0,
+            },
+        )),
+        true,
+    );
+    let worktree = fixture.root.join("repo-wt-fetch");
+    let worktree_str = worktree.to_string_lossy().to_string();
+    run_git(
+        &[
+            "-C",
+            fixture.repo_path.as_str(),
+            "worktree",
+            "add",
+            "-b",
+            "feature/fetch-command",
+            worktree_str.as_str(),
+        ],
+        Path::new(&fixture.repo_path),
+    );
+
+    let response = invoke_json(
+        &fixture.webview,
+        "git_fetch_remote",
+        json!({
+            "repoPath": fixture.repo_path.as_str(),
+            "workingDir": worktree_str,
+            "targetBranch": "  origin/main  ",
+        }),
+    )
+    .expect("fetch command should succeed");
+
+    assert_eq!(response["outcome"], json!("fetched"));
+    assert_eq!(response["output"], json!("Fetched origin"));
+    let expected_worktree = fs::canonicalize(&worktree)
+        .expect("worktree should canonicalize")
+        .to_string_lossy()
+        .to_string();
+    let state = fixture
+        .git_state
+        .lock()
+        .expect("command git state lock should not be poisoned");
+    assert_eq!(state.fetch_remote_calls.len(), 1);
+    assert_eq!(
+        state.fetch_remote_calls[0],
+        FetchRemoteCall {
+            repo_path: expected_worktree.clone(),
+            working_dir: Some(expected_worktree),
+            target_branch: "origin/main".to_string(),
+        }
     );
 }
 

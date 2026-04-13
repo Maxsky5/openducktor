@@ -13,11 +13,12 @@ mod worktree;
 use anyhow::{Context, Result};
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitConflictAbortRequest,
-    GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
-    GitMergeBranchRequest, GitMergeBranchResult, GitPort, GitPullRequest, GitPullResult,
-    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData, GitWorktreeSummary,
+    GitConflictAbortResult, GitCurrentBranch, GitDiffScope, GitFetchRequest, GitFetchResult,
+    GitFileDiff, GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPort,
+    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitResetWorktreeSelectionRequest,
+    GitResetWorktreeSelectionResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitWorktreeSummary,
 };
 use std::path::Path;
 
@@ -112,6 +113,10 @@ impl GitPort for GitCliPort {
         force_with_lease: bool,
     ) -> Result<GitPushResult> {
         self.push_branch_impl(repo_path, remote, branch, set_upstream, force_with_lease)
+    }
+
+    fn fetch_remote(&self, repo_path: &Path, request: GitFetchRequest) -> Result<GitFetchResult> {
+        self.fetch_remote_impl(repo_path, request)
     }
 
     fn pull_branch(&self, repo_path: &Path, _request: GitPullRequest) -> Result<GitPullResult> {
