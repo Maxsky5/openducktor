@@ -221,6 +221,7 @@ jobs:
 
   finalize-release:
     name: Summarize release draft
+    if: ${{ always() }}
     permissions:
       contents: read
     needs:
@@ -230,6 +231,8 @@ jobs:
     steps:
       - name: Publish workflow summary
         env:
+          BUILD_RESULT: ${{ needs.build-macos.result }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
@@ -239,6 +242,7 @@ jobs:
             echo "## Desktop release draft ready"
             echo
             echo "- Tag: $TAG"
+            echo "- Build job result: $BUILD_RESULT"
             echo "- Draft release: $RELEASE_URL"
             echo "- Assets uploaded by tauri-action for macOS arm64 and macOS Intel"
             echo "- Signing/notarization: required"

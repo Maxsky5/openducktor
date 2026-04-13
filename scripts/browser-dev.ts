@@ -10,7 +10,16 @@ const backendEnv: Record<string, string> = {
 };
 
 const backendProcess = Bun.spawn({
-  cmd: ["cargo", "run", "--bin", "browser_backend"],
+  cmd: [
+    "cargo",
+    "run",
+    "--bin",
+    "openducktor-desktop",
+    "--",
+    "--browser-backend",
+    "--port",
+    backendPort,
+  ],
   cwd: `${repoRoot}/apps/desktop/src-tauri`,
   detached: true,
   env: backendEnv,

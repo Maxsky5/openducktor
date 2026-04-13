@@ -11,7 +11,7 @@ describe("public API contract", () => {
     expect(packageJson.main).toBe("./dist/index.js");
     expect(packageJson.types).toBe("./dist/index.d.ts");
     expect(packageJson.bin).toEqual({
-      "openducktor-mcp": "./dist/index.js",
+      "openducktor-mcp": "dist/index.js",
     });
     expect(packageJson.exports).toEqual({
       ".": {
