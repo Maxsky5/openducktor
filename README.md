@@ -73,12 +73,14 @@ At a high level:
 
 Under the hood, OpenDucktor exposes its own MCP server, `openducktor`.
 
-- Desktop-managed agent sessions use that MCP internally to read tasks and persist workflow updates.
+The Rust host remains the only Beads/Dolt owner in the desktop architecture. The MCP layer does not talk to Beads or Dolt directly; it validates `odt_*` inputs and forwards those calls back to the running host bridge.
+
+- Desktop-managed agent sessions launch that MCP as a sidecar and pass it `ODT_REPO_PATH` plus a loopback `ODT_HOST_URL`.
 - The same MCP surface can also be used outside the desktop app through `@openducktor/mcp`.
 - Public MCP tools cover task access such as `odt_create_task`, `odt_search_tasks`, `odt_read_task`, and `odt_read_task_documents`.
 - Internal workflow tools such as `odt_set_spec`, `odt_set_plan`, `odt_build_*`, and `odt_qa_*` let agent sessions write progress back into the canonical task workflow.
 
-That keeps the workflow task-centric and auditable: agents can act through a controlled tool surface, while OpenDucktor remains the place where task state, documents, approvals, and delivery history come together.
+That keeps the workflow task-centric and auditable: agents act through a controlled tool surface, the Rust host enforces the workflow and storage rules, and OpenDucktor remains the place where task state, documents, approvals, and delivery history come together.
 
 ## Current Scope
 

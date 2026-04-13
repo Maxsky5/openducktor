@@ -11,6 +11,8 @@ Both desktop-managed and standalone MCP paths now route task operations through 
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 - Startup fails if the host bridge is unhealthy or does not expose the required ODT tool surface.
 
+The MCP package is transport and validation only. The Rust host remains the owner of Beads attachment readiness, shared Dolt lifecycle, workflow transitions, and metadata persistence.
+
 For the full Beads and shared Dolt lifecycle, including why the Rust host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
 
 Package name:
@@ -48,6 +50,23 @@ Equivalent environment variables:
 - `ODT_REPO_PATH`
 - `ODT_HOST_URL` optional override
 
+Unsupported legacy environment variables:
+
+- `ODT_BEADS_ATTACHMENT_DIR`
+- `ODT_DOLT_HOST`
+- `ODT_DOLT_PORT`
+- `ODT_DATABASE_NAME`
+- `ODT_METADATA_NAMESPACE`
+
+Unsupported legacy CLI flags:
+
+- `--beads-attachment-dir`
+- `--dolt-host`
+- `--dolt-port`
+- `--database-name`
+- `--database`
+- `--metadata-namespace`
+
 Automatic discovery:
 
 - The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
@@ -63,6 +82,8 @@ Startup contract:
 5. Call the host bridge `/health` endpoint.
 6. Call `odt_mcp_ready` through the loopback host API.
 7. Refuse startup if any required ODT tool name is missing.
+
+Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it.
 
 ## Public Tools
 
@@ -292,3 +313,4 @@ Output:
 - The Rust host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
 - The Rust host also owns document compression and decompression for Beads metadata.
 - The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.
+- Beads and Dolt stay modeled as storage infrastructure. They are not part of the MCP runtime contract beyond the host-owned bridge being healthy.

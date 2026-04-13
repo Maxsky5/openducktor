@@ -20,7 +20,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [agent-runtime-implementation-plan.md](agent-runtime-implementation-plan.md): runtime abstraction plan and guardrails.
 - [agent-ui-library-evaluation.md](agent-ui-library-evaluation.md): reasoning behind the current agent UI approach.
 - [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md): detailed Beads attachment and shared Dolt lifecycle, command inventory, startup, hydration, and shutdown rules.
-- [external-mcp.md](external-mcp.md): public MCP package usage, install config, and the external task tools.
+- [external-mcp.md](external-mcp.md): public MCP package usage, host-bridge startup contract, and the external task tools.
 - [runtime-integration-guide.md](runtime-integration-guide.md): runtime vocabulary, capability model, integration checklist, and verification path.
 
 ## Security And Maintenance Docs

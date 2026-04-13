@@ -6,6 +6,8 @@ The MCP package is a thin client of the running Rust host.
 
 The published package is intentionally a standalone CLI/server package. It does not expose a supported JavaScript or TypeScript library API from `@openducktor/mcp`.
 
+Desktop-managed sessions launch this same package as a sidecar. In both desktop-managed and standalone use, the package validates `odt_*` inputs and forwards them to the Rust host bridge instead of talking to Beads or Dolt directly.
+
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
 - Standalone use auto-discovers a running host bridge from the local registry.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
@@ -38,6 +40,23 @@ Equivalent environment variables:
 - `ODT_REPO_PATH`
 - `ODT_HOST_URL` optional override
 
+Rejected legacy environment variables:
+
+- `ODT_BEADS_ATTACHMENT_DIR`
+- `ODT_DOLT_HOST`
+- `ODT_DOLT_PORT`
+- `ODT_DATABASE_NAME`
+- `ODT_METADATA_NAMESPACE`
+
+Rejected legacy CLI flags:
+
+- `--beads-attachment-dir`
+- `--dolt-host`
+- `--dolt-port`
+- `--database-name`
+- `--database`
+- `--metadata-namespace`
+
 Automatic discovery:
 
 - The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
@@ -52,6 +71,8 @@ Startup behavior:
 - It checks the host bridge `/health` endpoint.
 - It calls `odt_mcp_ready` before serving requests.
 - Startup fails if the host does not expose the full ODT tool surface.
+
+The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
 
 ## Public Tools
 

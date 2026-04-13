@@ -1,7 +1,7 @@
 # End-to-End Architecture and Data Flow
 
 ## Purpose
-This document is the maintainer-facing map of how OpenDucktor moves data across layers, from React UI to Beads/MCP.
+This document is the maintainer-facing map of how OpenDucktor moves data across layers, from React UI through the Rust host to Beads-backed persistence and MCP clients.
 
 Use it to answer:
 - which layer owns a rule,
@@ -24,7 +24,7 @@ Current scope note:
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore` persistence gateway, Beads lifecycle coordination, config/worktree/process integrations | UI workflow decisions |
-| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/host-bridge-client.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | MCP stdio transport, shared schema validation, host-bridge readiness checks, host-backed `odt_*` task/workflow calls | Frontend rendering/state |
+| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/host-bridge-client.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | MCP stdio transport, shared schema validation, host-bridge readiness checks, host-backed `odt_*` task/workflow calls | Frontend rendering/state, Beads/Dolt lifecycle ownership |
 
 ## Platform-specific native lifecycle seams
 
@@ -63,9 +63,10 @@ Key boundary:
  - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
  - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
 6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_REPO_PATH` and `ODT_HOST_URL`.
-7. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
-8. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
-9. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
+7. The MCP process uses only that host-bridge contract. Direct Beads/Dolt startup inputs are rejected so storage ownership stays in the Rust host.
+8. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
+9. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
+10. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
 
 For the exact Beads attachment and shared Dolt startup/shutdown command sequence, see `docs/beads-shared-dolt-lifecycle.md`.
 
@@ -74,7 +75,7 @@ Critical session invariants:
 - Stale workspace protection must roll back newly started/resumed sessions with best-effort `stopSession` cleanup.
 
 ### 3) Workflow transition
-OpenDucktor has two transition paths that converge on Beads as persistent truth.
+OpenDucktor has two transition paths that converge on the Rust host as the workflow mutation entry point and Beads as persistent truth.
 
 Human-triggered path:
 1. User clicks a workflow action surfaced from `availableActions`.
@@ -87,10 +88,14 @@ Human-triggered path:
 Agent-triggered path:
 1. Active OpenCode session calls `odt_*` tool through local MCP server `openducktor`.
 2. `packages/openducktor-mcp` validates input against shared `ODT_TOOL_SCHEMAS`.
-3. `OdtTaskStore` forwards the repo-scoped request to the running Rust host bridge.
+3. `OdtTaskStore` forwards the repo-scoped request to the running Rust host bridge; the MCP package does not talk to Beads or Dolt directly.
 4. `AppService` validates workflow rules and persists Beads metadata/status through `TaskStore`.
 5. Tool result is emitted in session stream.
 6. Frontend session-event handler detects completed ODT mutation tools and triggers task refresh.
+
+Key boundary:
+- Desktop-managed and standalone MCP clients use the same host-bridge execution path.
+- Beads and Dolt remain storage infrastructure concerns owned by the Rust host, not by agent runtimes or MCP clients.
 
 ### 4) Generate a pull request
 1. The approval flow starts a Builder session with scenario `build_pull_request_generation`.
@@ -131,6 +136,7 @@ Concrete adapters today:
 5. Keep Tauri commands as transport/mapping layer; place policy in `AppService`/domain layers.
 6. Preserve Beads as lifecycle source of truth; do not move lifecycle authority into UI-local state.
 7. Keep Rust host and MCP transition policy matrices aligned; when one changes, update the other in the same change set.
+8. Keep Beads attachment paths, Dolt coordinates, and metadata namespace ownership in the Rust host; do not reintroduce them into MCP startup or runtime-session contracts.
 
 ## Related Docs
 - `docs/agent-orchestrator-module-map.md`
