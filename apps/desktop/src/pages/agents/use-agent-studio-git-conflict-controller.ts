@@ -245,7 +245,7 @@ export function useAgentStudioGitConflictController({
       toast.success(getGitConflictCopy(activeGitConflict.operation).abortedToastTitle);
 
       try {
-        await refreshDiffData();
+        await refreshDiffData("soft");
       } catch (error) {
         const message = toErrorMessage(error, "Git conflict was aborted, but diff refresh failed.");
         setRebaseError(message);

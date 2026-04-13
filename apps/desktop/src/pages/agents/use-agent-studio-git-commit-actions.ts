@@ -57,7 +57,7 @@ export function useAgentStudioGitCommitActions({
         }
 
         try {
-          await refreshDiffData();
+          await refreshDiffData("soft");
         } catch (error) {
           setCommitError(toErrorMessage(error, "Diff refresh failed."));
         }

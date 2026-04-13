@@ -94,7 +94,7 @@ export function useAgentStudioGitPushActions({
         toast.success(`Pushed ${pushResult.branch}`, {
           description: `Remote: ${pushResult.remote}`,
         });
-        await refreshDiffData();
+        await refreshDiffData("soft");
       } catch (error) {
         const message = toErrorMessage(
           error,

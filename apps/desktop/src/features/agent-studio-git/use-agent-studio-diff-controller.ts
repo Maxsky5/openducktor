@@ -16,7 +16,6 @@ import {
   type LoadRequestContext,
   useAgentStudioDiffBatchState,
 } from "./use-agent-studio-diff-batch-state";
-import { useAgentStudioDiffPolling } from "./use-agent-studio-diff-polling";
 import { useAgentStudioDiffRequestController } from "./use-agent-studio-diff-request-controller";
 
 type LoadDataContext = {
@@ -41,7 +40,6 @@ type UseAgentStudioDiffControllerArgs = {
   targetBranch: string;
   workingDir: string | null;
   requestContextKey: string | null;
-  enablePolling: boolean;
   shouldBlockDiffLoading: boolean;
 };
 
@@ -54,6 +52,9 @@ type UseAgentStudioDiffControllerResult = {
   refreshActiveScope: (
     context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
   ) => Promise<void>;
+  refreshActiveScopeSummary: (
+    context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
+  ) => Promise<void>;
   reloadActiveScope: (showLoading?: boolean) => void;
 };
 
@@ -62,7 +63,6 @@ export function useAgentStudioDiffController({
   targetBranch,
   workingDir,
   requestContextKey,
-  enablePolling,
   shouldBlockDiffLoading,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
   const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
@@ -398,27 +398,6 @@ export function useAgentStudioDiffController({
     workingDir,
   ]);
 
-  const pollActiveScopeSummary = useCallback((): void => {
-    if (!repoPathRef.current) {
-      return;
-    }
-
-    void loadData(false, {
-      repoPath: repoPathRef.current,
-      targetBranch: targetBranchRef.current,
-      workingDir: workingDirRef.current,
-      scope: diffScopeRef.current,
-      mode: "summary",
-    });
-  }, [loadData]);
-
-  useAgentStudioDiffPolling({
-    enablePolling,
-    repoPath,
-    shouldBlockDiffLoading,
-    poll: pollActiveScopeSummary,
-  });
-
   const refreshActiveScope = useCallback(
     async (
       context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
@@ -441,6 +420,32 @@ export function useAgentStudioDiffController({
         scope: refreshContext.scope,
         force: true,
         replayIfInFlight: true,
+      });
+    },
+    [loadData, shouldBlockDiffLoading],
+  );
+
+  const refreshActiveScopeSummary = useCallback(
+    async (
+      context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
+    ): Promise<void> => {
+      const refreshContext = context ?? {
+        repoPath: repoPathRef.current,
+        targetBranch: targetBranchRef.current,
+        workingDir: workingDirRef.current,
+        scope: diffScopeRef.current,
+      };
+
+      if (shouldBlockDiffLoading || !refreshContext.repoPath) {
+        return;
+      }
+
+      await loadData(false, {
+        repoPath: refreshContext.repoPath,
+        targetBranch: refreshContext.targetBranch,
+        workingDir: refreshContext.workingDir,
+        scope: refreshContext.scope,
+        mode: "summary",
       });
     },
     [loadData, shouldBlockDiffLoading],
@@ -472,6 +477,7 @@ export function useAgentStudioDiffController({
     state,
     statusSnapshotKey,
     refreshActiveScope,
+    refreshActiveScopeSummary,
     reloadActiveScope,
   };
 }

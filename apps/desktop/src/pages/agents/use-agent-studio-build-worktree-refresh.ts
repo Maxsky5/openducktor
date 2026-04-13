@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { GitDiffRefreshMode } from "@/features/agent-studio-git";
 import {
   forEachSessionMessage,
   forEachSessionMessageFrom,
@@ -12,7 +13,7 @@ type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
   activeSession: AgentSessionState | null;
   isSessionHistoryHydrating: boolean;
-  refreshWorktree: () => void;
+  refreshWorktree: (mode?: GitDiffRefreshMode) => void;
 };
 
 const EXPLICIT_NON_WORKTREE_TOOL_NAMES = new Set([
@@ -168,7 +169,7 @@ export function useAgentStudioBuildWorktreeRefresh({
     previousMessagesRef.current = activeSession.messages;
 
     if (shouldRefresh) {
-      refreshWorktree();
+      refreshWorktree("soft");
     }
   }, [activeSession, isSessionHistoryHydrating, refreshWorktree, viewRole]);
 }

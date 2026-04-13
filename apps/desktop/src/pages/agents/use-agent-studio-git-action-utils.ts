@@ -1,9 +1,13 @@
-import type { GitConflict, GitConflictOperation } from "@/features/agent-studio-git";
+import type {
+  GitConflict,
+  GitConflictOperation,
+  GitDiffRefreshMode,
+} from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 
 export type GitActionKind = "commit" | "push" | "rebase";
 
-export type RefreshGitDiffData = () => void | Promise<void>;
+export type RefreshGitDiffData = (mode?: GitDiffRefreshMode) => void | Promise<void>;
 
 export const BUILDER_LOCK_REASON = "Git actions are disabled while the Builder session is working.";
 export const CONFLICT_LOCK_REASON = "Git actions are disabled while git conflicts are unresolved.";

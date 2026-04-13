@@ -98,7 +98,7 @@ export function useAgentStudioGitRebaseActions({
           const message = toConflictMessage(result.conflictedFiles, "pull_rebase");
           captureFreshConflict(conflict);
           toast.error("Pull requires conflict resolution", { description: message });
-          await refreshDiffData();
+          await refreshDiffData("soft");
           return;
         }
 
@@ -115,7 +115,7 @@ export function useAgentStudioGitRebaseActions({
         } else {
           toast.success("Pulled from upstream");
         }
-        await refreshDiffData();
+        await refreshDiffData("soft");
       } catch (error) {
         const message = toErrorMessage(error, "Pull failed.");
         setRebaseError(message);
@@ -176,12 +176,12 @@ export function useAgentStudioGitRebaseActions({
           const message = toConflictMessage(result.conflictedFiles, "rebase");
           captureFreshConflict(conflict);
           toast.error("Rebase requires conflict resolution", { description: message });
-          await refreshDiffData();
+          await refreshDiffData("soft");
           return;
         }
 
         clearActionErrors();
-        await refreshDiffData();
+        await refreshDiffData("soft");
       } catch (error) {
         setRebaseError(toErrorMessage(error, fallbackError));
       } finally {

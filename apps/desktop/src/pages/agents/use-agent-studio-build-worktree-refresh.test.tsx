@@ -99,6 +99,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         activeSession: createCompletedToolSession("apply_patch", "tool-1"),
       });
       expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+      expect(refreshWorktreeMock).toHaveBeenLastCalledWith("soft");
 
       await harness.update({
         ...createBaseArgs(),
@@ -112,6 +113,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         }),
       });
       expect(refreshWorktreeMock).toHaveBeenCalledTimes(2);
+      expect(refreshWorktreeMock).toHaveBeenLastCalledWith("soft");
     } finally {
       await harness.unmount();
     }
@@ -273,6 +275,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       });
 
       expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+      expect(refreshWorktreeMock).toHaveBeenLastCalledWith("soft");
     } finally {
       await harness.unmount();
     }

@@ -6,6 +6,7 @@ import type {
   AgentStudioPendingReset,
   GitConflict,
   GitConflictAction,
+  GitDiffRefreshMode,
 } from "@/features/agent-studio-git";
 import { useAgentStudioGitActionErrors } from "./use-agent-studio-git-action-errors";
 import { BUILDER_LOCK_REASON, type GitActionKind } from "./use-agent-studio-git-action-utils";
@@ -64,7 +65,7 @@ type UseAgentStudioGitActionsInput = {
   upstreamAheadBehind?: CommitsAheadBehind | null;
   detectedConflictedFiles?: string[];
   worktreeStatusSnapshotKey?: string | null;
-  refreshDiffData: () => void | Promise<void>;
+  refreshDiffData: (mode?: GitDiffRefreshMode) => void | Promise<void>;
   isDiffDataLoading?: boolean;
   isBuilderSessionWorking?: boolean;
   onResolveGitConflict?: (conflict: GitConflict) => Promise<boolean>;

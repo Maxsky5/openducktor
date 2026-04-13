@@ -131,6 +131,7 @@ describe("useAgentStudioGitActions", () => {
 
       await harness.waitFor((state) => state.isCommitting === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
       expect(harness.getLatest().commitError).toBeNull();
     } finally {
       await harness.unmount();
@@ -162,6 +163,7 @@ describe("useAgentStudioGitActions", () => {
         undefined,
       );
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
       expect(harness.getLatest().commitError).toBe("Refresh exploded");
     } finally {
       await harness.unmount();
@@ -233,6 +235,7 @@ describe("useAgentStudioGitActions", () => {
       pushDeferred.resolve({ remote: "origin", branch: "feature/task-10", output: "done" });
       await pushHarness.waitFor((state) => state.isPushing === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
       expect(pushHarness.getLatest().pushError).toBeNull();
       expect(toastSuccessMock).toHaveBeenCalledWith("Pushed feature/task-10", {
         description: "Remote: origin",
@@ -270,7 +273,35 @@ describe("useAgentStudioGitActions", () => {
       rebaseDeferred.resolve({ outcome: "rebased" });
       await harness.waitFor((state) => state.isRebasing === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
       expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps commit actions in flight until the soft refresh settles", async () => {
+    const refreshDeferred = createDeferred<void>();
+    const refreshDiffData = mock(async (_mode?: string) => refreshDeferred.promise);
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        void state.commitAll("fix: preserve disabled state");
+      });
+
+      await harness.waitFor((state) => state.isCommitting === true);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
+      expect(harness.getLatest().isCommitting).toBe(true);
+
+      refreshDeferred.resolve();
+      await harness.waitFor((state) => state.isCommitting === false);
     } finally {
       await harness.unmount();
     }
