@@ -276,9 +276,9 @@ impl AppService {
         external_session_id: &str,
         working_directory: &str,
     ) -> Result<()> {
-        let port = runtime_route
-            .port()
-            .ok_or_else(|| anyhow!("Build runtime route must expose a port"))?;
+        let port = runtime_route.local_http_port().ok_or_else(|| {
+            anyhow!("OpenCode build session abort requires a local_http runtime route with a port")
+        })?;
         let request_path = format!(
             "/session/{external_session_id}/abort?{}",
             form_urlencoded::Serializer::new(String::new())
@@ -394,8 +394,10 @@ impl AppService {
         let task_id_string = task_id.to_string();
         let port = runtime_summary
             .runtime_route
-            .port()
-            .ok_or_else(|| anyhow!("Build runtime route must expose a port"))?;
+            .local_http_port()
+            .ok_or_else(|| {
+                anyhow!("OpenCode build runs require a local_http runtime route with a port")
+            })?;
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
@@ -405,7 +407,7 @@ impl AppService {
             task_id: task_id_string.clone(),
             branch: prerequisites.branch.clone(),
             worktree_path: worktree_path.clone(),
-            port,
+            port: Some(port),
             state: RunState::Running,
             last_message: Some(format!("{} runtime running", runtime_kind.as_str())),
             started_at: now_rfc3339(),

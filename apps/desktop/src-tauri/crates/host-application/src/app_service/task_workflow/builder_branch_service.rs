@@ -637,7 +637,7 @@ mod tests {
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),
                     worktree_path: active_worktree.to_string_lossy().to_string(),
-                    port: 4444,
+                    port: Some(4444),
                     state: RunState::Running,
                     last_message: None,
                     started_at: "2026-03-11T11:00:00Z".to_string(),

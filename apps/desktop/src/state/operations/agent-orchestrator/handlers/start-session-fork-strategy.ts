@@ -1,6 +1,7 @@
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
+import { resolveRuntimeRouteConnection } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
@@ -73,14 +74,21 @@ export const executeForkStart = async ({
     resolved.runtime.runtimeKind ??
     selectedModel?.runtimeKind ??
     DEFAULT_RUNTIME_KIND;
+  const sourceRuntimeRoute = sourceSession.runtimeRoute ?? resolved.runtime.runtimeRoute;
+  if (!sourceRuntimeRoute) {
+    throw new Error(
+      `Session "${input.sourceSessionId}" is missing a live runtime route required for forking.`,
+    );
+  }
+  const runtimeConnection = resolveRuntimeRouteConnection(
+    sourceRuntimeRoute,
+    sourceSession.workingDirectory,
+  ).runtimeConnection;
 
   const summary = await deps.runtime.adapter.forkSession({
     repoPath: ctx.repoPath,
     runtimeKind,
-    runtimeConnection: {
-      endpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
-      workingDirectory: sourceSession.workingDirectory,
-    },
+    runtimeConnection,
     workingDirectory: sourceSession.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
@@ -104,11 +112,6 @@ export const executeForkStart = async ({
       startedCtx,
     });
   }
-
-  const runtimeConnection = {
-    endpoint: sourceSession.runtimeEndpoint || resolved.runtime.runtimeEndpoint,
-    workingDirectory: sourceSession.workingDirectory,
-  };
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
@@ -163,7 +166,8 @@ export const executeForkStart = async ({
     runtimeKind,
     runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
     runId: sourceSession.runId ?? resolved.runtime.runId,
-    runtimeEndpoint: runtimeConnection.endpoint,
+    runtimeRoute: sourceRuntimeRoute,
+    runtimeConnection,
     workingDirectory: sourceSession.workingDirectory,
     ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
   };

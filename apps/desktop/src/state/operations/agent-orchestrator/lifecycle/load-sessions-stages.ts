@@ -38,6 +38,7 @@ import {
   type ResolvedHydrationRuntime,
   readPersistedRuntimeKind,
 } from "./hydration-runtime-resolution";
+import { runtimeRouteToConnection } from "../runtime/runtime";
 import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createReattachLiveSession } from "./reattach-live-session";
@@ -162,7 +163,7 @@ const mergePersistedSessionRecord = (
   promptOverrides: RepoPromptOverrides,
 ): AgentSessionState => {
   const persisted = fromPersistedSessionRecord(record, taskId);
-  const shouldPreserveCurrentWorkingDirectory = current.runtimeEndpoint.trim().length > 0;
+  const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
 
   return {
     ...current,
@@ -392,10 +393,10 @@ export const createRuntimeResolutionPlannerStage = async ({
   ): Extract<ResolvedHydrationRuntime, { ok: true }> | null => {
     const currentSession = sessionsRef.current[record.sessionId];
     const runtimeKind = currentSession?.runtimeKind ?? null;
-    const runtimeEndpoint = currentSession?.runtimeEndpoint.trim() ?? "";
+    const runtimeRoute = currentSession?.runtimeRoute ?? null;
     const workingDirectory =
       currentSession?.workingDirectory.trim() || record.workingDirectory.trim();
-    if (!runtimeKind || runtimeEndpoint.length === 0 || workingDirectory.length === 0) {
+    if (!runtimeKind || runtimeRoute === null || workingDirectory.length === 0) {
       return null;
     }
 
@@ -404,11 +405,8 @@ export const createRuntimeResolutionPlannerStage = async ({
       runtimeKind,
       runtimeId: currentSession?.runtimeId ?? null,
       runId: currentSession?.runId ?? null,
-      runtimeEndpoint,
-      runtimeConnection: {
-        endpoint: runtimeEndpoint,
-        workingDirectory,
-      },
+      runtimeRoute,
+      runtimeConnection: runtimeRouteToConnection(runtimeRoute, workingDirectory),
     };
   };
 
@@ -483,7 +481,7 @@ export const createRuntimeResolutionPlannerStage = async ({
     const storedSnapshot = liveAgentSessionStore?.readSnapshot({
       repoPath: intent.repoPath,
       runtimeKind: runtimeResolution.runtimeKind,
-      runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+      runtimeConnection: runtimeResolution.runtimeConnection,
       workingDirectory: resolvedWorkingDirectory,
       externalSessionId,
     });
@@ -494,7 +492,7 @@ export const createRuntimeResolutionPlannerStage = async ({
     const preloadedSnapshots = options?.preloadedLiveAgentSessionsByKey?.get(
       liveAgentSessionLookupKey(
         runtimeResolution.runtimeKind,
-        runtimeResolution.runtimeEndpoint,
+        runtimeResolution.runtimeConnection,
         resolvedWorkingDirectory,
       ),
     );
@@ -772,7 +770,7 @@ export const hydrateSessionRecordsStage = async ({
           runtimeKind: readPersistedRuntimeKind(record),
           runtimeId: null,
           runId: null,
-          runtimeEndpoint: "",
+          runtimeRoute: null,
           workingDirectory: record.workingDirectory,
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
         }),
@@ -781,7 +779,7 @@ export const hydrateSessionRecordsStage = async ({
       return;
     }
 
-    const { runtimeKind, runtimeId, runId, runtimeEndpoint, runtimeConnection } = runtimeResolution;
+    const { runtimeKind, runtimeId, runId, runtimeRoute, runtimeConnection } = runtimeResolution;
     const workingDirectory = runtimeConnection.workingDirectory;
     if (!shouldHydrateHistory) {
       updateSession(
@@ -791,7 +789,7 @@ export const hydrateSessionRecordsStage = async ({
           runtimeKind,
           runtimeId,
           runId,
-          runtimeEndpoint,
+          runtimeRoute,
           workingDirectory,
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
         }),
@@ -842,7 +840,7 @@ export const hydrateSessionRecordsStage = async ({
           runtimeKind,
           runtimeId,
           runId,
-          runtimeEndpoint,
+          runtimeRoute,
           status: liveSessionStatus ?? current.status,
           workingDirectory,
           historyHydrationState: "hydrated",

@@ -29,7 +29,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   runtimeKind: "opencode",
   runtimeId: null,
   runId: null,
-  runtimeEndpoint: "",
+  runtimeRoute: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -149,7 +149,9 @@ const createRuntime = (
 
 describe("load-sessions-stages", () => {
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
-    const existingSession = createSession({ runtimeEndpoint: "http://127.0.0.1:4444" });
+    const existingSession = createSession({
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+    });
     const stateHarness = createStateHarness({ "session-1": existingSession });
     let persistedLoads = 0;
     let setCalls = 0;
@@ -344,8 +346,9 @@ describe("load-sessions-stages", () => {
             runtimeKind: "opencode",
             runtimeId: "runtime-1",
             runId: null,
-            runtimeEndpoint: "http://127.0.0.1:4444",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             runtimeConnection: {
+              type: "local_http",
               endpoint: "http://127.0.0.1:4444",
               workingDirectory: "/tmp/repo/worktree",
             },
@@ -370,7 +373,7 @@ describe("load-sessions-stages", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
         runId: "run-current",
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory,
       }),
     });
@@ -402,12 +405,16 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeConnectionsByKey: new Map([
           [
             runtimeWorkingDirectoryKey("opencode", workingDirectory),
-            { endpoint: "http://127.0.0.1:4444", workingDirectory },
+            { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
           ],
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
           [
-            liveAgentSessionLookupKey("opencode", "http://127.0.0.1:4444", workingDirectory),
+            liveAgentSessionLookupKey(
+              "opencode",
+              { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
+              workingDirectory,
+            ),
             [liveSnapshot],
           ],
         ]),
@@ -444,8 +451,9 @@ describe("load-sessions-stages", () => {
       runtimeKind: "opencode",
       runtimeId: "runtime-current",
       runId: "run-current",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       runtimeConnection: {
+        type: "local_http",
         endpoint: "http://127.0.0.1:4444",
         workingDirectory,
       },
@@ -458,8 +466,9 @@ describe("load-sessions-stages", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
         runId: "run-current",
-        runtimeEndpoint: "http://127.0.0.1:4444",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         runtimeConnection: {
+          type: "local_http",
           endpoint: "http://127.0.0.1:4444",
           workingDirectory,
         },

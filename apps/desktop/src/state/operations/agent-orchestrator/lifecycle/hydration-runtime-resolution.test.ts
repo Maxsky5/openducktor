@@ -63,6 +63,7 @@ describe("createHydrationRuntimeResolver", () => {
       [
         runtimeWorkingDirectoryKey("opencode", workingDirectory),
         {
+          type: "local_http",
           endpoint: "http://127.0.0.1:9999",
           workingDirectory,
         },
@@ -84,7 +85,10 @@ describe("createHydrationRuntimeResolver", () => {
 
     expect(result.runId).toBe("run-1");
     expect(result.runtimeId).toBeNull();
-    expect(result.runtimeEndpoint).toBe("http://127.0.0.1:4444");
+    expect(result.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+    });
   });
 
   test("prefers live runtime resolution over preloaded runtime connections", async () => {
@@ -93,6 +97,7 @@ describe("createHydrationRuntimeResolver", () => {
       [
         runtimeWorkingDirectoryKey("opencode", workingDirectory),
         {
+          type: "local_http",
           endpoint: "http://127.0.0.1:9999",
           workingDirectory,
         },
@@ -116,7 +121,10 @@ describe("createHydrationRuntimeResolver", () => {
 
     expect(result.runtimeId).toBe("runtime-1");
     expect(result.runId).toBeNull();
-    expect(result.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(result.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+    });
   });
 
   test("falls back to preloaded runtime connection when no run or runtime exists", async () => {
@@ -125,6 +133,7 @@ describe("createHydrationRuntimeResolver", () => {
       [
         runtimeWorkingDirectoryKey("opencode", workingDirectory),
         {
+          type: "local_http",
           endpoint: "http://127.0.0.1:9999",
           workingDirectory,
         },
@@ -150,7 +159,10 @@ describe("createHydrationRuntimeResolver", () => {
 
     expect(result.runtimeId).toBeNull();
     expect(result.runId).toBeNull();
-    expect(result.runtimeEndpoint).toBe("http://127.0.0.1:9999");
+    expect(result.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:9999",
+    });
     expect(ensureCalls).toBe(0);
   });
 });

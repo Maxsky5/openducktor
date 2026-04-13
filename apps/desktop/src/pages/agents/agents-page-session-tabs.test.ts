@@ -32,7 +32,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   startedAt: "2026-02-20T10:00:00.000Z",
   runtimeId: null,
   runId: null,
-  runtimeEndpoint: "https://example.test",
+  runtimeRoute: { type: "local_http", endpoint: "https://example.test" },
   workingDirectory: "/tmp/work",
   messages: [],
   draftAssistantText: "",

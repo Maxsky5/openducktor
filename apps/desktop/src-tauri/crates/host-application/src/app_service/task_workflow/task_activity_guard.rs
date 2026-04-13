@@ -117,7 +117,7 @@ impl<'a> TaskActivityGuard<'a> {
             session_roles,
             &runtime_routes_by_worktree,
             &repo_runtime_routes_by_kind,
-        );
+        )?;
 
         let primary_statuses_by_target = self
             .service
@@ -178,22 +178,23 @@ impl<'a> TaskActivityGuard<'a> {
         session_roles: &[&str],
         runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
         repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
-    ) -> TaskActivityProbePlan {
+    ) -> Result<TaskActivityProbePlan> {
         let mut primary_probe_targets = Vec::new();
-        let run_plans = build_run_probe_plans(candidate_runs, sessions, &mut primary_probe_targets);
+        let run_plans =
+            build_run_probe_plans(candidate_runs, sessions, &mut primary_probe_targets)?;
         let session_plans = build_session_probe_plans(
             sessions,
             session_roles,
             runtime_routes_by_worktree,
             repo_runtime_routes_by_kind,
             &mut primary_probe_targets,
-        );
+        )?;
 
-        TaskActivityProbePlan {
+        Ok(TaskActivityProbePlan {
             run_plans,
             session_plans,
             primary_probe_targets,
-        }
+        })
     }
 
     fn evaluate_run_activity(
@@ -355,7 +356,7 @@ fn build_run_probe_plans(
     candidate_runs: &[RunProbeCandidate],
     sessions: &[AgentSessionDocument],
     primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
-) -> Vec<RunProbePlan> {
+) -> Result<Vec<RunProbePlan>> {
     let mut run_plans = Vec::with_capacity(candidate_runs.len());
     for run_candidate in candidate_runs {
         let external_session_ids = collect_build_external_session_ids(run_candidate, sessions);
@@ -365,7 +366,7 @@ fn build_run_probe_plans(
             let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
                 &run_candidate.runtime_route,
                 run_candidate.worktree_path.as_str(),
-            );
+            )?;
             primary_probe_targets.push(target.clone());
             Some(target)
         };
@@ -375,7 +376,7 @@ fn build_run_probe_plans(
             primary_target,
         });
     }
-    run_plans
+    Ok(run_plans)
 }
 
 fn build_session_probe_plans(
@@ -384,7 +385,7 @@ fn build_session_probe_plans(
     runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
     repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
     primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
-) -> Vec<SessionProbePlan> {
+) -> Result<Vec<SessionProbePlan>> {
     let allowed_roles = session_roles
         .iter()
         .map(|role| role.trim())
@@ -416,13 +417,13 @@ fn build_session_probe_plans(
         let primary_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
             runtime_route,
             session.working_directory.as_str(),
-        );
+        )?;
         primary_probe_targets.push(primary_target.clone());
         let fallback_target = select_fallback_probe_target(
             worktree_runtime_route,
             repo_runtime_route,
             session.working_directory.as_str(),
-        );
+        )?;
 
         session_plans.push(SessionProbePlan {
             worktree_key,
@@ -432,7 +433,7 @@ fn build_session_probe_plans(
             fallback_target,
         });
     }
-    session_plans
+    Ok(session_plans)
 }
 
 fn collect_runtime_routes_by_worktree(
@@ -494,21 +495,19 @@ fn select_fallback_probe_target(
     worktree_runtime_route: Option<&RuntimeRoute>,
     repo_runtime_route: Option<&RuntimeRoute>,
     working_directory: &str,
-) -> Option<OpencodeSessionStatusProbeTarget> {
+) -> Result<Option<OpencodeSessionStatusProbeTarget>> {
     let (Some(primary_route), Some(fallback_route)) = (worktree_runtime_route, repo_runtime_route)
     else {
-        return None;
+        return Ok(None);
     };
-    let primary_endpoint = runtime_route_endpoint(primary_route);
-    let fallback_endpoint = runtime_route_endpoint(fallback_route);
-    if primary_endpoint == fallback_endpoint {
-        return None;
+    if primary_route == fallback_route {
+        return Ok(None);
     }
 
-    Some(OpencodeSessionStatusProbeTarget::for_runtime_route(
+    Ok(Some(OpencodeSessionStatusProbeTarget::for_runtime_route(
         fallback_route,
         working_directory,
-    ))
+    )?))
 }
 
 fn dedupe_probe_targets(
@@ -521,12 +520,6 @@ fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
     match value.trim() {
         "opencode" => Some(AgentRuntimeKind::Opencode),
         _ => None,
-    }
-}
-
-fn runtime_route_endpoint(route: &RuntimeRoute) -> &str {
-    match route {
-        RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
     }
 }
 

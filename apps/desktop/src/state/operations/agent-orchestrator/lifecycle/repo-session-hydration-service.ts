@@ -29,7 +29,6 @@ type HydrationScope = "bootstrap" | "reconcile";
 type RuntimeConnectionScan = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
-  runtimeEndpoint: string;
   directories: Set<string>;
 };
 
@@ -209,24 +208,23 @@ export const createRepoSessionHydrationService = ({
       );
 
       for (const runtime of runtimeEntries) {
-        const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+        const { runtimeConnection } = resolveRuntimeRouteConnection(
           runtime.runtimeRoute,
           runtime.workingDirectory,
         );
         preloadedRuntimeConnectionsByKey.set(
           runtimeWorkingDirectoryKey(runtimeKind, runtime.workingDirectory),
-          { ...runtimeConnection, endpoint: runtimeEndpoint },
+          runtimeConnection,
         );
         if (!desiredDirectories.has(runtime.workingDirectory)) {
           continue;
         }
 
-        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeEndpoint);
+        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
         if (!runtimeConnections.has(scanKey)) {
           runtimeConnections.set(scanKey, {
             runtimeKind,
             runtimeConnection,
-            runtimeEndpoint,
             directories: new Set<string>(),
           });
         }
@@ -264,12 +262,11 @@ export const createRepoSessionHydrationService = ({
         runtimeEntries.push(routeSourceRuntime);
       }
       const repoRuntime = resolveRuntimeRouteConnection(routeSourceRuntime.runtimeRoute, repoPath);
-      const scanKey = getLiveAgentSessionCacheKey(runtimeKind, repoRuntime.runtimeEndpoint);
+      const scanKey = getLiveAgentSessionCacheKey(runtimeKind, repoRuntime.runtimeConnection);
       if (!runtimeConnections.has(scanKey)) {
         runtimeConnections.set(scanKey, {
           runtimeKind,
           runtimeConnection: repoRuntime.runtimeConnection,
-          runtimeEndpoint: repoRuntime.runtimeEndpoint,
           directories: new Set<string>(),
         });
       }
@@ -290,20 +287,19 @@ export const createRepoSessionHydrationService = ({
       if (!activeRunStates.has(run.state)) {
         continue;
       }
-      const { runtimeEndpoint, runtimeConnection } = resolveRuntimeRouteConnection(
+      const { runtimeConnection } = resolveRuntimeRouteConnection(
         run.runtimeRoute,
         run.worktreePath,
       );
       preloadedRuntimeConnectionsByKey.set(
         runtimeWorkingDirectoryKey(run.runtimeKind, run.worktreePath),
-        { ...runtimeConnection, endpoint: runtimeEndpoint },
+        runtimeConnection,
       );
-      const scanKey = getLiveAgentSessionCacheKey(run.runtimeKind, runtimeEndpoint);
+      const scanKey = getLiveAgentSessionCacheKey(run.runtimeKind, runtimeConnection);
       if (!runtimeConnections.has(scanKey)) {
         runtimeConnections.set(scanKey, {
           runtimeKind: run.runtimeKind,
           runtimeConnection,
-          runtimeEndpoint,
           directories: new Set<string>(),
         });
       }
@@ -340,7 +336,7 @@ export const createRepoSessionHydrationService = ({
 
       for (const [workingDirectory, sessionsForDirectory] of sessionsByWorkingDirectory) {
         preloadedLiveAgentSessionsByKey.set(
-          liveAgentSessionLookupKey(input.runtimeKind, input.runtimeEndpoint, workingDirectory),
+          liveAgentSessionLookupKey(input.runtimeKind, input.runtimeConnection, workingDirectory),
           sessionsForDirectory,
         );
       }

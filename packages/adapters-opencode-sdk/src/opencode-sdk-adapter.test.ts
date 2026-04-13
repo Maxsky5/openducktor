@@ -185,7 +185,8 @@ describe("opencode-sdk-adapter", () => {
       scenario: "spec_initial",
       systemPrompt: "system",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -224,7 +225,8 @@ describe("opencode-sdk-adapter", () => {
         scenario: "spec_initial",
         systemPrompt: "system",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -241,7 +243,8 @@ describe("opencode-sdk-adapter", () => {
     const sessions = await adapter.listLiveAgentSessions({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -284,7 +287,8 @@ describe("opencode-sdk-adapter", () => {
     const catalog = await adapter.listAvailableSlashCommands({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -318,7 +322,8 @@ describe("opencode-sdk-adapter", () => {
       adapter.listAvailableSlashCommands({
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -336,7 +341,8 @@ describe("opencode-sdk-adapter", () => {
     const results = await adapter.searchFiles({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
       query: "src",
@@ -378,7 +384,8 @@ describe("opencode-sdk-adapter", () => {
       adapter.searchFiles({
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
         query: "src",
@@ -396,7 +403,8 @@ describe("opencode-sdk-adapter", () => {
     const snapshots = await adapter.listLiveAgentSessionSnapshots({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -478,7 +486,8 @@ describe("opencode-sdk-adapter", () => {
       adapter.listLiveAgentSessions({
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -506,7 +515,8 @@ describe("opencode-sdk-adapter", () => {
       adapter.listLiveAgentSessions({
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -543,7 +553,8 @@ describe("opencode-sdk-adapter", () => {
     const sessions = await adapter.listLiveAgentSessions({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -596,7 +607,8 @@ describe("opencode-sdk-adapter", () => {
       adapter.listLiveAgentSessions({
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -615,7 +627,8 @@ describe("opencode-sdk-adapter", () => {
     const pending = await adapter.listLiveAgentSessionPendingInput({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });

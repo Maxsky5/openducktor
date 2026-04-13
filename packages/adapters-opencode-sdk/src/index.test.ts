@@ -9,6 +9,7 @@ const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(reso
 const buildQueuedSignature = (text: string): string =>
   buildQueuedRequestSignature([{ kind: "text", text }]);
 const defaultRuntimeConnection = {
+  type: "local_http",
   endpoint: "http://127.0.0.1:12345",
   workingDirectory: "/repo",
 } as const;
@@ -529,7 +530,8 @@ describe("OpencodeSdkAdapter", () => {
       scenario: "build_implementation_start",
       systemPrompt: "system",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12000",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12000",
         workingDirectory: "/repo",
       },
     });
@@ -543,7 +545,8 @@ describe("OpencodeSdkAdapter", () => {
       scenario: "qa_review",
       systemPrompt: "system",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12000",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12000",
         workingDirectory: "/other",
       },
     });
@@ -591,7 +594,8 @@ describe("OpencodeSdkAdapter", () => {
       scenario: "planner_initial",
       systemPrompt: "system",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12000",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12000",
         workingDirectory: "/repo",
       },
     });
@@ -1740,7 +1744,8 @@ describe("OpencodeSdkAdapter", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12000",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12000",
           workingDirectory: "/repo",
         },
         workingDirectory: "/repo/other-worktree",
@@ -2873,7 +2878,8 @@ describe("OpencodeSdkAdapter", () => {
       adapter.loadSessionTodos({
         runtimeKind: "opencode",
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:12345",
+          type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
           workingDirectory: "   ",
         },
         externalSessionId: "session-opencode-1",
@@ -2899,7 +2905,8 @@ describe("OpencodeSdkAdapter", () => {
     const todos = await adapter.loadSessionTodos({
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "  /repo  ",
       },
       externalSessionId: "session-opencode-1",

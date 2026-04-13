@@ -25,7 +25,6 @@ import {
   type ResumeAgentSessionInput,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
-  toRuntimeClientInput,
   type UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import {
@@ -64,6 +63,7 @@ import {
   requireSession,
   stopSessionRuntime,
 } from "./session-registry";
+import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
 import type {
   ClientFactory,
@@ -197,7 +197,10 @@ export class OpencodeSdkAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const runtimeDefinition = this.getRuntimeDefinition();
-    const runtimeClientInput = toRuntimeClientInput(input.runtimeConnection, "start session");
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "start session",
+    );
     const client = this.createClient(runtimeClientInput);
     const created = await client.session.create({
       directory: input.workingDirectory,
@@ -238,7 +241,10 @@ export class OpencodeSdkAdapter
       return existing.summary;
     }
 
-    const runtimeClientInput = toRuntimeClientInput(input.runtimeConnection, "resume session");
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "resume session",
+    );
     const client = this.createClient(runtimeClientInput);
     const detail = await client.session.get({
       directory: input.workingDirectory,
@@ -272,7 +278,10 @@ export class OpencodeSdkAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
-    const runtimeClientInput = toRuntimeClientInput(input.runtimeConnection, "fork session");
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "fork session",
+    );
     const client = this.createClient(runtimeClientInput);
     const forked = await client.session.fork({
       directory: input.workingDirectory,
@@ -317,7 +326,7 @@ export class OpencodeSdkAdapter
   async listLiveAgentSessionSnapshots(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSnapshot[]> {
-    const runtimeClientInput = toRuntimeClientInput(
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
       input.runtimeConnection,
       "list live agent sessions",
     );
@@ -388,7 +397,7 @@ export class OpencodeSdkAdapter
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
-    const runtimeClientInput = toRuntimeClientInput(
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
       input.runtimeConnection,
       "load session history",
     );
@@ -416,7 +425,7 @@ export class OpencodeSdkAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     return loadSessionTodos(this.createClient, {
-      ...toRuntimeClientInput(input.runtimeConnection, "load session todos"),
+      ...toOpencodeRuntimeClientInput(input.runtimeConnection, "load session todos"),
       externalSessionId: input.externalSessionId,
     });
   }
@@ -426,14 +435,17 @@ export class OpencodeSdkAdapter
   ): Promise<LiveAgentSessionPendingInputBySession> {
     return listLiveAgentSessionPendingInput(
       this.createClient,
-      toRuntimeClientInput(input.runtimeConnection, "list live agent session pending input"),
+      toOpencodeRuntimeClientInput(
+        input.runtimeConnection,
+        "list live agent session pending input",
+      ),
     );
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
     return listAvailableModels(
       this.createClient,
-      toRuntimeClientInput(input.runtimeConnection, "list available models"),
+      toOpencodeRuntimeClientInput(input.runtimeConnection, "list available models"),
     );
   }
 
@@ -442,7 +454,7 @@ export class OpencodeSdkAdapter
   ): Promise<import("@openducktor/core").AgentSlashCommandCatalog> {
     return listAvailableSlashCommands(
       this.createClient,
-      toRuntimeClientInput(input.runtimeConnection, "list available slash commands"),
+      toOpencodeRuntimeClientInput(input.runtimeConnection, "list available slash commands"),
     );
   }
 
@@ -450,7 +462,7 @@ export class OpencodeSdkAdapter
     input: import("@openducktor/core").SearchAgentFilesInput,
   ): Promise<import("@openducktor/core").AgentFileSearchResult[]> {
     return searchFiles(this.createClient, {
-      ...toRuntimeClientInput(input.runtimeConnection, "search files"),
+      ...toOpencodeRuntimeClientInput(input.runtimeConnection, "search files"),
       query: input.query,
     });
   }
@@ -553,7 +565,7 @@ export class OpencodeSdkAdapter
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
     return loadSessionDiffOp(
-      toRuntimeClientInput(input.runtimeConnection, "load session diff").runtimeEndpoint,
+      toOpencodeRuntimeClientInput(input.runtimeConnection, "load session diff").runtimeEndpoint,
       input.sessionId,
       input.messageId,
     );
@@ -563,7 +575,7 @@ export class OpencodeSdkAdapter
     input: LoadAgentFileStatusInput,
   ): Promise<import("@openducktor/contracts").FileStatus[]> {
     return loadFileStatusOp(
-      toRuntimeClientInput(input.runtimeConnection, "load file status").runtimeEndpoint,
+      toOpencodeRuntimeClientInput(input.runtimeConnection, "load file status").runtimeEndpoint,
     );
   }
 

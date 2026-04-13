@@ -536,11 +536,16 @@ impl AppService {
         )
     }
 
-    fn repo_runtime_client(runtime: &RuntimeInstanceSummary) -> RepoRuntimeHealthHttpClient<'_> {
+    fn repo_runtime_client(
+        runtime: &RuntimeInstanceSummary,
+    ) -> std::result::Result<RepoRuntimeHealthHttpClient<'_>, RuntimeHealthHttpFailure> {
         match &runtime.runtime_route {
             RuntimeRoute::LocalHttp { endpoint } => {
-                RepoRuntimeHealthHttpClient::new(endpoint.as_str())
+                Ok(RepoRuntimeHealthHttpClient::new(endpoint.as_str()))
             }
+            RuntimeRoute::Stdio => Err(RuntimeHealthHttpFailure::error(
+                "OpenCode runtime MCP health checks require a local_http runtime route".to_string(),
+            )),
         }
     }
 
@@ -549,7 +554,7 @@ impl AppService {
         runtime: &RuntimeInstanceSummary,
     ) -> std::result::Result<HashMap<String, RuntimeHealthMcpServerStatus>, RuntimeHealthHttpFailure>
     {
-        Self::repo_runtime_client(runtime).load_mcp_status(runtime.working_directory.as_str())
+        Self::repo_runtime_client(runtime)?.load_mcp_status(runtime.working_directory.as_str())
     }
 
     fn repo_runtime_connect_mcp_server(
@@ -557,7 +562,7 @@ impl AppService {
         runtime: &RuntimeInstanceSummary,
         name: &str,
     ) -> std::result::Result<(), RuntimeHealthHttpFailure> {
-        Self::repo_runtime_client(runtime)
+        Self::repo_runtime_client(runtime)?
             .connect_mcp_server(name, runtime.working_directory.as_str())
     }
 
@@ -565,7 +570,7 @@ impl AppService {
         &self,
         runtime: &RuntimeInstanceSummary,
     ) -> std::result::Result<Vec<String>, RuntimeHealthHttpFailure> {
-        Self::repo_runtime_client(runtime).load_tool_ids(runtime.working_directory.as_str())
+        Self::repo_runtime_client(runtime)?.load_tool_ids(runtime.working_directory.as_str())
     }
 
     fn repo_runtime_resolve_mcp_status(
@@ -688,9 +693,6 @@ impl AppService {
         repo_key: &str,
         runtime_route: &RuntimeRoute,
     ) -> Result<bool> {
-        let runtime_endpoint = match runtime_route {
-            RuntimeRoute::LocalHttp { endpoint } => endpoint.as_str(),
-        };
         Ok(self.runs_list(Some(repo_key))?.iter().any(|run| {
             matches!(
                 run.state,
@@ -698,7 +700,7 @@ impl AppService {
                     | RunState::Running
                     | RunState::Blocked
                     | RunState::AwaitingDoneConfirmation
-            ) && matches!(&run.runtime_route, RuntimeRoute::LocalHttp { endpoint } if endpoint == runtime_endpoint)
+            ) && &run.runtime_route == runtime_route
         }))
     }
 

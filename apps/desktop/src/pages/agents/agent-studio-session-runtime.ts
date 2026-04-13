@@ -1,8 +1,9 @@
+import { runtimeRouteToConnection } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const WORKTREE_RUNTIME_ROLES = new Set<AgentSessionState["role"]>(["build", "qa"]);
 
-type RuntimeAttachmentState = Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeEndpoint">;
+type RuntimeAttachmentState = Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeRoute">;
 type WorktreeRuntimeRole = Pick<AgentSessionState, "role">;
 
 export const requiresLiveWorktreeRuntime = (
@@ -18,11 +19,17 @@ export const hasAttachedSessionRuntime = (
     return false;
   }
 
-  return (
-    session.runId !== null ||
-    session.runtimeId !== null ||
-    session.runtimeEndpoint.trim().length > 0
-  );
+  return session.runId !== null || session.runtimeId !== null || session.runtimeRoute !== null;
+};
+
+export const toAttachedSessionRuntimeConnection = (
+  session: Pick<AgentSessionState, "runtimeRoute" | "workingDirectory"> | null | undefined,
+) => {
+  if (!session?.runtimeRoute) {
+    return null;
+  }
+
+  return runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory);
 };
 
 export const isWaitingForAttachedWorktreeRuntime = (

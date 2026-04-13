@@ -26,8 +26,10 @@ import {
   repoConfigSchema,
   runEventSchema,
   runtimeDescriptorSchema,
+  runSummarySchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
+  runtimeTransportSchema,
   slashCommandCatalogSchema,
   taskCardSchema,
 } from "./index";
@@ -674,7 +676,10 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.runtimeId).toBe("runtime-1");
-    expect(parsed.runtimeRoute.endpoint).toBe("http://127.0.0.1:4100");
+    expect(parsed.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4100",
+    });
     expect(parsed.descriptor.capabilities.supportsSlashCommands).toBe(true);
     expect(parsed.descriptor.capabilities.supportsFileSearch).toBe(true);
     expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
@@ -763,6 +768,64 @@ describe("runtime schemas", () => {
         }),
       ]),
     );
+  });
+
+  test("runtime route and connection schemas accept stdio transports", () => {
+    expect(
+      runtimeInstanceSummarySchema.parse({
+        kind: "opencode",
+        runtimeId: "runtime-stdio",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: {
+          type: "stdio",
+        },
+        startedAt: "2026-01-01T00:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      }).runtimeRoute,
+    ).toEqual({ type: "stdio" });
+
+    expect(
+      runtimeTransportSchema.parse({
+        type: "stdio",
+        workingDirectory: "/repo",
+      }),
+    ).toEqual({
+      type: "stdio",
+      workingDirectory: "/repo",
+    });
+  });
+
+  test("runtime connection schema rejects malformed stdio payloads", () => {
+    expect(() =>
+      runtimeTransportSchema.parse({
+        type: "stdio",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/repo",
+      }),
+    ).toThrow();
+  });
+
+  test("run summary accepts missing generic port semantics", () => {
+    const parsed = runSummarySchema.parse({
+      runId: "run-1",
+      runtimeKind: "opencode",
+      runtimeRoute: {
+        type: "stdio",
+      },
+      repoPath: "/repo",
+      taskId: "task-1",
+      branch: "feature/runtime-route",
+      worktreePath: "/repo/.worktrees/task-1",
+      state: "running",
+      lastMessage: null,
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(parsed.port).toBeUndefined();
+    expect(parsed.runtimeRoute).toEqual({ type: "stdio" });
   });
 
   test("slash command catalog parses runtime command metadata", () => {

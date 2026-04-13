@@ -30,6 +30,7 @@ import {
 } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { toAttachedSessionRuntimeConnection } from "./agent-studio-session-runtime";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
@@ -107,7 +108,7 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
 const toRuntimeQueryInput = (
   session: {
     runtimeKind: RuntimeKind | null;
-    runtimeEndpoint: string;
+    runtimeRoute: AgentSessionState["runtimeRoute"];
     workingDirectory: string;
   } | null,
 ): {
@@ -115,22 +116,19 @@ const toRuntimeQueryInput = (
   runtimeConnection: AgentRuntimeConnection;
 } | null => {
   const runtimeKind = session?.runtimeKind ?? null;
-  const runtimeEndpoint = session?.runtimeEndpoint?.trim() ?? "";
-  const workingDirectory = session?.workingDirectory?.trim() ?? "";
-  if (
-    !session ||
-    runtimeKind == null ||
-    runtimeEndpoint.length === 0 ||
-    workingDirectory.length === 0
-  ) {
+  const runtimeConnection =
+    session === null
+      ? null
+      : toAttachedSessionRuntimeConnection({
+          runtimeRoute: session.runtimeRoute,
+          workingDirectory: session.workingDirectory,
+        });
+  if (!session || runtimeKind == null || runtimeConnection === null) {
     return null;
   }
   return {
     runtimeKind,
-    runtimeConnection: {
-      endpoint: runtimeEndpoint,
-      workingDirectory,
-    },
+    runtimeConnection,
   };
 };
 
@@ -179,7 +177,7 @@ export function useAgentStudioModelSelection({
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
   const activeSessionModelCatalog = activeSession?.modelCatalog ?? null;
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
-  const activeSessionRuntimeEndpoint = activeSession?.runtimeEndpoint?.trim() ?? "";
+  const activeSessionRuntimeRoute = activeSession?.runtimeRoute ?? null;
   const activeSessionWorkingDirectory = activeSession?.workingDirectory?.trim() ?? "";
   const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
   const activeSessionLiveContextUsage = activeSession?.contextUsage ?? null;
@@ -209,14 +207,14 @@ export function useAgentStudioModelSelection({
         hasActiveSession
           ? {
               runtimeKind: activeSessionRuntimeKind,
-              runtimeEndpoint: activeSessionRuntimeEndpoint,
+              runtimeRoute: activeSessionRuntimeRoute,
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
       ),
     [
-      activeSessionRuntimeEndpoint,
       activeSessionRuntimeKind,
+      activeSessionRuntimeRoute,
       activeSessionWorkingDirectory,
       hasActiveSession,
     ],

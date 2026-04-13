@@ -196,7 +196,11 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore.readSnapshot({
         repoPath,
         runtimeKind: "opencode",
-        runtimeEndpoint: "http://127.0.0.1:4555",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4555",
+          workingDirectory: worktreePath,
+        },
         workingDirectory: worktreePath,
         externalSessionId: "external-1",
       })?.externalSessionId,

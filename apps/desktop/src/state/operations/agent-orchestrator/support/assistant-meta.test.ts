@@ -15,7 +15,7 @@ const sessionFixture: AgentSessionState = {
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
   runId: "run-1",
-  runtimeEndpoint: "http://127.0.0.1:4444",
+  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "Draft answer",

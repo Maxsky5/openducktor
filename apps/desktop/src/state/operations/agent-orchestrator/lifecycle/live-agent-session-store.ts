@@ -1,4 +1,4 @@
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 
 const DEFAULT_SNAPSHOT_MAX_AGE_MS = 5_000;
@@ -33,7 +33,7 @@ export class LiveAgentSessionStore {
   readSnapshot(input: {
     repoPath: string;
     runtimeKind: string;
-    runtimeEndpoint: string;
+    runtimeConnection: AgentRuntimeConnection;
     workingDirectory: string;
     externalSessionId: string;
     maxAgeMs?: number;
@@ -46,7 +46,7 @@ export class LiveAgentSessionStore {
 
     const lookupKey = liveAgentSessionLookupKey(
       input.runtimeKind,
-      input.runtimeEndpoint,
+      input.runtimeConnection,
       input.workingDirectory,
     );
     const storedSnapshots = repoSnapshots.get(lookupKey);

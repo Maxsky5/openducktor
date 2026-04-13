@@ -11,6 +11,7 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
+import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createLoadAgentSessions } from "./load-sessions";
 
@@ -227,7 +228,7 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeKind: "opencode",
       runtimeId: null,
       runId: null,
-      runtimeEndpoint: "",
+      runtimeRoute: null,
       workingDirectory: "/tmp/repo",
       messages: [
         {
@@ -349,7 +350,7 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeKind: "opencode",
       runtimeId: null,
       runId: null,
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
       messages: [],
       draftAssistantText: "",
@@ -479,7 +480,7 @@ describe("agent-orchestrator-load-sessions", () => {
           runtimeKind: "opencode",
           runtimeId: null,
           runId: null,
-          runtimeEndpoint: "http://127.0.0.1:4444",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
           draftAssistantText: "",
@@ -645,7 +646,7 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeKind: "opencode",
       runtimeId: "runtime-live",
       runId: "run-live",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
       messages: [],
       draftAssistantText: "",
@@ -686,7 +687,8 @@ describe("agent-orchestrator-load-sessions", () => {
         loadSessionHistory: async (input) => {
           historyLoadInput = {
             runtimeKind: input.runtimeKind,
-            endpoint: input.runtimeConnection.endpoint ?? "",
+            endpoint:
+              input.runtimeConnection.type === "local_http" ? input.runtimeConnection.endpoint : "",
             workingDirectory: input.runtimeConnection.workingDirectory,
             externalSessionId: input.externalSessionId,
           };
@@ -929,7 +931,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(state["session-1"]).toMatchObject({
       status: "stopped",
-      runtimeEndpoint: "",
+      runtimeRoute: null,
       messages: [],
       pendingPermissions: [],
       pendingQuestions: [],
@@ -950,7 +952,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hydratedSession = state["session-1"];
     expect(hydratedSession).toMatchObject({
       status: "running",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       historyHydrationState: "hydrated",
       pendingPermissions: [
         { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
@@ -990,7 +992,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ).toEqual(hydratedMessageIds);
     expect(state["session-1"]).toMatchObject({
       status: "running",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       historyHydrationState: "hydrated",
       pendingPermissions: [
         { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
@@ -1275,7 +1277,7 @@ describe("agent-orchestrator-load-sessions", () => {
     await loadPromise;
 
     expect(resumeCalls).toBe(0);
-    expect(state["session-1"]?.runtimeEndpoint ?? "").toBe("");
+    expect(state["session-1"]?.runtimeRoute).toBeUndefined();
   });
 
   test("reuses the trusted live agent session store for requested session hydration", async () => {
@@ -1292,7 +1294,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: "runtime-1",
           runId: "run-1",
-          runtimeEndpoint: "http://127.0.0.1:4444",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
           draftAssistantText: "",
@@ -1323,7 +1325,15 @@ describe("agent-orchestrator-load-sessions", () => {
       "/tmp/repo",
       new Map([
         [
-          "opencode::http://127.0.0.1:4444::/tmp/repo/worktree",
+          liveAgentSessionLookupKey(
+            "opencode",
+            {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4444",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+            "/tmp/repo/worktree",
+          ),
           [
             {
               externalSessionId: "external-1",
@@ -1401,7 +1411,7 @@ describe("agent-orchestrator-load-sessions", () => {
           runtimeKind: "opencode",
           runtimeId: "runtime-live",
           runId: null,
-          runtimeEndpoint: "http://127.0.0.1:4444",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [
             {
@@ -1508,7 +1518,7 @@ describe("agent-orchestrator-load-sessions", () => {
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
           runId: null,
-          runtimeEndpoint: "http://127.0.0.1:4555",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4555" },
           workingDirectory: "/tmp/repo/resolved-worktree",
           messages: [],
           draftAssistantText: "",
@@ -1622,7 +1632,7 @@ describe("agent-orchestrator-load-sessions", () => {
           runtimeKind: "opencode",
           runtimeId: "runtime-live",
           runId: null,
-          runtimeEndpoint: "http://127.0.0.1:4444",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
           draftAssistantText: "",
@@ -1836,7 +1846,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(0);
     expect(runLoads).toBe(0);
     expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
-    expect(state["session-1"]?.runtimeEndpoint).toBe("");
+    expect(state["session-1"]?.runtimeRoute).toBeNull();
   });
 
   test("hydrates requested session through its persisted runtime kind when endpoint is missing", async () => {
@@ -1871,7 +1881,8 @@ describe("agent-orchestrator-load-sessions", () => {
       activeRepo: "/tmp/repo",
       adapter: createAdapter({
         loadSessionHistory: async ({ runtimeConnection }) => {
-          observedRuntimeEndpoint = runtimeConnection.endpoint ?? "";
+          observedRuntimeEndpoint =
+            runtimeConnection.type === "local_http" ? runtimeConnection.endpoint : "";
           return [];
         },
       }),
@@ -1985,7 +1996,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: null,
           runId: null,
-          runtimeEndpoint: "",
+          runtimeRoute: null,
           workingDirectory: "/tmp/repo",
           messages: [
             {
@@ -2065,7 +2076,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: "runtime-1",
           runId: null,
-          runtimeEndpoint: "http://127.0.0.1:4555",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4555" },
           workingDirectory: "/tmp/repo",
           messages: [
             {
@@ -2151,7 +2162,10 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
     }
-    expect(sessionsRef.current["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(sessionsRef.current["session-1"]?.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+    });
   });
 
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
@@ -2166,7 +2180,7 @@ describe("agent-orchestrator-load-sessions", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeId: "runtime-1",
       runId: "run-1",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo",
       messages: [],
       draftAssistantText: "",
@@ -2300,7 +2314,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: null,
           runId: null,
-          runtimeEndpoint: "",
+          runtimeRoute: null,
           runtimeKind: "opencode" as const,
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
@@ -2521,7 +2535,8 @@ describe("agent-orchestrator-load-sessions", () => {
         return;
       }
       const next = updater(current);
-      observedRuntimeEndpoint = next.runtimeEndpoint;
+      observedRuntimeEndpoint =
+        next.runtimeRoute?.type === "local_http" ? next.runtimeRoute.endpoint : null;
       state = {
         ...state,
         [sessionId]: next,
@@ -3169,7 +3184,10 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(0);
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
+    expect(state["session-1"]?.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+    });
     expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
   });
 
@@ -3505,7 +3523,10 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
+    expect(state["session-1"]?.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+    });
   });
 
   test("resumes and reattaches missing adapter sessions when reconciling after a repo switch", async () => {
@@ -3639,7 +3660,10 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
     expect(attachedListeners).toBe(1);
     expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+    });
   });
 
   test("does not reattach adapter-held sessions when the runtime no longer reports them live", async () => {
@@ -3654,7 +3678,7 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeKind: "opencode",
       runtimeId: "runtime-1",
       runId: null,
-      runtimeEndpoint: "http://127.0.0.1:4555",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4555" },
       workingDirectory: "/tmp/repo/worktree",
       messages: [],
       draftAssistantText: "",
@@ -3781,7 +3805,10 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(attachedListeners).toBe(0);
     expect(state["session-1"]?.status).toBe("stopped");
-    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+    });
     expect(state["session-1"]?.pendingPermissions).toEqual([]);
     expect(state["session-1"]?.pendingQuestions).toEqual([]);
   });
@@ -4099,7 +4126,7 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeKind: "opencode",
       runtimeId: "runtime-1",
       runId: null,
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo",
       historyHydrationState: "not_requested",
       messages: [

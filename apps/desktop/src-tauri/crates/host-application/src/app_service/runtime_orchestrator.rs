@@ -621,7 +621,7 @@ impl AppService {
             let probe_target = super::OpencodeSessionStatusProbeTarget::for_runtime_route(
                 &run.summary.runtime_route,
                 run.worktree_path.as_str(),
-            );
+            )?;
             probe_targets.push(probe_target.clone());
             exposure_plans.push(RunExposurePlan::with_probe(
                 run.summary,
@@ -1603,7 +1603,7 @@ mod tests {
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),
                     worktree_path: runtime.working_directory.clone(),
-                    port,
+                    port: Some(port),
                     state: host_domain::RunState::Running,
                     last_message: None,
                     started_at: "2026-04-04T16:00:10Z".to_string(),
@@ -1699,7 +1699,7 @@ mod tests {
                         task_id: "task-1".to_string(),
                         branch: "odt/task-1".to_string(),
                         worktree_path: "/tmp/repo/worktree".to_string(),
-                        port,
+                        port: Some(port),
                         state: host_domain::RunState::Running,
                         last_message: None,
                         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1761,7 +1761,7 @@ mod tests {
                         task_id: "task-1".to_string(),
                         branch: "odt/task-1".to_string(),
                         worktree_path: "/tmp/repo/worktree".to_string(),
-                        port,
+                        port: Some(port),
                         state: host_domain::RunState::Running,
                         last_message: None,
                         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1830,7 +1830,7 @@ mod tests {
                             task_id: format!("task-{index}"),
                             branch: format!("odt/task-{index}"),
                             worktree_path: format!("/tmp/repo/worktree-{index}"),
-                            port,
+                            port: Some(port),
                             state: host_domain::RunState::Running,
                             last_message: None,
                             started_at: format!("2026-03-17T11:00:0{index}Z"),

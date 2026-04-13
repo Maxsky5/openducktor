@@ -25,7 +25,7 @@ const buildSession = (
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
   runtimeId: null,
   runId: null,
-  runtimeEndpoint: "http://localhost:4096",
+  runtimeRoute: { type: "local_http", endpoint: "http://localhost:4096" },
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",

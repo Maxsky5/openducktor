@@ -114,10 +114,17 @@ export const runStateSchema = z.enum([
 export type RunState = z.infer<typeof runStateSchema>;
 
 export const runtimeRouteSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("local_http"),
-    endpoint: z.string().trim().min(1),
-  }),
+  z
+    .object({
+      type: z.literal("local_http"),
+      endpoint: z.string().trim().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("stdio"),
+    })
+    .strict(),
 ]);
 export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
 
@@ -129,7 +136,7 @@ export const runSummarySchema = z.object({
   taskId: z.string(),
   branch: z.string(),
   worktreePath: z.string(),
-  port: z.number().int().positive(),
+  port: z.number().int().positive().nullable().optional(),
   state: runStateSchema,
   lastMessage: z.string().nullable(),
   startedAt: z.string(),

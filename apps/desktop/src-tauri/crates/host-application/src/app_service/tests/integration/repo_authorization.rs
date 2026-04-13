@@ -274,7 +274,7 @@ fn runs_list_without_filter_hides_non_allowlisted_runs() -> Result<()> {
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),
                     worktree_path: "/tmp/outside-allowlist".to_string(),
-                    port: 4010,
+                    port: Some(4010),
                     state: RunState::Running,
                     last_message: None,
                     started_at: "2026-02-28T16:00:00Z".to_string(),

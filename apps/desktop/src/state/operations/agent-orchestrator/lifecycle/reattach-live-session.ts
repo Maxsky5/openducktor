@@ -113,7 +113,7 @@ export const createReattachLiveSession = ({
         runtimeKind: runtimeResolution.runtimeKind,
         runtimeId: runtimeResolution.runtimeId,
         runId: runtimeResolution.runId,
-        runtimeEndpoint: runtimeResolution.runtimeEndpoint,
+        runtimeRoute: runtimeResolution.runtimeRoute,
         workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
         status: nextStatus,
         pendingPermissions: liveSession.pendingPermissions,

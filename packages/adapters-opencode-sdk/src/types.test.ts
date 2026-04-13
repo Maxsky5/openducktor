@@ -19,7 +19,8 @@ describe("types", () => {
       repoPath: "/repo",
       runtimeKind: "opencode",
       runtimeConnection: {
-        endpoint: "http://127.0.0.1:12345",
+        type: "local_http",
+      endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
       workingDirectory: "/repo",

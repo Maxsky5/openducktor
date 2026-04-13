@@ -34,7 +34,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   runtimeKind: "opencode",
   runtimeId: null,
   runId: null,
-  runtimeEndpoint: "http://127.0.0.1:4444",
+  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",
@@ -420,7 +420,7 @@ describe("useAgentStudioTaskHydration", () => {
       status: "stopped",
       runId: null,
       runtimeId: null,
-      runtimeEndpoint: "",
+      runtimeRoute: null,
       historyHydrationState: "not_requested",
     });
     const harness = createHookHarness(
@@ -447,7 +447,7 @@ describe("useAgentStudioTaskHydration", () => {
             status: "stopped",
             runId: "run-1",
             runtimeId: null,
-            runtimeEndpoint: "http://127.0.0.1:4444",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             historyHydrationState: "not_requested",
           }),
           agentStudioReadinessState: "ready",
