@@ -165,4 +165,40 @@ describe("createHydrationRuntimeResolver", () => {
     });
     expect(ensureCalls).toBe(0);
   });
+
+  test("preserves stdio preloaded runtime connections during hydration fallback", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
+      [
+        runtimeWorkingDirectoryKey("opencode", workingDirectory),
+        {
+          type: "stdio",
+          workingDirectory,
+        },
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      liveRuns: [],
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnectionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("planner", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBeNull();
+    expect(result.runId).toBeNull();
+    expect(result.runtimeConnection).toEqual({
+      type: "stdio",
+      workingDirectory,
+    });
+    expect(result.runtimeRoute).toEqual({
+      type: "stdio",
+    });
+  });
 });

@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
     RepoRuntimeStartupStatus, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
-    RuntimeRole,
+    RuntimeRole, RuntimeRoute,
 };
 use std::collections::{HashMap, HashSet};
 use std::process::Child;
@@ -617,6 +617,11 @@ impl AppService {
                 exposure_plans.push(RunExposurePlan::without_probe(run.summary));
                 continue;
             }
+
+            let RuntimeRoute::LocalHttp { .. } = &run.summary.runtime_route else {
+                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
+                continue;
+            };
 
             let probe_target = super::OpencodeSessionStatusProbeTarget::for_runtime_route(
                 &run.summary.runtime_route,
@@ -1651,6 +1656,40 @@ mod tests {
     }
 
     #[test]
+    fn repo_runtime_health_reports_stdio_routes_as_unsupported_for_mcp_checks() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-stdio-health".to_string(),
+            repo_path: "/tmp/repo-health-stdio".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-stdio".to_string(),
+            runtime_route: RuntimeRoute::Stdio,
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health = service.repo_runtime_health("opencode", "/tmp/repo-health-stdio")?;
+
+        assert_eq!(health.runtime.instance, Some(runtime));
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Error);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Error)
+        );
+        assert!(health
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
+            .is_some_and(|value| value.contains("local_http runtime route")));
+
+        Ok(())
+    }
+
+    #[test]
     fn module_runs_list_is_empty_on_fresh_service() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
@@ -1719,6 +1758,62 @@ mod tests {
             .expect("status server thread should finish");
 
         assert!(runs.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn module_runs_list_keeps_stdio_build_runs_visible_without_http_probe() -> Result<()> {
+        let (service, task_state, _git_state) =
+            build_service_with_state(vec![make_task("task-1", "task", TaskStatus::InProgress)]);
+
+        task_state
+            .lock()
+            .expect("task store lock poisoned")
+            .agent_sessions = vec![AgentSessionDocument {
+            session_id: "build-session".to_string(),
+            external_session_id: Some("external-build-session".to_string()),
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: "/tmp/repo/worktree".to_string(),
+            selected_model: None,
+        }];
+
+        service
+            .runs
+            .lock()
+            .expect("run state lock poisoned")
+            .insert(
+                "run-1".to_string(),
+                RunProcess {
+                    summary: RunSummary {
+                        run_id: "run-1".to_string(),
+                        runtime_kind: AgentRuntimeKind::Opencode,
+                        runtime_route: RuntimeRoute::Stdio,
+                        repo_path: "/tmp/repo".to_string(),
+                        task_id: "task-1".to_string(),
+                        branch: "odt/task-1".to_string(),
+                        worktree_path: "/tmp/repo/worktree".to_string(),
+                        port: None,
+                        state: host_domain::RunState::Running,
+                        last_message: None,
+                        started_at: "2026-03-17T11:00:00Z".to_string(),
+                    },
+                    child: None,
+                    _opencode_process_guard: None,
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    worktree_path: "/tmp/repo/worktree".to_string(),
+                    repo_config: RepoConfig::default(),
+                },
+            );
+
+        let runs = service.runs_list(Some("/tmp/repo"))?;
+
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].run_id, "run-1");
+        assert_eq!(runs[0].runtime_route, RuntimeRoute::Stdio);
         Ok(())
     }
 

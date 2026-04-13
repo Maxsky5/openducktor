@@ -736,6 +736,17 @@ mod tests {
     }
 
     #[test]
+    fn probe_target_rejects_stdio_runtime_routes() {
+        let error =
+            OpencodeSessionStatusProbeTarget::for_runtime_route(&RuntimeRoute::Stdio, "/tmp/repo")
+                .expect_err("stdio routes should not build OpenCode HTTP probe targets");
+
+        assert!(error
+            .to_string()
+            .contains("OpenCode session status probes require a local_http runtime route"));
+    }
+
+    #[test]
     fn cached_probe_refreshes_when_entry_expires() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let (port, connections, server_handle) = spawn_counting_status_server(

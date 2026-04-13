@@ -199,6 +199,32 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
 
+  test("accepts stdio model catalog connections without forcing an endpoint", async () => {
+    const harness = createStateHarness(createSession({ runtimeRoute: { type: "stdio" } }));
+    let receivedConnection: unknown = null;
+    const loadSessionModelCatalog = createLoadSessionModelCatalog({
+      adapter: {
+        listAvailableModels: async ({ runtimeConnection }) => {
+          receivedConnection = runtimeConnection;
+          return catalogFixture;
+        },
+        loadSessionTodos: async () => [],
+      },
+      updateSession: harness.updateSession,
+    });
+
+    await loadSessionModelCatalog("session-1", "opencode", {
+      type: "stdio",
+      workingDirectory: "/tmp/repo",
+    });
+
+    expect(receivedConnection).toEqual({
+      type: "stdio",
+      workingDirectory: "/tmp/repo",
+    });
+    expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);
+  });
+
   test("loads todos and merges while preserving existing order", async () => {
     const harness = createStateHarness(
       createSession({}, [

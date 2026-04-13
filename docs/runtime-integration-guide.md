@@ -81,9 +81,10 @@ The host returns this payload after listing, ensuring, or starting a runtime. It
 
 Live host-visible route information for a running runtime.
 
-Supported shape:
+Supported shapes:
 
 - `{ type: "local_http", endpoint }`
+- `{ type: "stdio" }`
 
 This is a live route, not a persisted identifier.
 
@@ -93,12 +94,12 @@ Request-scoped adapter input used by the TypeScript runtime adapter boundary.
 
 Defined in `packages/contracts/src/agent-runtime-schemas.ts` as `runtimeTransportSchema` and consumed through `packages/core/src/services/runtime-connections.ts`.
 
-Supported shape:
+Supported shapes:
 
-- `endpoint?: string`
-- `workingDirectory: string`
+- `{ type: "local_http", endpoint, workingDirectory }`
+- `{ type: "stdio", workingDirectory }`
 
-The adapter boundary turns this payload into runtime-specific client input. Generic orchestration code uses `RuntimeConnection` to describe where a request should run and which working directory it applies to.
+The adapter boundary turns this payload into runtime-specific client input. Generic orchestration code uses `RuntimeConnection` to describe where a request should run and which working directory it applies to, while runtime-specific adapters decide how to construct HTTP clients or other transport-native inputs.
 
 ### Persisted session record
 
@@ -111,7 +112,7 @@ Persisted records keep durable identity only:
 - `externalSessionId`
 - optional `selectedModel`
 
-Persisted records store durable session context. Live route fields such as `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are resolved again when the session is loaded.
+Persisted records store durable session context. Live route or connection fields such as `runtimeRoute`, `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are resolved again when the session is loaded.
 
 ### Session routing behavior
 
@@ -206,19 +207,19 @@ A runtime is represented through:
 
 ### Transport behavior
 
-The current transport model assumes:
+The current transport model assumes only these shared invariants:
 
-- live routes are `local_http`,
-- endpoints use `http`,
-- endpoints are loopback/localhost,
-- working directories are absolute and non-traversing.
+- live routes are described by `RuntimeRoute`,
+- request-scoped adapter inputs are described by `RuntimeConnection`,
+- working directories are absolute and non-traversing,
+- transport-specific client construction stays inside the runtime adapter or host boundary that owns that transport.
 
-Runtimes that do not expose a local loopback HTTP surface extend:
+Today the shared contracts support:
 
-- `runtimeRouteSchema` in `packages/contracts/src/run-schemas.ts`,
-- Rust `RuntimeRoute` in `apps/desktop/src-tauri/crates/host-domain/src/runtime.rs`,
-- session loader validation in `apps/desktop/src/state/operations/agent-orchestrator/lifecycle/session-loaders.ts`,
-- and any adapter/runtime connection helpers that reconstruct local HTTP clients.
+- `local_http` live routes and runtime connections for OpenCode's HTTP surface,
+- `stdio` live routes and runtime connections for non-HTTP-capable runtime plumbing.
+
+When a runtime-specific operation only works over one transport, the adapter or host branch must reject unsupported route or connection types explicitly instead of coercing them into HTTP.
 
 ### Runtime behavior
 

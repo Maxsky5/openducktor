@@ -186,7 +186,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -226,7 +226,7 @@ describe("opencode-sdk-adapter", () => {
         systemPrompt: "system",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -244,7 +244,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -288,7 +288,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -323,11 +323,30 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
     ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
+  });
+
+  test("listAvailableSlashCommands rejects stdio runtime connections before creating a client", async () => {
+    const createClient = mock(() => ({}) as OpencodeClient);
+    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+
+    await expect(
+      adapter.listAvailableSlashCommands({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "stdio",
+          workingDirectory: "/repo",
+        },
+      }),
+    ).rejects.toThrow(
+      "Runtime connection type 'stdio' is unsupported for list available slash commands; local_http is required.",
+    );
+
+    expect(createClient).not.toHaveBeenCalled();
   });
 
   test("searchFiles forwards runtime inputs to the catalog loader", async () => {
@@ -342,7 +361,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
       query: "src",
@@ -385,7 +404,7 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
         query: "src",
@@ -404,7 +423,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -487,7 +506,7 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -516,7 +535,7 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -554,7 +573,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
@@ -608,7 +627,7 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "/repo",
         },
       }),
@@ -628,7 +647,7 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     });
