@@ -16,7 +16,7 @@ type UseAgentStudioBuildWorktreeRefreshHook =
 
 let useAgentStudioBuildWorktreeRefresh: UseAgentStudioBuildWorktreeRefreshHook;
 
-const refreshWorktreeMock = mock(() => {});
+const refreshWorktreeMock = mock(async (_mode?: string) => {});
 
 type HookArgs = Parameters<UseAgentStudioBuildWorktreeRefreshHook>[0];
 

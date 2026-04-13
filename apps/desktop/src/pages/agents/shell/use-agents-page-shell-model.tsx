@@ -22,6 +22,7 @@ import {
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
@@ -86,7 +87,7 @@ const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRuntime({
   refreshWorktreeRef,
   ...args
 }: UseAgentsPageRightPanelModelArgs & {
-  refreshWorktreeRef: MutableRefObject<(() => void) | null>;
+  refreshWorktreeRef: MutableRefObject<GitDiffRefresh | null>;
 }): ReactElement | null {
   const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
 
@@ -115,11 +116,14 @@ function AgentsPageBuildWorktreeRefreshRuntime({
   viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
   isSessionHistoryHydrating: boolean;
-  refreshWorktreeRef: MutableRefObject<(() => void) | null>;
+  refreshWorktreeRef: MutableRefObject<GitDiffRefresh | null>;
 }): null {
-  const refreshWorktree = useCallback(() => {
-    refreshWorktreeRef.current?.();
-  }, [refreshWorktreeRef]);
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    (mode) => {
+      return refreshWorktreeRef.current?.(mode) ?? Promise.resolve();
+    },
+    [refreshWorktreeRef],
+  );
 
   useAgentStudioBuildWorktreeRefresh({
     viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
@@ -182,7 +186,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
-  const rightPanelRefreshWorktreeRef = useRef<(() => void) | null>(null);
+  const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
 
   const {

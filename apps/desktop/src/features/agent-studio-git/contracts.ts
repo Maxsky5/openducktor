@@ -9,6 +9,8 @@ export type DiffScope = "target" | "uncommitted";
 
 export type GitDiffRefreshMode = "hard" | "soft" | "scheduled";
 
+export type GitDiffRefresh = (mode?: GitDiffRefreshMode) => Promise<void>;
+
 export type DiffScopeState = {
   branch: string | null;
   fileDiffs: FileDiff[];
@@ -42,7 +44,7 @@ export type DiffDataState = {
   uncommittedFileCount: number;
   isLoading: boolean;
   error: string | null;
-  refresh: (mode?: GitDiffRefreshMode) => void;
+  refresh: GitDiffRefresh;
   setDiffScope: (scope: DiffScope) => void;
 };
 

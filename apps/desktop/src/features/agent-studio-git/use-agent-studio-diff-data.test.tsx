@@ -467,6 +467,75 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("refresh returns a promise that settles after the queued soft reload finishes", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      const deferredRefresh = createDeferred<GitWorktreeStatus>();
+      gitGetWorktreeStatusMock.mockImplementationOnce(
+        async (
+          _repoPath: string,
+          targetBranch: string,
+          diffScope?: "target" | "uncommitted",
+          workingDir?: string,
+        ): Promise<GitWorktreeStatus> =>
+          deferredRefresh.promise.then((snapshot) => ({
+            ...snapshot,
+            snapshot: {
+              ...snapshot.snapshot,
+              targetBranch,
+              diffScope: diffScope ?? snapshot.snapshot.diffScope,
+              effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+            },
+          })),
+      );
+
+      let didSettle = false;
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((state) => {
+        refreshPromise = state.refresh("soft");
+        void refreshPromise.then(() => {
+          didSettle = true;
+        });
+      });
+
+      expect(harness.getLatest().isLoading).toBe(true);
+      expect(didSettle).toBe(false);
+
+      if (!refreshPromise) {
+        throw new Error("Expected refresh promise");
+      }
+
+      await harness.run(async () => {
+        deferredRefresh.resolve(
+          withSnapshotHashes({
+            currentBranch: { name: "feature/task-10", detached: false },
+            fileStatuses: [{ path: "src/after-refresh.ts", status: "M", staged: false }],
+            fileDiffs: [],
+            targetAheadBehind: { ahead: 0, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: "/repo",
+              targetBranch: "origin/main",
+              diffScope: "uncommitted",
+              observedAtMs: 1731000001111,
+            },
+          }),
+        );
+
+        await refreshPromise;
+      });
+      await harness.waitFor((state) => !state.isLoading);
+      expect(didSettle).toBe(true);
+      expect(harness.getLatest().fileStatuses[0]?.path).toBe("src/after-refresh.ts");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("scheduled refresh fetches at most once within the cooldown window", async () => {
     const originalDateNow = Date.now;
     let nowMs = 1_731_000_000_000;

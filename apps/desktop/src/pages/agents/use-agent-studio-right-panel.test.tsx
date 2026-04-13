@@ -102,7 +102,7 @@ const diffModel: AgentStudioGitPanelModel = {
   uncommittedFileCount: 0,
   isLoading: false,
   error: null,
-  refresh: () => {},
+  refresh: async () => {},
   setDiffScope: () => {},
   isCommitting: false,
   isPushing: false,

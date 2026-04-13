@@ -299,7 +299,9 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
             ? { onUpdateTargetBranch: model.onUpdateTargetBranch }
             : {})}
           setDiffScope={handleDiffScopeChange}
-          onRefresh={model.refresh}
+          onRefresh={() => {
+            void model.refresh();
+          }}
         />
 
         {displayedError ? (

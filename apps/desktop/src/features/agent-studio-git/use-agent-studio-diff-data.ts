@@ -150,35 +150,35 @@ export function useAgentStudioDiffData({
   }, [activeScopeState.error, refreshError, state.isLoading]);
 
   const refresh = useCallback(
-    (mode: GitDiffRefreshMode = "hard"): void => {
+    (mode: GitDiffRefreshMode = "hard"): Promise<void> => {
       if (preconditionError != null) {
-        return;
+        return Promise.resolve();
       }
 
       if (worktreeResolutionError != null) {
         retryWorktreeResolution();
-        return;
+        return Promise.resolve();
       }
 
       if (shouldBlockDiffLoading) {
-        return;
+        return Promise.resolve();
       }
 
       const nextRefreshContext = refreshContextRef.current;
       if (nextRefreshContext == null) {
-        return;
+        return Promise.resolve();
       }
 
       if (refreshPromiseRef.current != null) {
         if (mode === "scheduled") {
-          return;
+          return refreshPromiseRef.current;
         }
 
         queuedRefreshRequestRef.current = mergeRefreshRequests(queuedRefreshRequestRef.current, {
           context: nextRefreshContext,
           mode,
         });
-        return;
+        return refreshPromiseRef.current;
       }
 
       queuedRefreshRequestRef.current = {
@@ -303,6 +303,7 @@ export function useAgentStudioDiffData({
         }
       });
       refreshPromiseRef.current = refreshPromise;
+      return refreshPromise;
     },
     [
       refreshActiveScope,
@@ -319,7 +320,7 @@ export function useAgentStudioDiffData({
     repoPath: effectiveRepoPath,
     shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
     poll: () => {
-      refresh("scheduled");
+      void refresh("scheduled");
     },
   });
 
