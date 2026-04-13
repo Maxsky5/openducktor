@@ -15,6 +15,7 @@ concurrency:
 env:
   BUN_VERSION: 1.3.11
   CARGO_TERM_COLOR: always
+  XCODE_APP_PATH: /Applications/Xcode_26.2.app
 
 jobs:
   build-macos:
@@ -79,6 +80,25 @@ jobs:
 
       - name: Install JS dependencies
         run: bun install --frozen-lockfile
+
+      - name: Select Xcode 26.2 SDK
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$XCODE_APP_PATH" ]]; then
+            echo "Expected Xcode at $XCODE_APP_PATH on the GitHub macOS runner." >&2
+            exit 1
+          fi
+
+          sudo xcode-select -s "$XCODE_APP_PATH"
+          echo "DEVELOPER_DIR=$XCODE_APP_PATH/Contents/Developer" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+
+      - name: Report active Apple toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun --find clang
 
       - name: Install packaged sidecar prerequisites
         run: |
