@@ -7,27 +7,31 @@ import {
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
   buildRuntimeHealthErrorMap,
+  hasRuntimeHealthCheckingState,
 } from "./check-diagnostics";
 
-const makeRepoHealth = (
-  overrides: Partial<RepoRuntimeHealthCheck> = {},
-): RepoRuntimeHealthCheck => ({
-  status: "ready",
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  runtime: {
+type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
+  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
+  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
+};
+
+const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
+  const checkedAt = overrides.checkedAt ?? "2026-02-22T08:00:00.000Z";
+  const runtime: RepoRuntimeHealthCheck["runtime"] = {
     status: "ready",
     stage: "runtime_ready",
     observation: null,
     instance: null,
     startedAt: null,
-    updatedAt: "2026-02-22T08:00:00.000Z",
+    updatedAt: checkedAt,
     elapsedMs: null,
     attempts: null,
     detail: null,
     failureKind: null,
     failureReason: null,
-  },
-  mcp: {
+    ...overrides.runtime,
+  };
+  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
     supported: true,
     status: "connected",
     serverName: "openducktor",
@@ -35,9 +39,24 @@ const makeRepoHealth = (
     toolIds: [],
     detail: null,
     failureKind: null,
-  },
-  ...overrides,
-});
+    ...overrides.mcp,
+  };
+
+  return {
+    status:
+      overrides.status ??
+      (runtime.status === "error" || mcp.status === "error"
+        ? "error"
+        : mcp.status === "checking" ||
+            mcp.status === "reconnecting" ||
+            mcp.status === "waiting_for_runtime"
+          ? "checking"
+          : runtime.status),
+    checkedAt,
+    runtime,
+    mcp,
+  };
+};
 
 describe("check-diagnostics helpers", () => {
   test("projects runtime and beads query failures into concrete error states", () => {
@@ -237,6 +256,40 @@ describe("check-diagnostics helpers", () => {
         beadsCheckFetching: false,
         runtimeHealthByRuntime: {
           opencode: makeRepoHealth({
+            status: "checking",
+            runtime: {
+              status: "ready",
+              stage: "runtime_ready",
+            },
+            mcp: {
+              supported: true,
+              status: "checking",
+              serverName: "openducktor",
+              serverStatus: null,
+              toolIds: [],
+              detail: "Checking OpenDucktor MCP",
+              failureKind: null,
+            },
+          }),
+        },
+        runtimeHealthFetching: false,
+      }),
+    ).toEqual({
+      retryRuntimeCheck: false,
+      retryBeadsCheck: false,
+      retryRuntimeHealth: true,
+    });
+
+    expect(
+      buildDiagnosticsRetryPlan({
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeCheckFailureKind: null,
+        runtimeCheckFetching: false,
+        beadsCheckFailureKind: null,
+        beadsCheckFetching: false,
+        runtimeHealthByRuntime: {
+          opencode: makeRepoHealth({
             status: "error",
             mcp: {
               supported: true,
@@ -256,5 +309,34 @@ describe("check-diagnostics helpers", () => {
       retryBeadsCheck: false,
       retryRuntimeHealth: false,
     });
+  });
+
+  test("detects runtime-health checking states that still need polling", () => {
+    expect(
+      hasRuntimeHealthCheckingState([OPENCODE_RUNTIME_DESCRIPTOR], {
+        opencode: makeRepoHealth({
+          status: "checking",
+          runtime: {
+            status: "ready",
+            stage: "runtime_ready",
+          },
+          mcp: {
+            supported: true,
+            status: "checking",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Checking OpenDucktor MCP",
+            failureKind: null,
+          },
+        }),
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRuntimeHealthCheckingState([OPENCODE_RUNTIME_DESCRIPTOR], {
+        opencode: makeRepoHealth(),
+      }),
+    ).toBe(false);
   });
 });

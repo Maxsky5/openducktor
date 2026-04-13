@@ -379,6 +379,71 @@ describe("use-checks", () => {
     }
   });
 
+  test("automatically refreshes runtime health while MCP connectivity is still checking", async () => {
+    const runtimeCheck = mock(
+      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    );
+    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
+    let repoHealthCallCount = 0;
+    repoHealthHandler = async () => {
+      repoHealthCallCount += 1;
+      if (repoHealthCallCount === 1) {
+        return makeRepoHealth({
+          status: "checking",
+          runtime: {
+            status: "ready",
+            stage: "runtime_ready",
+          },
+          mcp: {
+            supported: true,
+            status: "checking",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: "Checking OpenDucktor MCP",
+            failureKind: null,
+          },
+        });
+      }
+
+      return makeRepoHealth();
+    };
+
+    const original = {
+      runtimeCheck: host.runtimeCheck,
+      beadsCheck: host.beadsCheck,
+    };
+    host.runtimeCheck = runtimeCheck;
+    host.beadsCheck = beadsCheck;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await waitForInitialChecksToSettle(harness);
+
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.status).toBe(
+        "checking",
+      );
+
+      await harness.waitFor(
+        (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
+        5000,
+      );
+
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.status).toBe(
+        "connected",
+      );
+    } finally {
+      await harness.unmount();
+      host.runtimeCheck = original.runtimeCheck;
+      host.beadsCheck = original.beadsCheck;
+    }
+  });
+
   test("tracks per-repo cache and projects cached checks when active repo changes", async () => {
     const beadsCheck = mock(
       async (repoPath: string): Promise<BeadsCheck> =>
