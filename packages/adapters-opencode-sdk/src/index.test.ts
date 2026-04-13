@@ -1529,6 +1529,55 @@ describe("OpencodeSdkAdapter", () => {
     ]);
   });
 
+  test("loadSessionHistory collapses redundant slash-command echo text parts", async () => {
+    const slashEnvelope = `<auto-slash-command>\n# /test-command Command\n\n**Description**: A command for testing slash commands\n\n**User Arguments**: pouet\n\n**Scope**: opencode\n\n---\n\n## Command Instructions\n\nI just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet\n\n\n---\n\n## User Request\n\npouet\n</auto-slash-command>`;
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-user-slash-1",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-envelope",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-slash-1",
+              type: "text",
+              text: slashEnvelope,
+            } as Part,
+            {
+              id: "text-user-echo",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-slash-1",
+              type: "text",
+              text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(1);
+    if (history[0]?.role !== "user") {
+      throw new Error("Expected user history entry");
+    }
+    expect(history[0].text).toBe(slashEnvelope);
+    expect(history[0].displayParts).toEqual([{ kind: "text", text: slashEnvelope }]);
+  });
+
   test("loadSessionHistory preserves local attachment preview paths from the live session metadata", async () => {
     const mock = makeMockClient({
       messagesResponse: [

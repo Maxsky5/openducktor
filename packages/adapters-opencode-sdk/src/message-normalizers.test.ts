@@ -105,6 +105,32 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
+    const parts: Part[] = [
+      {
+        id: "slash-envelope",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "text",
+        text: "<auto-slash-command>\n# /test-command Command\n\n## User Request\n\npouet\n</auto-slash-command>",
+      } as Part,
+      {
+        id: "slash-echo",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "text",
+        text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "text",
+        text: "<auto-slash-command>\n# /test-command Command\n\n## User Request\n\npouet\n</auto-slash-command>",
+      },
+    ]);
+  });
+
   test("normalizes local multimodal file parts into attachment display parts", () => {
     const parts: Part[] = [
       {
