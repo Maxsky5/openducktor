@@ -848,7 +848,7 @@ mod tests {
         now_rfc3339, AgentRuntimeKind, AgentSessionDocument, RepoRuntimeHealthMcp,
         RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime, RepoRuntimeHealthState,
         RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary,
-        TaskStatus,
+        RuntimeRoute, TaskStatus,
     };
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
@@ -1673,7 +1673,22 @@ mod tests {
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-stdio")?;
 
-        assert_eq!(health.runtime.instance, Some(runtime));
+        assert_eq!(
+            health
+                .runtime
+                .instance
+                .as_ref()
+                .map(|value| value.runtime_id.as_str()),
+            Some(runtime.runtime_id.as_str())
+        );
+        assert_eq!(
+            health
+                .runtime
+                .instance
+                .as_ref()
+                .map(|value| value.repo_path.as_str()),
+            Some(runtime.repo_path.as_str())
+        );
         assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
         assert_eq!(health.status, RepoRuntimeHealthState::Error);
         assert_eq!(
@@ -1685,6 +1700,7 @@ mod tests {
             .as_ref()
             .and_then(|value| value.detail.as_deref())
             .is_some_and(|value| value.contains("local_http runtime route")));
+        service.runtime_stop(runtime.runtime_id.as_str())?;
 
         Ok(())
     }
