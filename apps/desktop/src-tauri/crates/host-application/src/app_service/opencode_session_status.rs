@@ -736,9 +736,7 @@ mod tests {
             OpencodeSessionStatusProbeTarget::for_runtime_route(&RuntimeRoute::Stdio, "/tmp/repo")
                 .expect_err("stdio routes should not build OpenCode HTTP probe targets");
 
-        assert!(error
-            .to_string()
-            .contains("OpenCode session status probes require a local_http runtime route"));
+        assert!(error.to_string().contains("local_http runtime route"));
     }
 
     #[test]

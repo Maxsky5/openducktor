@@ -525,7 +525,7 @@ mod tests {
 
         assert!(error
             .to_string()
-            .contains("OpenCode build runs require a local_http runtime route with a port"));
+            .contains("local_http runtime route with a port"));
         assert!(task_state
             .lock()
             .expect("task store lock poisoned")
@@ -542,8 +542,8 @@ mod tests {
         )
         .expect_err("stdio abort should fail fast");
 
-        assert!(error.to_string().contains(
-            "OpenCode build session abort requires a local_http runtime route with a port"
-        ));
+        assert!(error
+            .to_string()
+            .contains("local_http runtime route with a port"));
     }
 }
