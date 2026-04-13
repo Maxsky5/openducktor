@@ -78,6 +78,19 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let task_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let shutdown_signal = Arc::new(Notify::new());
+    let shutdown_started = Arc::new(AtomicBool::new(false));
+    startup_phase_shutdown_hooks_with_gate(
+        service.clone(),
+        shutdown_started.clone(),
+        Some(shutdown_signal.clone()),
+    );
+    let cors_layer = browser_backend_cors_layer()?;
+    let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
+        .await
+        .with_context(|| {
+            format!("failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{port}")
+        })?;
     let pull_request_sync_stop_requested = start_pull_request_sync_loop(service.clone(), {
         let task_events = task_events.clone();
         move |event: ExternalTaskSyncEvent| match serde_json::to_string(&event) {
@@ -91,13 +104,6 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             }
         }
     });
-    let shutdown_signal = Arc::new(Notify::new());
-    let shutdown_started = Arc::new(AtomicBool::new(false));
-    startup_phase_shutdown_hooks_with_gate(
-        service.clone(),
-        shutdown_started.clone(),
-        Some(shutdown_signal.clone()),
-    );
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/shutdown", post(shutdown_handler))
@@ -109,23 +115,17 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             get(local_attachment_preview_handler),
         )
         .route("/invoke/{command}", post(invoke_handler))
-        .layer(browser_backend_cors_layer()?)
+        .layer(cors_layer)
         .with_state(HeadlessState {
             service,
             events,
             dev_server_events,
             task_events,
-            pull_request_sync_stop_requested,
+            pull_request_sync_stop_requested: pull_request_sync_stop_requested.clone(),
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
         });
-
-    let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
-        .await
-        .with_context(|| {
-            format!("failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{port}")
-        })?;
 
     tracing::info!(
         target: "openducktor.browser-backend",
@@ -134,12 +134,30 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         "OpenDucktor browser backend listening"
     );
 
-    axum::serve(listener, app)
+    serve_browser_backend(
+        listener,
+        app,
+        shutdown_signal,
+        pull_request_sync_stop_requested,
+    )
+    .await
+}
+
+async fn serve_browser_backend(
+    listener: TcpListener,
+    app: Router,
+    shutdown_signal: Arc<Notify>,
+    pull_request_sync_stop_requested: Arc<AtomicBool>,
+) -> anyhow::Result<()> {
+    let result = axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             shutdown_signal.notified().await;
         })
         .await
-        .context("browser backend server terminated unexpectedly")
+        .context("browser backend server terminated unexpectedly");
+
+    pull_request_sync_stop_requested.store(true, Ordering::SeqCst);
+    result
 }
 
 async fn health_handler() -> impl IntoResponse {
@@ -369,8 +387,9 @@ mod tests {
     use axum::http::Request;
     use host_application::AppService;
     use host_domain::{
-        AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, IssueType,
-        PullRequestRecord, QaReportDocument, QaVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+        is_syncable_pull_request_state, is_terminal_task_status, AgentSessionDocument,
+        AgentWorkflows, CreateTaskInput, DirectMergeRecord, IssueType, PullRequestRecord,
+        QaReportDocument, QaVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
         RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
         RepoStoreSharedServerOwnershipState, SpecDocument, TaskCard, TaskDocumentSummary,
         TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
@@ -437,7 +456,16 @@ mod tests {
             &self,
             repo_path: &std::path::Path,
         ) -> Result<Vec<TaskCard>> {
-            self.list_tasks(repo_path)
+            Ok(self
+                .list_tasks(repo_path)?
+                .into_iter()
+                .filter(|task| {
+                    !is_terminal_task_status(&task.status)
+                        && task.pull_request.as_ref().is_some_and(|pull_request| {
+                            is_syncable_pull_request_state(pull_request.state.as_str())
+                        })
+                })
+                .collect())
         }
 
         fn get_task(&self, _repo_path: &std::path::Path, task_id: &str) -> Result<TaskCard> {
@@ -686,6 +714,20 @@ mod tests {
         }
     }
 
+    fn make_pull_request(number: u32, state: &str) -> PullRequestRecord {
+        PullRequestRecord {
+            provider_id: "github".to_string(),
+            number,
+            url: format!("https://github.com/example/repo/pull/{number}"),
+            state: state.to_string(),
+            created_at: "2026-04-09T00:00:00Z".to_string(),
+            updated_at: "2026-04-09T00:00:00Z".to_string(),
+            last_synced_at: None,
+            merged_at: None,
+            closed_at: None,
+        }
+    }
+
     #[test]
     fn classify_shutdown_request_starts_only_once() {
         assert_eq!(
@@ -702,6 +744,74 @@ mod tests {
     fn shutdown_exit_code_maps_success_and_failure() {
         assert_eq!(shutdown_exit_code(true), 0);
         assert_eq!(shutdown_exit_code(false), 1);
+    }
+
+    #[tokio::test]
+    async fn serve_browser_backend_stops_pull_request_sync_loop_when_server_returns() {
+        let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, 0))
+            .await
+            .expect("listener should bind");
+        let shutdown_signal = Arc::new(Notify::new());
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let notify_shutdown = shutdown_signal.clone();
+
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            notify_shutdown.notify_one();
+        });
+
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            serve_browser_backend(
+                listener,
+                Router::new(),
+                shutdown_signal,
+                stop_requested.clone(),
+            ),
+        )
+        .await
+        .expect("server should stop before the test timeout")
+        .expect("server should shut down cleanly");
+
+        assert!(stop_requested.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn headless_test_store_filters_pull_request_sync_candidates_like_production() {
+        let task_state = Arc::new(Mutex::new(TestTaskStoreState {
+            ensure_calls: Vec::new(),
+            created_inputs: Vec::new(),
+            tasks: {
+                let mut open_candidate =
+                    make_task("task-1", "Open candidate", TaskStatus::Open, vec![]);
+                open_candidate.pull_request = Some(make_pull_request(11, "open"));
+
+                let mut closed_candidate =
+                    make_task("task-2", "Closed task", TaskStatus::Closed, vec![]);
+                closed_candidate.pull_request = Some(make_pull_request(12, "open"));
+
+                let mut merged_candidate =
+                    make_task("task-3", "Merged PR", TaskStatus::Open, vec![]);
+                merged_candidate.pull_request = Some(make_pull_request(13, "merged"));
+
+                let no_pull_request = make_task("task-4", "No PR", TaskStatus::Open, vec![]);
+
+                vec![
+                    open_candidate,
+                    closed_candidate,
+                    merged_candidate,
+                    no_pull_request,
+                ]
+            },
+        }));
+        let store = TestTaskStore::new(task_state);
+
+        let candidates = store
+            .list_pull_request_sync_candidates(std::path::Path::new("/repo"))
+            .expect("candidate listing should succeed");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, "task-1");
     }
 
     #[tokio::test]
