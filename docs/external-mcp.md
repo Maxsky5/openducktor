@@ -50,23 +50,6 @@ Equivalent environment variables:
 - `ODT_REPO_PATH`
 - `ODT_HOST_URL` optional override
 
-Unsupported legacy environment variables:
-
-- `ODT_BEADS_ATTACHMENT_DIR`
-- `ODT_DOLT_HOST`
-- `ODT_DOLT_PORT`
-- `ODT_DATABASE_NAME`
-- `ODT_METADATA_NAMESPACE`
-
-Unsupported legacy CLI flags:
-
-- `--beads-attachment-dir`
-- `--dolt-host`
-- `--dolt-port`
-- `--database-name`
-- `--database`
-- `--metadata-namespace`
-
 Automatic discovery:
 
 - The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.

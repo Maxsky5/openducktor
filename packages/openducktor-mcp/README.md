@@ -11,7 +11,6 @@ Desktop-managed sessions launch this same package as a sidecar. In both desktop-
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
 - Standalone use auto-discovers a running host bridge from the local registry.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
-- Legacy direct `bd` / `dolt` startup parameters are rejected.
 
 For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
 
@@ -39,23 +38,6 @@ Equivalent environment variables:
 
 - `ODT_REPO_PATH`
 - `ODT_HOST_URL` optional override
-
-Rejected legacy environment variables:
-
-- `ODT_BEADS_ATTACHMENT_DIR`
-- `ODT_DOLT_HOST`
-- `ODT_DOLT_PORT`
-- `ODT_DATABASE_NAME`
-- `ODT_METADATA_NAMESPACE`
-
-Rejected legacy CLI flags:
-
-- `--beads-attachment-dir`
-- `--dolt-host`
-- `--dolt-port`
-- `--database-name`
-- `--database`
-- `--metadata-namespace`
 
 Automatic discovery:
 

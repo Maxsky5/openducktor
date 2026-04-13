@@ -339,19 +339,6 @@ The Rust host owns the Beads attachment directory, shared Dolt connection detail
 
 The MCP sidecar no longer connects to Dolt or runs Beads directly. In desktop-managed mode the host injects a loopback `ODT_HOST_URL`, and the MCP forwards task, document, and workflow calls back to the running host. Standalone MCP use auto-discovers running host bridge ports from the local registry and can still use `ODT_HOST_URL` as an explicit override.
 
-Direct storage startup inputs are now rejected in the MCP package, including:
-
-- `ODT_BEADS_ATTACHMENT_DIR`
-- `ODT_DOLT_HOST`
-- `ODT_DOLT_PORT`
-- `ODT_DATABASE_NAME`
-- `ODT_METADATA_NAMESPACE`
-- `--beads-attachment-dir`
-- `--dolt-host`
-- `--dolt-port`
-- `--database-name` and `--database`
-- `--metadata-namespace`
-
 That keeps Beads and Dolt modeled as storage infrastructure, not as an agent runtime concern.
 
 ## What Happens On App Exit
