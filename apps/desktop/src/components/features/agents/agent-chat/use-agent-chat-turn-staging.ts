@@ -20,7 +20,8 @@ export function useAgentChatTurnStaging({
   const [count, setCount] = useState(turns.length);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
-  const completedSessionRef = useRef<string | null>(null);
+  const completedSessionIdsRef = useRef<Set<string>>(new Set());
+  const previousSessionIdRef = useRef<string | null>(activeSessionId);
 
   useEffect(() => {
     if (frameRef.current !== null) {
@@ -28,12 +29,23 @@ export function useAgentChatTurnStaging({
       frameRef.current = null;
     }
 
+    const previousSessionId = previousSessionIdRef.current;
+    const switchedSessions =
+      previousSessionId !== null &&
+      activeSessionId !== null &&
+      previousSessionId !== activeSessionId;
+    previousSessionIdRef.current = activeSessionId;
+
+    if (switchedSessions) {
+      completedSessionIdsRef.current.add(activeSessionId);
+    }
+
     const shouldStage =
       !disabled &&
       activeSessionId !== null &&
       windowStart > 0 &&
       turns.length > STAGE_INIT &&
-      completedSessionRef.current !== activeSessionId;
+      !completedSessionIdsRef.current.has(activeSessionId);
 
     if (!shouldStage) {
       activeSessionRef.current = null;
@@ -62,7 +74,7 @@ export function useAgentChatTurnStaging({
       if (nextCount >= turns.length) {
         frameRef.current = null;
         activeSessionRef.current = null;
-        completedSessionRef.current = sessionId;
+        completedSessionIdsRef.current.add(sessionId);
         return;
       }
 

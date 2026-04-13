@@ -263,6 +263,11 @@ const dispatchScroll = async (container: HTMLDivElement): Promise<void> => {
   await flush();
 };
 
+const dispatchPointerDown = async (container: HTMLDivElement): Promise<void> => {
+  container.dispatchEvent(new PointerEvent("pointerdown"));
+  await flush();
+};
+
 describe("useAgentChatWindow", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -469,6 +474,7 @@ describe("useAgentChatWindow", () => {
 
     container.scrollTop = 160;
     await act(async () => {
+      await dispatchPointerDown(container);
       await dispatchScroll(container);
     });
 
@@ -533,6 +539,33 @@ describe("useAgentChatWindow", () => {
       buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
     );
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("ignores non-user scroll restoration while following the transcript", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = Math.floor(getMaxScrollTop(container) / 2);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
 
     await harness.unmount();
   });

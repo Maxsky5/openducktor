@@ -216,6 +216,11 @@ export function useAgentChatScrollController({
         return;
       }
 
+      if (!userScrolledRef.current && userScrollIntentVersionRef.current === 0) {
+        scrollToBottomNow(false);
+        return;
+      }
+
       if (!userScrolledRef.current) {
         setUserScrolledState(true);
         updateOverflowAnchor();

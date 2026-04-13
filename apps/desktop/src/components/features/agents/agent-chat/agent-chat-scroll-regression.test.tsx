@@ -260,6 +260,7 @@ describe("agent chat scroll regression", () => {
 
     container.scrollTop = 500;
     await act(async () => {
+      fireEvent.pointerDown(container);
       fireEvent.scroll(container);
     });
     await flushAnimationFrames();
@@ -345,6 +346,7 @@ describe("agent chat scroll regression", () => {
 
     container.scrollTop = 500;
     await act(async () => {
+      fireEvent.pointerDown(container);
       fireEvent.scroll(container);
     });
     await flushAnimationFrames();

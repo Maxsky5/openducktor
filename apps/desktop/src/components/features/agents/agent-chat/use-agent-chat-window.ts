@@ -166,13 +166,15 @@ export function useAgentChatWindow({
   ]);
 
   useLayoutEffect(() => {
+    void visibleWindowKey;
+
     if (!pendingBottomResetRef.current) {
       return;
     }
 
     pendingBottomResetRef.current = false;
     forceScrollToBottom();
-  }, [forceScrollToBottom]);
+  }, [forceScrollToBottom, visibleWindowKey]);
 
   useLayoutEffect(() => {
     void visibleWindowKey;
