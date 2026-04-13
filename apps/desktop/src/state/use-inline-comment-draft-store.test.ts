@@ -55,9 +55,16 @@ describe("use-inline-comment-draft-store", () => {
     const addedState = useInlineCommentDraftStore.getState();
     expect(addedState.getDraftCount()).toBe(2);
     expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(2);
+    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts", "uncommitted")).toBe(1);
+    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts", "target")).toBe(1);
     expect(
       addedState.getDraftsForFile("apps/desktop/src/file-a.ts").map((draft) => draft.id),
     ).toEqual([secondId, firstId]);
+    expect(
+      addedState
+        .getDraftsForFile("apps/desktop/src/file-a.ts", "uncommitted")
+        .map((draft) => draft.id),
+    ).toEqual([firstId]);
 
     addedState.updateDraft(firstId, "Updated note");
     expect(

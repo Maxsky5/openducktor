@@ -75,13 +75,14 @@ const RAW_DIFF_FALLBACK_CLASS_NAME =
   "overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
 const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
+const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
 const HUNK_RESET_BUTTON_CLASS_NAME =
   "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
 const MAX_RENDERABLE_DIFF_CACHE_ENTRIES = 64;
 const DIFF_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(70vh,48rem)] overflow-auto";
 const HUNK_RESET_FLOATING_CSS = `
-[data-line-annotation],
-[data-gutter-buffer='annotation'] {
+[data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]),
+[data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) {
   --diffs-line-bg: transparent;
   min-height: 0 !important;
   height: 0 !important;
@@ -89,7 +90,8 @@ const HUNK_RESET_FLOATING_CSS = `
   background-color: transparent !important;
 }
 
-[data-line-annotation] [data-annotation-content] {
+[data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) [data-annotation-content],
+[data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) [data-annotation-content] {
   position: relative;
   min-height: 0 !important;
   height: 0 !important;
@@ -462,7 +464,10 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
         const hunkResetMetadata = metadata as HunkResetAnnotationMetadata;
         return (
           <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
-            <div className={HUNK_RESET_ANNOTATION_CLASS_NAME}>
+            <div
+              className={HUNK_RESET_ANNOTATION_CLASS_NAME}
+              {...{ [HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE]: "true" }}
+            >
               <Button
                 className={HUNK_RESET_BUTTON_CLASS_NAME}
                 variant="outline"

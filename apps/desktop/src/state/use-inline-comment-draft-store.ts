@@ -51,13 +51,14 @@ export type InlineCommentDraftStore = {
   beginSubmittingDrafts: (drafts: InlineCommentDraftSnapshot[]) => string | null;
   restoreSubmittingDrafts: (submissionId: string) => void;
   markSubmittingDraftsAsSent: (submissionId: string) => void;
+  setDraftStateKey: (draftStateKey: string) => void;
   resetForContext: (draftStateKey: string) => void;
   getPendingDrafts: () => InlineCommentDraft[];
   formatBatchMessage: (drafts: InlineCommentDraft[]) => string;
   formatPendingBatchMessage: () => string;
   getDraftCount: () => number;
-  getFileDraftCount: (filePath: string) => number;
-  getDraftsForFile: (filePath: string) => InlineCommentDraft[];
+  getFileDraftCount: (filePath: string, diffScope?: DiffScope) => number;
+  getDraftsForFile: (filePath: string, diffScope?: DiffScope) => InlineCommentDraft[];
 };
 
 let nextId = 0;
@@ -260,6 +261,14 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     set({ drafts: [], draftStateKey });
   },
 
+  setDraftStateKey: (draftStateKey) => {
+    if (get().draftStateKey === draftStateKey) {
+      return;
+    }
+
+    set({ draftStateKey });
+  },
+
   getPendingDrafts: () =>
     get()
       .drafts.filter((draft) => draft.status === "pending")
@@ -292,11 +301,17 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
 
   getDraftCount: () => get().getPendingDrafts().length,
 
-  getFileDraftCount: (filePath) =>
-    get().drafts.filter((draft) => draft.filePath === filePath).length,
+  getFileDraftCount: (filePath, diffScope) =>
+    get().drafts.filter(
+      (draft) =>
+        draft.filePath === filePath && (diffScope == null || draft.diffScope === diffScope),
+    ).length,
 
-  getDraftsForFile: (filePath) =>
+  getDraftsForFile: (filePath, diffScope) =>
     get()
-      .drafts.filter((draft) => draft.filePath === filePath)
+      .drafts.filter(
+        (draft) =>
+          draft.filePath === filePath && (diffScope == null || draft.diffScope === diffScope),
+      )
       .sort(compareDrafts),
 }));

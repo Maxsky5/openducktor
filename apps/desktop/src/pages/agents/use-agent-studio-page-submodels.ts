@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { appendTextToDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
@@ -33,6 +33,23 @@ type UseAgentStudioHeaderModelArgs = {
   onSessionSelectionChange: (nextValue: string) => void;
   onCreateSession: (option: SessionCreateOption) => void;
   workflow: WorkflowHeaderContext;
+};
+
+const parseDraftStateKey = (draftStateKey: string) => {
+  const [taskId = "", role = "", sessionId = "", contextSwitchVersion = ""] =
+    draftStateKey.split(":");
+  return { taskId, role, sessionId, contextSwitchVersion };
+};
+
+const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string): boolean => {
+  const previous = parseDraftStateKey(previousKey);
+  const next = parseDraftStateKey(nextKey);
+  return (
+    previous.taskId === next.taskId &&
+    previous.role === next.role &&
+    previous.contextSwitchVersion === next.contextSwitchVersion &&
+    previous.sessionId !== next.sessionId
+  );
 };
 
 export const useAgentStudioHeaderModel = ({
@@ -335,9 +352,26 @@ export const useAgentStudioComposerModel = ({
   const waitingInputPlaceholder = activeSession
     ? getAgentSessionWaitingInputPlaceholder(activeSession)
     : null;
+  const previousDraftStateKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    useInlineCommentDraftStore.getState().resetForContext(draftStateKey);
+    const store = useInlineCommentDraftStore.getState();
+    const previousDraftStateKey = previousDraftStateKeyRef.current;
+    if (previousDraftStateKey === draftStateKey) {
+      return;
+    }
+
+    if (
+      previousDraftStateKey != null &&
+      isSessionOnlyDraftStateTransition(previousDraftStateKey, draftStateKey) &&
+      store.drafts.some((draft) => draft.status === "submitting")
+    ) {
+      store.setDraftStateKey(draftStateKey);
+    } else {
+      store.resetForContext(draftStateKey);
+    }
+
+    previousDraftStateKeyRef.current = draftStateKey;
   }, [draftStateKey]);
 
   const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(

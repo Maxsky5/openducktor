@@ -82,7 +82,16 @@ function FileDiffEntry({
 }: FileDiffEntryProps): ReactElement {
   const StatusIcon = FILE_STATUS_ICON[diff.type] ?? FileText;
   const statusColor = FILE_STATUS_COLOR[diff.type] ?? "text-muted-foreground";
-  const allDrafts = useInlineCommentDraftStore((store) => store.drafts);
+  const fileCommentStateKey = useInlineCommentDraftStore(
+    useCallback(
+      (store) =>
+        store
+          .getDraftsForFile(diff.file, diffScope)
+          .map((comment) => `${comment.id}:${comment.revision}:${comment.status}`)
+          .join("|"),
+      [diff.file, diffScope],
+    ),
+  );
   const addDraft = useInlineCommentDraftStore((store) => store.addDraft);
   const updateDraft = useInlineCommentDraftStore((store) => store.updateDraft);
   const removeDraft = useInlineCommentDraftStore((store) => store.removeDraft);
@@ -91,13 +100,8 @@ function FileDiffEntry({
   const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
   const diffResetKey = `${diffScope}:${diff.diff}`;
-  const fileComments = useMemo(
-    () =>
-      allDrafts.filter(
-        (comment) => comment.filePath === diff.file && comment.diffScope === diffScope,
-      ),
-    [allDrafts, diff.file, diffScope],
-  );
+  void fileCommentStateKey;
+  const fileComments = useInlineCommentDraftStore.getState().getDraftsForFile(diff.file, diffScope);
   const fileCommentCount = fileComments.length;
   const draftComments = fileComments.filter((comment) => comment.status !== "sent");
   const commentsById = useMemo(
@@ -111,9 +115,7 @@ function FileDiffEntry({
   const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
   const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
   const [pendingSelection, setPendingSelection] = useState<PierreDiffSelection | null>(null);
-  const [newCommentText, setNewCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState("");
 
   useEffect(() => {
     if (isExpanded && hasDiffContent) {
@@ -130,9 +132,7 @@ function FileDiffEntry({
     void diffResetKey;
     setSelectedLines(null);
     setPendingSelection(null);
-    setNewCommentText("");
     setEditingCommentId(null);
-    setEditingText("");
   }, [diffResetKey]);
 
   useEffect(() => {
@@ -143,7 +143,6 @@ function FileDiffEntry({
     const editingComment = draftComments.find((comment) => comment.id === editingCommentId);
     if (editingComment?.status === "submitting") {
       setEditingCommentId(null);
-      setEditingText("");
     }
   }, [draftComments, editingCommentId]);
 
@@ -155,57 +154,57 @@ function FileDiffEntry({
   const clearPendingSelection = useCallback(() => {
     setSelectedLines(null);
     setPendingSelection(null);
-    setNewCommentText("");
   }, []);
 
   const handleLineSelectionEnd = useCallback((selection: PierreDiffSelection | null) => {
     setPendingSelection(selection);
     setSelectedLines(selection?.selectedLines ?? null);
-    setNewCommentText("");
   }, []);
 
-  const handleSaveNewComment = useCallback(() => {
-    const text = newCommentText.trim();
-    if (!pendingSelection || text.length === 0) {
-      return;
-    }
+  const handleSaveNewComment = useCallback(
+    (text: string) => {
+      const normalizedText = text.trim();
+      if (!pendingSelection || normalizedText.length === 0) {
+        return;
+      }
 
-    addDraft({
-      filePath: diff.file,
-      diffScope,
-      startLine: pendingSelection.startLine,
-      endLine: pendingSelection.endLine,
-      side: pendingSelection.side,
-      text,
-      codeContext: pendingSelection.codeContext,
-      language: pendingSelection.language,
-    });
-    clearPendingSelection();
-  }, [addDraft, clearPendingSelection, diff.file, diffScope, newCommentText, pendingSelection]);
+      addDraft({
+        filePath: diff.file,
+        diffScope,
+        startLine: pendingSelection.startLine,
+        endLine: pendingSelection.endLine,
+        side: pendingSelection.side,
+        text: normalizedText,
+        codeContext: pendingSelection.codeContext,
+        language: pendingSelection.language,
+      });
+      clearPendingSelection();
+    },
+    [addDraft, clearPendingSelection, diff.file, diffScope, pendingSelection],
+  );
 
   const handleStartEditing = useCallback((comment: InlineCommentDraft) => {
     setEditingCommentId(comment.id);
-    setEditingText(comment.text);
     setSelectedLines(null);
     setPendingSelection(null);
-    setNewCommentText("");
   }, []);
 
   const handleCancelEditing = useCallback(() => {
     setEditingCommentId(null);
-    setEditingText("");
   }, []);
 
-  const handleSaveEditing = useCallback(() => {
-    const text = editingText.trim();
-    if (!editingCommentId || text.length === 0) {
-      return;
-    }
+  const handleSaveEditing = useCallback(
+    (commentId: string, text: string) => {
+      const normalizedText = text.trim();
+      if (normalizedText.length === 0) {
+        return;
+      }
 
-    updateDraft(editingCommentId, text);
-    setEditingCommentId(null);
-    setEditingText("");
-  }, [editingCommentId, editingText, updateDraft]);
+      updateDraft(commentId, normalizedText);
+      setEditingCommentId(null);
+    },
+    [updateDraft],
+  );
   const lineAnnotations = useMemo<DiffLineAnnotation<GitDiffCommentAnnotationMetadata>[]>(() => {
     const commentAnnotations = fileComments.map((comment) => ({
       side: mapCommentSideToAnnotationSide(comment.side),
@@ -239,12 +238,7 @@ function FileDiffEntry({
 
         return (
           <DiffAnnotationShell>
-            <NewCommentForm
-              value={newCommentText}
-              onChange={setNewCommentText}
-              onCancel={clearPendingSelection}
-              onSave={handleSaveNewComment}
-            />
+            <NewCommentForm onCancel={clearPendingSelection} onSave={handleSaveNewComment} />
           </DiffAnnotationShell>
         );
       }
@@ -267,8 +261,6 @@ function FileDiffEntry({
           <DraftCommentCard
             comment={comment}
             isEditing={editingCommentId === comment.id}
-            editingText={editingText}
-            onEditingTextChange={setEditingText}
             onStartEditing={handleStartEditing}
             onCancelEditing={handleCancelEditing}
             onSaveEditing={handleSaveEditing}
@@ -281,12 +273,10 @@ function FileDiffEntry({
       clearPendingSelection,
       commentsById,
       editingCommentId,
-      editingText,
       handleCancelEditing,
       handleSaveEditing,
       handleSaveNewComment,
       handleStartEditing,
-      newCommentText,
       pendingSelection,
       removeDraft,
     ],

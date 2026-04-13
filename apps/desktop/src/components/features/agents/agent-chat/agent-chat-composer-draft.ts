@@ -516,15 +516,23 @@ export const appendTextToDraft = (
   const normalizedDraft = normalizeComposerDraft(draft);
   const lastSegment = normalizedDraft.segments[normalizedDraft.segments.length - 1];
   if (!lastSegment || lastSegment.kind !== "text") {
-    return normalizedDraft;
+    throw new Error(
+      "appendTextToDraft: normalizeComposerDraft invariant violated - last segment is not text.",
+    );
   }
 
-  const separator = draftToSerializedText(normalizedDraft).trim().length > 0 ? "\n\n" : "";
+  const hasMeaningfulExistingContent = draftToSerializedText(normalizedDraft).trim().length > 0;
+  const separator = hasMeaningfulExistingContent ? "\n\n" : "";
   return {
     ...normalizedDraft,
     segments: normalizedDraft.segments.map((segment, index) =>
       index === normalizedDraft.segments.length - 1 && segment.kind === "text"
-        ? { ...segment, text: `${segment.text}${separator}${appendedText}` }
+        ? {
+            ...segment,
+            text: hasMeaningfulExistingContent
+              ? `${segment.text}${separator}${appendedText}`
+              : appendedText,
+          }
         : segment,
     ),
   };

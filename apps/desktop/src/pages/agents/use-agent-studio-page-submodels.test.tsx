@@ -308,6 +308,78 @@ describe("useAgentStudioComposerModel", () => {
     resetInlineComments();
   });
 
+  test("preserves submitting inline comments when the draft key switches from new to session id", async () => {
+    await act(async () => {
+      resetInlineComments();
+      useInlineCommentDraftStore.getState().resetForContext("task-1:build:new:0");
+      useInlineCommentDraftStore.getState().addDraft({
+        filePath: "src/example.ts",
+        diffScope: "uncommitted",
+        startLine: 4,
+        endLine: 4,
+        side: "new",
+        text: "Keep during first-send session switch",
+        codeContext: [{ lineNumber: 4, text: "target", isSelected: true }],
+        language: "ts",
+      });
+    });
+
+    let resolveSend: ((value: boolean) => void) | null = null;
+    const harness = createComposerHookHarness(
+      createComposerHookArgs({
+        draftStateKey: "task-1:build:new:0",
+        onSend: async () =>
+          await new Promise<boolean>((resolve) => {
+            resolveSend = resolve;
+          }),
+      }),
+    );
+
+    await act(async () => {
+      await harness.mount();
+    });
+
+    let sendPromise: Promise<boolean> | null = null;
+    await harness.run((model) => {
+      sendPromise = model.onSend(createEmptyComposerDraft());
+    });
+
+    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("submitting");
+
+    await act(async () => {
+      await harness.update(
+        createComposerHookArgs({
+          draftStateKey: "task-1:build:session-1:0",
+          onSend: async () =>
+            await new Promise<boolean>((resolve) => {
+              resolveSend = resolve;
+            }),
+        }),
+      );
+    });
+
+    expect(useInlineCommentDraftStore.getState().drafts).toHaveLength(1);
+    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("submitting");
+    expect(useInlineCommentDraftStore.getState().draftStateKey).toBe("task-1:build:session-1:0");
+
+    if (resolveSend == null) {
+      throw new Error("Expected pending send resolver");
+    }
+
+    await act(async () => {
+      resolveSend?.(false);
+      await sendPromise;
+    });
+
+    expect(useInlineCommentDraftStore.getState().drafts).toHaveLength(1);
+    expect(useInlineCommentDraftStore.getState().drafts[0]?.status).toBe("pending");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+    resetInlineComments();
+  });
+
   test("keeps pending inline comments when send fails or the draft context changes", async () => {
     await act(async () => {
       resetInlineComments();

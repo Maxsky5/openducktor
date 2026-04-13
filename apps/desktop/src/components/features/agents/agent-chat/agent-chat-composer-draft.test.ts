@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentChatComposerDraft,
+  appendTextToDraft,
   applyComposerDraftEdit,
   createComposerAttachment,
   createFileReferenceSegment,
@@ -290,5 +291,16 @@ describe("applyComposerDraftEdit", () => {
     };
 
     expect(readFileTriggerMatchForDraft(draft, "text-1", 18)).toBeNull();
+  });
+
+  test("replaces a whitespace-only draft body when appending text", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("    ", "text-1")],
+      attachments: [],
+    };
+
+    expect(draftToSerializedText(appendTextToDraft(draft, "## Git Diff Comments"))).toBe(
+      "## Git Diff Comments",
+    );
   });
 });

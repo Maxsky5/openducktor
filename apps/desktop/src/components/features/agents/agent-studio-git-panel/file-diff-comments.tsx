@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Pencil, Trash2 } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -20,16 +20,14 @@ const CommentMeta = ({ status }: { status: InlineCommentDraft["status"] }): Reac
 };
 
 export const NewCommentForm = ({
-  value,
-  onChange,
   onCancel,
   onSave,
 }: {
-  value: string;
-  onChange: (value: string) => void;
   onCancel: () => void;
-  onSave: () => void;
+  onSave: (value: string) => void;
 }): ReactElement => {
+  const [draftText, setDraftText] = useState("");
+
   return (
     <section
       className="rounded-lg border border-border bg-card p-3"
@@ -37,16 +35,21 @@ export const NewCommentForm = ({
     >
       <CommentMeta status="pending" />
       <Textarea
-        value={value}
+        value={draftText}
         placeholder="Add a comment for the Builder"
         className="mt-3 min-h-24"
-        onChange={(event) => onChange(event.currentTarget.value)}
+        onChange={(event) => setDraftText(event.currentTarget.value)}
       />
       <div className="mt-3 flex items-center justify-between gap-2">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="button" size="sm" disabled={value.trim().length === 0} onClick={onSave}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={draftText.trim().length === 0}
+          onClick={() => onSave(draftText)}
+        >
           <Check className="size-4" />
           Comment
         </Button>
@@ -62,8 +65,6 @@ export const DiffAnnotationShell = ({ children }: { children: ReactElement }): R
 export const DraftCommentCard = ({
   comment,
   isEditing,
-  editingText,
-  onEditingTextChange,
   onStartEditing,
   onCancelEditing,
   onSaveEditing,
@@ -71,14 +72,19 @@ export const DraftCommentCard = ({
 }: {
   comment: InlineCommentDraft;
   isEditing: boolean;
-  editingText: string;
-  onEditingTextChange: (value: string) => void;
   onStartEditing: (comment: InlineCommentDraft) => void;
   onCancelEditing: () => void;
-  onSaveEditing: () => void;
+  onSaveEditing: (commentId: string, text: string) => void;
   onRemove: (commentId: string) => void;
 }): ReactElement => {
   const isSubmitting = comment.status === "submitting";
+  const [editingText, setEditingText] = useState(comment.text);
+
+  useEffect(() => {
+    if (isEditing) {
+      setEditingText(comment.text);
+    }
+  }, [comment.text, isEditing]);
 
   return (
     <div
@@ -92,7 +98,7 @@ export const DraftCommentCard = ({
             value={editingText}
             className="mt-3 min-h-24"
             disabled={isSubmitting}
-            onChange={(event) => onEditingTextChange(event.currentTarget.value)}
+            onChange={(event) => setEditingText(event.currentTarget.value)}
           />
           <div className="mt-3 flex items-center justify-between gap-2">
             <Button
@@ -108,7 +114,7 @@ export const DraftCommentCard = ({
               type="button"
               size="sm"
               disabled={isSubmitting || editingText.trim().length === 0}
-              onClick={onSaveEditing}
+              onClick={() => onSaveEditing(comment.id, editingText)}
             >
               <Check className="size-4" />
               Save
