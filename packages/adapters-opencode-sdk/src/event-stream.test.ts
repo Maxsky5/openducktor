@@ -450,6 +450,60 @@ describe("event-stream", () => {
     expect(userMessages[1]?.parts).toEqual([{ kind: "text", text: "New text" }]);
   });
 
+  test("suppresses redundant slash-command instruction echo parts in live user messages", async () => {
+    const slashEnvelope = `<auto-slash-command>\n# /test-command Command\n\n**Description**: A command for testing slash commands\n\n**User Arguments**: pouet\n\n**Scope**: opencode\n\n---\n\n## Command Instructions\n\nI just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet\n\n\n---\n\n## User Request\n\npouet\n</auto-slash-command>`;
+
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-slash-1",
+            role: "user",
+            sessionID: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:06.500Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-slash-envelope",
+            sessionID: "external-session-1",
+            messageID: "user-message-slash-1",
+            type: "text",
+            text: slashEnvelope,
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "user-part-slash-echo",
+            sessionID: "external-session-1",
+            messageID: "user-message-slash-1",
+            type: "text",
+            text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    expect(userMessages).toHaveLength(1);
+    const latestUserMessage = userMessages[userMessages.length - 1];
+    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+
+    expect(latestUserMessage.message).toBe(slashEnvelope);
+    expect(latestUserMessage.parts).toEqual([{ kind: "text", text: slashEnvelope }]);
+  });
+
   test("preserves visible user text when later file parts arrive without visible text parts", async () => {
     const emitted = await runEventStream([
       {

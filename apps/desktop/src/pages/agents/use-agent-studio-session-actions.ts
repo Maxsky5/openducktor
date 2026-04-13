@@ -13,7 +13,6 @@ import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
   draftHasSlashCommandSegment,
-  draftToSerializedText,
   resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -254,12 +253,7 @@ export function useAgentStudioSessionActions({
         }
       }
 
-      const serializedDraft = draftToSerializedText(draft).trim();
-      if (
-        !draftHasMeaningfulContent(draft) ||
-        (!serializedDraft && (draft.attachments ?? []).length === 0) ||
-        !taskId
-      ) {
+      if (!draftHasMeaningfulContent(draft) || !taskId) {
         return false;
       }
       const sendContextKeys = new Set<string>();

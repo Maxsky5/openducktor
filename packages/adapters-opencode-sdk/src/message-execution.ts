@@ -1,12 +1,11 @@
 import {
   type AgentUserMessageDisplayPart,
-  buildAgentUserMessagePromptText,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
-  serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
 import { setSessionActive } from "./event-stream/shared";
 import { detectAgentFileReferenceMime } from "./file-reference-utils";
+import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
@@ -64,7 +63,7 @@ const toCommandModelInput = (
 };
 
 const toPromptFilePart = (
-  fileReference: ReturnType<typeof buildAgentUserMessagePromptText>["fileReferences"][number],
+  fileReference: ReturnType<typeof buildOpenCodePromptText>["fileReferences"][number],
   workingDirectory: string,
 ): Extract<OpenCodePromptPart, { type: "file" }> => {
   const normalizedPath = fileReference.file.path.trim();
@@ -89,7 +88,7 @@ const toPromptParts = (
   parts: SendAgentUserMessageInput["parts"],
   workingDirectory: string,
 ): OpenCodePromptPart[] => {
-  const promptText = buildAgentUserMessagePromptText(parts);
+  const promptText = buildOpenCodePromptText(parts);
   return [
     { type: "text", text: promptText.text },
     ...promptText.fileReferences.map((fileReference) =>
@@ -149,8 +148,8 @@ const toSlashCommandExecutionRequest = (
     return null;
   }
 
-  const leadingText = serializeAgentUserMessagePartsToText(normalizedParts.slice(0, commandIndex));
-  if (leadingText.trim().length > 0) {
+  const leadingParts = normalizedParts.slice(0, commandIndex);
+  if (leadingParts.some((part) => part.kind !== "text" || part.text.trim().length > 0)) {
     throw new Error("OpenCode slash commands must be the first meaningful message segment.");
   }
 
@@ -159,9 +158,10 @@ const toSlashCommandExecutionRequest = (
     return null;
   }
 
-  const trailingText = serializeAgentUserMessagePartsToText(
-    normalizedParts.slice(commandIndex + 1),
-  );
+  const trailingText = normalizedParts
+    .slice(commandIndex + 1)
+    .flatMap((part) => (part.kind === "text" ? [part.text] : []))
+    .join("");
   return {
     command: commandPart.command.trigger,
     arguments: trailingText.trim(),

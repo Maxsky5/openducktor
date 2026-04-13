@@ -151,6 +151,48 @@ describe("message-execution", () => {
     expect(promptAsync).not.toHaveBeenCalled();
   });
 
+  test("tracks queued file-reference sends using OpenCode-visible text and source spans", async () => {
+    const { session, promptAsync } = createSession();
+    session.activeAssistantMessageId = "msg-200";
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [{ kind: "file_reference", file: FILE_REFERENCE }],
+      },
+      tools: {},
+    });
+
+    expect(session.pendingQueuedUserMessages).toEqual([
+      {
+        signature: buildQueuedRequestSignature(
+          [{ kind: "file_reference", file: FILE_REFERENCE }],
+          undefined,
+        ),
+      },
+    ]);
+    expect(promptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          { type: "text", text: "@src/main.ts" },
+          expect.objectContaining({
+            type: "file",
+            source: {
+              type: "file",
+              path: "src/main.ts",
+              text: {
+                value: "@src/main.ts",
+                start: 0,
+                end: 12,
+              },
+            },
+          }),
+        ],
+      }),
+    );
+  });
+
   test("removes the exact queued slash follow-up entry when duplicate content send fails", async () => {
     const { session } = createSession({
       commandResult: {
@@ -295,6 +337,54 @@ describe("message-execution", () => {
       tools: {},
       parts: [
         { type: "text", text: "describe this" },
+        {
+          type: "file",
+          mime: "image/png",
+          url: "file:///tmp/diagram.png",
+          filename: "diagram.png",
+        },
+      ],
+    });
+  });
+
+  test("keeps file-reference spans aligned when attachments are skipped from prompt text", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        sessionId: "session-1",
+        parts: [
+          { kind: "text", text: "review " },
+          { kind: "attachment", attachment: IMAGE_ATTACHMENT },
+          { kind: "text", text: "with " },
+          { kind: "file_reference", file: FILE_REFERENCE },
+        ],
+      },
+      tools: {},
+    });
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      tools: {},
+      parts: [
+        { type: "text", text: "review with @src/main.ts" },
+        {
+          type: "file",
+          mime: "text/plain",
+          url: "file:///repo/src/main.ts",
+          filename: "main.ts",
+          source: {
+            type: "file",
+            path: "src/main.ts",
+            text: {
+              value: "@src/main.ts",
+              start: 12,
+              end: 24,
+            },
+          },
+        },
         {
           type: "file",
           mime: "image/png",
@@ -482,6 +572,27 @@ describe("message-execution", () => {
     ).rejects.toThrow(
       "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments or file references.",
     );
+  });
+
+  test("fails explicitly when text appears before a slash command", () => {
+    expect(() =>
+      __testExports.toSlashCommandExecutionRequest([
+        { kind: "text", text: "before " },
+        { kind: "slash_command", command: COMMAND },
+      ]),
+    ).toThrow("OpenCode slash commands must be the first meaningful message segment.");
+  });
+
+  test("fails explicitly when a message contains multiple slash commands", () => {
+    expect(() =>
+      __testExports.toSlashCommandExecutionRequest([
+        { kind: "slash_command", command: COMMAND },
+        {
+          kind: "slash_command",
+          command: { ...COMMAND, id: "review", trigger: "review", title: "review" },
+        },
+      ]),
+    ).toThrow("OpenCode supports only one slash command token per message.");
   });
 
   test("preserves slash-command error context without wrapping it as a prompt failure", async () => {

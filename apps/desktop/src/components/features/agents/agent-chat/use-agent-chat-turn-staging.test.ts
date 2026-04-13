@@ -131,6 +131,51 @@ describe("useAgentChatTurnStaging", () => {
     await harness.unmount();
   });
 
+  test("does not stage turns when switching to another session", async () => {
+    const turns = buildTurns(6);
+    const harness = createHookHarness(
+      ({ activeSessionId, windowStart, nextTurns }) =>
+        useAgentChatTurnStaging({
+          activeSessionId,
+          windowStart,
+          turns: nextTurns,
+          disabled: false,
+        }),
+      {
+        activeSessionId: "session-qa",
+        windowStart: 10,
+        nextTurns: turns,
+      },
+    );
+
+    await harness.mount();
+
+    await act(async () => {
+      while (animationFrameCallbacks.size > 0) {
+        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+        animationFrameCallbacks.clear();
+        for (const callback of queuedCallbacks) {
+          callback(16);
+        }
+        await flush();
+      }
+    });
+
+    const builderTurns = buildTurns(8);
+    await harness.update({
+      activeSessionId: "session-builder",
+      windowStart: 14,
+      nextTurns: builderTurns,
+    });
+
+    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(
+      builderTurns.map((turn) => turn.key),
+    );
+    expect(animationFrameCallbacks.size).toBe(0);
+
+    await harness.unmount();
+  });
+
   test("returns all turns immediately when staging is disabled", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(

@@ -4,6 +4,8 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
+  createFileReferenceSegment,
+  createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -30,6 +32,20 @@ const createComposerDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
   attachments: [],
 });
+
+const COMMAND = {
+  id: "compact",
+  trigger: "compact",
+  title: "compact",
+  hints: ["compact"],
+};
+
+const FILE_REFERENCE = {
+  id: "file-src-main",
+  path: "src/main.ts",
+  name: "main.ts",
+  kind: "code" as const,
+};
 
 const createAttachmentDraft = (input: {
   id: string;
@@ -315,6 +331,64 @@ describe("useAgentStudioSessionActions", () => {
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
       { kind: "text", text: "  hello world  " },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend allows slash-command-only drafts without relying on serialized text", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-before"),
+        createSlashCommandSegment(COMMAND, "slash-1"),
+        createTextSegment("", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ sessionId: "session-existing" }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "slash_command", command: COMMAND },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend allows file-reference-only drafts without relying on serialized text", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-before"),
+        createFileReferenceSegment(FILE_REFERENCE, "file-1"),
+        createTextSegment("", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ sessionId: "session-existing" }),
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "file_reference", file: FILE_REFERENCE },
     ]);
 
     await harness.unmount();

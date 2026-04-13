@@ -1,13 +1,16 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import {
-  type AgentModelSelection,
-  type AgentUserMessageDisplayPart,
-  type AgentUserMessagePart,
-  type AgentUserMessageSourceText,
-  serializeAgentUserMessagePartsToText,
+import type {
+  AgentModelSelection,
+  AgentUserMessageDisplayPart,
+  AgentUserMessagePart,
+  AgentUserMessageSourceText,
 } from "@openducktor/core";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
+import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
+
+const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
+const AUTO_SLASH_COMMAND_CLOSE = "</auto-slash-command>";
 
 export const readTextFromParts = (parts: Part[]): string => {
   return parts
@@ -160,22 +163,43 @@ const normalizeFileReferencePart = (
   };
 };
 
+const isAutoSlashCommandEnvelopeText = (text: string): boolean => {
+  return text.startsWith(AUTO_SLASH_COMMAND_OPEN) && text.includes(AUTO_SLASH_COMMAND_CLOSE);
+};
+
 export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessageDisplayPart[] => {
-  return parts.flatMap((part) => {
+  const normalizedParts: AgentUserMessageDisplayPart[] = [];
+  let hasAutoSlashCommandEnvelope = false;
+
+  for (const part of parts) {
     if (part.type === "text") {
       if (part.synthetic || part.ignored || part.text.length === 0) {
-        return [];
+        continue;
       }
-      return [{ kind: "text", text: part.text } satisfies AgentUserMessageDisplayPart];
+
+      if (isAutoSlashCommandEnvelopeText(part.text)) {
+        if (!hasAutoSlashCommandEnvelope) {
+          normalizedParts.push({ kind: "text", text: part.text });
+          hasAutoSlashCommandEnvelope = true;
+        }
+        continue;
+      }
+
+      if (!hasAutoSlashCommandEnvelope) {
+        normalizedParts.push({ kind: "text", text: part.text });
+      }
+      continue;
     }
 
     if (part.type === "file") {
       const fileReference = normalizeFileReferencePart(part);
-      return fileReference ? [fileReference] : [];
+      if (fileReference) {
+        normalizedParts.push(fileReference);
+      }
     }
+  }
 
-    return [];
-  });
+  return normalizedParts;
 };
 
 export const hasVisibleUserTextDisplayPart = (parts: AgentUserMessageDisplayPart[]): boolean => {
@@ -260,7 +284,7 @@ export const readVisibleUserTextFromDisplayParts = (
     return [{ kind: "file_reference", file: part.file }];
   });
 
-  return serializeAgentUserMessagePartsToText(userMessageParts);
+  return buildOpenCodeVisibleText(userMessageParts);
 };
 
 export const readTextFromMessageInfo = (info: unknown): string => {

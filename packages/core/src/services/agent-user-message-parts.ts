@@ -1,7 +1,4 @@
-import type {
-  AgentUserMessagePart,
-  AgentUserMessagePromptFileReference,
-} from "../types/agent-orchestrator";
+import type { AgentUserMessagePart } from "../types/agent-orchestrator";
 
 const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
@@ -98,6 +95,8 @@ export const hasMeaningfulAgentUserMessageParts = (parts: AgentUserMessagePart[]
   return normalizeAgentUserMessageParts(parts).length > 0;
 };
 
+// This display helper preserves the current UI text conventions. Runtime adapters must do their
+// own final encoding for sends instead of treating this as the runtime contract.
 export const serializeAgentUserMessagePartsToText = (parts: AgentUserMessagePart[]): string => {
   const normalized = normalizeAgentUserMessageParts(parts);
   let text = "";
@@ -122,59 +121,4 @@ export const serializeAgentUserMessagePartsToText = (parts: AgentUserMessagePart
   }
 
   return text;
-};
-
-export const buildAgentUserMessagePromptText = (
-  parts: AgentUserMessagePart[],
-): {
-  text: string;
-  fileReferences: AgentUserMessagePromptFileReference[];
-} => {
-  const normalized = normalizeAgentUserMessageParts(parts);
-  let text = "";
-  const fileReferences: AgentUserMessagePromptFileReference[] = [];
-  let previousPart: AgentUserMessagePart | null = null;
-  let skippedStructuredPart = false;
-
-  for (const part of normalized) {
-    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
-      text += " ";
-    }
-
-    const serializedPart = serializeAgentUserMessagePart(part);
-
-    if (serializedPart === null) {
-      skippedStructuredPart = true;
-      continue;
-    }
-
-    if (part.kind === "text" || part.kind === "slash_command") {
-      text +=
-        part.kind === "text"
-          ? collapseLeadingWhitespaceAfterSkippedPart(text, serializedPart, skippedStructuredPart)
-          : serializedPart;
-      previousPart = part;
-      skippedStructuredPart = false;
-      continue;
-    }
-
-    if (part.kind !== "file_reference") {
-      continue;
-    }
-
-    const start = text.length;
-    text += serializedPart;
-    fileReferences.push({
-      file: part.file,
-      sourceText: {
-        value: serializedPart,
-        start,
-        end: text.length,
-      },
-    });
-    previousPart = part;
-    skippedStructuredPart = false;
-  }
-
-  return { text, fileReferences };
 };
