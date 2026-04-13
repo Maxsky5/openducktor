@@ -438,6 +438,32 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("successful non-refresh loads clear a stale refresh error", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockRejectedValueOnce(new Error("Cannot resolve safe remote for refresh"));
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+      await harness.waitFor(
+        (state) => state.error === "Error: Cannot resolve safe remote for refresh",
+      );
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+
+      await harness.waitFor((state) => state.diffScope === "target");
+      await harness.waitFor((state) => state.error === null);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("resets diff scope to uncommitted when repository context changes", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),

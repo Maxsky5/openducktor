@@ -88,8 +88,10 @@ export function useAgentStudioDiffData({
   const queuedRefreshContextRef = useRef<RefreshContext | null>(null);
   const refreshContextRef = useRef<RefreshContext | null>(refreshContext);
   refreshContextRef.current = refreshContext;
+  const previousIsLoadingRef = useRef(state.isLoading);
 
   useEffect(() => {
+    // Skip cleanup from stale renders if a newer refresh context won the race to commit.
     if (refreshContextKey !== (refreshContextRef.current?.requestContextKey ?? null)) {
       return;
     }
@@ -99,6 +101,15 @@ export function useAgentStudioDiffData({
     refreshPromiseRef.current = null;
     setIsRefreshing(false);
   }, [refreshContextKey]);
+
+  useEffect(() => {
+    const wasLoading = previousIsLoadingRef.current;
+    previousIsLoadingRef.current = state.isLoading;
+
+    if (refreshError != null && wasLoading && !state.isLoading && activeScopeState.error == null) {
+      setRefreshError(null);
+    }
+  }, [activeScopeState.error, refreshError, state.isLoading]);
 
   const refresh = useCallback((): void => {
     if (preconditionError != null) {

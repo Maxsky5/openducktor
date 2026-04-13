@@ -245,6 +245,62 @@ fn fetch_remote_skips_when_no_safe_remote_can_be_resolved() {
 }
 
 #[test]
+fn fetch_remote_errors_when_upstream_target_has_no_resolvable_remote_in_remote_repo() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("fetch-upstream-missing-remote");
+    let remote = setup_bare_remote("fetch-upstream-missing-remote-origin");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    let git = GitCliPort::new();
+
+    let error = git
+        .fetch_remote(
+            &repo.path,
+            GitFetchRequest {
+                working_dir: None,
+                target_branch: "@{upstream}".to_string(),
+            },
+        )
+        .expect_err("missing upstream remote should fail in remote-enabled repos");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("requires an upstream remote for the current branch"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
+fn fetch_remote_errors_when_explicit_remote_ref_uses_unknown_remote() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("fetch-explicit-unknown-remote");
+    let git = GitCliPort::new();
+
+    let error = git
+        .fetch_remote(
+            &repo.path,
+            GitFetchRequest {
+                working_dir: None,
+                target_branch: "refs/remotes/gone-remote/main".to_string(),
+            },
+        )
+        .expect_err("explicit remote refs should fail when the remote is unknown");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("uses unknown remote `gone-remote`"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
 fn push_branch_returns_non_fast_forward_rejection() {
     if !git_available() {
         return;
