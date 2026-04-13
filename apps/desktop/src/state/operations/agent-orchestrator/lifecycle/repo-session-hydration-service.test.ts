@@ -209,6 +209,89 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile preloads stdio runtime snapshots into the live session store", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-stdio",
+        repoPath,
+        taskId: null,
+        role: "workspace",
+        workingDirectory: worktreePath,
+        runtimeRoute: {
+          type: "stdio",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            {
+              externalSessionId: "external-1",
+              title: "Task 1",
+              workingDirectory: worktreePath,
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskWithSession("task-1", "external-1")],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: {
+          type: "stdio",
+          workingDirectory: worktreePath,
+        },
+        directories: [worktreePath],
+      },
+    ]);
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "stdio",
+          workingDirectory: worktreePath,
+        },
+        workingDirectory: worktreePath,
+        externalSessionId: "external-1",
+      })?.externalSessionId,
+    ).toBe("external-1");
+    service.dispose();
+  });
+
   test("reconcile ensures a missing runtime kind only once even when multiple directories are missing", async () => {
     let runtimeEnsureCalls = 0;
     const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];

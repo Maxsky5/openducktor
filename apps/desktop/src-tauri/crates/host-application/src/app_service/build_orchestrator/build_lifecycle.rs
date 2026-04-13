@@ -380,6 +380,12 @@ impl AppService {
             run_id,
             emitter,
         } = input;
+        let port = runtime_summary
+            .runtime_route
+            .local_http_port()
+            .ok_or_else(|| {
+                anyhow!("OpenCode build runs require a local_http runtime route with a port")
+            })?;
         self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
             task_id,
@@ -392,12 +398,6 @@ impl AppService {
             .map(|path| path.to_string())?;
         let run_id_string = run_id.to_string();
         let task_id_string = task_id.to_string();
-        let port = runtime_summary
-            .runtime_route
-            .local_http_port()
-            .ok_or_else(|| {
-                anyhow!("OpenCode build runs require a local_http runtime route with a port")
-            })?;
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
@@ -421,6 +421,79 @@ impl AppService {
             worktree_path,
             emitter,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app_service::test_support::{build_service_with_state, make_emitter, make_task};
+    use host_domain::{GitTargetBranch, TaskStatus};
+    use host_infra_system::RepoConfig;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn initiate_build_mode_rejects_stdio_routes_before_transitioning_task() {
+        let (service, task_state, _git_state) =
+            build_service_with_state(vec![make_task("task-1", "task", TaskStatus::Open)]);
+
+        let error = service
+            .initiate_build_mode(BuildModeStartInput {
+                runtime_kind: AgentRuntimeKind::Opencode,
+                prerequisites: BuildPrerequisites {
+                    repo_path: "/tmp/repo".to_string(),
+                    repo_config: RepoConfig::default(),
+                    target_branch: GitTargetBranch {
+                        remote: Some("origin".to_string()),
+                        branch: "main".to_string(),
+                    },
+                    allow_local_branch_fallback: false,
+                    branch: "odt/task-1".to_string(),
+                    worktree_base: "/tmp/worktrees".to_string(),
+                },
+                prepared_worktree: PreparedBuildWorktree {
+                    worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
+                },
+                runtime_summary: RuntimeInstanceSummary {
+                    kind: AgentRuntimeKind::Opencode,
+                    runtime_id: "runtime-1".to_string(),
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: None,
+                    role: super::super::RuntimeRole::Workspace,
+                    working_directory: "/tmp/repo".to_string(),
+                    runtime_route: RuntimeRoute::Stdio,
+                    started_at: "2026-04-13T00:00:00Z".to_string(),
+                    descriptor: AgentRuntimeKind::Opencode.descriptor(),
+                },
+                task_id: "task-1",
+                run_id: "run-1",
+                emitter: make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            })
+            .expect_err("stdio build routes should fail fast");
+
+        assert!(error
+            .to_string()
+            .contains("OpenCode build runs require a local_http runtime route with a port"));
+        assert!(task_state
+            .lock()
+            .expect("task store lock poisoned")
+            .updated_patches
+            .is_empty());
+    }
+
+    #[test]
+    fn abort_opencode_session_rejects_stdio_routes() {
+        let error = AppService::abort_opencode_session(
+            &RuntimeRoute::Stdio,
+            "external-session-1",
+            "/tmp/repo/worktree",
+        )
+        .expect_err("stdio abort should fail fast");
+
+        assert!(error.to_string().contains(
+            "OpenCode build session abort requires a local_http runtime route with a port"
+        ));
     }
 }
 

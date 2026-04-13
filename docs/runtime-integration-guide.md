@@ -505,7 +505,7 @@ For `host_managed` runtimes, the Rust host contains the startup and readiness lo
 
 ### Transport model
 
-`RuntimeRoute` and several validation paths assume loopback HTTP. Runtimes that use sockets, stdio, remote HTTPS, or non-local transports extend the route and transport abstractions as part of the integration.
+`RuntimeRoute` and request-scoped `RuntimeConnection` are transport-generic shared abstractions. Runtime-specific code may still require a particular transport such as `local_http`, but those constraints must stay inside the owning adapter or host path and fail explicitly for unsupported route or connection types.
 
 ### Capability interpretation
 
