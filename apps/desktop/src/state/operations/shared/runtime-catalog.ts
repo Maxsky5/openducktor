@@ -16,8 +16,8 @@ import { appQueryClient } from "@/lib/query-client";
 import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { host } from "./host";
 import { resolveRuntimeRouteConnection } from "../agent-orchestrator/runtime/runtime";
+import { host } from "./host";
 
 type ListCatalogInput = {
   runtimeKind: RuntimeKind;

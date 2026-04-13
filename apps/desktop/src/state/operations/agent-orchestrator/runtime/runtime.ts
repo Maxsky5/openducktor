@@ -8,12 +8,12 @@ import type {
   RuntimeRoute,
 } from "@openducktor/contracts";
 import {
-  requireRuntimeConnection,
   type AgentModelSelection,
   type AgentRole,
   type AgentRuntimeConnection,
+  mergePromptOverrides,
+  requireRuntimeConnection,
 } from "@openducktor/core";
-import { mergePromptOverrides } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";

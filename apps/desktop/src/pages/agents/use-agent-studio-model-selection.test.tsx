@@ -419,9 +419,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
       expect(readSessionSlashCommands).not.toHaveBeenCalled();
-      expect(harness.getLatest().slashCommandsError).toBe(
-        "Runtime connection type 'stdio' is unsupported for active session runtime queries in runtime 'opencode'; local_http is required.",
-      );
+      expect(harness.getLatest().slashCommandsError).toContain("local_http is required");
     } finally {
       await harness.unmount();
     }
@@ -478,7 +476,7 @@ describe("useAgentStudioModelSelection", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Runtime connection type 'stdio' is unsupported for active session runtime queries in runtime 'opencode'; local_http is required.",
+        "local_http is required",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {

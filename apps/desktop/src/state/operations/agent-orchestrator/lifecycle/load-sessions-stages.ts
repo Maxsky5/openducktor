@@ -17,6 +17,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
+import { requireRuntimeConnectionSupport, runtimeRouteToConnection } from "../runtime/runtime";
 import { DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE } from "../support/history-hydration";
 import {
   appendSessionMessage,
@@ -38,7 +39,6 @@ import {
   type ResolvedHydrationRuntime,
   readPersistedRuntimeKind,
 } from "./hydration-runtime-resolution";
-import { requireRuntimeConnectionSupport, runtimeRouteToConnection } from "../runtime/runtime";
 import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createReattachLiveSession } from "./reattach-live-session";
@@ -810,9 +810,14 @@ export const hydrateSessionRecordsStage = async ({
       resolvedScenario,
       promptOverrides,
     });
-    const history = await adapter.loadSessionHistory({
+    const supportedRuntimeConnection = requireRuntimeConnectionSupport(
       runtimeKind,
       runtimeConnection,
+      "load session history",
+    );
+    const history = await adapter.loadSessionHistory({
+      runtimeKind,
+      runtimeConnection: supportedRuntimeConnection,
       externalSessionId: record.externalSessionId ?? record.sessionId,
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });

@@ -504,6 +504,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(persistedSessionRecord.sessionId).toBe("session-1");
     expect("status" in persistedSessionRecord).toBe(false);
     expect("taskId" in persistedSessionRecord).toBe(false);
+    expect("runtimeRoute" in persistedSessionRecord).toBe(false);
     expect("runtimeEndpoint" in persistedSessionRecord).toBe(false);
     expect("baseUrl" in persistedSessionRecord).toBe(false);
     expect("runtimeTransport" in persistedSessionRecord).toBe(false);

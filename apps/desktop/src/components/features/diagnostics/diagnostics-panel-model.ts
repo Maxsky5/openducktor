@@ -23,13 +23,13 @@ import {
   getRepoStoreStatusLabel,
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
+import { describeRuntimeRoute } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
   hasDiagnosticsRetryingState,
   hasRuntimeCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
-import { describeRuntimeRoute } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
 

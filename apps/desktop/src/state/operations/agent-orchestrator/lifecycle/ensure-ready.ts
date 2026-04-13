@@ -5,8 +5,8 @@ import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import {
-  requireRuntimeConnectionSupport,
   type RuntimeInfo,
+  requireRuntimeConnectionSupport,
   resolveRuntimeConnection,
   runtimeRouteToConnection,
 } from "../runtime/runtime";

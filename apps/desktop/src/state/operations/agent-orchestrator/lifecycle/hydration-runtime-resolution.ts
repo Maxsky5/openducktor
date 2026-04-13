@@ -1,9 +1,9 @@
 import type {
   AgentSessionRecord,
   RunSummary,
-  RuntimeRoute,
   RuntimeInstanceSummary,
   RuntimeKind,
+  RuntimeRoute,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
 import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";

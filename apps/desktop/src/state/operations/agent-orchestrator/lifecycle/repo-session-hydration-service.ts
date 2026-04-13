@@ -261,20 +261,19 @@ export const createRepoSessionHydrationService = ({
         ensuredRuntimeForKind = routeSourceRuntime;
         runtimeEntries.push(routeSourceRuntime);
       }
-      const repoRuntime = resolveRuntimeRouteConnection(routeSourceRuntime.runtimeRoute, repoPath);
-      const scanKey = getLiveAgentSessionCacheKey(runtimeKind, repoRuntime.runtimeConnection);
-      if (!runtimeConnections.has(scanKey)) {
-        runtimeConnections.set(scanKey, {
-          runtimeKind,
-          runtimeConnection: repoRuntime.runtimeConnection,
-          directories: new Set<string>(),
-        });
-      }
       for (const workingDirectory of missingDesiredDirectories) {
         const { runtimeConnection } = resolveRuntimeRouteConnection(
           routeSourceRuntime.runtimeRoute,
           workingDirectory,
         );
+        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
+        if (!runtimeConnections.has(scanKey)) {
+          runtimeConnections.set(scanKey, {
+            runtimeKind,
+            runtimeConnection,
+            directories: new Set<string>(),
+          });
+        }
         preloadedRuntimeConnectionsByKey.set(
           runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
           runtimeConnection,

@@ -531,7 +531,7 @@ describe("OpencodeSdkAdapter", () => {
       systemPrompt: "system",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12000",
+        endpoint: "http://127.0.0.1:12000",
         workingDirectory: "/repo",
       },
     });
@@ -546,7 +546,7 @@ describe("OpencodeSdkAdapter", () => {
       systemPrompt: "system",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12000",
+        endpoint: "http://127.0.0.1:12000",
         workingDirectory: "/other",
       },
     });
@@ -595,7 +595,7 @@ describe("OpencodeSdkAdapter", () => {
       systemPrompt: "system",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12000",
+        endpoint: "http://127.0.0.1:12000",
         workingDirectory: "/repo",
       },
     });
@@ -1745,7 +1745,7 @@ describe("OpencodeSdkAdapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12000",
+          endpoint: "http://127.0.0.1:12000",
           workingDirectory: "/repo",
         },
         workingDirectory: "/repo/other-worktree",
@@ -2879,7 +2879,7 @@ describe("OpencodeSdkAdapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+          endpoint: "http://127.0.0.1:12345",
           workingDirectory: "   ",
         },
         externalSessionId: "session-opencode-1",
@@ -2906,7 +2906,7 @@ describe("OpencodeSdkAdapter", () => {
       runtimeKind: "opencode",
       runtimeConnection: {
         type: "local_http",
-      endpoint: "http://127.0.0.1:12345",
+        endpoint: "http://127.0.0.1:12345",
         workingDirectory: "  /repo  ",
       },
       externalSessionId: "session-opencode-1",

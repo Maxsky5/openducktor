@@ -1,7 +1,7 @@
 import {
+  type AgentRuntimeConnection,
   requireLocalHttpRuntimeConnection,
   requireRuntimeWorkingDirectory,
-  type AgentRuntimeConnection,
 } from "@openducktor/core";
 
 export type OpencodeRuntimeClientInput = {

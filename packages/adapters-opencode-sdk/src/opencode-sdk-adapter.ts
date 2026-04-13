@@ -1,31 +1,31 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
-import {
-  type AgentCatalogPort,
-  type AgentEvent,
-  type AgentModelCatalog,
-  type AgentSessionHistoryMessage,
-  type AgentSessionPort,
-  type AgentSessionSummary,
-  type AgentSessionTodoItem,
-  type AgentWorkspaceInspectionPort,
-  type EventUnsubscribe,
-  type ForkAgentSessionInput,
-  type ListAgentModelsInput,
-  type ListLiveAgentSessionPendingInput,
-  type ListLiveAgentSessionsInput,
-  type LiveAgentSessionPendingInputBySession,
-  type LiveAgentSessionSnapshot,
-  type LiveAgentSessionSummary,
-  type LoadAgentFileStatusInput,
-  type LoadAgentSessionDiffInput,
-  type LoadAgentSessionHistoryInput,
-  type LoadAgentSessionTodosInput,
-  type ReplyPermissionInput,
-  type ReplyQuestionInput,
-  type ResumeAgentSessionInput,
-  type SendAgentUserMessageInput,
-  type StartAgentSessionInput,
-  type UpdateAgentSessionModelInput,
+import type {
+  AgentCatalogPort,
+  AgentEvent,
+  AgentModelCatalog,
+  AgentSessionHistoryMessage,
+  AgentSessionPort,
+  AgentSessionSummary,
+  AgentSessionTodoItem,
+  AgentWorkspaceInspectionPort,
+  EventUnsubscribe,
+  ForkAgentSessionInput,
+  ListAgentModelsInput,
+  ListLiveAgentSessionPendingInput,
+  ListLiveAgentSessionsInput,
+  LiveAgentSessionPendingInputBySession,
+  LiveAgentSessionSnapshot,
+  LiveAgentSessionSummary,
+  LoadAgentFileStatusInput,
+  LoadAgentSessionDiffInput,
+  LoadAgentSessionHistoryInput,
+  LoadAgentSessionTodosInput,
+  ReplyPermissionInput,
+  ReplyQuestionInput,
+  ResumeAgentSessionInput,
+  SendAgentUserMessageInput,
+  StartAgentSessionInput,
+  UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import {
   connectMcpServer,
@@ -56,6 +56,7 @@ import {
   replyPermission,
   replyQuestion,
 } from "./message-ops";
+import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import {
   clearWorkflowToolCacheForDirectory,
   hasSession,
@@ -63,7 +64,6 @@ import {
   requireSession,
   stopSessionRuntime,
 } from "./session-registry";
-import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
 import type {
   ClientFactory,

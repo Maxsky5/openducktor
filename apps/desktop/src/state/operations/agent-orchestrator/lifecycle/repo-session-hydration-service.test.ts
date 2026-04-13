@@ -462,6 +462,67 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile fans missing stdio worktrees out by per-directory scan identity", async () => {
+    let runtimeEnsureCalls = 0;
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [];
+    host.runtimeEnsure = async () => {
+      runtimeEnsureCalls += 1;
+      return createRuntimeInstance({
+        runtimeId: "runtime-stdio-root",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio" },
+      });
+    };
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: [...input.directories].sort() } : {}),
+          });
+          return [];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a"),
+        taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b"),
+      ],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(runtimeEnsureCalls).toBe(1);
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: stdioRuntimeConnection("/tmp/repo/worktree-a"),
+        directories: ["/tmp/repo/worktree-a"],
+      },
+      {
+        runtimeConnection: stdioRuntimeConnection("/tmp/repo/worktree-b"),
+        directories: ["/tmp/repo/worktree-b"],
+      },
+    ]);
+    service.dispose();
+  });
+
   test("reconcile invalidates runtime list queries after ensuring a missing runtime", async () => {
     const liveAgentSessionStore = new LiveAgentSessionStore();
     host.runtimeList = async () => [];
