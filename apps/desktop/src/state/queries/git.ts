@@ -108,6 +108,16 @@ export const loadRepoBranchesFromQuery = (
   hostClient?: GitBranchesQueryHost,
 ): Promise<GitBranch[]> => queryClient.fetchQuery(repoBranchesQueryOptions(repoPath, hostClient));
 
+export const invalidateRepoBranchesQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    queryKey: gitQueryKeys.branches(repoPath),
+    exact: true,
+    refetchType: "none",
+  });
+
 export const loadCurrentBranchFromQuery = (
   queryClient: QueryClient,
   repoPath: string,

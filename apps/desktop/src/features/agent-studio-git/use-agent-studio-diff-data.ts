@@ -2,11 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { canonicalTargetBranch } from "@/lib/target-branch";
-import { gitQueryKeys } from "@/state/queries/git";
+import { invalidateRepoBranchesQuery } from "@/state/queries/git";
 import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
 import type { DiffDataState } from "./contracts";
 import { useAgentStudioDiffController } from "./use-agent-studio-diff-controller";
 import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
+
+type RefreshContext = {
+  requestContextKey: string;
+  repoPath: string;
+  targetBranch: string;
+  workingDir: string | null;
+  scope: DiffDataState["diffScope"];
+};
 
 export function useAgentStudioDiffData({
   repoPath,
@@ -59,25 +67,38 @@ export function useAgentStudioDiffData({
     enablePolling,
     shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
   });
+  const refreshContext = useMemo<RefreshContext | null>(() => {
+    if (requestContextKey == null || effectiveRepoPath == null) {
+      return null;
+    }
+
+    return {
+      requestContextKey,
+      repoPath: effectiveRepoPath,
+      targetBranch,
+      workingDir: worktreePath,
+      scope: diffScope,
+    };
+  }, [diffScope, effectiveRepoPath, requestContextKey, targetBranch, worktreePath]);
+  const refreshContextKey = refreshContext?.requestContextKey ?? null;
 
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
-  const refreshQueuedRef = useRef(false);
-  const requestContextKeyRef = useRef(requestContextKey);
-  requestContextKeyRef.current = requestContextKey;
+  const queuedRefreshContextRef = useRef<RefreshContext | null>(null);
+  const refreshContextRef = useRef<RefreshContext | null>(refreshContext);
+  refreshContextRef.current = refreshContext;
 
   useEffect(() => {
-    const resetContextKey = requestContextKey;
-    if (requestContextKeyRef.current !== resetContextKey) {
+    if (refreshContextKey !== (refreshContextRef.current?.requestContextKey ?? null)) {
       return;
     }
 
     setRefreshError(null);
-    refreshQueuedRef.current = false;
+    queuedRefreshContextRef.current = null;
     refreshPromiseRef.current = null;
     setIsRefreshing(false);
-  }, [requestContextKey]);
+  }, [refreshContextKey]);
 
   const refresh = useCallback((): void => {
     if (preconditionError != null) {
@@ -93,22 +114,23 @@ export function useAgentStudioDiffData({
       return;
     }
 
-    if (!effectiveRepoPath) {
+    const nextRefreshContext = refreshContextRef.current;
+    if (nextRefreshContext == null) {
       return;
     }
 
-    refreshQueuedRef.current = true;
+    queuedRefreshContextRef.current = nextRefreshContext;
     if (refreshPromiseRef.current != null) {
       return;
     }
 
     const runRefreshLoop = async (): Promise<void> => {
-      const refreshContextKey = requestContextKeyRef.current;
-      const hasSameRefreshContext = (): boolean =>
-        requestContextKeyRef.current === refreshContextKey;
+      while (queuedRefreshContextRef.current != null) {
+        const activeRefreshContext = queuedRefreshContextRef.current;
+        queuedRefreshContextRef.current = null;
+        const hasSameRefreshContext = (): boolean =>
+          refreshContextRef.current?.requestContextKey === activeRefreshContext.requestContextKey;
 
-      while (refreshQueuedRef.current) {
-        refreshQueuedRef.current = false;
         if (!hasSameRefreshContext()) {
           break;
         }
@@ -117,25 +139,26 @@ export function useAgentStudioDiffData({
 
         try {
           await hostClient.gitFetchRemote(
-            effectiveRepoPath,
-            targetBranch,
-            worktreePath ?? undefined,
+            activeRefreshContext.repoPath,
+            activeRefreshContext.targetBranch,
+            activeRefreshContext.workingDir ?? undefined,
           );
           if (!hasSameRefreshContext()) {
             break;
           }
 
-          await appQueryClient.invalidateQueries({
-            queryKey: gitQueryKeys.branches(effectiveRepoPath),
-            exact: true,
-            refetchType: "none",
-          });
+          await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
           if (!hasSameRefreshContext()) {
             break;
           }
 
           setRefreshError(null);
-          await refreshActiveScope();
+          await refreshActiveScope({
+            repoPath: activeRefreshContext.repoPath,
+            targetBranch: activeRefreshContext.targetBranch,
+            workingDir: activeRefreshContext.workingDir,
+            scope: activeRefreshContext.scope,
+          });
         } catch (error) {
           if (hasSameRefreshContext()) {
             setRefreshError(String(error));
@@ -155,13 +178,10 @@ export function useAgentStudioDiffData({
     });
     refreshPromiseRef.current = refreshPromise;
   }, [
-    effectiveRepoPath,
     refreshActiveScope,
     preconditionError,
     retryWorktreeResolution,
     shouldBlockDiffLoading,
-    targetBranch,
-    worktreePath,
     worktreeResolutionError,
   ]);
 

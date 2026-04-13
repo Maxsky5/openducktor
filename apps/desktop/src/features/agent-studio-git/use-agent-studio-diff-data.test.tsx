@@ -2107,6 +2107,64 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("does not reload a new worktree context when an older refresh fetch resolves", async () => {
+    const pendingFetch = createDeferred<{ output: string }>();
+
+    gitFetchRemoteMock.mockImplementation(async () => pendingFetch.promise);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionWorkingDirectory: "/repo/.worktrees/run-1",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        1,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        "/repo/.worktrees/run-1",
+      );
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+      expect(gitFetchRemoteMock).toHaveBeenNthCalledWith(
+        1,
+        "/repo",
+        "origin/main",
+        "/repo/.worktrees/run-1",
+      );
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionWorkingDirectory: "/repo/.worktrees/run-2",
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        "/repo/.worktrees/run-2",
+      );
+
+      pendingFetch.resolve({ output: "From origin" });
+      await harness.run(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("ignores stale in-flight response after repo path is cleared", async () => {
     const pendingRequest = createDeferred<GitWorktreeStatus>();
 
