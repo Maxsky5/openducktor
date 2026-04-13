@@ -18,7 +18,7 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
 const createElement = (
-  type: typeof AgentChatMessageCard,
+  _type: typeof AgentChatMessageCard,
   props: React.ComponentProps<typeof AgentChatMessageCard>,
 ) => {
   return createReactElement(

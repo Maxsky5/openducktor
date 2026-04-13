@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentRole } from "./agent-workflow-schemas";
-import { agentToolNameValues, type AgentToolName } from "./agent-workflow-schemas";
+import { type AgentToolName, agentToolNameValues } from "./agent-workflow-schemas";
 
 export const knownRuntimeKindValues = ["opencode"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
@@ -162,7 +162,7 @@ const runtimeWorkflowToolAliasesByCanonicalSchema = z
           context.addIssue({
             code: "custom",
             path: [canonicalTool, index],
-            message: `Runtime workflow alias \"${alias}\" is already assigned to canonical tool \"${existingCanonicalTool}\".`,
+            message: `Runtime workflow alias "${alias}" is already assigned to canonical tool "${existingCanonicalTool}".`,
           });
           continue;
         }

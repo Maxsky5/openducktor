@@ -1,5 +1,5 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   assistantRoleFromMessage,

@@ -554,6 +554,7 @@ mod tests {
         RuntimeProvisioningMode, RuntimeRoute, RuntimeSupportedScope,
         REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
+    use std::collections::BTreeMap;
 
     fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabilities {
         RuntimeCapabilities {
