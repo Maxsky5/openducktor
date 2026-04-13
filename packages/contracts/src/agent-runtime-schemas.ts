@@ -155,6 +155,7 @@ const runtimeWorkflowToolAliasesByCanonicalSchema = z
             path: [canonicalTool, index],
             message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
           });
+          continue;
         }
 
         const existingCanonicalTool = canonicalByAlias.get(alias);
