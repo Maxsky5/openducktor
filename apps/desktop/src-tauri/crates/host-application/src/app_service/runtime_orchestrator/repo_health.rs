@@ -4,6 +4,7 @@ use super::repo_health_snapshot::{
     RepoRuntimeProgressInput, RuntimeHealthWorkflowStage,
 };
 use super::AppService;
+use crate::app_service::require_opencode_local_http_endpoint;
 use crate::app_service::service_core::{RepoRuntimeHealthFlight, RepoRuntimeHealthFlightState};
 use crate::app_service::OpencodeStartupWaitFailure;
 use anyhow::{anyhow, Result};
@@ -539,14 +540,12 @@ impl AppService {
     fn repo_runtime_client(
         runtime: &RuntimeInstanceSummary,
     ) -> std::result::Result<RepoRuntimeHealthHttpClient<'_>, RuntimeHealthHttpFailure> {
-        match &runtime.runtime_route {
-            RuntimeRoute::LocalHttp { endpoint } => {
-                Ok(RepoRuntimeHealthHttpClient::new(endpoint.as_str()))
-            }
-            RuntimeRoute::Stdio => Err(RuntimeHealthHttpFailure::error(
-                "OpenCode runtime MCP health checks require a local_http runtime route".to_string(),
-            )),
-        }
+        let endpoint = require_opencode_local_http_endpoint(
+            &runtime.runtime_route,
+            "runtime MCP health checks",
+        )
+        .map_err(|error| RuntimeHealthHttpFailure::error(error.to_string()))?;
+        Ok(RepoRuntimeHealthHttpClient::new(endpoint))
     }
 
     fn repo_runtime_load_mcp_status(

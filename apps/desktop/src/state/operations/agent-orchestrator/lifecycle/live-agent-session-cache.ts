@@ -10,7 +10,13 @@ import { normalizeWorkingDirectory } from "../support/core";
 export const getLiveAgentSessionCacheKey = (
   runtimeKind: string,
   runtimeConnection: AgentRuntimeConnection,
-): string => `${runtimeKind}::${runtimeConnectionTransportKey(runtimeConnection)}`;
+): string => {
+  const connectionKey =
+    runtimeConnection.type === "stdio"
+      ? `${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`
+      : runtimeConnectionTransportKey(runtimeConnection);
+  return `${runtimeKind}::${connectionKey}`;
+};
 
 export const runtimeWorkingDirectoryKey = (runtimeKind: string, workingDirectory: string): string =>
   `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;

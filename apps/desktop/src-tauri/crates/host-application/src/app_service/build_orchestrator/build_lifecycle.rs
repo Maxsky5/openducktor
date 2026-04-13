@@ -1,7 +1,7 @@
 use super::super::{
-    emit_event, AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter,
-    RunProcess, RuntimeInstanceSummary, StartupEventContext, StartupEventCorrelation,
-    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    emit_event, require_opencode_local_http_port, AppService, OpencodeStartupReadinessPolicy,
+    OpencodeStartupWaitReport, RunEmitter, RunProcess, RuntimeInstanceSummary, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use super::BuildResponseAction;
@@ -276,9 +276,7 @@ impl AppService {
         external_session_id: &str,
         working_directory: &str,
     ) -> Result<()> {
-        let port = runtime_route.local_http_port().ok_or_else(|| {
-            anyhow!("OpenCode build session abort requires a local_http runtime route with a port")
-        })?;
+        let port = require_opencode_local_http_port(runtime_route, "build session abort")?;
         let request_path = format!(
             "/session/{external_session_id}/abort?{}",
             form_urlencoded::Serializer::new(String::new())
@@ -380,12 +378,7 @@ impl AppService {
             run_id,
             emitter,
         } = input;
-        let port = runtime_summary
-            .runtime_route
-            .local_http_port()
-            .ok_or_else(|| {
-                anyhow!("OpenCode build runs require a local_http runtime route with a port")
-            })?;
+        let port = require_opencode_local_http_port(&runtime_summary.runtime_route, "build runs")?;
         self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
             task_id,
@@ -433,6 +426,34 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
+    fn make_stdio_runtime_summary() -> RuntimeInstanceSummary {
+        RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::Opencode,
+            runtime_id: "runtime-1".to_string(),
+            repo_path: "/tmp/repo".to_string(),
+            task_id: None,
+            role: super::super::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo".to_string(),
+            runtime_route: RuntimeRoute::Stdio,
+            started_at: "2026-04-13T00:00:00Z".to_string(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        }
+    }
+
+    fn make_build_prerequisites() -> BuildPrerequisites {
+        BuildPrerequisites {
+            repo_path: "/tmp/repo".to_string(),
+            repo_config: RepoConfig::default(),
+            target_branch: GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            allow_local_branch_fallback: false,
+            branch: "odt/task-1".to_string(),
+            worktree_base: "/tmp/worktrees".to_string(),
+        }
+    }
+
     #[test]
     fn initiate_build_mode_rejects_stdio_routes_before_transitioning_task() {
         let (service, task_state, _git_state) =
@@ -441,31 +462,11 @@ mod tests {
         let error = service
             .initiate_build_mode(BuildModeStartInput {
                 runtime_kind: AgentRuntimeKind::Opencode,
-                prerequisites: BuildPrerequisites {
-                    repo_path: "/tmp/repo".to_string(),
-                    repo_config: RepoConfig::default(),
-                    target_branch: GitTargetBranch {
-                        remote: Some("origin".to_string()),
-                        branch: "main".to_string(),
-                    },
-                    allow_local_branch_fallback: false,
-                    branch: "odt/task-1".to_string(),
-                    worktree_base: "/tmp/worktrees".to_string(),
-                },
+                prerequisites: make_build_prerequisites(),
                 prepared_worktree: PreparedBuildWorktree {
                     worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
                 },
-                runtime_summary: RuntimeInstanceSummary {
-                    kind: AgentRuntimeKind::Opencode,
-                    runtime_id: "runtime-1".to_string(),
-                    repo_path: "/tmp/repo".to_string(),
-                    task_id: None,
-                    role: super::super::RuntimeRole::Workspace,
-                    working_directory: "/tmp/repo".to_string(),
-                    runtime_route: RuntimeRoute::Stdio,
-                    started_at: "2026-04-13T00:00:00Z".to_string(),
-                    descriptor: AgentRuntimeKind::Opencode.descriptor(),
-                },
+                runtime_summary: make_stdio_runtime_summary(),
                 task_id: "task-1",
                 run_id: "run-1",
                 emitter: make_emitter(Arc::new(Mutex::new(Vec::new()))),

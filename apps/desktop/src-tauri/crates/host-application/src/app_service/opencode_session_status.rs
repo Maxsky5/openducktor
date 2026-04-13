@@ -1,3 +1,4 @@
+use super::require_opencode_local_http_endpoint;
 use super::service_core::{
     AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeError,
     CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatusFlight,
@@ -43,16 +44,10 @@ impl OpencodeSessionStatusProbeTarget {
         runtime_route: &RuntimeRoute,
         working_directory: &str,
     ) -> Result<Self> {
-        let endpoint = match runtime_route {
-            RuntimeRoute::LocalHttp { endpoint } => endpoint.clone(),
-            RuntimeRoute::Stdio => {
-                return Err(anyhow!(
-                    "OpenCode session status probes require a local_http runtime route"
-                ))
-            }
-        };
+        let endpoint =
+            require_opencode_local_http_endpoint(runtime_route, "session status probes")?;
         Ok(Self {
-            endpoint,
+            endpoint: endpoint.to_string(),
             working_directory: working_directory.to_string(),
         })
     }
