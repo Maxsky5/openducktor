@@ -11,7 +11,11 @@
     }
   },
   "bin": {
-    "openducktor-mcp": "./dist/index.js"
+    "openducktor-mcp": "dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Maxsky5/openducktor.git"
   },
   "files": [
     "dist",
