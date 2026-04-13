@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  createRepoRuntimeHealthFixture,
+  type RepoRuntimeHealthFixtureOverrides,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import {
   buildBeadsCheckErrorState,
@@ -10,34 +14,9 @@ import {
 } from "./check-diagnostics";
 
 const makeRepoHealth = (
-  overrides: Partial<RepoRuntimeHealthCheck> = {},
-): RepoRuntimeHealthCheck => ({
-  status: "ready",
-  checkedAt: "2026-02-22T08:00:00.000Z",
-  runtime: {
-    status: "ready",
-    stage: "runtime_ready",
-    observation: null,
-    instance: null,
-    startedAt: null,
-    updatedAt: "2026-02-22T08:00:00.000Z",
-    elapsedMs: null,
-    attempts: null,
-    detail: null,
-    failureKind: null,
-    failureReason: null,
-  },
-  mcp: {
-    supported: true,
-    status: "connected",
-    serverName: "openducktor",
-    serverStatus: "connected",
-    toolIds: [],
-    detail: null,
-    failureKind: null,
-  },
-  ...overrides,
-});
+  overrides: RepoRuntimeHealthFixtureOverrides = {},
+): RepoRuntimeHealthCheck =>
+  createRepoRuntimeHealthFixture({ checkedAt: "2026-02-22T08:00:00.000Z" }, overrides);
 
 describe("check-diagnostics helpers", () => {
   test("projects runtime and beads query failures into concrete error states", () => {
@@ -225,6 +204,40 @@ describe("check-diagnostics helpers", () => {
       retryRuntimeCheck: false,
       retryBeadsCheck: false,
       retryRuntimeHealth: true,
+    });
+
+    expect(
+      buildDiagnosticsRetryPlan({
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeCheckFailureKind: null,
+        runtimeCheckFetching: false,
+        beadsCheckFailureKind: null,
+        beadsCheckFetching: false,
+        runtimeHealthByRuntime: {
+          opencode: makeRepoHealth({
+            status: "checking",
+            runtime: {
+              status: "ready",
+              stage: "runtime_ready",
+            },
+            mcp: {
+              supported: true,
+              status: "checking",
+              serverName: "openducktor",
+              serverStatus: null,
+              toolIds: [],
+              detail: "Checking OpenDucktor MCP",
+              failureKind: null,
+            },
+          }),
+        },
+        runtimeHealthFetching: false,
+      }),
+    ).toEqual({
+      retryRuntimeCheck: false,
+      retryBeadsCheck: false,
+      retryRuntimeHealth: false,
     });
 
     expect(

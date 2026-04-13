@@ -6,7 +6,18 @@ import type { DiagnosticsRetryPlan, DiagnosticsToastIssue } from "./check-diagno
 
 const RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS = 2_000;
 
-export function useDiagnosticsToasts(diagnosticsToastIssues: DiagnosticsToastIssue[]): void {
+export type DiagnosticsToastApi = {
+  error: (
+    message: string,
+    options?: { description?: string; id?: string; duration?: number },
+  ) => unknown;
+  dismiss: (toastId?: string | number) => unknown;
+};
+
+export function useDiagnosticsToasts(
+  diagnosticsToastIssues: DiagnosticsToastIssue[],
+  toastApi: DiagnosticsToastApi = toast,
+): void {
   const issueSignaturesRef = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -17,7 +28,7 @@ export function useDiagnosticsToasts(diagnosticsToastIssues: DiagnosticsToastIss
         continue;
       }
 
-      toast.dismiss(issueId);
+      toastApi.dismiss(issueId);
       issueSignaturesRef.current.delete(issueId);
     }
 
@@ -27,7 +38,7 @@ export function useDiagnosticsToasts(diagnosticsToastIssues: DiagnosticsToastIss
         continue;
       }
 
-      toast.error(issue.title, {
+      toastApi.error(issue.title, {
         id: issue.id,
         description: issue.description,
         duration: Number.POSITIVE_INFINITY,
@@ -35,16 +46,16 @@ export function useDiagnosticsToasts(diagnosticsToastIssues: DiagnosticsToastIss
 
       issueSignaturesRef.current.set(issue.id, signature);
     }
-  }, [diagnosticsToastIssues]);
+  }, [diagnosticsToastIssues, toastApi]);
 
   useEffect(() => {
     return () => {
       for (const issueId of issueSignaturesRef.current.keys()) {
-        toast.dismiss(issueId);
+        toastApi.dismiss(issueId);
       }
       issueSignaturesRef.current.clear();
     };
-  }, []);
+  }, [toastApi]);
 }
 
 type UseDiagnosticsRetrySchedulerArgs = {

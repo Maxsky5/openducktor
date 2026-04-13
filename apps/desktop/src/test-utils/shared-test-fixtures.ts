@@ -1,5 +1,6 @@
 import type { BeadsCheck, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
 const BASE_BEADS_CHECK_FIXTURE: BeadsCheck = {
   beadsOk: true,
@@ -32,6 +33,14 @@ type RepoStoreHealthFixtureOverrides = Omit<
 
 export type BeadsCheckFixtureOverrides = Omit<Partial<BeadsCheck>, "repoStoreHealth"> & {
   repoStoreHealth?: RepoStoreHealthFixtureOverrides;
+};
+
+export type RepoRuntimeHealthFixtureOverrides = Omit<
+  Partial<RepoRuntimeHealthCheck>,
+  "runtime" | "mcp"
+> & {
+  runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
+  mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
 };
 
 const BASE_TASK_CARD_FIXTURE: TaskCard = {
@@ -90,6 +99,35 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   modelCatalog: null,
   selectedModel: null,
   isLoadingModelCatalog: false,
+};
+
+const BASE_REPO_RUNTIME_HEALTH_FIXTURE: RepoRuntimeHealthCheck = {
+  status: "ready",
+  checkedAt: "2026-02-22T08:00:00.000Z",
+  runtime: {
+    status: "ready",
+    stage: "runtime_ready",
+    observation: null,
+    instance: null,
+    startedAt: null,
+    updatedAt: "2026-02-22T08:00:00.000Z",
+    elapsedMs: null,
+    attempts: null,
+    detail: null,
+    failureKind: null,
+    failureReason: null,
+  },
+  mcp: null,
+};
+
+const BASE_REPO_RUNTIME_MCP_FIXTURE: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
+  supported: true,
+  status: "connected",
+  serverName: "openducktor",
+  serverStatus: "connected",
+  toolIds: [],
+  detail: null,
+  failureKind: null,
 };
 
 export const createDeferred = <T>() => {
@@ -202,6 +240,58 @@ export const createAgentSessionFixture = (
     ...defaults,
     ...overrides,
   } satisfies AgentSessionState;
+
+  return structuredClone(merged);
+};
+
+export const createRepoRuntimeHealthFixture = (
+  defaults: RepoRuntimeHealthFixtureOverrides = {},
+  overrides: RepoRuntimeHealthFixtureOverrides = {},
+): RepoRuntimeHealthCheck => {
+  const checkedAt =
+    overrides.checkedAt ?? defaults.checkedAt ?? BASE_REPO_RUNTIME_HEALTH_FIXTURE.checkedAt;
+  const runtimeDefaults = defaults.runtime ?? {};
+  const runtimeOverrides = overrides.runtime ?? {};
+  const mcpDefaults = defaults.mcp ?? {};
+  const mcpOverrides = overrides.mcp ?? {};
+  const mergedMcp = {
+    ...BASE_REPO_RUNTIME_MCP_FIXTURE,
+    ...mcpDefaults,
+    ...mcpOverrides,
+  };
+  const runtime: RepoRuntimeHealthCheck["runtime"] = {
+    ...BASE_REPO_RUNTIME_HEALTH_FIXTURE.runtime,
+    ...runtimeDefaults,
+    ...runtimeOverrides,
+    updatedAt: runtimeOverrides.updatedAt ?? runtimeDefaults.updatedAt ?? checkedAt,
+  };
+  const mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]> = {
+    supported: mergedMcp.supported ?? BASE_REPO_RUNTIME_MCP_FIXTURE.supported,
+    status: mergedMcp.status ?? BASE_REPO_RUNTIME_MCP_FIXTURE.status,
+    serverName: mergedMcp.serverName ?? BASE_REPO_RUNTIME_MCP_FIXTURE.serverName,
+    serverStatus: mergedMcp.serverStatus ?? BASE_REPO_RUNTIME_MCP_FIXTURE.serverStatus,
+    toolIds: mergedMcp.toolIds ?? BASE_REPO_RUNTIME_MCP_FIXTURE.toolIds,
+    detail: mergedMcp.detail ?? BASE_REPO_RUNTIME_MCP_FIXTURE.detail,
+    failureKind: mergedMcp.failureKind ?? BASE_REPO_RUNTIME_MCP_FIXTURE.failureKind,
+  };
+  const merged = {
+    ...BASE_REPO_RUNTIME_HEALTH_FIXTURE,
+    ...defaults,
+    ...overrides,
+    status:
+      overrides.status ??
+      defaults.status ??
+      (runtime.status === "error" || mcp.status === "error"
+        ? "error"
+        : mcp.status === "checking" ||
+            mcp.status === "reconnecting" ||
+            mcp.status === "waiting_for_runtime"
+          ? "checking"
+          : runtime.status),
+    checkedAt,
+    runtime,
+    mcp,
+  } satisfies RepoRuntimeHealthCheck;
 
   return structuredClone(merged);
 };
