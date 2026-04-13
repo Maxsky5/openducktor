@@ -4,10 +4,7 @@ import {
   type AgentUserMessagePart,
   normalizeAgentUserMessageParts,
 } from "@openducktor/core";
-import {
-  buildOpenCodePromptText,
-  buildOpenCodeVisibleText,
-} from "./opencode-user-message-encoding";
+import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 
 type ComparableNonTextPart =
   | {
@@ -92,7 +89,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
   ];
 
   return buildComparableSignature({
-    visible: buildOpenCodeVisibleText(normalizedParts),
+    visible: promptText.text,
     nonTextParts,
     ...(model ? { model } : {}),
   });

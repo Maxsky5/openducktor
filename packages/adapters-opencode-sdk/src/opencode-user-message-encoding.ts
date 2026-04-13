@@ -62,14 +62,14 @@ const buildOpenCodeMessageEncoding = (
   let skippedStructuredPart = false;
 
   for (const part of normalized) {
-    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
-      text += " ";
-    }
-
     const encodedPart = encodeOpenCodePartToText(part);
     if (encodedPart === null) {
       skippedStructuredPart = true;
       continue;
+    }
+
+    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
+      text += " ";
     }
 
     if (part.kind === "text") {
