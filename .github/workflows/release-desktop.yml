@@ -218,6 +218,14 @@ jobs:
         id: cef
         run: bun run --cwd apps/desktop scripts/resolve-cef-release-env.ts >> "$GITHUB_OUTPUT"
 
+      - name: Clear stale target bundle outputs
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          rm -rf "apps/desktop/src-tauri/target/$TARGET/release/bundle"
+          rm -rf "apps/desktop/src-tauri/target/$TARGET/bundle"
+
       - name: Build and upload signed desktop assets
         uses: tauri-apps/tauri-action@97cef2bd32ead607bcc2c6af5b40ce2f25d48e77
         timeout-minutes: 60
