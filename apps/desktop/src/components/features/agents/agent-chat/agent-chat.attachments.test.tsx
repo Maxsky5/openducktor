@@ -45,6 +45,7 @@ const buildModel = () => ({
     isReadOnly: false,
     readOnlyReason: null,
     busySendBlockedReason: null,
+    pendingInlineCommentCount: 0,
     draftStateKey: "draft-1",
     onSend: async () => true,
     isSending: false,

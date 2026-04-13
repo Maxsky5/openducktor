@@ -6,8 +6,16 @@ const originalDateNow = Date.now;
 const resetStore = (): void => {
   useInlineCommentDraftStore.setState({
     drafts: [],
-    editingDraftId: null,
+    draftStateKey: null,
   });
+};
+
+const requireDraftRevision = (index: number): number => {
+  const revision = useInlineCommentDraftStore.getState().drafts[index]?.revision;
+  if (revision == null) {
+    throw new Error(`Expected draft revision at index ${index}`);
+  }
+  return revision;
 };
 
 describe("use-inline-comment-draft-store", () => {
@@ -20,92 +28,311 @@ describe("use-inline-comment-draft-store", () => {
     resetStore();
   });
 
-  test("adds, updates, removes, and clears drafts while keeping editing state in sync", () => {
+  test("drops submitted comments from the store after a successful send", () => {
     Date.now = () => 1_700_000_000_000;
 
     const firstId = useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
       startLine: 10,
       endLine: 10,
-      side: "modified",
+      side: "new",
       text: "Initial note",
+      codeContext: [{ lineNumber: 10, text: "const a = 1;", isSelected: true }],
+      language: "ts",
     });
     const secondId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-b.ts",
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "target",
       startLine: 20,
       endLine: 22,
-      side: "original",
+      side: "old",
       text: "Second note",
+      codeContext: [{ lineNumber: 20, text: "old line", isSelected: true }],
+      language: "ts",
     });
 
     const addedState = useInlineCommentDraftStore.getState();
     expect(addedState.getDraftCount()).toBe(2);
-    expect(addedState.drafts.map((draft) => draft.id)).toEqual([firstId, secondId]);
-    expect(addedState.drafts.map((draft) => draft.createdAt)).toEqual([
-      1_700_000_000_000, 1_700_000_000_000,
-    ]);
+    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(2);
+    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts", "uncommitted")).toBe(1);
+    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts", "target")).toBe(1);
+    expect(
+      addedState.getDraftsForFile("apps/desktop/src/file-a.ts").map((draft) => draft.id),
+    ).toEqual([secondId, firstId]);
+    expect(
+      addedState
+        .getDraftsForFile("apps/desktop/src/file-a.ts", "uncommitted")
+        .map((draft) => draft.id),
+    ).toEqual([firstId]);
 
-    addedState.setEditing(secondId);
     addedState.updateDraft(firstId, "Updated note");
+    expect(
+      useInlineCommentDraftStore.getState().drafts.find((draft) => draft.id === firstId)?.text,
+    ).toBe("Updated note");
+    const pendingSnapshots = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
-    const updatedState = useInlineCommentDraftStore.getState();
-    expect(updatedState.editingDraftId).toBe(secondId);
-    expect(updatedState.drafts.find((draft) => draft.id === firstId)?.text).toBe("Updated note");
+    Date.now = () => 1_700_000_000_100;
+    const submissionId = useInlineCommentDraftStore
+      .getState()
+      .beginSubmittingDrafts(pendingSnapshots);
+    if (submissionId == null) {
+      throw new Error("Expected submission id");
+    }
+    useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
 
-    updatedState.removeDraft(secondId);
-
-    const removedState = useInlineCommentDraftStore.getState();
-    expect(removedState.getDraftCount()).toBe(1);
-    expect(removedState.editingDraftId).toBeNull();
-    expect(removedState.drafts.map((draft) => draft.id)).toEqual([firstId]);
-
-    removedState.clearAll();
-
-    const clearedState = useInlineCommentDraftStore.getState();
-    expect(clearedState.getDraftCount()).toBe(0);
-    expect(clearedState.drafts).toEqual([]);
-    expect(clearedState.editingDraftId).toBeNull();
+    const submittedState = useInlineCommentDraftStore.getState();
+    expect(submittedState.getDraftCount()).toBe(0);
+    expect(submittedState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(0);
+    expect(submittedState.drafts).toEqual([]);
   });
 
-  test("formats grouped markdown by file with sorted line ranges and original-side labels", () => {
+  test("removes only the submitted snapshot when another pending draft changes in flight", () => {
+    Date.now = () => 1_700_000_000_000;
+
+    const firstId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 10,
+      endLine: 10,
+      side: "new",
+      text: "First note",
+      codeContext: [{ lineNumber: 10, text: "first", isSelected: true }],
+      language: "ts",
+    });
+    useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-b.ts",
+      diffScope: "target",
+      startLine: 20,
+      endLine: 20,
+      side: "old",
+      text: "Second note",
+      codeContext: [{ lineNumber: 20, text: "second", isSelected: true }],
+      language: "ts",
+    });
+
+    const sentSnapshot = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
+
+    Date.now = () => 1_700_000_000_050;
+    useInlineCommentDraftStore
+      .getState()
+      .updateDraft(firstId, "First note updated after send start");
+
+    Date.now = () => 1_700_000_000_100;
+    const submissionId = useInlineCommentDraftStore.getState().beginSubmittingDrafts(sentSnapshot);
+    if (submissionId == null) {
+      throw new Error("Expected submission id");
+    }
+    useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
+
+    const drafts = useInlineCommentDraftStore.getState().drafts;
+    expect(drafts.find((draft) => draft.id === firstId)?.status).toBe("pending");
+    expect(drafts.some((draft) => draft.filePath === "apps/desktop/src/file-b.ts")).toBe(false);
+  });
+
+  test("rejects editing or removing a comment while that exact draft is being sent", () => {
+    const draftId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 1,
+      endLine: 1,
+      side: "new",
+      text: "Pending comment",
+      codeContext: [{ lineNumber: 1, text: "line", isSelected: true }],
+      language: "ts",
+    });
+    const snapshot = useInlineCommentDraftStore
+      .getState()
+      .getPendingDrafts()
+      .map((draft) => ({ id: draft.id, revision: draft.revision }));
+
+    const submissionId = useInlineCommentDraftStore.getState().beginSubmittingDrafts(snapshot);
+    if (submissionId == null) {
+      throw new Error("Expected submission id");
+    }
+
+    expect(() => useInlineCommentDraftStore.getState().updateDraft(draftId, "Edited")).toThrow(
+      "Cannot edit a git diff comment while it is being sent.",
+    );
+    expect(() => useInlineCommentDraftStore.getState().removeDraft(draftId)).toThrow(
+      "Cannot remove a git diff comment while it is being sent.",
+    );
+  });
+
+  test("excludes submitting drafts from new pending batches and clears submitting locks per batch", () => {
+    const firstId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 1,
+      endLine: 1,
+      side: "new",
+      text: "First",
+      codeContext: [{ lineNumber: 1, text: "first", isSelected: true }],
+      language: "ts",
+    });
+    const secondId = useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-b.ts",
+      diffScope: "target",
+      startLine: 2,
+      endLine: 2,
+      side: "old",
+      text: "Second",
+      codeContext: [{ lineNumber: 2, text: "second", isSelected: true }],
+      language: "ts",
+    });
+
+    const firstSnapshot = [{ id: firstId, revision: requireDraftRevision(0) }];
+    const secondSnapshot = [{ id: secondId, revision: requireDraftRevision(1) }];
+
+    const firstSubmissionId = useInlineCommentDraftStore
+      .getState()
+      .beginSubmittingDrafts(firstSnapshot);
+    if (firstSubmissionId == null) {
+      throw new Error("Expected first submission id");
+    }
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .getPendingDrafts()
+        .map((draft) => draft.id),
+    ).toEqual([secondId]);
+    expect(useInlineCommentDraftStore.getState().getDraftCount()).toBe(1);
+
+    const secondSubmissionId = useInlineCommentDraftStore
+      .getState()
+      .beginSubmittingDrafts(secondSnapshot);
+    if (secondSubmissionId == null) {
+      throw new Error("Expected second submission id");
+    }
+    expect(
+      useInlineCommentDraftStore.getState().drafts.filter((draft) => draft.status === "submitting"),
+    ).toHaveLength(2);
+    expect(useInlineCommentDraftStore.getState().getPendingDrafts()).toEqual([]);
+
+    useInlineCommentDraftStore.getState().restoreSubmittingDrafts(firstSubmissionId);
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .getPendingDrafts()
+        .map((draft) => draft.id),
+    ).toEqual([firstId]);
+    expect(
+      useInlineCommentDraftStore
+        .getState()
+        .drafts.filter((draft) => draft.status === "submitting")
+        .map((draft) => draft.id),
+    ).toEqual([secondId]);
+  });
+
+  test("formats a deterministic markdown appendix with explicit change semantics", () => {
     Date.now = () => 1_700_000_000_000;
 
     useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/beta.ts",
+      diffScope: "target",
       startLine: 30,
       endLine: 30,
-      side: "modified",
+      side: "new",
       text: "Beta line comment",
+      codeContext: [
+        { lineNumber: 29, text: "before", isSelected: false },
+        { lineNumber: 30, text: "selected", isSelected: true },
+      ],
+      language: "ts",
     });
     useInlineCommentDraftStore.getState().addDraft({
       filePath: "apps/desktop/src/alpha.ts",
+      diffScope: "uncommitted",
       startLine: 12,
       endLine: 15,
-      side: "original",
+      side: "old",
       text: "Alpha range comment",
-    });
-    useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/alpha.ts",
-      startLine: 5,
-      endLine: 5,
-      side: "modified",
-      text: "Alpha single-line comment",
+      codeContext: [
+        { lineNumber: 12, text: "removed one", isSelected: true },
+        { lineNumber: 13, text: "removed two", isSelected: true },
+      ],
+      language: "ts",
     });
 
-    expect(useInlineCommentDraftStore.getState().formatBatchMessage()).toBe(
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toBe(
       [
-        "## Review Comments",
+        "## Git Diff Comments",
         "",
-        "### `apps/desktop/src/beta.ts` (line 30)",
-        "Beta line comment",
+        "### Comment 1",
+        "File: `apps/desktop/src/alpha.ts`",
+        "Diff: uncommitted changes",
+        "Change: removed",
+        "Lines: 12-15",
+        "Context:",
+        "```ts",
+        "12 | removed one",
+        "13 | removed two",
+        "```",
+        "Instruction: Alpha range comment",
         "",
-        "### `apps/desktop/src/alpha.ts` (line 5)",
-        "Alpha single-line comment",
-        "",
-        "### `apps/desktop/src/alpha.ts` (lines 12-15 (old))",
-        "Alpha range comment",
-        "",
+        "### Comment 2",
+        "File: `apps/desktop/src/beta.ts`",
+        "Diff: branch changes",
+        "Change: added",
+        "Lines: 30",
+        "Context:",
+        "```ts",
+        "30 | selected",
+        "```",
+        "Instruction: Beta line comment",
       ].join("\n"),
     );
+  });
+
+  test("formats multiline instructions inline while keeping selected-line-only context", () => {
+    useInlineCommentDraftStore.getState().addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "target",
+      startLine: 5,
+      endLine: 5,
+      side: "new",
+      text: "First line\nSecond line",
+      codeContext: [{ lineNumber: 5, text: "target", isSelected: true }],
+      language: "ts",
+    });
+
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
+      "Instruction: First line\nSecond line",
+    );
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
+      ["Context:", "```ts", "5 | target", "```"].join("\n"),
+    );
+    expect(useInlineCommentDraftStore.getState().formatPendingBatchMessage()).toContain(
+      "Diff: branch changes",
+    );
+  });
+
+  test("resets comment state only when the draft context key changes", () => {
+    const store = useInlineCommentDraftStore.getState();
+
+    store.resetForContext("draft-1");
+    store.addDraft({
+      filePath: "apps/desktop/src/file-a.ts",
+      diffScope: "uncommitted",
+      startLine: 3,
+      endLine: 3,
+      side: "new",
+      text: "Note",
+      codeContext: [{ lineNumber: 3, text: "line", isSelected: true }],
+      language: "ts",
+    });
+
+    useInlineCommentDraftStore.getState().resetForContext("draft-1");
+    expect(useInlineCommentDraftStore.getState().drafts).toHaveLength(1);
+
+    useInlineCommentDraftStore.getState().resetForContext("draft-2");
+    expect(useInlineCommentDraftStore.getState().drafts).toEqual([]);
+    expect(useInlineCommentDraftStore.getState().draftStateKey).toBe("draft-2");
   });
 });

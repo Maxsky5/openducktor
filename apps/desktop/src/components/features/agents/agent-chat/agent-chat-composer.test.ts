@@ -10,6 +10,7 @@ const buildModel = () => ({
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
+  pendingInlineCommentCount: 0,
   draftStateKey: "draft-1",
   onSend: async () => true,
   isSending: false,
@@ -143,6 +144,21 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain('aria-label="Send message" disabled');
+  });
+
+  test("shows a send badge and keeps send enabled when only inline comments are pending", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          pendingInlineCommentCount: 3,
+        },
+      }),
+    );
+
+    expect(html).toContain("agent-chat-send-comment-badge");
+    expect(html).toContain(">3<");
+    expect(html).not.toContain('aria-label="Send message" disabled');
   });
 
   test("styles composer shell with agent accent border and padded container", () => {

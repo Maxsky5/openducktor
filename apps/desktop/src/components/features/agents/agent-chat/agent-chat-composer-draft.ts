@@ -505,6 +505,39 @@ export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolea
 
 export const draftHasSlashCommandSegment = hasExistingSlashCommandSegment;
 
+export const appendTextToDraft = (
+  draft: AgentChatComposerDraft,
+  appendedText: string,
+): AgentChatComposerDraft => {
+  if (appendedText.length === 0) {
+    return draft;
+  }
+
+  const normalizedDraft = normalizeComposerDraft(draft);
+  const lastSegment = normalizedDraft.segments[normalizedDraft.segments.length - 1];
+  if (!lastSegment || lastSegment.kind !== "text") {
+    throw new Error(
+      "appendTextToDraft: normalizeComposerDraft invariant violated - last segment is not text.",
+    );
+  }
+
+  const hasMeaningfulExistingContent = draftToSerializedText(normalizedDraft).trim().length > 0;
+  const separator = hasMeaningfulExistingContent ? "\n\n" : "";
+  return {
+    ...normalizedDraft,
+    segments: normalizedDraft.segments.map((segment, index) =>
+      index === normalizedDraft.segments.length - 1 && segment.kind === "text"
+        ? {
+            ...segment,
+            text: hasMeaningfulExistingContent
+              ? `${segment.text}${separator}${appendedText}`
+              : appendedText,
+          }
+        : segment,
+    ),
+  };
+};
+
 export const appendAttachmentsToDraft = (
   draft: AgentChatComposerDraft,
   attachments: AgentChatComposerAttachment[],

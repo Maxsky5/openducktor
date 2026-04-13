@@ -65,6 +65,16 @@ const renderUnsupportedAttachmentDescription = (name: string): ReactElement => {
   );
 };
 
+const hasComposerSendContent = (
+  draft: AgentChatComposerDraft,
+  pendingInlineCommentCount: number,
+): boolean => {
+  return draftHasMeaningfulContent(draft) || pendingInlineCommentCount > 0;
+};
+
+const SEND_COMMENT_BADGE_CLASS_NAME =
+  "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
+
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onPickAttachments,
   attachmentIntakeDisabled,
@@ -87,6 +97,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession,
   showSubmittingState,
   sendDisabled,
+  pendingInlineCommentCount,
 }: {
   onPickAttachments: () => void;
   attachmentIntakeDisabled: boolean;
@@ -109,6 +120,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession: AgentChatComposerModel["onStopSession"];
   showSubmittingState: boolean;
   sendDisabled: boolean;
+  pendingInlineCommentCount: number;
 }): ReactElement {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
@@ -202,19 +214,29 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             <Square className="size-3 fill-current" />
           </Button>
         ) : null}
-        <Button
-          type="submit"
-          size="icon"
-          className="size-8 rounded-full"
-          aria-label={showSubmittingState ? "Preparing message" : "Send message"}
-          disabled={sendDisabled}
-        >
-          {showSubmittingState ? (
-            <LoaderCircle className="size-3.5 animate-spin" />
-          ) : (
-            <SendHorizontal className="size-3.5" />
-          )}
-        </Button>
+        <div className="relative">
+          <Button
+            type="submit"
+            size="icon"
+            className="size-8 rounded-full"
+            aria-label={showSubmittingState ? "Preparing message" : "Send message"}
+            disabled={sendDisabled}
+          >
+            {showSubmittingState ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <SendHorizontal className="size-3.5" />
+            )}
+          </Button>
+          {pendingInlineCommentCount > 0 ? (
+            <span
+              className={SEND_COMMENT_BADGE_CLASS_NAME}
+              data-testid="agent-chat-send-comment-badge"
+            >
+              {pendingInlineCommentCount}
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -230,6 +252,7 @@ export const AgentChatComposer = forwardRef<
     isReadOnly,
     readOnlyReason,
     busySendBlockedReason,
+    pendingInlineCommentCount,
     draftStateKey,
     onSend,
     isSending,
@@ -364,7 +387,7 @@ export const AgentChatComposer = forwardRef<
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
     !taskId ||
-    !draftHasMeaningfulContent(draft) ||
+    !hasComposerSendContent(draft, pendingInlineCommentCount) ||
     !agentStudioReady;
 
   latestDraftRef.current = draft;
@@ -588,6 +611,7 @@ export const AgentChatComposer = forwardRef<
             onStopSession={onStopSession}
             showSubmittingState={isSubmitting}
             sendDisabled={sendDisabled}
+            pendingInlineCommentCount={pendingInlineCommentCount}
           />
         </div>
       </div>

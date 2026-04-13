@@ -55,6 +55,7 @@ export type AgentChatComposerModel = {
   isReadOnly: boolean;
   readOnlyReason: string | null;
   busySendBlockedReason: string | null;
+  pendingInlineCommentCount: number;
   draftStateKey: string;
   onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;
   isSending: boolean;

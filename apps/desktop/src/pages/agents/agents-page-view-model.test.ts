@@ -303,6 +303,7 @@ describe("agents-page-view-model", () => {
       isReadOnly: false,
       readOnlyReason: null,
       busySendBlockedReason: null,
+      pendingInlineCommentCount: 0,
       onSend: async (draft) => onSend(draft),
       isWaitingInput: false,
       isModelSelectionPending: false,

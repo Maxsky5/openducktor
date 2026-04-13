@@ -3,12 +3,14 @@ import { AlignJustify, SplitSquareHorizontal } from "lucide-react";
 import { memo, type ReactElement, useMemo } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
 import { DiffPreloadQueue } from "./diff-preload-queue";
 import { FileDiffEntryWithMemo } from "./file-diff-entry";
 
 type FileDiffListProps = {
   fileDiffs: FileDiff[];
+  diffScope: DiffScope;
   conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
   setDiffStyle: (style: PierreDiffStyle) => void;
@@ -60,6 +62,7 @@ function DiffStyleToggleButton({
 
 export const FileDiffList = memo(function FileDiffList({
   fileDiffs,
+  diffScope,
   conflictedFiles,
   diffStyle,
   setDiffStyle,
@@ -122,6 +125,7 @@ export const FileDiffList = memo(function FileDiffList({
         <FileDiffEntryWithMemo
           key={diff.file}
           diff={diff}
+          diffScope={diffScope}
           isConflicted={conflictedFiles.has(diff.file)}
           reserveConflictSlot={reserveConflictSlot}
           isExpanded={expandedFiles.has(diff.file)}

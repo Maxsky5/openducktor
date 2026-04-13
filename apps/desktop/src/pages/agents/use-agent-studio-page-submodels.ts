@@ -1,10 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { RefObject } from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import { appendTextToDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
+import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -31,6 +33,23 @@ type UseAgentStudioHeaderModelArgs = {
   onSessionSelectionChange: (nextValue: string) => void;
   onCreateSession: (option: SessionCreateOption) => void;
   workflow: WorkflowHeaderContext;
+};
+
+const parseDraftStateKey = (draftStateKey: string) => {
+  const [taskId = "", role = "", sessionId = "", contextSwitchVersion = ""] =
+    draftStateKey.split(":");
+  return { taskId, role, sessionId, contextSwitchVersion };
+};
+
+const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string): boolean => {
+  const previous = parseDraftStateKey(previousKey);
+  const next = parseDraftStateKey(nextKey);
+  return (
+    previous.taskId === next.taskId &&
+    previous.role === next.role &&
+    previous.contextSwitchVersion === next.contextSwitchVersion &&
+    previous.sessionId !== next.sessionId
+  );
 };
 
 export const useAgentStudioHeaderModel = ({
@@ -329,15 +348,66 @@ export const useAgentStudioComposerModel = ({
     activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
   );
   const activeSessionId = activeSession?.sessionId;
+  const pendingInlineCommentCount = useInlineCommentDraftStore((store) => store.getDraftCount());
   const waitingInputPlaceholder = activeSession
     ? getAgentSessionWaitingInputPlaceholder(activeSession)
     : null;
+  const previousDraftStateKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const store = useInlineCommentDraftStore.getState();
+    const previousDraftStateKey = previousDraftStateKeyRef.current;
+    if (previousDraftStateKey === draftStateKey) {
+      return;
+    }
+
+    if (
+      previousDraftStateKey != null &&
+      isSessionOnlyDraftStateTransition(previousDraftStateKey, draftStateKey) &&
+      store.drafts.some((draft) => draft.status === "submitting")
+    ) {
+      store.setDraftStateKey(draftStateKey);
+    } else {
+      store.resetForContext(draftStateKey);
+    }
+
+    previousDraftStateKeyRef.current = draftStateKey;
+  }, [draftStateKey]);
 
   const handleSend = useCallback<AgentChatModel["composer"]["onSend"]>(
     async (draft) => {
+      const pendingDrafts = useInlineCommentDraftStore.getState().getPendingDrafts();
+      const submittingDrafts = pendingDrafts.map((pendingDraft) => ({
+        id: pendingDraft.id,
+        revision: pendingDraft.revision,
+      }));
+      const commentAppendix = useInlineCommentDraftStore
+        .getState()
+        .formatBatchMessage(pendingDrafts);
+      const nextDraft =
+        commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
       scrollToBottomOnSendRef.current?.();
-      const didSend = await onSend(draft);
-      return didSend;
+      const submissionId = useInlineCommentDraftStore
+        .getState()
+        .beginSubmittingDrafts(submittingDrafts);
+      try {
+        const didSend = await onSend(nextDraft);
+        if (!submissionId) {
+          return didSend;
+        }
+
+        if (didSend) {
+          useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
+        } else {
+          useInlineCommentDraftStore.getState().restoreSubmittingDrafts(submissionId);
+        }
+        return didSend;
+      } catch (error) {
+        if (submissionId) {
+          useInlineCommentDraftStore.getState().restoreSubmittingDrafts(submissionId);
+        }
+        throw error;
+      }
     },
     [onSend, scrollToBottomOnSendRef],
   );
@@ -357,6 +427,7 @@ export const useAgentStudioComposerModel = ({
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
         busySendBlockedReason,
+        pendingInlineCommentCount,
         draftStateKey,
         onSend: handleSend,
         isSending,
@@ -410,6 +481,7 @@ export const useAgentStudioComposerModel = ({
       isSessionWorking,
       isWaitingInput,
       busySendBlockedReason,
+      pendingInlineCommentCount,
       isStarting,
       waitingInputPlaceholder,
       modelGroups,

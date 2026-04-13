@@ -52,5 +52,4 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   targetBranchOptions?: ComboboxOption[];
   targetBranchSelectionValue?: string;
   onUpdateTargetBranch?: (selection: string) => Promise<void>;
-  onSendReview?: (message: string) => void;
 };
