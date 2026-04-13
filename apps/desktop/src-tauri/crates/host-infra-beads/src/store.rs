@@ -27,14 +27,14 @@ mod namespace;
 mod session_ops;
 mod task_ops;
 
-use cache::{KanbanTaskListCacheState, PullRequestSyncCandidateCacheEntry, TaskListCacheState};
+use cache::{KanbanTaskListCacheState, PullRequestSyncCandidateCacheState, TaskListCacheState};
 
 pub struct BeadsTaskStore {
     pub(crate) metadata_namespace: Mutex<String>,
     pub(crate) lifecycle: BeadsLifecycle,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
     kanban_task_list_cache: Mutex<HashMap<String, KanbanTaskListCacheState>>,
-    pull_request_sync_candidate_cache: Mutex<HashMap<String, PullRequestSyncCandidateCacheEntry>>,
+    pull_request_sync_candidate_cache: Mutex<HashMap<String, PullRequestSyncCandidateCacheState>>,
 }
 
 impl fmt::Debug for BeadsTaskStore {

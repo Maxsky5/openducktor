@@ -90,9 +90,9 @@ impl BeadsTaskStore {
     ) -> Result<Vec<TaskCard>> {
         let metadata_namespace = self.current_metadata_namespace();
         let repo_key = Self::repo_key(repo_path);
-        if let Some(tasks) =
-            self.cached_pull_request_sync_candidates(&repo_key, &metadata_namespace)?
-        {
+        let (cached_tasks, cache_generation) = self
+            .cached_pull_request_sync_candidates_and_generation(&repo_key, &metadata_namespace)?;
+        if let Some(tasks) = cached_tasks {
             return Ok(tasks);
         }
 
@@ -101,7 +101,12 @@ impl BeadsTaskStore {
             .into_iter()
             .filter(Self::is_pull_request_sync_candidate)
             .collect::<Vec<_>>();
-        self.cache_pull_request_sync_candidates(&repo_key, &metadata_namespace, &tasks)?;
+        self.cache_pull_request_sync_candidates_if_generation(
+            &repo_key,
+            &metadata_namespace,
+            cache_generation,
+            &tasks,
+        )?;
         Ok(tasks)
     }
 
