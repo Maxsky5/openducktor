@@ -334,16 +334,6 @@ export const hasRuntimeHealthTimeoutIssue = (
   });
 };
 
-export const hasRuntimeHealthCheckingState = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthByRuntime: RepoRuntimeHealthMap,
-): boolean => {
-  return runtimeDefinitions.some((definition) => {
-    const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-    return runtimeHealth?.status === "checking";
-  });
-};
-
 export const hasDiagnosticsRetryingState = ({
   runtimeDefinitions,
   runtimeCheckFailureKind,
@@ -378,8 +368,7 @@ export const buildDiagnosticsRetryPlan = ({
   const retryRuntimeHealth =
     activeRepo !== null &&
     runtimeDefinitions.length > 0 &&
-    (hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) ||
-      hasRuntimeHealthCheckingState(runtimeDefinitions, runtimeHealthByRuntime)) &&
+    hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime) &&
     !runtimeHealthFetching;
 
   return {

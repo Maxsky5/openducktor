@@ -7,7 +7,6 @@ import {
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
   buildRuntimeHealthErrorMap,
-  hasRuntimeHealthCheckingState,
 } from "./check-diagnostics";
 
 type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
@@ -277,7 +276,7 @@ describe("check-diagnostics helpers", () => {
     ).toEqual({
       retryRuntimeCheck: false,
       retryBeadsCheck: false,
-      retryRuntimeHealth: true,
+      retryRuntimeHealth: false,
     });
 
     expect(
@@ -309,34 +308,5 @@ describe("check-diagnostics helpers", () => {
       retryBeadsCheck: false,
       retryRuntimeHealth: false,
     });
-  });
-
-  test("detects runtime-health checking states that still need polling", () => {
-    expect(
-      hasRuntimeHealthCheckingState([OPENCODE_RUNTIME_DESCRIPTOR], {
-        opencode: makeRepoHealth({
-          status: "checking",
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-          },
-          mcp: {
-            supported: true,
-            status: "checking",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "Checking OpenDucktor MCP",
-            failureKind: null,
-          },
-        }),
-      }),
-    ).toBe(true);
-
-    expect(
-      hasRuntimeHealthCheckingState([OPENCODE_RUNTIME_DESCRIPTOR], {
-        opencode: makeRepoHealth(),
-      }),
-    ).toBe(false);
   });
 });

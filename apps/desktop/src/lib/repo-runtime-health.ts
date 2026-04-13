@@ -40,6 +40,31 @@ export const isRepoRuntimeReady = (runtimeHealth: RepoRuntimeHealthCheck | null)
   return runtimeHealth?.status === "ready";
 };
 
+export const isRepoRuntimeHealthTransient = (
+  runtimeHealth: RepoRuntimeHealthCheck | null,
+): boolean => {
+  if (!runtimeHealth) {
+    return false;
+  }
+
+  if (runtimeHealth.runtime.status === "checking") {
+    return true;
+  }
+
+  if (runtimeHealth.runtime.status !== "ready") {
+    return false;
+  }
+
+  switch (runtimeHealth.mcp?.status) {
+    case "checking":
+    case "reconnecting":
+    case "waiting_for_runtime":
+      return true;
+    default:
+      return false;
+  }
+};
+
 export const getRepoRuntimeBadge = (
   runtimeHealth: RepoRuntimeHealthCheck | null,
 ): RuntimeHealthBadge => {
