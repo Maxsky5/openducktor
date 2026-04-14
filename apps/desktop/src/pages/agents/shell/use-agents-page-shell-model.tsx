@@ -1,14 +1,5 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import {
-  type MutableRefObject,
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
 import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
@@ -55,6 +46,10 @@ import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
+import {
+  useForwardedWorktreeRefresh,
+  type WorktreeRefreshRef,
+} from "./use-forwarded-worktree-refresh";
 
 type AgentsPageShellModel = {
   activeRepo: string | null;
@@ -87,7 +82,7 @@ const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRuntime({
   refreshWorktreeRef,
   ...args
 }: UseAgentsPageRightPanelModelArgs & {
-  refreshWorktreeRef: MutableRefObject<GitDiffRefresh | null>;
+  refreshWorktreeRef: WorktreeRefreshRef;
 }): ReactElement | null {
   const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
 
@@ -116,14 +111,9 @@ function AgentsPageBuildWorktreeRefreshRuntime({
   viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
   isSessionHistoryHydrating: boolean;
-  refreshWorktreeRef: MutableRefObject<GitDiffRefresh | null>;
+  refreshWorktreeRef: WorktreeRefreshRef;
 }): null {
-  const refreshWorktree = useCallback<GitDiffRefresh>(
-    (mode) => {
-      return refreshWorktreeRef.current?.(mode) ?? Promise.resolve();
-    },
-    [refreshWorktreeRef],
-  );
+  const refreshWorktree = useForwardedWorktreeRefresh(refreshWorktreeRef);
 
   useAgentStudioBuildWorktreeRefresh({
     viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,

@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import * as appStateContexts from "@/state/app-state-contexts";
@@ -45,8 +44,8 @@ type QuerySyncState = {
 
 type SelectionState = {
   viewTaskId: string;
-  viewRole: "planner" | "build";
-  viewScenario: "planner_initial" | "build_implementation_start";
+  viewRole: "planner";
+  viewScenario: "planner_initial";
   viewSelectedTask: typeof task | null;
   viewSessionsForTask: SessionFixture[];
   viewActiveSession: SessionFixture | null;
@@ -87,7 +86,7 @@ type OrchestrationState = {
   agentStudioWorkspaceSidebarModel: { activeDocument: null };
   agentChatModel: { kind: string };
   rightPanel: {
-    panelKind: "documents" | "build_tools";
+    panelKind: "documents";
     isPanelOpen: boolean;
     rightPanelToggleModel: { label: string };
   };
@@ -610,95 +609,6 @@ const createHookHarness = () =>
   createSharedHookHarness((_: undefined) => useAgentsPageShellModel(), undefined);
 
 describe("useAgentsPageShellModel", () => {
-  test("forwards soft refresh mode through the shell worktree refresh ref", async () => {
-    const buildSession = createAgentSessionFixture({
-      sessionId: "builder-session-1",
-      taskId: "task-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      runtimeKind: "opencode",
-      messages: [],
-    });
-    const completedToolSession = createAgentSessionFixture({
-      ...buildSession,
-      messages: [
-        {
-          id: "tool-1",
-          role: "tool",
-          content: "",
-          timestamp: "2026-02-22T08:10:00.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-tool-1",
-            callId: "call-tool-1",
-            tool: "apply_patch",
-            status: "completed",
-          },
-        },
-      ],
-    });
-
-    selectionState = {
-      ...selectionState,
-      viewRole: "build",
-      viewScenario: "build_implementation_start",
-      viewActiveSession: buildSession,
-      activeSession: buildSession,
-      viewSessionsForTask: [buildSession],
-      sessionsForTask: [buildSession],
-      selectedSessionById: { [buildSession.sessionId]: buildSession },
-    };
-    agentSessions = [buildSession];
-    orchestrationState = {
-      ...orchestrationState,
-      rightPanel: {
-        panelKind: "build_tools",
-        isPanelOpen: true,
-        rightPanelToggleModel,
-      },
-    };
-
-    const harness = createHookHarness();
-
-    try {
-      await harness.mount();
-      const initialContent = harness.getLatest().rightPanelContent;
-      if (!initialContent) {
-        throw new Error("Expected right panel content");
-      }
-
-      const view = render(initialContent);
-      await waitFor(() => {
-        expect(refreshWorktreeMock).toHaveBeenCalledTimes(0);
-      });
-
-      selectionState = {
-        ...selectionState,
-        viewActiveSession: completedToolSession,
-        activeSession: completedToolSession,
-        viewSessionsForTask: [completedToolSession],
-        sessionsForTask: [completedToolSession],
-        selectedSessionById: { [completedToolSession.sessionId]: completedToolSession },
-      };
-      agentSessions = [completedToolSession];
-
-      await harness.update(undefined);
-      const updatedContent = harness.getLatest().rightPanelContent;
-      if (!updatedContent) {
-        throw new Error("Expected updated right panel content");
-      }
-      view.rerender(updatedContent);
-
-      await waitFor(() => {
-        expect(refreshWorktreeMock).toHaveBeenCalledWith("soft");
-      });
-
-      view.unmount();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("surfaces hook state and wires modal/controller elements", async () => {
     tasksState = {
       ...tasksState,
