@@ -44,12 +44,14 @@ export function FolderPickerDialog({
   const [manualPath, setManualPath] = useState("");
   const [filterText, setFilterText] = useState("");
   const [confirmedListing, setConfirmedListing] = useState<DirectoryListing | null>(null);
+  const [hasResolvedRequestedPath, setHasResolvedRequestedPath] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setConfirmedListing(null);
+      setHasResolvedRequestedPath(false);
       setSubmitError(null);
       return;
     }
@@ -57,6 +59,7 @@ export function FolderPickerDialog({
     setRequestedPath(initialPath);
     setManualPath("");
     setFilterText("");
+    setHasResolvedRequestedPath(false);
     setSubmitError(null);
   }, [initialPath, open]);
 
@@ -71,6 +74,7 @@ export function FolderPickerDialog({
     }
 
     setConfirmedListing(directoryQuery.data);
+    setHasResolvedRequestedPath(true);
   }, [directoryQuery.data]);
 
   const filteredEntries = useMemo(() => {
@@ -96,6 +100,7 @@ export function FolderPickerDialog({
       return;
     }
     setSubmitError(null);
+    setHasResolvedRequestedPath(false);
     setRequestedPath(path);
   };
 
@@ -109,7 +114,7 @@ export function FolderPickerDialog({
   };
 
   const handleConfirm = async (): Promise<void> => {
-    if (!confirmedListing) {
+    if (!confirmedListing || !hasResolvedRequestedPath) {
       return;
     }
 
@@ -131,7 +136,9 @@ export function FolderPickerDialog({
   const isRefreshing = directoryQuery.isFetching && Boolean(confirmedListing);
   const isBusy = isSubmitting || isInitialLoad;
   const isCurrentPathSelectable = Boolean(
-    confirmedListing && (!requireGitRepo || confirmedListing.currentPathIsGitRepo),
+    confirmedListing &&
+      hasResolvedRequestedPath &&
+      (!requireGitRepo || confirmedListing.currentPathIsGitRepo),
   );
   const helperMessage =
     requireGitRepo && confirmedListing && !confirmedListing.currentPathIsGitRepo

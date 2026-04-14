@@ -316,7 +316,7 @@ describe("FolderPickerDialog", () => {
     }
   });
 
-  test("shows actionable errors for invalid manual paths without losing the last resolved folder", async () => {
+  test("shows actionable errors for invalid manual paths and disables confirmation until a new path resolves", async () => {
     filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
       if (path === "/missing") {
         throw new Error("Directory does not exist: /missing");
@@ -325,11 +325,15 @@ describe("FolderPickerDialog", () => {
       return createListing();
     });
 
-    const rendered = renderDialog();
+    const onConfirm = mock(async (_path: string) => {});
+    const rendered = renderDialog({ onConfirm });
 
     try {
       await screen.findByText("/Users/dev");
       expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(
+        (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+      ).toBe(false);
 
       fireEvent.change(screen.getByLabelText("Open path"), {
         target: { value: "/missing" },
@@ -338,6 +342,12 @@ describe("FolderPickerDialog", () => {
 
       await screen.findByText("Directory does not exist: /missing");
       expect(screen.getByText("/Users/dev")).toBeTruthy();
+      expect(
+        (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+
+      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      expect(onConfirm).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
     }
