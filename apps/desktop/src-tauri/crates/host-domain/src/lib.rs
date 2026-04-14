@@ -134,9 +134,9 @@ mod tests {
             RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
             RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RunEvent, RunState,
             RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument,
-            SystemCheck, TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence,
-            TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore,
-            UpdateTaskPatch, WorkspaceRecord,
+            SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo, TaskAction, TaskCard,
+            TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary, TaskMetadata,
+            TaskQaDocumentPresence, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -217,6 +217,8 @@ mod tests {
             RuntimeRole,
             SpecDocument,
             SystemCheck,
+            SystemOpenInToolId,
+            SystemOpenInToolInfo,
             TaskAction,
             TaskCard,
             TaskDirectMergeResult,

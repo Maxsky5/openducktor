@@ -309,7 +309,7 @@ impl AppService {
         self.open_directory_in_tool_with_launcher(
             directory_path,
             tool_id,
-            |directory, selected_tool| open_directory_in_tool_with_system(directory, selected_tool),
+            open_directory_in_tool_with_system,
         )
     }
 

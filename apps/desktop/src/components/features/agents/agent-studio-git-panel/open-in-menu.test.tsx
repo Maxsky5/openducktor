@@ -288,10 +288,53 @@ describe("OpenInMenu", () => {
       });
 
       expect(await screen.findByTestId("agent-studio-git-open-in-icon-finder")).toBeTruthy();
-      expect(systemListOpenInTools).toHaveBeenNthCalledWith(1, false);
+      expect(systemListOpenInTools).toHaveBeenNthCalledWith(1);
       expect(systemListOpenInTools).toHaveBeenNthCalledWith(2, true);
     } finally {
       host.systemListOpenInTools = originalSystemListOpenInTools;
     }
+  });
+
+  test("retry surfaces a toast when refresh discovery also fails", async () => {
+    await withMockedToast(async ({ toastErrorMock }) => {
+      const originalSystemListOpenInTools = host.systemListOpenInTools;
+      const systemListOpenInTools = mock(async () => {
+        throw new Error("refresh discovery failed");
+      });
+      host.systemListOpenInTools = systemListOpenInTools;
+
+      try {
+        rendered = render(
+          <QueryProvider useIsolatedClient>
+            <TooltipProvider>
+              <OpenInMenu
+                contextMode="worktree"
+                targetPath="/tmp/worktrees/task-24"
+                disabledReason={null}
+                onOpenInTool={async () => {}}
+              />
+            </TooltipProvider>
+          </QueryProvider>,
+        );
+
+        await act(async () => {
+          fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
+        });
+
+        expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
+
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        expect(toastErrorMock).toHaveBeenCalledWith("Failed to refresh supported apps", {
+          description: "refresh discovery failed",
+        });
+      } finally {
+        host.systemListOpenInTools = originalSystemListOpenInTools;
+      }
+    });
   });
 });

@@ -16,7 +16,8 @@ struct OpenDirectoryInToolArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SystemListOpenInToolsArgs {
-    force_refresh: Option<bool>,
+    #[serde(default)]
+    force_refresh: bool,
 }
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {
@@ -30,10 +31,7 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
 }
 
 async fn handle_system_list_open_in_tools(state: &HeadlessState, args: Value) -> CommandResult {
-    let force_refresh = match deserialize_args::<SystemListOpenInToolsArgs>(args) {
-        Ok(parsed) => parsed.force_refresh.unwrap_or(false),
-        Err(_) => false,
-    };
+    let SystemListOpenInToolsArgs { force_refresh } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         run_headless_blocking("system_list_open_in_tools", move || {

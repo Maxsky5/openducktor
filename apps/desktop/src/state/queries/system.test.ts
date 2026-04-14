@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SystemOpenInToolInfo } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { host } from "../operations/host";
 import {
   ensureOpenInToolsFromQuery,
   loadOpenInToolsFromQuery,
@@ -28,19 +27,14 @@ describe("system queries", () => {
           { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
         ] satisfies SystemOpenInToolInfo[],
     );
-    const originalSystemListOpenInTools = host.systemListOpenInTools;
-    host.systemListOpenInTools = systemListOpenInTools;
+    const hostClient = { systemListOpenInTools };
 
-    try {
-      await loadOpenInToolsFromQuery(queryClient);
-      expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
+    await loadOpenInToolsFromQuery(queryClient, hostClient);
+    expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
 
-      await ensureOpenInToolsFromQuery(queryClient);
-      expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
-    } finally {
-      host.systemListOpenInTools = originalSystemListOpenInTools;
-      queryClient.clear();
-    }
+    await ensureOpenInToolsFromQuery(queryClient, hostClient);
+    expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
+    queryClient.clear();
   });
 
   test("refreshOpenInToolsFromQuery bypasses the cached discovery result", async () => {
@@ -53,20 +47,15 @@ describe("system queries", () => {
           },
         ] satisfies SystemOpenInToolInfo[],
     );
-    const originalSystemListOpenInTools = host.systemListOpenInTools;
-    host.systemListOpenInTools = systemListOpenInTools;
+    const hostClient = { systemListOpenInTools };
 
-    try {
-      const first = await loadOpenInToolsFromQuery(queryClient);
-      const refreshed = await refreshOpenInToolsFromQuery(queryClient);
+    const first = await loadOpenInToolsFromQuery(queryClient, hostClient);
+    const refreshed = await refreshOpenInToolsFromQuery(queryClient, hostClient);
 
-      expect(first[0]?.toolId).toBe("finder");
-      expect(refreshed[0]?.toolId).toBe("zed");
-      expect(systemListOpenInTools).toHaveBeenNthCalledWith(1, false);
-      expect(systemListOpenInTools).toHaveBeenNthCalledWith(2, true);
-    } finally {
-      host.systemListOpenInTools = originalSystemListOpenInTools;
-      queryClient.clear();
-    }
+    expect(first[0]?.toolId).toBe("finder");
+    expect(refreshed[0]?.toolId).toBe("zed");
+    expect(systemListOpenInTools).toHaveBeenNthCalledWith(1);
+    expect(systemListOpenInTools).toHaveBeenNthCalledWith(2, true);
+    queryClient.clear();
   });
 });

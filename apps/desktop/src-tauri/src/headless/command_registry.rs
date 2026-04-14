@@ -153,6 +153,7 @@ mod tests {
 
         assert!(registry.contains("workspace_list"));
         assert!(registry.contains("system_list_open_in_tools"));
+        assert!(registry.contains("system_open_directory_in_tool"));
         assert!(registry.contains("git_get_status"));
         assert!(registry.contains("task_create"));
         assert!(registry.contains("odt_read_task"));

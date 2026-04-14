@@ -1,25 +1,18 @@
 use crate::{as_error, run_service_blocking, AppState};
 use anyhow::{anyhow, Result};
 use host_domain::{SystemOpenInToolId, SystemOpenInToolInfo};
-use serde::Deserialize;
 use serde_json::json;
 use std::process::{Command, Stdio};
 use tauri::State;
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SystemListOpenInToolsArgs {
-    force_refresh: Option<bool>,
-}
-
 #[tauri::command]
 pub async fn system_list_open_in_tools(
     state: State<'_, AppState>,
-    args: Option<SystemListOpenInToolsArgs>,
+    force_refresh: Option<bool>,
 ) -> Result<Vec<SystemOpenInToolInfo>, String> {
     let service = state.service.clone();
     let result = run_service_blocking("system_list_open_in_tools", move || {
-        service.list_open_in_tools(args.and_then(|value| value.force_refresh).unwrap_or(false))
+        service.list_open_in_tools(force_refresh.unwrap_or(false))
     })
     .await;
 

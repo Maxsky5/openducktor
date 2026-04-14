@@ -1,31 +1,14 @@
-import type { SystemOpenInToolId } from "@openducktor/contracts";
+import { type SystemOpenInToolId, systemOpenInToolIdValues } from "@openducktor/contracts";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 
 type PersistedOpenInPreference = {
   openInToolId?: string;
 };
 
-const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId => {
-  switch (value) {
-    case "finder":
-    case "terminal":
-    case "iterm2":
-    case "ghostty":
-    case "vscode":
-    case "cursor":
-    case "zed":
-    case "intellij-idea":
-    case "webstorm":
-    case "pycharm":
-    case "phpstorm":
-    case "rider":
-    case "rustrover":
-    case "android-studio":
-      return true;
-    default:
-      return false;
-  }
-};
+const systemOpenInToolIdSet = new Set<string>(systemOpenInToolIdValues);
+
+const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId =>
+  systemOpenInToolIdSet.has(value);
 
 const openInPreferencesStorageKey = (): string => toRightPanelStorageKey();
 

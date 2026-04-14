@@ -1,12 +1,23 @@
-use crate::{resolve_command_path, run_command_allow_failure};
-use anyhow::{anyhow, Context, Result};
-use base64::{engine::general_purpose, Engine as _};
+use anyhow::{anyhow, Result};
 use host_domain::{SystemOpenInToolId, SystemOpenInToolInfo};
+use std::path::Path;
+
+#[cfg(target_os = "macos")]
+use crate::{resolve_command_path, run_command_allow_failure};
+#[cfg(target_os = "macos")]
+use anyhow::Context;
+#[cfg(target_os = "macos")]
+use base64::{engine::general_purpose, Engine as _};
+#[cfg(target_os = "macos")]
 use std::env;
+#[cfg(target_os = "macos")]
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(target_os = "macos")]
 #[derive(Clone, Copy)]
 struct OpenInToolMetadata {
     id: SystemOpenInToolId,
@@ -14,14 +25,17 @@ struct OpenInToolMetadata {
     app_names: &'static [&'static str],
     launch_strategy: OpenInLaunchStrategy,
     cli_command: Option<&'static str>,
+    cli_new_window_arg: Option<&'static str>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Clone)]
 struct OpenInLaunchSpec {
     program: String,
     args: Vec<String>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Clone, Copy)]
 enum OpenInLaunchStrategy {
     OpenDirectory,
@@ -29,6 +43,7 @@ enum OpenInLaunchStrategy {
     Jetbrains,
 }
 
+#[cfg(target_os = "macos")]
 const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
     OpenInToolMetadata {
         id: SystemOpenInToolId::Finder,
@@ -36,6 +51,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Finder"],
         launch_strategy: OpenInLaunchStrategy::OpenDirectory,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Terminal,
@@ -43,6 +59,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Terminal"],
         launch_strategy: OpenInLaunchStrategy::OpenDirectory,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Iterm2,
@@ -50,6 +67,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["iTerm2", "iTerm"],
         launch_strategy: OpenInLaunchStrategy::OpenDirectory,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Ghostty,
@@ -57,6 +75,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Ghostty"],
         launch_strategy: OpenInLaunchStrategy::OpenDirectory,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Vscode,
@@ -64,6 +83,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Visual Studio Code"],
         launch_strategy: OpenInLaunchStrategy::Editor,
         cli_command: Some("code"),
+        cli_new_window_arg: Some("-n"),
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Cursor,
@@ -71,6 +91,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Cursor"],
         launch_strategy: OpenInLaunchStrategy::Editor,
         cli_command: Some("cursor"),
+        cli_new_window_arg: Some("-n"),
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Zed,
@@ -78,6 +99,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Zed"],
         launch_strategy: OpenInLaunchStrategy::Editor,
         cli_command: Some("zed"),
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::IntellijIdea,
@@ -85,6 +107,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["IntelliJ IDEA", "IntelliJ IDEA CE"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Webstorm,
@@ -92,6 +115,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["WebStorm"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Pycharm,
@@ -99,6 +123,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["PyCharm", "PyCharm CE"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Phpstorm,
@@ -106,6 +131,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["PhpStorm"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Rider,
@@ -113,6 +139,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Rider"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::Rustrover,
@@ -120,6 +147,7 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["RustRover"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
     OpenInToolMetadata {
         id: SystemOpenInToolId::AndroidStudio,
@@ -127,9 +155,11 @@ const OPEN_IN_TOOL_CATALOG: [OpenInToolMetadata; 14] = [
         app_names: &["Android Studio"],
         launch_strategy: OpenInLaunchStrategy::Jetbrains,
         cli_command: None,
+        cli_new_window_arg: None,
     },
 ];
 
+#[cfg(target_os = "macos")]
 fn open_in_tool_metadata(tool_id: SystemOpenInToolId) -> Result<&'static OpenInToolMetadata> {
     OPEN_IN_TOOL_CATALOG
         .iter()
@@ -137,6 +167,7 @@ fn open_in_tool_metadata(tool_id: SystemOpenInToolId) -> Result<&'static OpenInT
         .ok_or_else(|| anyhow!("Unsupported Open In tool: {tool_id:?}"))
 }
 
+#[cfg(target_os = "macos")]
 fn process_output_message(stdout: &str, stderr: &str) -> String {
     let trimmed_stdout = stdout.trim();
     let trimmed_stderr = stderr.trim();
@@ -149,6 +180,49 @@ fn process_output_message(stdout: &str, stderr: &str) -> String {
     }
 
     format!("{trimmed_stdout}\n{trimmed_stderr}")
+}
+
+#[cfg(target_os = "macos")]
+enum TempCleanupKind {
+    File,
+    Directory,
+}
+
+#[cfg(target_os = "macos")]
+struct TempPathCleanup {
+    path: PathBuf,
+    kind: TempCleanupKind,
+}
+
+#[cfg(target_os = "macos")]
+impl TempPathCleanup {
+    fn file(path: PathBuf) -> Self {
+        Self {
+            path,
+            kind: TempCleanupKind::File,
+        }
+    }
+
+    fn directory(path: PathBuf) -> Self {
+        Self {
+            path,
+            kind: TempCleanupKind::Directory,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for TempPathCleanup {
+    fn drop(&mut self) {
+        match self.kind {
+            TempCleanupKind::File => {
+                let _ = fs::remove_file(&self.path);
+            }
+            TempCleanupKind::Directory => {
+                let _ = fs::remove_dir_all(&self.path);
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -177,8 +251,8 @@ fn resolve_application_path_by_name(app_name: &str) -> Option<PathBuf> {
         }
     }
 
-    if let Some(home) = env::var_os("HOME") {
-        let user_app_path = PathBuf::from(home).join("Applications").join(&bundle_name);
+    if let Some(home) = dirs::home_dir() {
+        let user_app_path = home.join("Applications").join(&bundle_name);
         if user_app_path.exists() {
             return Some(user_app_path);
         }
@@ -194,7 +268,12 @@ fn resolve_application_path_by_name(app_name: &str) -> Option<PathBuf> {
             }
 
             let path = PathBuf::from(trimmed);
-            if path.exists() {
+            if path.is_dir()
+                && path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case("app"))
+            {
                 return Some(path);
             }
         }
@@ -384,6 +463,7 @@ fn resolve_best_iconset_representation(iconset_dir: &Path) -> Option<PathBuf> {
 #[cfg(target_os = "macos")]
 fn extract_best_png_from_iconset(icon_path: &Path, app_name: &str) -> Option<Vec<u8>> {
     let iconset_dir = temp_icon_output_path(app_name, "iconset");
+    let _iconset_cleanup = TempPathCleanup::directory(iconset_dir.clone());
     let icon_path_string = icon_path.to_string_lossy().to_string();
     let iconset_dir_string = iconset_dir.to_string_lossy().to_string();
     let (ok, _stdout, _stderr) = run_command_allow_failure(
@@ -399,13 +479,11 @@ fn extract_best_png_from_iconset(icon_path: &Path, app_name: &str) -> Option<Vec
     )
     .ok()?;
     if !ok {
-        let _ = fs::remove_dir_all(&iconset_dir);
         return None;
     }
 
     let best_icon_path = resolve_best_iconset_representation(&iconset_dir);
     let bytes = best_icon_path.and_then(|path| fs::read(path).ok());
-    let _ = fs::remove_dir_all(&iconset_dir);
     bytes.filter(|value| !value.is_empty())
 }
 
@@ -413,6 +491,7 @@ fn extract_best_png_from_iconset(icon_path: &Path, app_name: &str) -> Option<Vec
 fn convert_icon_to_png(icon_path: &Path, app_name: &str) -> Option<Vec<u8>> {
     let icon_path_string = icon_path.to_string_lossy().to_string();
     let temp_path = temp_icon_output_path(app_name, "png");
+    let _temp_file_cleanup = TempPathCleanup::file(temp_path.clone());
     let temp_path_string = temp_path.to_string_lossy().to_string();
     let (ok, _stdout, _stderr) = run_command_allow_failure(
         "sips",
@@ -435,7 +514,6 @@ fn convert_icon_to_png(icon_path: &Path, app_name: &str) -> Option<Vec<u8>> {
     }
 
     let bytes = fs::read(&temp_path).ok();
-    let _ = fs::remove_file(&temp_path);
     bytes.filter(|value| !value.is_empty())
 }
 
@@ -485,7 +563,7 @@ where
 pub fn discover_open_in_tools() -> Result<Vec<SystemOpenInToolInfo>> {
     #[cfg(target_os = "macos")]
     {
-        return discover_open_in_tools_with_resolver(resolve_application_path);
+        discover_open_in_tools_with_resolver(resolve_application_path)
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -516,13 +594,21 @@ fn build_open_app_spec(
 }
 
 #[cfg(target_os = "macos")]
-fn build_cli_spec(command_path: &str, directory_path: &Path) -> OpenInLaunchSpec {
+fn build_cli_spec(
+    command_path: &str,
+    directory_path: &Path,
+    new_window_arg: Option<&str>,
+) -> OpenInLaunchSpec {
+    let mut args = Vec::new();
+    if let Some(flag) = new_window_arg {
+        args.push(flag.to_string());
+    }
+
+    args.push(directory_path.to_string_lossy().to_string());
+
     OpenInLaunchSpec {
         program: command_path.to_string(),
-        args: vec![
-            "-n".to_string(),
-            directory_path.to_string_lossy().to_string(),
-        ],
+        args,
     }
 }
 
@@ -556,7 +642,11 @@ fn build_open_directory_launch_specs(
                 .cli_command
                 .and_then(|command| resolve_command_path(command).ok().flatten())
             {
-                specs.push(build_cli_spec(&cli_path, directory_path));
+                specs.push(build_cli_spec(
+                    &cli_path,
+                    directory_path,
+                    metadata.cli_new_window_arg,
+                ));
             }
             specs.push(build_open_app_spec(app_path, directory_path, false));
         }
@@ -630,7 +720,7 @@ pub fn open_directory_in_tool(directory_path: &Path, tool_id: SystemOpenInToolId
             )
         })?;
         let specs = build_open_directory_launch_specs(metadata, &app_path, directory_path);
-        return execute_launch_specs(metadata, directory_path, &specs);
+        execute_launch_specs(metadata, directory_path, &specs)
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -643,12 +733,12 @@ pub fn open_directory_in_tool(directory_path: &Path, tool_id: SystemOpenInToolId
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::{
-        build_jetbrains_open_spec, build_open_app_spec, build_open_directory_launch_specs,
-        discover_open_in_tools_with_resolver, iconset_representation_score, open_in_tool_metadata,
-        OPEN_IN_TOOL_CATALOG,
+        build_cli_spec, build_jetbrains_open_spec, build_open_app_spec,
+        build_open_directory_launch_specs, discover_open_in_tools_with_resolver,
+        iconset_representation_score, open_in_tool_metadata, OPEN_IN_TOOL_CATALOG,
     };
     use host_domain::SystemOpenInToolId;
     use std::collections::HashSet;
@@ -718,6 +808,31 @@ mod tests {
             specs.last().expect("fallback spec should exist").program,
             "open"
         );
+    }
+
+    #[test]
+    fn build_cli_spec_uses_new_window_flag_when_supported() {
+        let spec = build_cli_spec(
+            "/usr/local/bin/code",
+            Path::new("/tmp/worktrees/task-24"),
+            Some("-n"),
+        );
+
+        assert_eq!(
+            spec.args,
+            vec!["-n".to_string(), "/tmp/worktrees/task-24".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_open_directory_launch_specs_skips_new_window_flag_for_zed() {
+        let spec = build_cli_spec(
+            "/usr/local/bin/zed",
+            Path::new("/tmp/worktrees/task-24"),
+            None,
+        );
+
+        assert_eq!(spec.args, vec!["/tmp/worktrees/task-24".to_string()]);
     }
 
     #[test]

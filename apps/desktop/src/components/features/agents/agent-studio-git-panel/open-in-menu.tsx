@@ -1,7 +1,7 @@
 import type { SystemOpenInToolId } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import { type ReactElement, type ReactNode, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -163,13 +163,10 @@ export function OpenInMenu({
   const [preferredToolId, setPreferredToolId] = useState<SystemOpenInToolId | null>(() =>
     readPreferredOpenInTool(),
   );
+  const [isRefreshingTools, setIsRefreshingTools] = useState(false);
   const queryClient = useQueryClient();
   const toolsQuery = useQuery(openInToolsQueryOptions());
   const targetLabel = contextMode === "repository" ? "repository root" : "builder worktree";
-
-  useEffect(() => {
-    setPreferredToolId(readPreferredOpenInTool());
-  }, []);
 
   const defaultTool = useMemo(() => {
     const tools = toolsQuery.data ?? [];
@@ -225,6 +222,23 @@ export function OpenInMenu({
       });
     } finally {
       setPendingToolId(null);
+    }
+  };
+
+  const handleRefreshTools = async (): Promise<void> => {
+    if (isRefreshingTools) {
+      return;
+    }
+
+    setIsRefreshingTools(true);
+    try {
+      await refreshOpenInToolsFromQuery(queryClient);
+    } catch (error) {
+      toast.error("Failed to refresh supported apps", {
+        description: errorMessage(error),
+      });
+    } finally {
+      setIsRefreshingTools(false);
     }
   };
 
@@ -293,10 +307,15 @@ export function OpenInMenu({
                 size="sm"
                 className="h-7 text-[11px]"
                 onClick={() => {
-                  void refreshOpenInToolsFromQuery(queryClient);
+                  void handleRefreshTools();
                 }}
+                disabled={isRefreshingTools}
               >
-                <RefreshCw className="size-3.5" />
+                {isRefreshingTools ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
                 Retry
               </Button>
             </div>

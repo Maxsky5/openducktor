@@ -11,13 +11,10 @@ export const systemQueryKeys = {
   openInTools: () => [...systemQueryKeys.all, "open-in-tools"] as const,
 };
 
-export const openInToolsQueryOptions = (
-  hostClient: SystemOpenInToolsQueryHost = host,
-  forceRefresh = false,
-) =>
+export const openInToolsQueryOptions = (hostClient: SystemOpenInToolsQueryHost = host) =>
   queryOptions({
     queryKey: systemQueryKeys.openInTools(),
-    queryFn: (): Promise<SystemOpenInToolInfo[]> => hostClient.systemListOpenInTools(forceRefresh),
+    queryFn: (): Promise<SystemOpenInToolInfo[]> => hostClient.systemListOpenInTools(),
     staleTime: OPEN_IN_TOOLS_STALE_TIME_MS,
   });
 
