@@ -268,8 +268,8 @@ fn runs_list_without_filter_hides_non_allowlisted_runs() -> Result<()> {
             RunProcess {
                 summary: RunSummary {
                     run_id: run_id.clone(),
-                    runtime_kind: AgentRuntimeKind::Opencode,
-                    runtime_route: AgentRuntimeKind::Opencode.route_for_port(4010),
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    runtime_route: AgentRuntimeKind::opencode().route_for_port(4010),
                     repo_path: "/tmp/outside-allowlist".to_string(),
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),

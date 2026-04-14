@@ -164,7 +164,7 @@ impl<'a> TaskActivityGuard<'a> {
                     )
             })
             .map(|run| RunProbeCandidate {
-                runtime_kind: run.summary.runtime_kind,
+                runtime_kind: run.summary.runtime_kind.clone(),
                 runtime_route: run.summary.runtime_route.clone(),
                 worktree_path: run.worktree_path.clone(),
             })
@@ -283,12 +283,15 @@ impl<'a> TaskActivityGuard<'a> {
             }
 
             if runtime.summary.role == RuntimeRole::Workspace {
-                routes_by_kind.insert(runtime.summary.kind, runtime.summary.runtime_route.clone());
+                routes_by_kind.insert(
+                    runtime.summary.kind.clone(),
+                    runtime.summary.runtime_route.clone(),
+                );
                 continue;
             }
 
             routes_by_kind
-                .entry(runtime.summary.kind)
+                .entry(runtime.summary.kind.clone())
                 .or_insert_with(|| runtime.summary.runtime_route.clone());
         }
 
@@ -517,10 +520,9 @@ fn dedupe_probe_targets(
 }
 
 fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
-    match value.trim() {
-        "opencode" => Some(AgentRuntimeKind::Opencode),
-        _ => None,
-    }
+    host_domain::builtin_runtime_registry()
+        .resolve_kind(value)
+        .ok()
 }
 
 fn collect_build_external_session_ids(

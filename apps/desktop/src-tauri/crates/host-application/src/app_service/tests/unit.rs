@@ -9,6 +9,7 @@ use host_infra_system::{
     AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
 };
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::process::Command;
@@ -16,10 +17,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry};
 use crate::app_service::test_support::{
-    build_service_with_git_state, make_task, spawn_opencode_session_status_server,
-    spawn_sleep_process, spawn_sleep_process_group, unique_temp_path, wait_for_process_exit,
-    write_private_file, FakeTaskStore, TaskStoreState,
+    build_service_with_git_state, build_service_with_runtime_registry, make_task,
+    spawn_opencode_session_status_server, spawn_sleep_process, spawn_sleep_process_group,
+    unique_temp_path, wait_for_process_exit, write_private_file, FakeTaskStore, TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -32,6 +34,10 @@ use crate::app_service::{
     StartupEventContext, StartupEventCorrelation, StartupEventPayload,
 };
 use host_domain::{DevServerGroupState, DevServerScriptState, DevServerScriptStatus};
+use host_domain::{
+    RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor, RuntimeHealth,
+    RuntimeProvisioningMode, RuntimeStartupReadinessConfig, RuntimeSupportedScope,
+};
 
 fn init_git_repo(path: &std::path::Path) -> Result<()> {
     let status = Command::new("git")
@@ -50,15 +56,15 @@ fn init_git_repo(path: &std::path::Path) -> Result<()> {
 
 fn insert_workspace_runtime(service: &AppService, repo_path: &str, port: u16) -> Result<()> {
     let summary = RuntimeInstanceSummary {
-        kind: AgentRuntimeKind::Opencode,
+        kind: AgentRuntimeKind::opencode(),
         runtime_id: "runtime-workspace".to_string(),
         repo_path: repo_path.to_string(),
         task_id: None,
         role: RuntimeRole::Workspace,
         working_directory: repo_path.to_string(),
-        runtime_route: AgentRuntimeKind::Opencode.route_for_port(port),
+        runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        descriptor: AgentRuntimeKind::opencode().descriptor(),
     };
     service
         .agent_runtimes
@@ -73,6 +79,125 @@ fn insert_workspace_runtime(service: &AppService, repo_path: &str, port: u16) ->
                 cleanup_target: None,
             },
         );
+    Ok(())
+}
+
+#[derive(Clone)]
+struct TestRuntimeAdapter {
+    definition: RuntimeDefinition,
+    health: RuntimeHealth,
+}
+
+impl AppRuntime for TestRuntimeAdapter {
+    fn definition(&self) -> RuntimeDefinition {
+        self.definition.clone()
+    }
+
+    fn startup_policy(&self, _service: &AppService) -> Result<OpencodeStartupReadinessPolicy> {
+        Err(anyhow::anyhow!(
+            "startup policy should not be used in this test"
+        ))
+    }
+
+    fn spawn_server(
+        &self,
+        _service: &AppService,
+        _working_directory: &std::path::Path,
+        _repo_path_for_mcp: &std::path::Path,
+        _port: u16,
+    ) -> Result<std::process::Child> {
+        Err(anyhow::anyhow!("spawn should not be used in this test"))
+    }
+
+    fn runtime_health(&self) -> RuntimeHealth {
+        self.health.clone()
+    }
+
+    fn abort_build_session(
+        &self,
+        _runtime_route: &host_domain::RuntimeRoute,
+        _external_session_id: &str,
+        _working_directory: &str,
+    ) -> Result<()> {
+        Err(anyhow::anyhow!("abort should not be used in this test"))
+    }
+}
+
+fn test_runtime_definition(kind: &str, label: &str) -> RuntimeDefinition {
+    RuntimeDefinition::new(
+        RuntimeDescriptor {
+            kind: AgentRuntimeKind::from(kind),
+            label: label.to_string(),
+            description: format!("{label} runtime"),
+            read_only_role_blocked_tools: vec!["apply_patch".to_string()],
+            workflow_tool_aliases_by_canonical: Default::default(),
+            capabilities: RuntimeCapabilities {
+                supports_profiles: true,
+                supports_variants: true,
+                supports_slash_commands: true,
+                supports_file_search: true,
+                supports_odt_workflow_tools: true,
+                supports_session_fork: true,
+                supports_queued_user_messages: true,
+                supports_permission_requests: true,
+                supports_question_requests: true,
+                supports_todos: true,
+                supports_diff: true,
+                supports_file_status: true,
+                supports_mcp_status: true,
+                supported_scopes: vec![
+                    RuntimeSupportedScope::Workspace,
+                    RuntimeSupportedScope::Task,
+                    RuntimeSupportedScope::Build,
+                ],
+                provisioning_mode: RuntimeProvisioningMode::HostManaged,
+            },
+        },
+        RuntimeStartupReadinessConfig::default(),
+        |port| host_domain::RuntimeRoute::LocalHttp {
+            endpoint: format!("http://127.0.0.1:{port}"),
+        },
+    )
+}
+
+#[test]
+fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(vec![
+        Arc::new(TestRuntimeAdapter {
+            definition: host_domain::builtin_runtime_registry()
+                .definition_by_str("opencode")
+                .expect("builtin opencode runtime should exist")
+                .clone(),
+            health: RuntimeHealth {
+                kind: "opencode".to_string(),
+                ok: true,
+                version: Some("1.0.0".to_string()),
+                error: None,
+            },
+        }),
+        Arc::new(TestRuntimeAdapter {
+            definition: test_runtime_definition("test-runtime", "Test Runtime"),
+            health: RuntimeHealth {
+                kind: "test-runtime".to_string(),
+                ok: true,
+                version: Some("0.1.0".to_string()),
+                error: None,
+            },
+        }),
+    ])?;
+    let (service, _task_state, _git_state) =
+        build_service_with_runtime_registry(vec![], runtime_registry);
+
+    let runtime_check = service.runtime_check()?;
+    let runtime_kinds = runtime_check
+        .runtimes
+        .iter()
+        .map(|entry| entry.kind.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(runtime_kinds, vec!["opencode", "test-runtime"]);
+    assert!(runtime_check.errors.is_empty());
+
     Ok(())
 }
 
@@ -3284,13 +3409,16 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
     let config = RuntimeConfig {
-        opencode_startup: OpencodeStartupReadinessConfig {
-            timeout_ms: 15_345,
-            connect_timeout_ms: 456,
-            initial_retry_delay_ms: 33,
-            max_retry_delay_ms: 99,
-            child_check_interval_ms: 77,
-        },
+        runtimes: BTreeMap::from([(
+            "opencode".to_string(),
+            OpencodeStartupReadinessConfig {
+                timeout_ms: 15_345,
+                connect_timeout_ms: 456,
+                initial_retry_delay_ms: 33,
+                max_retry_delay_ms: 99,
+                child_check_interval_ms: 77,
+            },
+        )]),
         ..RuntimeConfig::default()
     };
     runtime_config_store.save(&config)?;
@@ -3361,7 +3489,12 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
     });
     let service = AppService::new(task_store, config_store);
     let error = service
-        .resolve_build_startup_policy("/tmp/repo", "task-42", "run-abc")
+        .resolve_build_startup_policy(
+            &AgentRuntimeKind::opencode(),
+            "/tmp/repo",
+            "task-42",
+            "run-abc",
+        )
         .expect_err("invalid config should fail build startup policy resolution");
     let message = format!("{error:#}");
     assert!(message.contains("OpenCode build runtime failed before worktree preparation"));
@@ -3389,6 +3522,7 @@ fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
     let service = AppService::new(task_store, config_store);
     let error = service
         .resolve_runtime_startup_policy(
+            &AgentRuntimeKind::opencode(),
             "agent_runtime",
             "/tmp/repo",
             "task-42",

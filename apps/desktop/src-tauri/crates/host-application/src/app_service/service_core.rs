@@ -1,4 +1,5 @@
 use super::process_registry::TrackedOpencodeProcessGuard;
+use super::runtime_registry::AppRuntimeRegistry;
 use super::startup_metrics::OpencodeStartupMetrics;
 use super::workspace_policy::HookTrustChallenge;
 use super::*;
@@ -65,7 +66,7 @@ impl RuntimeStartupStatusEntry {
                 .map(|started_at| started_at.elapsed().as_millis().min(u64::MAX as u128) as u64)
         });
         RepoRuntimeStartupStatus {
-            runtime_kind: self.runtime_kind,
+            runtime_kind: self.runtime_kind.clone(),
             repo_path: self.repo_path.clone(),
             stage: self.stage,
             runtime: self.runtime.clone(),
@@ -149,6 +150,7 @@ pub struct AppService {
     pub(super) git_port: Arc<dyn GitPort>,
     pub(super) config_store: AppConfigStore,
     pub(super) runtime_config_store: RuntimeConfigStore,
+    pub(super) runtime_registry: AppRuntimeRegistry,
     pub(super) runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
@@ -265,6 +267,22 @@ impl AppService {
         git_port: Arc<dyn GitPort>,
         enforce_repo_allowlist: bool,
     ) -> Self {
+        Self::with_git_port_allowlist_and_runtime_registry(
+            task_store,
+            config_store,
+            git_port,
+            AppRuntimeRegistry::builtin(),
+            enforce_repo_allowlist,
+        )
+    }
+
+    fn with_git_port_allowlist_and_runtime_registry(
+        task_store: Arc<dyn TaskStore>,
+        config_store: AppConfigStore,
+        git_port: Arc<dyn GitPort>,
+        runtime_registry: AppRuntimeRegistry,
+        enforce_repo_allowlist: bool,
+    ) -> Self {
         let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
         let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
         let mcp_bridge_registry_path = Self::mcp_bridge_registry_path(&config_store);
@@ -274,6 +292,7 @@ impl AppService {
             git_port,
             config_store,
             runtime_config_store,
+            runtime_registry,
             runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
@@ -319,6 +338,22 @@ impl AppService {
         git_port: Arc<dyn GitPort>,
     ) -> Self {
         Self::with_git_port_allowlist(task_store, config_store, git_port, false)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_git_port_and_runtime_registry_unrestricted(
+        task_store: Arc<dyn TaskStore>,
+        config_store: AppConfigStore,
+        git_port: Arc<dyn GitPort>,
+        runtime_registry: AppRuntimeRegistry,
+    ) -> Self {
+        Self::with_git_port_allowlist_and_runtime_registry(
+            task_store,
+            config_store,
+            git_port,
+            runtime_registry,
+            false,
+        )
     }
 
     /// Public accessor for the git port, used by Tauri commands that need

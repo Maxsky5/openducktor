@@ -672,8 +672,8 @@ fn task_delete_rejects_active_builder_runs() {
         RunProcess {
             summary: RunSummary {
                 run_id: "run-1".to_string(),
-                runtime_kind: AgentRuntimeKind::Opencode,
-                runtime_route: AgentRuntimeKind::Opencode.route_for_port(port),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
                 repo_path: repo_path.to_string(),
                 task_id: "parent-1".to_string(),
                 branch: "obp/parent-1-cleanup".to_string(),

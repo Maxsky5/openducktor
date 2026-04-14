@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 use super::build_orchestrator::{BuildResponseAction, CleanupMode};
+use super::runtime_registry::AppRuntimeRegistry;
 use super::{
     allows_transition, build_opencode_config_content, build_opencode_startup_event_payload,
     can_set_plan, can_set_spec_from_status, default_mcp_workspace_root, derive_available_actions,
@@ -1302,6 +1303,80 @@ pub(crate) fn build_service_with_git_state(
     });
     let config_store = AppConfigStore::from_path(unique_temp_path("host-app-config"));
     let service = AppService::with_git_port_unrestricted(task_store, config_store, git_port);
+    (service, task_state, git_state)
+}
+
+pub(crate) fn build_service_with_runtime_registry(
+    tasks: Vec<TaskCard>,
+    runtime_registry: AppRuntimeRegistry,
+) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
+    let task_state = Arc::new(Mutex::new(default_task_store_state(tasks)));
+    let git_state = Arc::new(Mutex::new(GitState {
+        calls: Vec::new(),
+        branches: Vec::new(),
+        current_branch: GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        current_branches_by_path: HashMap::new(),
+        current_branch_error_by_path: HashMap::new(),
+        worktrees: Vec::new(),
+        remove_worktree_error: None,
+        delete_local_branch_error: None,
+        worktree_status_data: None,
+        last_push_remote: None,
+        push_branch_result: GitPushResult::Pushed {
+            remote: "origin".to_string(),
+            branch: "feature/x".to_string(),
+            output: "ok".to_string(),
+        },
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
+        fetch_remote_result: GitFetchResult::Fetched {
+            output: "Fetched origin".to_string(),
+        },
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        reset_worktree_selection_result: GitResetWorktreeSelectionResult {
+            affected_paths: vec!["README.md".to_string()],
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
+        rebase_abort_result: GitRebaseAbortResult::Aborted {
+            output: "rebase aborted".to_string(),
+        },
+        conflict_abort_result: GitConflictAbortResult {
+            output: "conflict aborted".to_string(),
+        },
+        merge_branch_result: GitMergeBranchResult::Merged {
+            output: "merge completed".to_string(),
+        },
+        suggested_squash_commit_message_result: Some("feat: builder change".to_string()),
+        is_ancestor_result: false,
+        commits_ahead_behind_result: GitAheadBehind {
+            ahead: 0,
+            behind: 0,
+        },
+    }));
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+        state: task_state.clone(),
+    });
+    let git_port: Arc<dyn GitPort> = Arc::new(FakeGitPort {
+        state: git_state.clone(),
+    });
+    let config_store =
+        AppConfigStore::from_path(unique_temp_path("host-app-config-runtime-registry"));
+    let service = AppService::with_git_port_and_runtime_registry_unrestricted(
+        task_store,
+        config_store,
+        git_port,
+        runtime_registry,
+    );
     (service, task_state, git_state)
 }
 

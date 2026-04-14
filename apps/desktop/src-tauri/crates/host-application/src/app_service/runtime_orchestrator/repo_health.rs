@@ -279,11 +279,11 @@ impl<'a> RepoRuntimeHealthHttpClient<'a> {
 impl AppService {
     fn update_repo_runtime_health_status(
         &self,
-        runtime_kind: AgentRuntimeKind,
+        runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
         health: RepoRuntimeHealthCheck,
     ) -> Result<()> {
-        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key);
         let mut statuses = self
             .repo_runtime_health_snapshots
             .lock()
@@ -294,10 +294,10 @@ impl AppService {
 
     fn clear_repo_runtime_health_status(
         &self,
-        runtime_kind: AgentRuntimeKind,
+        runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
     ) -> Result<()> {
-        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key);
         let mut statuses = self
             .repo_runtime_health_snapshots
             .lock()
@@ -310,7 +310,7 @@ impl AppService {
         &self,
         runtime: &RuntimeInstanceSummary,
     ) -> Result<()> {
-        self.clear_repo_runtime_health_status(runtime.kind, runtime.repo_path.as_str())
+        self.clear_repo_runtime_health_status(&runtime.kind, runtime.repo_path.as_str())
     }
 
     pub fn repo_runtime_health_status(
@@ -318,9 +318,9 @@ impl AppService {
         runtime_kind: &str,
         repo_path: &str,
     ) -> Result<RepoRuntimeHealthCheck> {
-        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
-        let status_key = Self::runtime_ensure_flight_key(runtime_kind, repo_key.as_str());
+        let status_key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key.as_str());
 
         if let Some(snapshot) = self
             .repo_runtime_health_snapshots
@@ -368,7 +368,12 @@ impl AppService {
                     _ => None,
                 },
                 runtime_failure_kind: startup_status.failure_kind,
-                supports_mcp_status: runtime_kind.descriptor().capabilities.supports_mcp_status,
+                supports_mcp_status: self
+                    .runtime_registry
+                    .definition(&runtime_kind)?
+                    .descriptor()
+                    .capabilities
+                    .supports_mcp_status,
                 mcp_ok: false,
                 mcp_error: (!matches!(
                     progress.stage,
@@ -398,7 +403,7 @@ impl AppService {
 
     fn store_repo_runtime_health(
         &self,
-        runtime_kind: AgentRuntimeKind,
+        runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
         health: RepoRuntimeHealthCheck,
     ) -> Result<RepoRuntimeHealthCheck> {
@@ -411,7 +416,7 @@ impl AppService {
         runtime_kind: AgentRuntimeKind,
         repo_key: &str,
     ) -> Result<(Arc<RepoRuntimeHealthFlight>, bool)> {
-        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+        let key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key);
         let mut flights = self
             .repo_runtime_health_flights
             .lock()
@@ -458,7 +463,7 @@ impl AppService {
                     poisoned_flights.into_inner()
                 }
             };
-            let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
+            let key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key);
             flights.remove(key.as_str());
         }
 
@@ -718,7 +723,7 @@ impl AppService {
                 error.message
             );
             return self.store_repo_runtime_health(
-                runtime_kind,
+                &runtime_kind,
                 repo_key,
                 build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                     checked_at: checked_at.to_string(),
@@ -748,7 +753,7 @@ impl AppService {
         }
 
         self.update_repo_runtime_health_status(
-            runtime_kind,
+            &runtime_kind,
             repo_key,
             build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                 checked_at: checked_at.to_string(),
@@ -782,7 +787,7 @@ impl AppService {
             let stop_message =
                 format!("Failed to stop runtime before MCP recovery: {stop_error:#}");
             return self.store_repo_runtime_health(
-                runtime_kind,
+                &runtime_kind,
                 repo_key,
                 build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                     checked_at: checked_at.to_string(),
@@ -811,12 +816,12 @@ impl AppService {
             );
         }
 
-        match self.ensure_workspace_runtime(runtime_kind, repo_key) {
+        match self.ensure_workspace_runtime(runtime_kind.clone(), repo_key) {
             Ok(restarted_runtime) => {
                 self.complete_repo_runtime_health(CompleteRepoRuntimeHealthInput {
                     repo_key: repo_key.to_string(),
                     checked_at: checked_at.to_string(),
-                    runtime_kind,
+                    runtime_kind: runtime_kind.clone(),
                     runtime: restarted_runtime,
                     host_status: Some(
                         self.runtime_startup_status(runtime_kind.as_str(), repo_key)?,
@@ -829,7 +834,7 @@ impl AppService {
                 let latest_host_status =
                     self.runtime_startup_status(runtime_kind.as_str(), repo_key)?;
                 self.store_repo_runtime_health(
-                    runtime_kind,
+                    &runtime_kind,
                     repo_key,
                     build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                         checked_at: checked_at.to_string(),
@@ -883,10 +888,10 @@ impl AppService {
         runtime_kind: &str,
         repo_path: &str,
     ) -> Result<RepoRuntimeHealthCheck> {
-        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         let (flight, is_leader) =
-            self.acquire_repo_runtime_health_flight(runtime_kind, repo_key.as_str())?;
+            self.acquire_repo_runtime_health_flight(runtime_kind.clone(), repo_key.as_str())?;
         if !is_leader {
             return Self::wait_for_repo_runtime_health_flight(&flight);
         }
@@ -895,7 +900,7 @@ impl AppService {
             let mut host_status =
                 Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
             let existing_runtime =
-                self.find_existing_workspace_runtime(runtime_kind, repo_key.as_str())?;
+                self.find_existing_workspace_runtime(&runtime_kind, repo_key.as_str())?;
             let mut observation = Self::repo_runtime_health_observation(
                 existing_runtime.is_some(),
                 host_status.as_ref(),
@@ -903,45 +908,49 @@ impl AppService {
 
             let runtime = match existing_runtime {
                 Some(runtime) => runtime,
-                None => match self.ensure_workspace_runtime(runtime_kind, repo_key.as_str()) {
-                    Ok(runtime) => runtime,
-                    Err(error) => {
-                        let latest_host_status =
-                            self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?;
-                        let progress = repo_runtime_progress(RepoRuntimeProgressInput {
-                            stage: map_startup_stage_to_failed_health(latest_host_status.stage),
-                            observation,
-                            host: Some(latest_host_status),
-                            checked_at: checked_at.clone(),
-                            failure_reason: Self::repo_runtime_failure_reason(&error),
-                            started_at: None,
-                            updated_at: None,
-                            elapsed_ms: None,
-                            attempts: None,
-                        });
-                        return self.store_repo_runtime_health(
-                            runtime_kind,
-                            repo_key.as_str(),
-                            build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                None => {
+                    match self.ensure_workspace_runtime(runtime_kind.clone(), repo_key.as_str()) {
+                        Ok(runtime) => runtime,
+                        Err(error) => {
+                            let latest_host_status = self
+                                .runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?;
+                            let progress = repo_runtime_progress(RepoRuntimeProgressInput {
+                                stage: map_startup_stage_to_failed_health(latest_host_status.stage),
+                                observation,
+                                host: Some(latest_host_status),
                                 checked_at: checked_at.clone(),
-                                runtime: None,
-                                runtime_ok: false,
-                                runtime_error: Some(format!("{error:#}")),
-                                runtime_failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
-                                supports_mcp_status: true,
-                                mcp_ok: false,
-                                mcp_error: Some(
-                                    "Runtime is unavailable, so MCP cannot be verified."
-                                        .to_string(),
-                                ),
-                                mcp_failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
-                                mcp_server_status: None,
-                                available_tool_ids: Vec::new(),
-                                progress: Some(progress),
-                            }),
-                        );
+                                failure_reason: Self::repo_runtime_failure_reason(&error),
+                                started_at: None,
+                                updated_at: None,
+                                elapsed_ms: None,
+                                attempts: None,
+                            });
+                            return self.store_repo_runtime_health(
+                                &runtime_kind,
+                                repo_key.as_str(),
+                                build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                                    checked_at: checked_at.clone(),
+                                    runtime: None,
+                                    runtime_ok: false,
+                                    runtime_error: Some(format!("{error:#}")),
+                                    runtime_failure_kind: Some(Self::repo_runtime_timeout_kind(
+                                        &error,
+                                    )),
+                                    supports_mcp_status: true,
+                                    mcp_ok: false,
+                                    mcp_error: Some(
+                                        "Runtime is unavailable, so MCP cannot be verified."
+                                            .to_string(),
+                                    ),
+                                    mcp_failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
+                                    mcp_server_status: None,
+                                    available_tool_ids: Vec::new(),
+                                    progress: Some(progress),
+                                }),
+                            );
+                        }
                     }
-                },
+                }
             };
 
             host_status =
@@ -959,7 +968,7 @@ impl AppService {
                     attempts: None,
                 });
                 return self.store_repo_runtime_health(
-                    runtime_kind,
+                    &runtime_kind,
                     repo_key.as_str(),
                     build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                         checked_at: checked_at.clone(),
@@ -981,7 +990,7 @@ impl AppService {
             self.complete_repo_runtime_health(CompleteRepoRuntimeHealthInput {
                 repo_key: repo_key.clone(),
                 checked_at: checked_at.clone(),
-                runtime_kind,
+                runtime_kind: runtime_kind.clone(),
                 runtime,
                 host_status,
                 observation: observation.take(),
@@ -1022,7 +1031,7 @@ impl AppService {
             attempts: None,
         });
         self.update_repo_runtime_health_status(
-            runtime_kind,
+            &runtime_kind,
             repo_key.as_str(),
             build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                 checked_at: checked_at.clone(),
@@ -1066,7 +1075,7 @@ impl AppService {
 
                 let mcp_message = format!("Failed to query runtime MCP status: {}", error.message);
                 return self.store_repo_runtime_health(
-                    runtime_kind,
+                    &runtime_kind,
                     repo_key.as_str(),
                     build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                         checked_at: checked_at.clone(),
@@ -1115,7 +1124,7 @@ impl AppService {
                 attempts: checking_progress.attempts,
             });
             self.update_repo_runtime_health_status(
-                runtime_kind,
+                &runtime_kind,
                 repo_key.as_str(),
                 build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                     checked_at: checked_at.clone(),
@@ -1153,7 +1162,7 @@ impl AppService {
                                 error.message
                             );
                             return self.store_repo_runtime_health(
-                                runtime_kind,
+                                &runtime_kind,
                                 repo_key.as_str(),
                                 build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                                     checked_at: checked_at.clone(),
@@ -1197,7 +1206,7 @@ impl AppService {
                         error.message
                     );
                     return self.store_repo_runtime_health(
-                        runtime_kind,
+                        &runtime_kind,
                         repo_key.as_str(),
                         build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                             checked_at: checked_at.clone(),
@@ -1292,7 +1301,7 @@ impl AppService {
         };
 
         self.store_repo_runtime_health(
-            runtime_kind,
+            &runtime_kind,
             repo_key.as_str(),
             build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
                 checked_at,
@@ -1426,7 +1435,7 @@ mod tests {
 
     fn runtime_summary(started_at: &str) -> host_domain::RuntimeInstanceSummary {
         host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::Opencode,
+            kind: AgentRuntimeKind::opencode(),
             runtime_id: "runtime-1".to_string(),
             repo_path: "/tmp/repo".to_string(),
             task_id: None,
@@ -1436,7 +1445,7 @@ mod tests {
                 endpoint: "http://127.0.0.1:4321".to_string(),
             },
             started_at: started_at.to_string(),
-            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+            descriptor: AgentRuntimeKind::opencode().descriptor(),
         }
     }
 
@@ -1546,7 +1555,7 @@ mod tests {
     fn mcp_startup_grace_window_stays_retryable_while_host_reports_runtime_starting() {
         let runtime = runtime_summary("2026-04-11T10:00:00Z");
         let host_status = RepoRuntimeStartupStatus {
-            runtime_kind: AgentRuntimeKind::Opencode,
+            runtime_kind: AgentRuntimeKind::opencode(),
             repo_path: "/tmp/repo".to_string(),
             stage: RepoRuntimeStartupStage::WaitingForRuntime,
             runtime: None,

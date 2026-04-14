@@ -1,7 +1,7 @@
 use super::super::{
-    emit_event, require_opencode_local_http_port, AppService, OpencodeStartupReadinessPolicy,
-    OpencodeStartupWaitReport, RunEmitter, RunProcess, RuntimeInstanceSummary, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    emit_event, AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter,
+    RunProcess, RuntimeInstanceSummary, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use super::BuildResponseAction;
@@ -10,11 +10,7 @@ use host_domain::{
     now_rfc3339, AgentRuntimeKind, AgentSessionDocument, RunEvent, RunState, RunSummary,
     RuntimeRoute, TaskStatus,
 };
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpStream;
 use std::path::{Component, PathBuf};
-use std::time::Duration;
-use url::form_urlencoded;
 use uuid::Uuid;
 
 struct BuildRunRegistration {
@@ -52,11 +48,12 @@ impl AppService {
         runtime_kind: &str,
         emitter: RunEmitter,
     ) -> Result<RunSummary> {
-        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
-        Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
+        let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
+        self.ensure_runtime_supports_all_workflow_scopes(runtime_kind.clone())?;
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
         self.resolve_build_startup_policy(
+            &runtime_kind,
             prerequisites.repo_path.as_str(),
             task_id,
             run_id.as_str(),
@@ -148,7 +145,7 @@ impl AppService {
                 .get(run_id)
                 .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
             BuildStopContext {
-                runtime_kind: run.summary.runtime_kind,
+                runtime_kind: run.summary.runtime_kind.clone(),
                 runtime_route: run.summary.runtime_route.clone(),
                 repo_path: run.repo_path.clone(),
                 task_id: run.task_id.clone(),
@@ -183,11 +180,14 @@ impl AppService {
 
     pub(crate) fn resolve_build_startup_policy(
         &self,
+        runtime_kind: &AgentRuntimeKind,
         repo_path: &str,
         task_id: &str,
         run_id: &str,
     ) -> Result<OpencodeStartupReadinessPolicy> {
-        self.opencode_startup_readiness_policy()
+        self.runtime_registry
+            .runtime(runtime_kind)?
+            .startup_policy(self)
             .inspect_err(|_| {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
                     StartupEventContext::new(
@@ -232,13 +232,13 @@ impl AppService {
             .filter(|value| !value.is_empty())
             .ok_or_else(|| anyhow!("Build session is missing an external OpenCode session id"))?;
 
-        match context.runtime_kind {
-            AgentRuntimeKind::Opencode => Self::abort_opencode_session(
+        self.runtime_registry
+            .runtime(&context.runtime_kind)?
+            .abort_build_session(
                 &context.runtime_route,
                 external_session_id,
                 session.working_directory.as_str(),
-            )?,
-        }
+            )?;
 
         Ok(())
     }
@@ -269,67 +269,6 @@ impl AppService {
                     .cmp(&build_session_sort_key(right))
                     .then_with(|| left.session_id.cmp(&right.session_id))
             }))
-    }
-
-    fn abort_opencode_session(
-        runtime_route: &RuntimeRoute,
-        external_session_id: &str,
-        working_directory: &str,
-    ) -> Result<()> {
-        let port = require_opencode_local_http_port(runtime_route, "build session abort")?;
-        let request_path = format!(
-            "/session/{external_session_id}/abort?{}",
-            form_urlencoded::Serializer::new(String::new())
-                .append_pair("directory", working_directory)
-                .finish()
-        );
-
-        let mut stream = TcpStream::connect(("127.0.0.1", port)).with_context(|| {
-            format!(
-                "Failed to connect to OpenCode runtime on port {port} to abort session {external_session_id}"
-            )
-        })?;
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .context("Failed configuring OpenCode abort read timeout")?;
-        stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
-            .context("Failed configuring OpenCode abort write timeout")?;
-
-        let request = format!(
-            "POST {request_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-        );
-        stream.write_all(request.as_bytes()).with_context(|| {
-            format!("Failed sending OpenCode abort request for session {external_session_id}")
-        })?;
-        stream.flush().with_context(|| {
-            format!("Failed flushing OpenCode abort request for session {external_session_id}")
-        })?;
-
-        let mut reader = BufReader::new(stream);
-        let mut status_line = String::new();
-        reader.read_line(&mut status_line).with_context(|| {
-            format!("Failed reading OpenCode abort response for session {external_session_id}")
-        })?;
-        let status_code = parse_http_status_code(status_line.as_str())?;
-
-        let mut response = String::new();
-        reader.read_to_string(&mut response).with_context(|| {
-            format!("Failed reading OpenCode abort response body for session {external_session_id}")
-        })?;
-        if (200..300).contains(&status_code) {
-            return Ok(());
-        }
-
-        let response_body = extract_http_response_body(response.as_str());
-        let detail_suffix = if response_body.is_empty() {
-            String::new()
-        } else {
-            format!(": {response_body}")
-        };
-        Err(anyhow!(
-            "OpenCode runtime failed to abort session {external_session_id}: HTTP {status_code}{detail_suffix}"
-        ))
     }
 
     fn register_build_run(&self, registration: BuildRunRegistration) -> Result<RunSummary> {
@@ -378,7 +317,10 @@ impl AppService {
             run_id,
             emitter,
         } = input;
-        let port = require_opencode_local_http_port(&runtime_summary.runtime_route, "build runs")?;
+        let port = runtime_summary
+            .runtime_route
+            .local_http_port()
+            .ok_or_else(|| anyhow!("Build runs require a local_http runtime route with a port"))?;
         self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
             task_id,
@@ -394,7 +336,7 @@ impl AppService {
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
-            runtime_kind,
+            runtime_kind: runtime_kind.clone(),
             runtime_route: runtime_summary.runtime_route,
             repo_path: prerequisites.repo_path.clone(),
             task_id: task_id_string.clone(),
@@ -448,25 +390,6 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
     }
 }
 
-fn parse_http_status_code(status_line: &str) -> Result<u16> {
-    let trimmed = status_line.trim();
-    let status_code = trimmed
-        .split_whitespace()
-        .nth(1)
-        .ok_or_else(|| anyhow!("OpenCode abort response missing HTTP status code"))?;
-    status_code
-        .parse::<u16>()
-        .with_context(|| format!("Invalid OpenCode abort HTTP status code: {status_code}"))
-}
-
-fn extract_http_response_body(response: &str) -> String {
-    response
-        .split_once("\r\n\r\n")
-        .or_else(|| response.split_once("\n\n"))
-        .map(|(_, body)| body.trim().to_string())
-        .unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,7 +401,7 @@ mod tests {
 
     fn make_stdio_runtime_summary() -> RuntimeInstanceSummary {
         RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::Opencode,
+            kind: AgentRuntimeKind::opencode(),
             runtime_id: "runtime-1".to_string(),
             repo_path: "/tmp/repo".to_string(),
             task_id: None,
@@ -486,7 +409,7 @@ mod tests {
             working_directory: "/tmp/repo".to_string(),
             runtime_route: RuntimeRoute::Stdio,
             started_at: "2026-04-13T00:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+            descriptor: AgentRuntimeKind::opencode().descriptor(),
         }
     }
 
@@ -511,7 +434,7 @@ mod tests {
 
         let error = service
             .initiate_build_mode(BuildModeStartInput {
-                runtime_kind: AgentRuntimeKind::Opencode,
+                runtime_kind: AgentRuntimeKind::opencode(),
                 prerequisites: make_build_prerequisites(),
                 prepared_worktree: PreparedBuildWorktree {
                     worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
@@ -535,12 +458,17 @@ mod tests {
 
     #[test]
     fn abort_opencode_session_rejects_stdio_routes() {
-        let error = AppService::abort_opencode_session(
-            &RuntimeRoute::Stdio,
-            "external-session-1",
-            "/tmp/repo/worktree",
-        )
-        .expect_err("stdio abort should fail fast");
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let error = service
+            .runtime_registry
+            .runtime(&AgentRuntimeKind::opencode())
+            .expect("opencode runtime should be registered")
+            .abort_build_session(
+                &RuntimeRoute::Stdio,
+                "external-session-1",
+                "/tmp/repo/worktree",
+            )
+            .expect_err("stdio abort should fail fast");
 
         assert!(error
             .to_string()

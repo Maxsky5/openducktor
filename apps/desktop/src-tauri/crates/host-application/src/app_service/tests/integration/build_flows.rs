@@ -469,8 +469,8 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
         RunProcess {
             summary: RunSummary {
                 run_id: run_id.clone(),
-                runtime_kind: AgentRuntimeKind::Opencode,
-                runtime_route: AgentRuntimeKind::Opencode.route_for_port(1),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                runtime_route: AgentRuntimeKind::opencode().route_for_port(1),
                 repo_path: repo_path.clone(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),
@@ -680,9 +680,9 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
     let error = service
         .build_stop(run.run_id.as_str(), emitter.clone())
         .expect_err("abort failures should surface to the caller");
-    assert!(error
-        .to_string()
-        .contains("OpenCode runtime failed to abort session external-build-session: HTTP 500"));
+    assert!(error.to_string().contains(
+        "OpenCode runtime rejected abort for session external-build-session with status 500"
+    ));
     let listed_runs = service.runs_list(Some(repo_path.as_str()))?;
     assert_eq!(listed_runs.len(), 1);
     assert!(matches!(listed_runs[0].state, RunState::Running));

@@ -13,13 +13,16 @@ use uuid::Uuid;
 impl AppService {
     pub(crate) fn resolve_runtime_startup_policy(
         &self,
+        runtime_kind: &host_domain::AgentRuntimeKind,
         startup_scope: &str,
         repo_path: &str,
         task_id: &str,
         role: RuntimeRole,
         startup_error_context: &str,
     ) -> Result<OpencodeStartupReadinessPolicy> {
-        self.opencode_startup_readiness_policy()
+        self.runtime_registry
+            .runtime(runtime_kind)?
+            .startup_policy(self)
             .inspect_err(|_| {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
                     StartupEventContext::new(
@@ -43,7 +46,7 @@ impl AppService {
         input: &RuntimeStartInput<'_>,
     ) -> Result<SpawnedRuntimeServer> {
         self.mark_runtime_startup_requested(
-            input.runtime_kind,
+            &input.runtime_kind,
             input.repo_key.as_str(),
             &super::RuntimeStartupProgress {
                 started_at_instant: input.startup_started_at_instant,
@@ -55,11 +58,15 @@ impl AppService {
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let startup_policy = input.startup_policy;
-        let mut child = self.spawn_opencode_server(
-            Path::new(input.working_directory.as_str()),
-            Path::new(input.repo_path),
-            port,
-        )?;
+        let mut child = self
+            .runtime_registry
+            .runtime(&input.runtime_kind)?
+            .spawn_server(
+                self,
+                Path::new(input.working_directory.as_str()),
+                Path::new(input.repo_path),
+                port,
+            )?;
         let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
             Ok(guard) => guard,
             Err(error) => {
@@ -96,7 +103,7 @@ impl AppService {
             startup_cancel_snapshot,
             |progress| {
                 let _ = self.mark_runtime_startup_waiting(
-                    input.runtime_kind,
+                    &input.runtime_kind,
                     input.repo_key.as_str(),
                     &super::RuntimeStartupProgress {
                         started_at_instant: input.startup_started_at_instant,

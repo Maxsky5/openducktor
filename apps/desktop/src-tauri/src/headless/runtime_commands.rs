@@ -7,8 +7,20 @@ use super::events::{make_dev_server_emitter, make_emitter};
 use crate::runtime_ensure_failure_kind;
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::AgentRuntimeKind;
-use serde::Deserialize;
+use serde::{de::Error as _, Deserialize, Deserializer};
 use serde_json::{json, Value};
+
+fn deserialize_registered_runtime_kind<'de, D>(
+    deserializer: D,
+) -> Result<AgentRuntimeKind, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let runtime_kind = String::deserialize(deserializer)?;
+    host_domain::builtin_runtime_registry()
+        .resolve_kind(runtime_kind.as_str())
+        .map_err(D::Error::custom)
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +31,7 @@ struct OptionalRepoPathArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeListArgs {
+    #[serde(deserialize_with = "deserialize_registered_runtime_kind")]
     runtime_kind: AgentRuntimeKind,
     repo_path: Option<String>,
 }
@@ -26,6 +39,7 @@ struct RuntimeListArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeEnsureArgs {
+    #[serde(deserialize_with = "deserialize_registered_runtime_kind")]
     runtime_kind: AgentRuntimeKind,
     repo_path: String,
 }
@@ -41,6 +55,7 @@ struct RuntimeStopArgs {
 struct BuildStartArgs {
     repo_path: String,
     task_id: String,
+    #[serde(deserialize_with = "deserialize_registered_runtime_kind")]
     runtime_kind: AgentRuntimeKind,
 }
 

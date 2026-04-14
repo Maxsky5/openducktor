@@ -382,18 +382,13 @@ pub(crate) fn build_opencode_startup_event_payload(
 }
 
 impl AppService {
+    #[cfg(test)]
     pub(crate) fn opencode_startup_readiness_policy(
         &self,
     ) -> Result<OpencodeStartupReadinessPolicy> {
-        let config = self.runtime_config_store.load().with_context(|| {
-            format!(
-                "Failed loading OpenCode startup readiness config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
-                self.runtime_config_store.path().display()
-            )
-        })?;
-        Ok(OpencodeStartupReadinessPolicy::from_config(
-            config.opencode_startup,
-        ))
+        self.runtime_registry
+            .runtime(&host_domain::AgentRuntimeKind::opencode())?
+            .startup_policy(self)
     }
 
     pub(crate) fn startup_cancel_epoch(&self) -> StartupCancelEpoch {

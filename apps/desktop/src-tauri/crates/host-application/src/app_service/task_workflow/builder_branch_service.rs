@@ -631,8 +631,8 @@ mod tests {
             crate::app_service::RunProcess {
                 summary: RunSummary {
                     run_id: "run-1".to_string(),
-                    runtime_kind: AgentRuntimeKind::Opencode,
-                    runtime_route: AgentRuntimeKind::Opencode.route_for_port(4444),
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    runtime_route: AgentRuntimeKind::opencode().route_for_port(4444),
                     repo_path: active_repo_path.clone(),
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),

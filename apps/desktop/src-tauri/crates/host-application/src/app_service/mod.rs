@@ -31,6 +31,7 @@ mod opencode_session_status;
 mod process_registry;
 mod repo_init;
 mod runtime_orchestrator;
+mod runtime_registry;
 mod service_core;
 mod startup_metrics;
 mod system_workspace_git;

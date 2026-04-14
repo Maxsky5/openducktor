@@ -619,7 +619,7 @@ mod tests {
             stream.flush().expect("server should flush response");
         });
 
-        let runtime_route = AgentRuntimeKind::Opencode.route_for_port(port);
+        let runtime_route = AgentRuntimeKind::opencode().route_for_port(port);
 
         let statuses = load_opencode_session_statuses(&runtime_route, "/tmp/repo path")
             .expect("status request should succeed");
@@ -678,7 +678,7 @@ mod tests {
         });
 
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo ",
         )
         .expect("local_http route should build a probe target");
@@ -713,7 +713,7 @@ mod tests {
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo",
         )
         .expect("local_http route should build a probe target");
@@ -748,7 +748,7 @@ mod tests {
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo",
         )
         .expect("local_http route should build a probe target");
@@ -785,12 +785,12 @@ mod tests {
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
         let live_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo-live",
         )
         .expect("local_http route should build a probe target");
         let stale_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(9999),
+            &AgentRuntimeKind::opencode().route_for_port(9999),
             "/tmp/repo-stale",
         )
         .expect("local_http route should build a probe target");
@@ -837,7 +837,7 @@ mod tests {
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo",
         )
         .expect("local_http route should build a probe target");
@@ -887,7 +887,7 @@ mod tests {
             )?;
             targets.push(
                 OpencodeSessionStatusProbeTarget::for_runtime_route(
-                    &AgentRuntimeKind::Opencode.route_for_port(port),
+                    &AgentRuntimeKind::opencode().route_for_port(port),
                     format!("/tmp/repo-{index}").as_str(),
                 )
                 .expect("local_http route should build a probe target"),
@@ -924,7 +924,7 @@ mod tests {
             Err((500, "session status failed".to_string())),
         )?;
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo",
         )
         .expect("local_http route should build a probe target");
@@ -951,7 +951,7 @@ mod tests {
         let (port, connections, server_handle) =
             spawn_counting_status_server(1, Duration::ZERO, Ok("{not-json}".to_string()))?;
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(port),
+            &AgentRuntimeKind::opencode().route_for_port(port),
             "/tmp/repo",
         )
         .expect("local_http route should build a probe target");
@@ -980,7 +980,7 @@ mod tests {
     fn session_status_flight_guard_finishes_waiters_when_dropped_uncompleted() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(1234),
+            &AgentRuntimeKind::opencode().route_for_port(1234),
             "/tmp/runtime-flight-guard",
         )
         .expect("local_http route should build a probe target");
@@ -1007,7 +1007,7 @@ mod tests {
     ) -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &AgentRuntimeKind::Opencode.route_for_port(1235),
+            &AgentRuntimeKind::opencode().route_for_port(1235),
             "/tmp/runtime-flight-poison",
         )
         .expect("local_http route should build a probe target");

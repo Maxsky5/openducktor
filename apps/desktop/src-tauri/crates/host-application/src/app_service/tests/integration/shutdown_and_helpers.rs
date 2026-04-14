@@ -45,15 +45,15 @@ fn runtime_summary_fixture(
     port: u16,
 ) -> RuntimeInstanceSummary {
     RuntimeInstanceSummary {
-        kind: AgentRuntimeKind::Opencode,
+        kind: AgentRuntimeKind::opencode(),
         runtime_id: runtime_id.to_string(),
         repo_path: repo_path.to_string(),
         task_id: Some(task_id.to_string()),
         role,
         working_directory: working_directory.to_string(),
-        runtime_route: AgentRuntimeKind::Opencode.route_for_port(port),
+        runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
         started_at: "2026-02-20T12:00:00Z".to_string(),
-        descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        descriptor: AgentRuntimeKind::opencode().descriptor(),
     }
 }
 
@@ -81,8 +81,8 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
         RunProcess {
             summary: RunSummary {
                 run_id: run_id.clone(),
-                runtime_kind: AgentRuntimeKind::Opencode,
-                runtime_route: AgentRuntimeKind::Opencode.route_for_port(1),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                runtime_route: AgentRuntimeKind::opencode().route_for_port(1),
                 repo_path: "/tmp/repo".to_string(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),
@@ -236,8 +236,8 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
         RunProcess {
             summary: RunSummary {
                 run_id: "run-shutdown-registry-error".to_string(),
-                runtime_kind: AgentRuntimeKind::Opencode,
-                runtime_route: AgentRuntimeKind::Opencode.route_for_port(1),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                runtime_route: AgentRuntimeKind::opencode().route_for_port(1),
                 repo_path: "/tmp/repo".to_string(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),

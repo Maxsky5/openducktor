@@ -27,17 +27,17 @@ impl AppService {
             ..
         } = input;
 
-        let descriptor = runtime_kind.descriptor();
+        let definition = self.runtime_registry.definition(&runtime_kind)?;
         let summary = RuntimeInstanceSummary {
-            kind: runtime_kind,
+            kind: runtime_kind.clone(),
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
             task_id: (role != host_domain::RuntimeRole::Workspace).then(|| task_id.to_string()),
             role,
             working_directory,
-            runtime_route: runtime_kind.route_for_port(spawned_server.port),
+            runtime_route: definition.route_for_port(spawned_server.port),
             started_at: now_rfc3339(),
-            descriptor,
+            descriptor: definition.descriptor().clone(),
         };
 
         let mut runtimes = self

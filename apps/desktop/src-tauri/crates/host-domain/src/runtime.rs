@@ -1,6 +1,8 @@
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::{Arc, LazyLock};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,69 +17,60 @@ pub enum RunState {
     Stopped,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentRuntimeKind {
-    Opencode,
-}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(transparent)]
+pub struct AgentRuntimeKind(String);
 
 impl AgentRuntimeKind {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Opencode => "opencode",
-        }
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
     }
 
-    pub fn descriptor(self) -> RuntimeDescriptor {
-        match self {
-            Self::Opencode => RuntimeDescriptor {
-                kind: self,
-                label: "OpenCode".to_string(),
-                description: "OpenCode local runtime with OpenDucktor MCP integration.".to_string(),
-                read_only_role_blocked_tools: vec![
-                    "edit".to_string(),
-                    "write".to_string(),
-                    "apply_patch".to_string(),
-                    "ast_grep_replace".to_string(),
-                    "lsp_rename".to_string(),
-                ],
-                workflow_tool_aliases_by_canonical: opencode_workflow_tool_aliases_by_canonical(),
-                capabilities: RuntimeCapabilities {
-                    supports_profiles: true,
-                    supports_variants: true,
-                    supports_slash_commands: true,
-                    supports_file_search: true,
-                    supports_odt_workflow_tools: true,
-                    supports_session_fork: true,
-                    supports_queued_user_messages: true,
-                    supports_permission_requests: true,
-                    supports_question_requests: true,
-                    supports_todos: true,
-                    supports_diff: true,
-                    supports_file_status: true,
-                    supports_mcp_status: true,
-                    supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
-                    provisioning_mode: RuntimeProvisioningMode::HostManaged,
-                },
-            },
-        }
+    pub fn opencode() -> Self {
+        Self::new("opencode")
     }
 
-    pub fn endpoint_for_port(self, port: u16) -> String {
-        match self {
-            Self::Opencode => {
-                let mut endpoint = String::new();
-                endpoint.push_str("http://127.0.0.1:");
-                endpoint.push_str(port.to_string().as_str());
-                endpoint
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn descriptor(&self) -> RuntimeDescriptor {
+        builtin_runtime_registry()
+            .definition(self)
+            .expect("runtime kind should be registered before descriptor lookup")
+            .descriptor()
+            .clone()
+    }
+
+    pub fn endpoint_for_port(&self, port: u16) -> String {
+        match self.route_for_port(port) {
+            RuntimeRoute::LocalHttp { endpoint } => endpoint,
+            RuntimeRoute::Stdio => {
+                panic!(
+                    "runtime kind {} does not support local_http routes",
+                    self.as_str()
+                )
             }
         }
     }
 
-    pub fn route_for_port(self, port: u16) -> RuntimeRoute {
-        RuntimeRoute::LocalHttp {
-            endpoint: self.endpoint_for_port(port),
-        }
+    pub fn route_for_port(&self, port: u16) -> RuntimeRoute {
+        builtin_runtime_registry()
+            .definition(self)
+            .expect("runtime kind should be registered before route lookup")
+            .route_for_port(port)
+    }
+}
+
+impl From<&str> for AgentRuntimeKind {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<String> for AgentRuntimeKind {
+    fn from(value: String) -> Self {
+        Self::new(value)
     }
 }
 
@@ -238,6 +231,215 @@ impl RuntimeDescriptor {
 
         errors
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeStartupReadinessConfig {
+    pub timeout_ms: u64,
+    pub connect_timeout_ms: u64,
+    pub initial_retry_delay_ms: u64,
+    pub max_retry_delay_ms: u64,
+    pub child_check_interval_ms: u64,
+}
+
+impl Default for RuntimeStartupReadinessConfig {
+    fn default() -> Self {
+        Self {
+            timeout_ms: 15_000,
+            connect_timeout_ms: 250,
+            initial_retry_delay_ms: 25,
+            max_retry_delay_ms: 250,
+            child_check_interval_ms: 75,
+        }
+    }
+}
+
+impl RuntimeStartupReadinessConfig {
+    pub fn normalize(&mut self) {
+        self.timeout_ms = self.timeout_ms.clamp(15_000, 120_000);
+        self.connect_timeout_ms = self.connect_timeout_ms.clamp(25, 10_000);
+        self.initial_retry_delay_ms = self.initial_retry_delay_ms.clamp(5, 5_000);
+        self.max_retry_delay_ms = self.max_retry_delay_ms.clamp(10, 10_000);
+        self.child_check_interval_ms = self.child_check_interval_ms.clamp(10, 2_000);
+        if self.max_retry_delay_ms < self.initial_retry_delay_ms {
+            self.max_retry_delay_ms = self.initial_retry_delay_ms;
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeDefinition {
+    descriptor: RuntimeDescriptor,
+    default_startup_config: RuntimeStartupReadinessConfig,
+    route_for_port: fn(u16) -> RuntimeRoute,
+}
+
+impl RuntimeDefinition {
+    pub fn new(
+        descriptor: RuntimeDescriptor,
+        default_startup_config: RuntimeStartupReadinessConfig,
+        route_for_port: fn(u16) -> RuntimeRoute,
+    ) -> Self {
+        Self {
+            descriptor,
+            default_startup_config,
+            route_for_port,
+        }
+    }
+
+    pub fn kind(&self) -> &AgentRuntimeKind {
+        &self.descriptor.kind
+    }
+
+    pub fn descriptor(&self) -> &RuntimeDescriptor {
+        &self.descriptor
+    }
+
+    pub fn default_startup_config(&self) -> &RuntimeStartupReadinessConfig {
+        &self.default_startup_config
+    }
+
+    pub fn route_for_port(&self, port: u16) -> RuntimeRoute {
+        (self.route_for_port)(port)
+    }
+
+    pub fn validate_for_openducktor(&self) -> Vec<String> {
+        self.descriptor.validate_for_openducktor()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeRegistry {
+    definitions_by_kind: Arc<BTreeMap<String, RuntimeDefinition>>,
+    default_kind: AgentRuntimeKind,
+}
+
+impl RuntimeRegistry {
+    pub fn new(definitions: Vec<RuntimeDefinition>) -> Result<Self> {
+        let mut definitions_by_kind = BTreeMap::new();
+        for definition in definitions {
+            let kind = definition.kind().as_str().trim().to_string();
+            if kind.is_empty() {
+                return Err(anyhow!("Registered runtime kind cannot be blank"));
+            }
+            let validation_errors = definition.validate_for_openducktor();
+            if !validation_errors.is_empty() {
+                return Err(anyhow!(
+                    "Runtime '{}' is incompatible with OpenDucktor: {}.",
+                    definition.kind().as_str(),
+                    validation_errors.join("; "),
+                ));
+            }
+            if definitions_by_kind
+                .insert(kind.clone(), definition)
+                .is_some()
+            {
+                return Err(anyhow!("Duplicate runtime registration: {kind}"));
+            }
+        }
+
+        let default_kind = definitions_by_kind
+            .values()
+            .next()
+            .map(|definition| definition.kind().clone())
+            .ok_or_else(|| anyhow!("Runtime registry requires at least one registered runtime"))?;
+
+        Ok(Self {
+            definitions_by_kind: Arc::new(definitions_by_kind),
+            default_kind,
+        })
+    }
+
+    pub fn default_kind(&self) -> &AgentRuntimeKind {
+        &self.default_kind
+    }
+
+    pub fn definitions(&self) -> Vec<RuntimeDefinition> {
+        self.definitions_by_kind.values().cloned().collect()
+    }
+
+    pub fn definition(&self, kind: &AgentRuntimeKind) -> Result<&RuntimeDefinition> {
+        self.definition_by_str(kind.as_str())
+    }
+
+    pub fn definition_by_str(&self, runtime_kind: &str) -> Result<&RuntimeDefinition> {
+        let runtime_kind = runtime_kind.trim();
+        if runtime_kind.is_empty() {
+            return Err(anyhow!("Agent runtime kind cannot be blank"));
+        }
+        self.definitions_by_kind
+            .get(runtime_kind)
+            .ok_or_else(|| anyhow!("Unsupported agent runtime kind: {runtime_kind}"))
+    }
+
+    pub fn resolve_kind(&self, runtime_kind: &str) -> Result<AgentRuntimeKind> {
+        Ok(self.definition_by_str(runtime_kind)?.kind().clone())
+    }
+}
+
+fn local_http_endpoint_for_port(port: u16) -> String {
+    let mut endpoint = String::new();
+    endpoint.push_str("http://127.0.0.1:");
+    endpoint.push_str(port.to_string().as_str());
+    endpoint
+}
+
+fn local_http_route_for_port(port: u16) -> RuntimeRoute {
+    RuntimeRoute::LocalHttp {
+        endpoint: local_http_endpoint_for_port(port),
+    }
+}
+
+fn opencode_runtime_definition() -> RuntimeDefinition {
+    let kind = AgentRuntimeKind::opencode();
+    RuntimeDefinition::new(
+        RuntimeDescriptor {
+            kind,
+            label: "OpenCode".to_string(),
+            description: "OpenCode local runtime with OpenDucktor MCP integration.".to_string(),
+            read_only_role_blocked_tools: vec![
+                "edit".to_string(),
+                "write".to_string(),
+                "apply_patch".to_string(),
+                "ast_grep_replace".to_string(),
+                "lsp_rename".to_string(),
+            ],
+            workflow_tool_aliases_by_canonical: opencode_workflow_tool_aliases_by_canonical(),
+            capabilities: RuntimeCapabilities {
+                supports_profiles: true,
+                supports_variants: true,
+                supports_slash_commands: true,
+                supports_file_search: true,
+                supports_odt_workflow_tools: true,
+                supports_session_fork: true,
+                supports_queued_user_messages: true,
+                supports_permission_requests: true,
+                supports_question_requests: true,
+                supports_todos: true,
+                supports_diff: true,
+                supports_file_status: true,
+                supports_mcp_status: true,
+                supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
+                provisioning_mode: RuntimeProvisioningMode::HostManaged,
+            },
+        },
+        RuntimeStartupReadinessConfig::default(),
+        local_http_route_for_port,
+    )
+}
+
+static BUILTIN_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry> = LazyLock::new(|| {
+    RuntimeRegistry::new(vec![opencode_runtime_definition()])
+        .expect("builtin runtime registry should be valid")
+});
+
+pub fn builtin_runtime_registry() -> &'static RuntimeRegistry {
+    &BUILTIN_RUNTIME_REGISTRY
+}
+
+pub fn default_runtime_kind() -> AgentRuntimeKind {
+    builtin_runtime_registry().default_kind().clone()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -553,11 +755,13 @@ pub enum RunEvent {
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentRuntimeKind, DevServerEvent, DevServerGroupState, DevServerScriptState,
-        DevServerScriptStatus, DevServerTerminalChunk, RuntimeCapabilities, RuntimeDescriptor,
-        RuntimeProvisioningMode, RuntimeRoute, RuntimeSupportedScope,
+        local_http_route_for_port, AgentRuntimeKind, DevServerEvent, DevServerGroupState,
+        DevServerScriptState, DevServerScriptStatus, DevServerTerminalChunk, RuntimeCapabilities,
+        RuntimeDefinition, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRegistry,
+        RuntimeRoute, RuntimeStartupReadinessConfig, RuntimeSupportedScope,
         REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
+    use anyhow::Result;
     use std::collections::BTreeMap;
 
     fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabilities {
@@ -578,6 +782,21 @@ mod tests {
             supported_scopes: scopes,
             provisioning_mode: RuntimeProvisioningMode::HostManaged,
         }
+    }
+
+    fn runtime_definition(kind: &str, label: &str) -> RuntimeDefinition {
+        RuntimeDefinition::new(
+            RuntimeDescriptor {
+                kind: AgentRuntimeKind::from(kind),
+                label: label.to_string(),
+                description: format!("{label} runtime"),
+                read_only_role_blocked_tools: vec!["apply_patch".to_string()],
+                workflow_tool_aliases_by_canonical: BTreeMap::new(),
+                capabilities: capabilities_with_scopes(REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec()),
+            },
+            RuntimeStartupReadinessConfig::default(),
+            local_http_route_for_port,
+        )
     }
 
     #[test]
@@ -601,7 +820,11 @@ mod tests {
 
     #[test]
     fn opencode_descriptor_uses_required_workflow_scope_set() {
-        let descriptor = AgentRuntimeKind::Opencode.descriptor();
+        let descriptor = super::builtin_runtime_registry()
+            .definition_by_str("opencode")
+            .expect("opencode runtime should be registered")
+            .descriptor()
+            .clone();
 
         assert_eq!(
             descriptor.capabilities.supported_scopes,
@@ -631,7 +854,7 @@ mod tests {
     #[test]
     fn runtime_descriptor_validation_reports_mandatory_capabilities_and_scopes() {
         let descriptor = RuntimeDescriptor {
-            kind: AgentRuntimeKind::Opencode,
+            kind: AgentRuntimeKind::opencode(),
             label: "OpenCode".to_string(),
             description: "desc".to_string(),
             read_only_role_blocked_tools: vec![],
@@ -662,6 +885,49 @@ mod tests {
                     .to_string(),
                 "missing required workflow scopes: task, build".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn runtime_registry_resolves_known_kinds_and_rejects_unknown_entries() -> Result<()> {
+        let registry = RuntimeRegistry::new(vec![
+            runtime_definition("opencode", "OpenCode"),
+            runtime_definition("test-runtime", "Test Runtime"),
+        ])
+        .expect("runtime registry should build");
+
+        assert_eq!(
+            registry.resolve_kind(" test-runtime ")?.as_str(),
+            "test-runtime"
+        );
+        assert_eq!(registry.default_kind().as_str(), "opencode");
+
+        let error = registry
+            .resolve_kind("missing-runtime")
+            .expect_err("unknown runtime kinds must fail fast");
+        assert_eq!(
+            error.to_string(),
+            "Unsupported agent runtime kind: missing-runtime"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_registry_exposes_multiple_descriptors_without_generic_code_changes() {
+        let registry = RuntimeRegistry::new(vec![
+            runtime_definition("opencode", "OpenCode"),
+            runtime_definition("test-runtime", "Test Runtime"),
+        ])
+        .expect("runtime registry should build");
+
+        let definitions = registry.definitions();
+        assert_eq!(definitions.len(), 2);
+        assert_eq!(definitions[0].kind().as_str(), "opencode");
+        assert_eq!(definitions[1].kind().as_str(), "test-runtime");
+        assert_eq!(
+            definitions[1].route_for_port(4311).local_http_port(),
+            Some(4311)
         );
     }
 

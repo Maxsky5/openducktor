@@ -1,11 +1,11 @@
 use super::types::{
     default_branch_prefix, normalize_git_target_branch_value, repo_script_fingerprint,
     AgentModelDefault, AutopilotActionId, AutopilotRule, AutopilotSettings, GitProviderConfig,
-    GitProviderRepository, GitTargetBranch, GlobalConfig, HookSet, KanbanSettings,
-    OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RuntimeConfig, AUTOPILOT_EVENT_ORDER,
+    GitProviderRepository, GitTargetBranch, GlobalConfig, HookSet, KanbanSettings, PromptOverrides,
+    RepoConfig, RepoDevServerScript, RuntimeConfig, AUTOPILOT_EVENT_ORDER,
 };
 use anyhow::{anyhow, Result};
+use host_domain::builtin_runtime_registry;
 use std::collections::HashSet;
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -195,19 +195,6 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn normalize_opencode_startup_readiness_config(
-    config: &mut OpencodeStartupReadinessConfig,
-) {
-    config.timeout_ms = config.timeout_ms.clamp(15_000, 120_000);
-    config.connect_timeout_ms = config.connect_timeout_ms.clamp(25, 10_000);
-    config.initial_retry_delay_ms = config.initial_retry_delay_ms.clamp(5, 5_000);
-    config.max_retry_delay_ms = config.max_retry_delay_ms.clamp(10, 10_000);
-    config.child_check_interval_ms = config.child_check_interval_ms.clamp(10, 2_000);
-    if config.max_retry_delay_ms < config.initial_retry_delay_ms {
-        config.max_retry_delay_ms = config.initial_retry_delay_ms;
-    }
-}
-
 fn normalize_kanban_settings(config: &mut KanbanSettings) {
     config.done_visible_days = config.done_visible_days.max(0);
 }
@@ -243,6 +230,23 @@ pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
 }
 
 pub(super) fn normalize_runtime_config(config: &mut RuntimeConfig) -> Result<()> {
-    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
+    let runtime_registry = builtin_runtime_registry();
+    let configured_runtime_kinds = config.runtimes.keys().cloned().collect::<Vec<_>>();
+    for runtime_kind in configured_runtime_kinds {
+        runtime_registry.definition_by_str(runtime_kind.as_str())?;
+    }
+
+    let mut normalized_runtimes = std::collections::BTreeMap::new();
+    for definition in runtime_registry.definitions() {
+        let runtime_kind = definition.kind().to_string();
+        let mut startup_config = config
+            .runtimes
+            .remove(runtime_kind.as_str())
+            .unwrap_or_else(|| definition.default_startup_config().clone());
+        startup_config.normalize();
+        normalized_runtimes.insert(runtime_kind, startup_config);
+    }
+
+    config.runtimes = normalized_runtimes;
     Ok(())
 }
