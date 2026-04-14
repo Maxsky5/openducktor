@@ -4,6 +4,7 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
+import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
@@ -179,22 +180,26 @@ describe("AgentStudioRightPanelToggleButton", () => {
 describe("AgentStudioRightPanel", () => {
   test("renders documents content via workspace sidebar", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioRightPanel, {
-        model: {
-          kind: "documents",
-          documentsModel: {
-            activeDocument: {
-              title: "Specification",
-              description: "Current specification document for this task.",
-              emptyState: "No spec document yet.",
-              document: {
-                ...emptyDoc,
-                markdown: "# Spec",
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(AgentStudioRightPanel, {
+          model: {
+            kind: "documents",
+            documentsModel: {
+              activeDocument: {
+                title: "Specification",
+                description: "Current specification document for this task.",
+                emptyState: "No spec document yet.",
+                document: {
+                  ...emptyDoc,
+                  markdown: "# Spec",
+                },
               },
             },
           },
-        },
-      }),
+        }),
+      ),
     );
 
     expect(html).toContain("Specification");
@@ -204,13 +209,17 @@ describe("AgentStudioRightPanel", () => {
 
   test("renders builder tools panel with git and dev server content", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentStudioRightPanel, {
-        model: {
-          kind: "build_tools",
-          diffModel,
-          devServerModel,
-        },
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(AgentStudioRightPanel, {
+          model: {
+            kind: "build_tools",
+            diffModel,
+            devServerModel,
+          },
+        }),
+      ),
     );
 
     expect(html).toContain("Current");

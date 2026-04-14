@@ -15,4 +15,5 @@ export * from "./session-schemas";
 export * from "./session-todo-parsing";
 export * from "./slash-command-schemas";
 export * from "./spec-template";
+export * from "./system-open-schemas";
 export * from "./task-schemas";

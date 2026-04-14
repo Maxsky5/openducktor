@@ -123,9 +123,7 @@ pub(crate) fn require_opencode_local_http_port(
     runtime_route: &RuntimeRoute,
     action: &str,
 ) -> Result<u16> {
-    runtime_route.local_http_port().ok_or_else(|| {
-        anyhow!(
-            "OpenCode {action} requires a local_http runtime route with a port"
-        )
-    })
+    runtime_route
+        .local_http_port()
+        .ok_or_else(|| anyhow!("OpenCode {action} requires a local_http runtime route with a port"))
 }

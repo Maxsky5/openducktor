@@ -313,6 +313,30 @@ describe("useAgentStudioRightPanel", () => {
     await secondHarness.unmount();
   });
 
+  test("preserves the stored preferred open-in tool when panel state changes", async () => {
+    globalThis.localStorage.setItem(
+      toRightPanelStorageKey(),
+      JSON.stringify({ openInToolId: "zed", build: true }),
+    );
+
+    const harness = createHookHarness({
+      role: "build",
+      hasDocumentPanel: false,
+      hasBuildToolsPanel: true,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.rightPanelToggleModel?.onToggle();
+    });
+
+    const persisted = JSON.parse(globalThis.localStorage.getItem(toRightPanelStorageKey()) ?? "{}");
+    expect(persisted.openInToolId).toBe("zed");
+    expect(persisted.build).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("logs malformed persisted panel state before recovering defaults", async () => {
     const originalError = console.error;
     const errorCalls: unknown[][] = [];

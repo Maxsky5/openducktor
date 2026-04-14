@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { fireEvent, type RenderResult, render } from "@testing-library/react";
-import { act, createElement } from "react";
+import {
+  fireEvent,
+  type RenderResult,
+  render as testingLibraryRender,
+} from "@testing-library/react";
+import { act, createElement, type ReactElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const omitDialogDomProps = ({
@@ -132,6 +137,16 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
 };
+
+const render = (element: ReactElement): RenderResult =>
+  testingLibraryRender(createElement(QueryProvider, { useIsolatedClient: true }, element));
+
+const renderAgentStudioGitPanelElement = (model: AgentStudioGitPanelModel): ReactElement =>
+  createElement(
+    QueryProvider,
+    { useIsolatedClient: true },
+    createElement(AgentStudioGitPanel, { model }),
+  );
 
 type DomTestNode = {
   readonly element: Element;
@@ -736,14 +751,14 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
+        renderAgentStudioGitPanelElement(
+          baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
             isPushing: true,
             diffScope: "uncommitted",
             commitAll,
           }),
-        }),
+        ),
       );
       await flush();
     });
@@ -751,13 +766,13 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
+        renderAgentStudioGitPanelElement(
+          baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
             diffScope: "uncommitted",
             commitAll,
           }),
-        }),
+        ),
       );
       findByTestId(root, "agent-studio-git-commit-message-input").props.onChange({
         currentTarget: { value: "feat: commit all files" },
@@ -815,8 +830,8 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
+        renderAgentStudioGitPanelElement(
+          baseModel({
             diffScope: "uncommitted",
             setDiffScope,
             commitAll,
@@ -824,7 +839,7 @@ describe("AgentStudioGitPanel", () => {
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
             commitError: "",
           }),
-        }),
+        ),
       );
       await flush();
     });
@@ -1006,8 +1021,8 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
+        renderAgentStudioGitPanelElement(
+          baseModel({
             branch: null,
             diffScope: "uncommitted",
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
@@ -1017,7 +1032,7 @@ describe("AgentStudioGitPanel", () => {
             rebaseOntoTarget,
             pullFromUpstream,
           }),
-        }),
+        ),
       );
       await flush();
     });
@@ -1031,8 +1046,8 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
+        renderAgentStudioGitPanelElement(
+          baseModel({
             branch: null,
             diffScope: "uncommitted",
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
@@ -1044,7 +1059,7 @@ describe("AgentStudioGitPanel", () => {
             rebaseOntoTarget,
             pullFromUpstream,
           }),
-        }),
+        ),
       );
       await flush();
     });
@@ -1397,9 +1412,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, { model: persistedConflictModel }),
-      );
+      ensureRenderer(renderer).rerender(renderAgentStudioGitPanelElement(persistedConflictModel));
       await flush();
     });
 
@@ -1419,9 +1432,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, { model: actionConflictModel }),
-      );
+      ensureRenderer(renderer).rerender(renderAgentStudioGitPanelElement(actionConflictModel));
       await flush();
     });
 
@@ -1455,9 +1466,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, { model: abortPendingModel }),
-      );
+      ensureRenderer(renderer).rerender(renderAgentStudioGitPanelElement(abortPendingModel));
       await flush();
     });
 
@@ -1508,9 +1517,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, { model: askBuilderPendingModel }),
-      );
+      ensureRenderer(renderer).rerender(renderAgentStudioGitPanelElement(askBuilderPendingModel));
       await flush();
     });
 
@@ -1559,9 +1566,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, { model: conflictModel }),
-      );
+      ensureRenderer(renderer).rerender(renderAgentStudioGitPanelElement(conflictModel));
       await flush();
     });
 
@@ -1730,8 +1735,8 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
+        renderAgentStudioGitPanelElement(
+          baseModel({
             diffScope: "target",
             fileDiffs: [
               {
@@ -1744,7 +1749,7 @@ describe("AgentStudioGitPanel", () => {
             ],
             fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
           }),
-        }),
+        ),
       );
       await flush();
     });

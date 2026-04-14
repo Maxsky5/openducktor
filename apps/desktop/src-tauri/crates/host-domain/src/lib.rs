@@ -37,7 +37,8 @@ pub use store::TaskStore;
 pub use system::{
     BeadsCheck, RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory,
     RepoStoreHealthStatus, RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
-    RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
+    RuntimeCheck, RuntimeHealth, SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo,
+    WorkspaceRecord,
 };
 pub use task::{
     is_syncable_pull_request_state, is_terminal_task_status, CreateTaskInput, IssueType,
@@ -133,9 +134,9 @@ mod tests {
             RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
             RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RunEvent, RunState,
             RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument,
-            SystemCheck, TaskAction, TaskCard, TaskDirectMergeResult, TaskDocumentPresence,
-            TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore,
-            UpdateTaskPatch, WorkspaceRecord,
+            SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo, TaskAction, TaskCard,
+            TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary, TaskMetadata,
+            TaskQaDocumentPresence, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -216,6 +217,8 @@ mod tests {
             RuntimeRole,
             SpecDocument,
             SystemCheck,
+            SystemOpenInToolId,
+            SystemOpenInToolInfo,
             TaskAction,
             TaskCard,
             TaskDirectMergeResult,

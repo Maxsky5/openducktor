@@ -2,6 +2,7 @@ import type { PlannerTools } from "@openducktor/core";
 import { TauriAgentClient } from "./build-runtime-client";
 import { TauriGitClient } from "./git-client";
 import type { InvokeFn } from "./invoke-utils";
+import { TauriSystemClient } from "./system-client";
 import { TauriTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
 import { TauriWorkspaceClient } from "./workspace-client";
@@ -30,6 +31,11 @@ const WORKSPACE_METHODS = [
   "workspaceResolveLocalAttachmentPath",
   "setTheme",
 ] as const satisfies readonly MethodName<TauriWorkspaceClient>[];
+
+const SYSTEM_METHODS = [
+  "systemListOpenInTools",
+  "systemOpenDirectoryInTool",
+] as const satisfies readonly MethodName<TauriSystemClient>[];
 
 const TASK_METHODS = [
   "tasksList",
@@ -117,11 +123,13 @@ const GIT_METHODS = [
 ] as const satisfies readonly MethodName<TauriGitClient>[];
 
 type WorkspaceMethodName = (typeof WORKSPACE_METHODS)[number];
+type SystemMethodName = (typeof SYSTEM_METHODS)[number];
 type TaskMethodName = (typeof TASK_METHODS)[number];
 type AgentMethodName = (typeof AGENT_METHODS)[number];
 type GitMethodName = (typeof GIT_METHODS)[number];
 
 type TauriHostClientApi = Pick<TauriWorkspaceClient, WorkspaceMethodName> &
+  Pick<TauriSystemClient, SystemMethodName> &
   Pick<TauriTaskClient, TaskMethodName> &
   Pick<TauriAgentClient, AgentMethodName> &
   Pick<TauriGitClient, GitMethodName>;
@@ -163,12 +171,14 @@ export type { BuildRespondInput } from "./build-runtime-client";
 const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
   const metadataCache = new TaskMetadataCache();
   const workspaceClient = new TauriWorkspaceClient(invokeFn);
+  const systemClient = new TauriSystemClient(invokeFn);
   const taskClient = new TauriTaskClient(invokeFn, metadataCache);
   const agentClient = new TauriAgentClient(invokeFn, metadataCache);
   const gitClient = new TauriGitClient(invokeFn);
   const hostClient = {} as TauriHostClientApi;
 
   bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);
+  bindDelegates(hostClient, systemClient, SYSTEM_METHODS);
   bindDelegates(hostClient, taskClient, TASK_METHODS);
   bindDelegates(hostClient, agentClient, AGENT_METHODS);
   bindDelegates(hostClient, gitClient, GIT_METHODS);

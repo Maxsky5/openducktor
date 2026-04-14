@@ -99,6 +99,9 @@ import type {
   SlashCommandSource,
   SoftGuardrails,
   SystemCheck,
+  SystemListOpenInToolsRequest,
+  SystemOpenInToolId,
+  SystemOpenInToolInfo,
   TaskAction,
   TaskCard,
   TaskCreateInput,
@@ -312,6 +315,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "settingsSnapshotSchema",
   "specTemplateSections",
   "systemCheckSchema",
+  "systemListOpenInToolsRequestSchema",
+  "systemOpenDirectoryInToolRequestSchema",
+  "systemOpenInToolIdSchema",
+  "systemOpenInToolInfoSchema",
+  "systemOpenInToolIdValues",
+  "systemOpenInToolListSchema",
   "planSubtaskInputSchema",
   "planSubtaskIssueTypeSchema",
   "planSubtaskPrioritySchema",
@@ -442,6 +451,9 @@ type ExportedTypeContract = {
   RuntimeSupportedScope: RuntimeSupportedScope;
   SettingsSnapshot: SettingsSnapshot;
   SystemCheck: SystemCheck;
+  SystemListOpenInToolsRequest: SystemListOpenInToolsRequest;
+  SystemOpenInToolId: SystemOpenInToolId;
+  SystemOpenInToolInfo: SystemOpenInToolInfo;
   TaskAction: TaskAction;
   TaskCard: TaskCard;
   TaskCreateInput: TaskCreateInput;

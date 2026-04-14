@@ -204,6 +204,8 @@ describe("TauriHostClient", () => {
       "workspaceSaveSettingsSnapshot",
       "workspacePrepareTrustedHooksChallenge",
       "workspaceSetTrustedHooks",
+      "systemListOpenInTools",
+      "systemOpenDirectoryInTool",
       "setTheme",
       "tasksList",
       "taskCreate",
@@ -296,6 +298,54 @@ describe("TauriHostClient", () => {
           repoPath: "/repo",
           taskId: "task-77",
           markdown: "# Updated Spec",
+        },
+      },
+    ]);
+  });
+
+  test("systemListOpenInTools uses the dedicated discovery IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "system_list_open_in_tools") {
+        return [
+          { toolId: "finder", iconDataUrl: null },
+          { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
+          { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const tools = await client.systemListOpenInTools(true);
+
+    expect(tools).toEqual([
+      { toolId: "finder", iconDataUrl: null },
+      { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
+      { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
+    ]);
+    expect(calls).toEqual([
+      {
+        command: "system_list_open_in_tools",
+        args: { forceRefresh: true },
+      },
+    ]);
+  });
+
+  test("systemOpenDirectoryInTool uses the dedicated launch IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "system_open_directory_in_tool") {
+        return { ok: true };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.systemOpenDirectoryInTool("/tmp/worktrees/task 1", "ghostty");
+
+    expect(calls).toEqual([
+      {
+        command: "system_open_directory_in_tool",
+        args: {
+          directoryPath: "/tmp/worktrees/task 1",
+          toolId: "ghostty",
         },
       },
     ]);

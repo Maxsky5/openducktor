@@ -118,3 +118,30 @@ pub struct WorkspaceRecord {
     pub default_worktree_base_path: Option<String>,
     pub effective_worktree_base_path: Option<String>,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum SystemOpenInToolId {
+    Finder,
+    Terminal,
+    Iterm2,
+    Ghostty,
+    Vscode,
+    Cursor,
+    Zed,
+    IntellijIdea,
+    Webstorm,
+    Pycharm,
+    Phpstorm,
+    Rider,
+    Rustrover,
+    AndroidStudio,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemOpenInToolInfo {
+    pub tool_id: SystemOpenInToolId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_data_url: Option<String>,
+}

@@ -1,6 +1,7 @@
 mod beads;
 mod config;
 mod git;
+mod open_in;
 mod process;
 mod user_paths;
 mod worktree;
@@ -27,6 +28,7 @@ pub use config::{
     SoftGuardrails,
 };
 pub use git::GitCliPort;
+pub use open_in::{discover_open_in_tools, open_directory_in_tool};
 pub use process::{
     bundled_command, command_exists, command_path, resolve_command_path, run_command,
     run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
