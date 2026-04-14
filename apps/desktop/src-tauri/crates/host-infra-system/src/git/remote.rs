@@ -322,7 +322,24 @@ impl GitCliPort {
             ));
         }
 
-        self.sync_pushed_remote_tracking_ref_impl(repo_path, remote.as_str(), branch.as_str())?;
+        let output = match self.sync_pushed_remote_tracking_ref_impl(
+            repo_path,
+            remote.as_str(),
+            branch.as_str(),
+        ) {
+            Ok(()) => output,
+            Err(error) => {
+                if output.trim().is_empty() {
+                    format!(
+                        "Push succeeded, but local upstream tracking status may remain stale until the next fetch: {error:#}"
+                    )
+                } else {
+                    format!(
+                        "{output}\nPush succeeded, but local upstream tracking status may remain stale until the next fetch: {error:#}"
+                    )
+                }
+            }
+        };
 
         Ok(GitPushResult::Pushed {
             remote,
@@ -539,11 +556,12 @@ impl GitCliPort {
         remote: &str,
         branch: &str,
     ) -> Result<()> {
-        if remote == "." {
+        let Some((local_branch_ref, upstream_ref)) =
+            self.resolve_push_tracking_sync_refs_impl(repo_path, remote, branch)?
+        else {
             return Ok(());
-        }
+        };
 
-        let local_branch_ref = normalize_merge_ref(branch);
         let local_branch_oid =
             self.run_git(repo_path, &["rev-parse", local_branch_ref.as_str()])?;
         let local_branch_oid = local_branch_oid.trim();
@@ -554,13 +572,42 @@ impl GitCliPort {
             ));
         }
 
-        let upstream_ref = resolve_upstream_ref(remote, local_branch_ref.as_str());
         self.run_git(
             repo_path,
             &["update-ref", upstream_ref.as_str(), local_branch_oid],
         )?;
 
         Ok(())
+    }
+
+    fn resolve_push_tracking_sync_refs_impl(
+        &self,
+        repo_path: &Path,
+        remote: &str,
+        branch: &str,
+    ) -> Result<Option<(String, String)>> {
+        if remote == "." {
+            return Ok(None);
+        }
+
+        let local_branch_ref = if branch == "HEAD" {
+            let current_branch = self.get_current_branch_unchecked(repo_path)?;
+            let Some(current_branch_name) = current_branch.name else {
+                return Ok(None);
+            };
+            normalize_merge_ref(current_branch_name.as_str())
+        } else if branch.contains(':') {
+            return Ok(None);
+        } else if branch.starts_with("refs/heads/") {
+            branch.to_string()
+        } else if branch.starts_with("refs/") {
+            return Ok(None);
+        } else {
+            normalize_merge_ref(branch)
+        };
+
+        let upstream_ref = resolve_upstream_ref(remote, local_branch_ref.as_str());
+        Ok(Some((local_branch_ref, upstream_ref)))
     }
 }
 

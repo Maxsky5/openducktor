@@ -3046,6 +3046,95 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("keeps polling listeners stable across rerenders with unchanged inputs", async () => {
+    const originalWindowAddEventListener = globalThis.addEventListener.bind(globalThis);
+    const originalWindowRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
+    const originalDocumentAddEventListener = document.addEventListener.bind(document);
+    const originalDocumentRemoveEventListener = document.removeEventListener.bind(document);
+    const windowAddEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean,
+      ) => {
+        originalWindowAddEventListener(type, listener, options);
+      },
+    );
+    const windowRemoveEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: EventListenerOptions | boolean,
+      ) => {
+        originalWindowRemoveEventListener(type, listener, options);
+      },
+    );
+    const documentAddEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean,
+      ) => {
+        originalDocumentAddEventListener(type, listener, options);
+      },
+    );
+    const documentRemoveEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: EventListenerOptions | boolean,
+      ) => {
+        originalDocumentRemoveEventListener(type, listener, options);
+      },
+    );
+    globalThis.addEventListener = windowAddEventListenerMock as typeof globalThis.addEventListener;
+    globalThis.removeEventListener =
+      windowRemoveEventListenerMock as typeof globalThis.removeEventListener;
+    document.addEventListener = documentAddEventListenerMock as typeof document.addEventListener;
+    document.removeEventListener =
+      documentRemoveEventListenerMock as typeof document.removeEventListener;
+
+    const pollingArgs = {
+      ...createBaseArgs(),
+      enablePolling: true,
+    } satisfies HookArgs;
+    const harness = createHookHarness(pollingArgs);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      expect(windowAddEventListenerMock).toHaveBeenCalledWith("focus", expect.any(Function));
+      expect(documentAddEventListenerMock).toHaveBeenCalledWith(
+        "visibilitychange",
+        expect.any(Function),
+      );
+      expect(windowRemoveEventListenerMock).not.toHaveBeenCalled();
+      expect(documentRemoveEventListenerMock).not.toHaveBeenCalled();
+
+      windowAddEventListenerMock.mockClear();
+      windowRemoveEventListenerMock.mockClear();
+      documentAddEventListenerMock.mockClear();
+      documentRemoveEventListenerMock.mockClear();
+
+      await harness.update(pollingArgs);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(windowAddEventListenerMock).not.toHaveBeenCalled();
+      expect(windowRemoveEventListenerMock).not.toHaveBeenCalled();
+      expect(documentAddEventListenerMock).not.toHaveBeenCalled();
+      expect(documentRemoveEventListenerMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      globalThis.addEventListener = originalWindowAddEventListener;
+      globalThis.removeEventListener = originalWindowRemoveEventListener;
+      document.addEventListener = originalDocumentAddEventListener;
+      document.removeEventListener = originalDocumentRemoveEventListener;
+    }
+  });
+
   test("canonicalizes short target branch names to origin-prefixed refs", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),

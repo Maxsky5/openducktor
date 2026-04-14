@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
 import type { DiffDataState } from "./contracts";
@@ -87,14 +87,15 @@ export function useAgentStudioDiffData({
     refreshActiveScope,
     refreshActiveScopeSummary,
   });
+  const scheduledPoll = useCallback(() => {
+    void refresh("scheduled");
+  }, [refresh]);
 
   useAgentStudioDiffPolling({
     enablePolling,
     repoPath: effectiveRepoPath,
     shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
-    poll: () => {
-      void refresh("scheduled");
-    },
+    poll: scheduledPoll,
   });
 
   const displayError =

@@ -386,6 +386,54 @@ fn push_branch_returns_non_fast_forward_rejection() {
 }
 
 #[test]
+fn push_branch_accepts_head_ref_without_failing_tracking_sync() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("push-head-ref");
+    let remote = setup_bare_remote("push-head-ref-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    fs::write(repo.path.join("head-push.txt"), "head push\n").expect("head push file should write");
+    run_git_ok(&repo.path, &["add", "head-push.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "push head ref"]);
+
+    let git = GitCliPort::new();
+    let result = git
+        .push_branch(&repo.path, "origin", "HEAD", false, false)
+        .expect("pushing HEAD should still succeed");
+
+    match result {
+        GitPushResult::Pushed { remote, branch, .. } => {
+            assert_eq!(remote, "origin");
+            assert_eq!(branch, "HEAD");
+        }
+        other => panic!("expected pushed result, got {other:?}"),
+    }
+
+    let local_head = run_git_ok(&repo.path, &["rev-parse", "HEAD"]);
+    let tracked_remote_head = run_git_ok(&repo.path, &["rev-parse", "refs/remotes/origin/main"]);
+    assert_eq!(tracked_remote_head, local_head);
+
+    let status = git
+        .get_worktree_status(&repo.path, "origin/main", GitDiffScope::Target)
+        .expect("worktree status should reflect a freshly pushed HEAD ref");
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Tracking {
+            ahead: 0,
+            behind: 0,
+        }
+    );
+}
+
+#[test]
 fn push_branch_rejects_option_like_remote_input() {
     if !git_available() {
         return;
