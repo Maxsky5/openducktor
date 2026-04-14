@@ -39,6 +39,7 @@ describe("Toaster", () => {
 
     expect(branch.contains(toaster)).toBe(true);
     expect(props.position).toBe("bottom-right");
+    expect(props.richColors).toBe(false);
     expect(props.closeButton).toBe(true);
     expect(props.expand).toBe(true);
     expect(props.visibleToasts).toBe(5);
