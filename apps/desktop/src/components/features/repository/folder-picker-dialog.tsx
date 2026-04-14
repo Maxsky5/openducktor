@@ -1,6 +1,6 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronUp, FolderOpen, GitBranch, Home, LoaderCircle } from "lucide-react";
+import { ChevronUp, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ type FolderPickerDialogProps = {
   description: string;
   confirmLabel: string;
   initialPath?: string;
+  requireGitRepo?: boolean;
   onConfirm: (path: string) => Promise<void> | void;
 };
 
@@ -36,10 +37,11 @@ export function FolderPickerDialog({
   description,
   confirmLabel,
   initialPath,
+  requireGitRepo = false,
   onConfirm,
 }: FolderPickerDialogProps): ReactElement {
   const [requestedPath, setRequestedPath] = useState<string | undefined>(initialPath);
-  const [manualPath, setManualPath] = useState(initialPath ?? "");
+  const [manualPath, setManualPath] = useState("");
   const [filterText, setFilterText] = useState("");
   const [confirmedListing, setConfirmedListing] = useState<DirectoryListing | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function FolderPickerDialog({
     }
 
     setRequestedPath(initialPath);
-    setManualPath(initialPath ?? "");
+    setManualPath("");
     setFilterText("");
     setSubmitError(null);
   }, [initialPath, open]);
@@ -69,7 +71,6 @@ export function FolderPickerDialog({
     }
 
     setConfirmedListing(directoryQuery.data);
-    setManualPath(directoryQuery.data.currentPath);
   }, [directoryQuery.data]);
 
   const filteredEntries = useMemo(() => {
@@ -129,52 +130,23 @@ export function FolderPickerDialog({
   const isInitialLoad = directoryQuery.isPending && !confirmedListing;
   const isRefreshing = directoryQuery.isFetching && Boolean(confirmedListing);
   const isBusy = isSubmitting || isInitialLoad;
+  const isCurrentPathSelectable = Boolean(
+    confirmedListing && (!requireGitRepo || confirmedListing.currentPathIsGitRepo),
+  );
+  const helperMessage =
+    requireGitRepo && confirmedListing && !confirmedListing.currentPathIsGitRepo
+      ? "Only Git repositories can be opened. Navigate into a repository before continuing."
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl px-5 pb-8 pt-6 sm:px-6">
+        <DialogHeader className="px-1">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 pt-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!confirmedListing?.parentPath || isBusy}
-              onClick={() => loadDirectory(confirmedListing?.parentPath ?? null)}
-            >
-              <ChevronUp className="size-4" />
-              Parent
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!confirmedListing?.homePath || isBusy}
-              onClick={() => loadDirectory(confirmedListing?.homePath ?? null)}
-            >
-              <Home className="size-4" />
-              Home
-            </Button>
-            {isRefreshing ? (
-              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" />
-                Loading directory...
-              </span>
-            ) : null}
-          </div>
-
-          <div className="rounded-lg border border-border bg-muted/40 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Current Folder
-            </p>
-            <p className="mt-1 break-all font-mono text-sm text-foreground">
-              {confirmedListing?.currentPath ?? "Loading..."}
-            </p>
-          </div>
-
+        <DialogBody className="space-y-4 px-1 pt-4">
           <form
             className="grid gap-2"
             onSubmit={(event) => {
@@ -182,12 +154,15 @@ export function FolderPickerDialog({
               loadManualPath();
             }}
           >
-            <Label htmlFor="folder-picker-manual-path">Open path</Label>
+            <Label htmlFor="folder-picker-manual-path" className="sr-only">
+              Open path
+            </Label>
             <div className="flex gap-2">
               <Input
                 id="folder-picker-manual-path"
                 value={manualPath}
-                placeholder="/absolute/path"
+                placeholder="/path/to/your/repo"
+                className="font-mono"
                 disabled={isBusy}
                 onChange={(event) => setManualPath(event.currentTarget.value)}
               />
@@ -201,42 +176,85 @@ export function FolderPickerDialog({
             </div>
           </form>
 
-          <div className="grid gap-2">
-            <Label htmlFor="folder-picker-filter">Filter directories</Label>
-            <Input
-              id="folder-picker-filter"
-              value={filterText}
-              placeholder="Search this folder"
-              disabled={isBusy || !confirmedListing}
-              onChange={(event) => setFilterText(event.currentTarget.value)}
-            />
-          </div>
-
-          {activeError ? (
-            <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted">
-              {activeError}
-            </div>
-          ) : null}
-
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-foreground">Directories</p>
-              {confirmedListing ? (
-                <p className="text-xs text-muted-foreground">{filteredEntries.length} visible</p>
-              ) : null}
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border px-3 py-3">
+              <Label htmlFor="folder-picker-filter" className="sr-only">
+                Filter directories
+              </Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="folder-picker-filter"
+                  value={filterText}
+                  placeholder="Search this folder"
+                  className="pl-9"
+                  disabled={isBusy || !confirmedListing}
+                  onChange={(event) => setFilterText(event.currentTarget.value)}
+                />
+              </div>
             </div>
 
-            <ScrollArea className="h-80 rounded-lg border border-border bg-card">
-              <div className="grid gap-2 p-3">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Go to parent folder"
+                title="Parent"
+                disabled={!confirmedListing?.parentPath || isBusy}
+                onClick={() => loadDirectory(confirmedListing?.parentPath ?? null)}
+              >
+                <ChevronUp className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Go to home folder"
+                title="Home"
+                disabled={!confirmedListing?.homePath || isBusy}
+                onClick={() => loadDirectory(confirmedListing?.homePath ?? null)}
+              >
+                <Home className="size-4" />
+              </Button>
+
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md border border-input bg-muted/40 px-3 py-2">
+                <span className="min-w-0 truncate font-mono text-sm text-foreground">
+                  {confirmedListing?.currentPath ?? "Loading..."}
+                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {isRefreshing ? (
+                    <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                      Loading...
+                    </span>
+                  ) : null}
+                  {confirmedListing?.currentPathIsGitRepo ? (
+                    <Badge variant="success" className="gap-1 whitespace-nowrap">
+                      <GitBranch className="size-3" />
+                      Git repo
+                    </Badge>
+                  ) : null}
+                  {confirmedListing ? (
+                    <p className="text-xs whitespace-nowrap text-muted-foreground">
+                      {filteredEntries.length} visible
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <ScrollArea className="h-80">
+              <div className="p-1">
                 {isInitialLoad ? (
-                  <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
                     <LoaderCircle className="size-4 animate-spin" />
                     Loading directories...
                   </div>
                 ) : null}
 
                 {!isInitialLoad && confirmedListing && filteredEntries.length === 0 ? (
-                  <div className="rounded-md border border-border bg-muted/40 px-3 py-6 text-sm text-muted-foreground">
+                  <div className="px-3 py-6 text-sm text-muted-foreground">
                     No directories match this view.
                   </div>
                 ) : null}
@@ -245,19 +263,20 @@ export function FolderPickerDialog({
                   <Button
                     key={entry.path}
                     type="button"
-                    variant="outline"
-                    className="h-auto justify-between gap-3 overflow-hidden px-3 py-2 text-left"
+                    variant="ghost"
+                    className="h-9 w-full justify-between gap-3 rounded-md px-3 text-left"
                     disabled={isBusy}
-                    onClick={() => loadDirectory(entry.path)}
+                    onClick={() => {
+                      setFilterText("");
+                      loadDirectory(entry.path);
+                    }}
                   >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <FolderOpen className="size-4 shrink-0 text-primary" />
-                      <span className="min-w-0 truncate font-medium text-foreground">
-                        {entry.name}
-                      </span>
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <Folder className="size-4 shrink-0 text-primary" />
+                      <span className="min-w-0 truncate text-sm text-foreground">{entry.name}</span>
                     </span>
                     {entry.isGitRepo ? (
-                      <Badge variant="success" className="shrink-0 gap-1">
+                      <Badge variant="success" className="shrink-0 gap-1 whitespace-nowrap">
                         <GitBranch className="size-3" />
                         Git repo
                       </Badge>
@@ -267,15 +286,27 @@ export function FolderPickerDialog({
               </div>
             </ScrollArea>
           </div>
+
+          {helperMessage ? (
+            <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
+              {helperMessage}
+            </div>
+          ) : null}
+
+          {activeError ? (
+            <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted">
+              {activeError}
+            </div>
+          ) : null}
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="mt-4 justify-between border-t border-border px-1 pt-5">
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             type="button"
-            disabled={!confirmedListing || isSubmitting}
+            disabled={!isCurrentPathSelectable || isSubmitting}
             onClick={() => void handleConfirm()}
           >
             {isSubmitting ? "Confirming..." : confirmLabel}

@@ -22,6 +22,7 @@ const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unkn
 
 const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryListing => ({
   currentPath: "/Users/dev",
+  currentPathIsGitRepo: false,
   parentPath: "/Users",
   homePath: "/Users/dev",
   entries: [],
@@ -40,6 +41,7 @@ describe("FolderPickerDialog", () => {
     description: string;
     confirmLabel: string;
     initialPath?: string;
+    requireGitRepo?: boolean;
     onConfirm: (path: string) => Promise<void>;
   }) => ReactNode;
 
@@ -166,6 +168,7 @@ describe("FolderPickerDialog", () => {
 
       await waitFor(() => {
         expect(screen.getByText("/Users/dev/apps")).toBeTruthy();
+        expect((screen.getByLabelText("Filter directories") as HTMLInputElement).value).toBe("");
       });
     } finally {
       rendered.unmount();
@@ -201,6 +204,7 @@ describe("FolderPickerDialog", () => {
         case "/Users/dev/repo-one":
           return createListing({
             currentPath: "/Users/dev/repo-one",
+            currentPathIsGitRepo: true,
             parentPath: "/Users/dev",
             homePath: "/Users/home",
             entries: [],
@@ -214,12 +218,15 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev/projects");
+      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
 
-      fireEvent.click(screen.getByRole("button", { name: /parent/i }));
+      fireEvent.click(screen.getByRole("button", { name: /go to parent folder/i }));
       await screen.findByText("/Users/dev");
+      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
 
-      fireEvent.click(screen.getByRole("button", { name: /home/i }));
+      fireEvent.click(screen.getByRole("button", { name: /go to home folder/i }));
       await screen.findByText("/Users/home");
+      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
 
       fireEvent.change(screen.getByLabelText("Open path"), {
         target: { value: "/Users/dev/repo-one" },
@@ -227,11 +234,82 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole("button", { name: /load path/i }));
 
       await screen.findByText("/Users/dev/repo-one");
+      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe(
+        "/Users/dev/repo-one",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /go to parent folder/i }));
+      await screen.findByText("/Users/dev");
+      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe(
+        "/Users/dev/repo-one",
+      );
 
       fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
 
       await waitFor(() => {
-        expect(onConfirm).toHaveBeenCalledWith("/Users/dev/repo-one");
+        expect(onConfirm).toHaveBeenCalledWith("/Users/dev");
+      });
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("disables confirmation until the current folder is a git repository when required", async () => {
+    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+      if (path === "/Users/dev/repo-one") {
+        return createListing({
+          currentPath: "/Users/dev/repo-one",
+          currentPathIsGitRepo: true,
+          entries: [],
+        });
+      }
+
+      return createListing({
+        currentPath: "/Users/dev",
+        currentPathIsGitRepo: false,
+        entries: [
+          {
+            name: "repo-one",
+            path: "/Users/dev/repo-one",
+            isDirectory: true,
+            isGitRepo: true,
+          },
+        ],
+      });
+    });
+
+    const rendered = render(
+      <QueryProvider useIsolatedClient>
+        <FolderPickerDialog
+          open
+          onOpenChange={() => {}}
+          title="Pick a folder"
+          description="Browse the filesystem"
+          confirmLabel="Open Repository"
+          requireGitRepo
+          onConfirm={async () => {}}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await screen.findByText(/only git repositories can be opened/i);
+      const confirmButton = screen.getByRole("button", { name: /open repository/i });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+
+      const explorerWarning = screen.getByText(/only git repositories can be opened/i);
+      const repoButton = screen.getByRole("button", { name: /repo-one/i });
+      expect(repoButton.compareDocumentPosition(explorerWarning)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+
+      fireEvent.click(repoButton);
+
+      await waitFor(() => {
+        expect(screen.getByText("/Users/dev/repo-one")).toBeTruthy();
+        expect(
+          (screen.getByRole("button", { name: /open repository/i }) as HTMLButtonElement).disabled,
+        ).toBe(false);
       });
     } finally {
       rendered.unmount();
@@ -251,6 +329,7 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev");
+      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
 
       fireEvent.change(screen.getByLabelText("Open path"), {
         target: { value: "/missing" },

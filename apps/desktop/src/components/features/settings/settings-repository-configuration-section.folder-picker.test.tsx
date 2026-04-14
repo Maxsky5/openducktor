@@ -32,6 +32,7 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
   const queryClient = createQueryClient();
   queryClient.setQueryData(filesystemQueryKeys.directory(), {
     currentPath: "/tmp/worktrees",
+    currentPathIsGitRepo: false,
     parentPath: "/tmp",
     homePath: "/tmp/worktrees",
     entries: [],

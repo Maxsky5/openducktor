@@ -143,6 +143,7 @@ describe("TauriHostClient", () => {
         expect(args).toEqual({ path: "/Users/dev" });
         return {
           currentPath: "/Users/dev",
+          currentPathIsGitRepo: false,
           parentPath: "/Users",
           homePath: "/Users/dev",
           entries: [
@@ -166,6 +167,7 @@ describe("TauriHostClient", () => {
         args: { path: "/Users/dev" },
       },
     ]);
+    expect(listing.currentPathIsGitRepo).toBe(false);
     expect(listing.entries[0]?.isGitRepo).toBe(true);
   });
 

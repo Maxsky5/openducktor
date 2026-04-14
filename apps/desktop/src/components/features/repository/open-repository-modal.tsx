@@ -176,6 +176,7 @@ export function OpenRepositoryModal({
           title="Open Repository"
           description="Browse to an existing Git repository on disk. OpenDucktor will register the selected path in place."
           confirmLabel="Open Repository"
+          requireGitRepo
           onConfirm={confirmSelectedRepo}
         />
       ) : null}

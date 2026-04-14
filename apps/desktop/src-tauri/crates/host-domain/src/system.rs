@@ -132,6 +132,7 @@ pub struct DirectoryEntry {
 #[serde(rename_all = "camelCase")]
 pub struct DirectoryListing {
     pub current_path: String,
+    pub current_path_is_git_repo: bool,
     pub parent_path: Option<String>,
     pub home_path: Option<String>,
     pub entries: Vec<DirectoryEntry>,

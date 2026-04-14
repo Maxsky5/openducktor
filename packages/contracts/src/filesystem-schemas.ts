@@ -10,6 +10,7 @@ export type DirectoryEntry = z.infer<typeof directoryEntrySchema>;
 
 export const directoryListingSchema = z.object({
   currentPath: z.string().min(1),
+  currentPathIsGitRepo: z.boolean(),
   parentPath: z.string().nullable(),
   homePath: z.string().nullable(),
   entries: z.array(directoryEntrySchema),

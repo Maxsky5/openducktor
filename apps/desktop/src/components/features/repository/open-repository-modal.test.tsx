@@ -116,6 +116,7 @@ describe("OpenRepositoryModal", () => {
     const queryClient = createQueryClient();
     queryClient.setQueryData(filesystemQueryKeys.directory(), {
       currentPath: "/repo",
+      currentPathIsGitRepo: true,
       parentPath: "/",
       homePath: "/repo",
       entries: [],

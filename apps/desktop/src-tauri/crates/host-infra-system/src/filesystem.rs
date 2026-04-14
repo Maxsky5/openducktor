@@ -32,6 +32,7 @@ pub fn list_directory(
 
     Ok(DirectoryListing {
         current_path: current_path_display,
+        current_path_is_git_repo: current_path.join(".git").exists(),
         parent_path: current_path.parent().map(|path| path_display(path)),
         home_path: resolve_home_path().map(|path| path_display(&path)),
         entries,
@@ -179,6 +180,7 @@ mod tests {
         let listing = list_directory(None).expect("home directory should list");
 
         assert_eq!(listing.current_path, canonical_home.to_string_lossy());
+        assert!(!listing.current_path_is_git_repo);
         assert_eq!(
             listing.home_path.as_deref(),
             Some(canonical_home.to_string_lossy().as_ref())
@@ -199,6 +201,7 @@ mod tests {
         let listing = list_directory(Some(root.path.to_string_lossy().as_ref()))
             .expect("directory listing should succeed");
 
+        assert!(!listing.current_path_is_git_repo);
         assert_eq!(
             listing
                 .entries
@@ -225,6 +228,18 @@ mod tests {
             listing.current_path,
             canonical_projects_path.to_string_lossy()
         );
+        assert!(!listing.current_path_is_git_repo);
+    }
+
+    #[test]
+    fn list_directory_marks_current_directory_when_it_is_a_git_repo() {
+        let root = TempDirFixture::new("current-repo");
+        fs::create_dir(root.path.join(".git")).expect("git metadata directory should exist");
+
+        let listing = list_directory(Some(root.path.to_string_lossy().as_ref()))
+            .expect("git repo directory should list");
+
+        assert!(listing.current_path_is_git_repo);
     }
 
     #[test]
