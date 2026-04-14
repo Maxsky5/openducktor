@@ -306,7 +306,7 @@ fn runtime_list_prunes_stale_entries() -> Result<()> {
             AgentRuntimeProcess {
                 summary,
                 child: stale_child,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 cleanup_target: None,
             },
         );
@@ -352,7 +352,7 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
                 worktree.to_string_lossy().as_ref(),
             ),
             child: Some(spawn_sleep_process(20)),
-            _opencode_process_guard: None,
+            _runtime_process_guard: None,
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),
             worktree_path: worktree.to_string_lossy().to_string(),

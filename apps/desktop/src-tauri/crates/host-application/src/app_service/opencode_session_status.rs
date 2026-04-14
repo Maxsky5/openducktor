@@ -1,4 +1,4 @@
-use super::require_opencode_local_http_endpoint;
+use super::require_local_http_endpoint;
 use super::service_core::{
     AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeError,
     CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatusFlight,
@@ -45,7 +45,7 @@ impl OpencodeSessionStatusProbeTarget {
         working_directory: &str,
     ) -> Result<Self> {
         let endpoint =
-            require_opencode_local_http_endpoint(runtime_route, "session status probes")?;
+            require_local_http_endpoint(runtime_route, "session status probes")?;
         Ok(Self {
             endpoint: endpoint.to_string(),
             working_directory: working_directory.to_string(),
@@ -302,7 +302,7 @@ impl AppService {
     pub(super) const OPENCODE_SESSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(1);
     const OPENCODE_SESSION_STATUS_BATCH_WORKER_LIMIT: usize = 16;
 
-    pub(super) fn load_cached_opencode_session_statuses_for_targets(
+    pub(super) fn load_cached_runtime_session_statuses_for_targets(
         &self,
         targets: &[OpencodeSessionStatusProbeTarget],
     ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
@@ -897,7 +897,7 @@ mod tests {
         }
 
         let started_at = Instant::now();
-        let statuses = service.load_cached_opencode_session_statuses_for_targets(&targets)?;
+        let statuses = service.load_cached_runtime_session_statuses_for_targets(&targets)?;
         let elapsed = started_at.elapsed();
 
         for handle in handles {

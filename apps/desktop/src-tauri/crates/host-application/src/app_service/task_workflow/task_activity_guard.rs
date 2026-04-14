@@ -2,8 +2,8 @@ use super::cleanup_plans::{
     normalize_path_for_comparison, normalize_path_key, IMPLEMENTATION_SESSION_ROLES,
 };
 use crate::app_service::{
-    dedupe_opencode_session_status_probe_targets, has_live_opencode_session_status,
-    service_core::AppService, OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
+    dedupe_runtime_session_probe_targets, has_live_runtime_session_status,
+    service_core::AppService, RuntimeSessionStatusMap, RuntimeSessionStatusProbeTarget,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunState, RuntimeRole, RuntimeRoute};
@@ -121,14 +121,14 @@ impl<'a> TaskActivityGuard<'a> {
 
         let primary_statuses_by_target = self
             .service
-            .load_cached_opencode_session_statuses_for_targets(&probe_plan.primary_probe_targets)?;
+            .load_cached_runtime_session_statuses_for_targets(&probe_plan.primary_probe_targets)?;
         let has_active_run =
             self.evaluate_run_activity(&probe_plan.run_plans, &primary_statuses_by_target)?;
 
         let fallback_probe_targets = probe_plan.fallback_probe_targets(&primary_statuses_by_target);
         let fallback_statuses_by_target = self
             .service
-            .load_cached_opencode_session_statuses_for_targets(&fallback_probe_targets)?;
+            .load_cached_runtime_session_statuses_for_targets(&fallback_probe_targets)?;
         let active_session_roles = self.collect_active_session_roles(
             &probe_plan.session_plans,
             &primary_statuses_by_target,
@@ -180,9 +180,14 @@ impl<'a> TaskActivityGuard<'a> {
         repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
     ) -> Result<TaskActivityProbePlan> {
         let mut primary_probe_targets = Vec::new();
-        let run_plans =
-            build_run_probe_plans(candidate_runs, sessions, &mut primary_probe_targets)?;
+        let run_plans = build_run_probe_plans(
+            self.service,
+            candidate_runs,
+            sessions,
+            &mut primary_probe_targets,
+        )?;
         let session_plans = build_session_probe_plans(
+            self.service,
             sessions,
             session_roles,
             runtime_routes_by_worktree,
@@ -201,8 +206,8 @@ impl<'a> TaskActivityGuard<'a> {
         &self,
         run_plans: &[RunProbePlan],
         primary_statuses_by_target: &HashMap<
-            OpencodeSessionStatusProbeTarget,
-            OpencodeSessionStatusMap,
+            RuntimeSessionStatusProbeTarget,
+            RuntimeSessionStatusMap,
         >,
     ) -> Result<bool> {
         for run_probe_plan in run_plans {
@@ -214,7 +219,7 @@ impl<'a> TaskActivityGuard<'a> {
                 .get(primary_target)
                 .ok_or_else(|| {
                     anyhow!(
-                        "Missing cached OpenCode session statuses for {}",
+                        "Missing cached runtime session statuses for {}",
                         run_probe_plan.worktree_path
                     )
                 })?;
@@ -222,7 +227,7 @@ impl<'a> TaskActivityGuard<'a> {
                 .external_session_ids
                 .iter()
                 .any(|external_session_id| {
-                    has_live_opencode_session_status(statuses, external_session_id)
+                    has_live_runtime_session_status(statuses, external_session_id)
                 })
             {
                 return Ok(true);
@@ -236,12 +241,12 @@ impl<'a> TaskActivityGuard<'a> {
         &self,
         session_plans: &[SessionProbePlan],
         primary_statuses_by_target: &HashMap<
-            OpencodeSessionStatusProbeTarget,
-            OpencodeSessionStatusMap,
+            RuntimeSessionStatusProbeTarget,
+            RuntimeSessionStatusMap,
         >,
         fallback_statuses_by_target: &HashMap<
-            OpencodeSessionStatusProbeTarget,
-            OpencodeSessionStatusMap,
+            RuntimeSessionStatusProbeTarget,
+            RuntimeSessionStatusMap,
         >,
     ) -> Result<Vec<String>> {
         let mut active_roles = HashSet::new();
@@ -251,7 +256,7 @@ impl<'a> TaskActivityGuard<'a> {
                 primary_statuses_by_target,
                 fallback_statuses_by_target,
             )?;
-            if has_live_opencode_session_status(
+            if has_live_runtime_session_status(
                 statuses,
                 session_probe_plan.external_session_id.as_str(),
             ) {
@@ -327,17 +332,17 @@ impl TaskActiveWorkEvidence {
 struct TaskActivityProbePlan {
     run_plans: Vec<RunProbePlan>,
     session_plans: Vec<SessionProbePlan>,
-    primary_probe_targets: Vec<OpencodeSessionStatusProbeTarget>,
+    primary_probe_targets: Vec<RuntimeSessionStatusProbeTarget>,
 }
 
 impl TaskActivityProbePlan {
     fn fallback_probe_targets(
         &self,
         primary_statuses_by_target: &HashMap<
-            OpencodeSessionStatusProbeTarget,
-            OpencodeSessionStatusMap,
+            RuntimeSessionStatusProbeTarget,
+            RuntimeSessionStatusMap,
         >,
-    ) -> Vec<OpencodeSessionStatusProbeTarget> {
+    ) -> Vec<RuntimeSessionStatusProbeTarget> {
         dedupe_probe_targets(
             self.session_plans
                 .iter()
@@ -356,9 +361,10 @@ impl TaskActivityProbePlan {
 }
 
 fn build_run_probe_plans(
+    service: &AppService,
     candidate_runs: &[RunProbeCandidate],
     sessions: &[AgentSessionDocument],
-    primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
+    primary_probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
 ) -> Result<Vec<RunProbePlan>> {
     let mut run_plans = Vec::with_capacity(candidate_runs.len());
     for run_candidate in candidate_runs {
@@ -366,10 +372,13 @@ fn build_run_probe_plans(
         let primary_target = if external_session_ids.is_empty() {
             None
         } else {
-            let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-                &run_candidate.runtime_route,
-                run_candidate.worktree_path.as_str(),
-            )?;
+            let target = service
+                .runtime_registry
+                .runtime(&run_candidate.runtime_kind)?
+                .session_status_probe_target(
+                    &run_candidate.runtime_route,
+                    run_candidate.worktree_path.as_str(),
+                )?;
             primary_probe_targets.push(target.clone());
             Some(target)
         };
@@ -383,11 +392,12 @@ fn build_run_probe_plans(
 }
 
 fn build_session_probe_plans(
+    service: &AppService,
     sessions: &[AgentSessionDocument],
     session_roles: &[&str],
     runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
     repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
-    primary_probe_targets: &mut Vec<OpencodeSessionStatusProbeTarget>,
+    primary_probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
 ) -> Result<Vec<SessionProbePlan>> {
     let allowed_roles = session_roles
         .iter()
@@ -410,19 +420,26 @@ fn build_session_probe_plans(
         let worktree_key = normalize_path_key(session.working_directory.as_str());
         let fallback_runtime_kind = parse_runtime_kind(session.runtime_kind.as_str());
         let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
-        let repo_runtime_route =
-            fallback_runtime_kind.and_then(|kind| repo_runtime_routes_by_kind.get(&kind));
+        let repo_runtime_route = fallback_runtime_kind
+            .as_ref()
+            .and_then(|kind| repo_runtime_routes_by_kind.get(kind));
+        let runtime_kind = worktree_runtime_route
+            .map(|_| parse_runtime_kind(session.runtime_kind.as_str()))
+            .flatten()
+            .or(fallback_runtime_kind);
         let runtime_route = worktree_runtime_route.or(repo_runtime_route);
-        let Some(runtime_route) = runtime_route else {
+        let (Some(runtime_route), Some(runtime_kind)) = (runtime_route, runtime_kind) else {
             continue;
         };
 
-        let primary_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            runtime_route,
-            session.working_directory.as_str(),
-        )?;
+        let primary_target = service
+            .runtime_registry
+            .runtime(&runtime_kind)?
+            .session_status_probe_target(runtime_route, session.working_directory.as_str())?;
         primary_probe_targets.push(primary_target.clone());
         let fallback_target = select_fallback_probe_target(
+            service,
+            runtime_kind,
             worktree_runtime_route,
             repo_runtime_route,
             session.working_directory.as_str(),
@@ -456,19 +473,19 @@ fn collect_runtime_routes_by_worktree(
 fn resolve_session_statuses<'a>(
     session_probe_plan: &SessionProbePlan,
     primary_statuses_by_target: &'a HashMap<
-        OpencodeSessionStatusProbeTarget,
-        OpencodeSessionStatusMap,
+        RuntimeSessionStatusProbeTarget,
+        RuntimeSessionStatusMap,
     >,
     fallback_statuses_by_target: &'a HashMap<
-        OpencodeSessionStatusProbeTarget,
-        OpencodeSessionStatusMap,
+        RuntimeSessionStatusProbeTarget,
+        RuntimeSessionStatusMap,
     >,
-) -> Result<&'a OpencodeSessionStatusMap> {
+) -> Result<&'a RuntimeSessionStatusMap> {
     let primary_statuses = primary_statuses_by_target
         .get(&session_probe_plan.primary_target)
         .ok_or_else(|| {
             anyhow!(
-                "Missing cached OpenCode session statuses for {}",
+                "Missing cached runtime session statuses for {}",
                 session_probe_plan.worktree_key
             )
         })?;
@@ -483,7 +500,7 @@ fn resolve_session_statuses<'a>(
         .get(fallback_target)
         .ok_or_else(|| {
             anyhow!(
-                "Missing cached OpenCode session fallback statuses for {}",
+                "Missing cached runtime session fallback statuses for {}",
                 session_probe_plan.worktree_key
             )
         })?;
@@ -495,10 +512,12 @@ fn resolve_session_statuses<'a>(
 }
 
 fn select_fallback_probe_target(
+    service: &AppService,
+    runtime_kind: AgentRuntimeKind,
     worktree_runtime_route: Option<&RuntimeRoute>,
     repo_runtime_route: Option<&RuntimeRoute>,
     working_directory: &str,
-) -> Result<Option<OpencodeSessionStatusProbeTarget>> {
+) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
     let (Some(primary_route), Some(fallback_route)) = (worktree_runtime_route, repo_runtime_route)
     else {
         return Ok(None);
@@ -507,16 +526,18 @@ fn select_fallback_probe_target(
         return Ok(None);
     }
 
-    Ok(Some(OpencodeSessionStatusProbeTarget::for_runtime_route(
-        fallback_route,
-        working_directory,
-    )?))
+    Ok(Some(
+        service
+            .runtime_registry
+            .runtime(&runtime_kind)?
+            .session_status_probe_target(fallback_route, working_directory)?,
+    ))
 }
 
 fn dedupe_probe_targets(
-    targets: Vec<OpencodeSessionStatusProbeTarget>,
-) -> Vec<OpencodeSessionStatusProbeTarget> {
-    dedupe_opencode_session_status_probe_targets(targets)
+    targets: Vec<RuntimeSessionStatusProbeTarget>,
+) -> Vec<RuntimeSessionStatusProbeTarget> {
+    dedupe_runtime_session_probe_targets(targets)
 }
 
 fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
@@ -558,13 +579,13 @@ struct RunProbeCandidate {
 struct RunProbePlan {
     worktree_path: String,
     external_session_ids: Vec<String>,
-    primary_target: Option<OpencodeSessionStatusProbeTarget>,
+    primary_target: Option<RuntimeSessionStatusProbeTarget>,
 }
 
 struct SessionProbePlan {
     worktree_key: String,
     role: String,
     external_session_id: String,
-    primary_target: OpencodeSessionStatusProbeTarget,
-    fallback_target: Option<OpencodeSessionStatusProbeTarget>,
+    primary_target: RuntimeSessionStatusProbeTarget,
+    fallback_target: Option<RuntimeSessionStatusProbeTarget>,
 }

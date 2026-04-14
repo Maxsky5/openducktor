@@ -481,7 +481,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
                 started_at: "2026-02-20T12:00:00Z".to_string(),
             },
             child: Some(spawn_sleep_process(20)),
-            _opencode_process_guard: None,
+            _runtime_process_guard: None,
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),
             worktree_path: repo_path.clone(),

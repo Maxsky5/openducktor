@@ -27,29 +27,29 @@ pub(super) struct RuntimePostStartPolicy<'a> {
     prune_error_context: String,
 }
 
-pub(super) struct RuntimeStartInput<'a> {
-    runtime_kind: AgentRuntimeKind,
-    startup_scope: &'a str,
-    repo_path: &'a str,
-    repo_key: String,
-    startup_started_at_instant: Instant,
-    startup_started_at: String,
-    task_id: &'a str,
-    role: RuntimeRole,
-    startup_policy: super::OpencodeStartupReadinessPolicy,
-    working_directory: String,
-    cleanup_target: Option<super::RuntimeCleanupTarget>,
-    tracking_error_context: &'static str,
-    startup_error_context: String,
-    post_start_policy: Option<RuntimePostStartPolicy<'a>>,
+pub(in crate::app_service) struct RuntimeStartInput<'a> {
+    pub(in crate::app_service) runtime_kind: AgentRuntimeKind,
+    pub(in crate::app_service) startup_scope: &'a str,
+    pub(in crate::app_service) repo_path: &'a str,
+    pub(in crate::app_service) repo_key: String,
+    pub(in crate::app_service) startup_started_at_instant: Instant,
+    pub(in crate::app_service) startup_started_at: String,
+    pub(in crate::app_service) task_id: &'a str,
+    pub(in crate::app_service) role: RuntimeRole,
+    pub(in crate::app_service) startup_policy: super::RuntimeStartupReadinessPolicy,
+    pub(in crate::app_service) working_directory: String,
+    pub(in crate::app_service) cleanup_target: Option<super::RuntimeCleanupTarget>,
+    pub(in crate::app_service) tracking_error_context: &'static str,
+    pub(in crate::app_service) startup_error_context: String,
+    pub(in crate::app_service) post_start_policy: Option<RuntimePostStartPolicy<'a>>,
 }
 
 #[derive(Clone)]
-struct RuntimeStartupProgress {
-    started_at_instant: Instant,
-    started_at: String,
-    attempts: Option<u32>,
-    elapsed_ms: Option<u64>,
+pub(in crate::app_service) struct RuntimeStartupProgress {
+    pub(in crate::app_service) started_at_instant: Instant,
+    pub(in crate::app_service) started_at: String,
+    pub(in crate::app_service) attempts: Option<u32>,
+    pub(in crate::app_service) elapsed_ms: Option<u64>,
 }
 
 struct RuntimeStartupFailure {
@@ -62,10 +62,10 @@ pub(super) struct SpawnedRuntimeServer {
     runtime_id: String,
     port: u16,
     child: Child,
-    opencode_process_guard: super::TrackedOpencodeProcessGuard,
+    runtime_process_guard: super::RuntimeProcessGuard,
     startup_started_at_instant: Instant,
     startup_started_at: String,
-    startup_report: super::OpencodeStartupWaitReport,
+    startup_report: super::RuntimeStartupWaitReport,
 }
 
 #[derive(Clone)]
@@ -100,7 +100,7 @@ impl RunExposureCandidate {
 struct RunExposurePlan {
     summary: RunSummary,
     external_session_ids: Vec<String>,
-    probe_target: Option<super::OpencodeSessionStatusProbeTarget>,
+    probe_target: Option<super::RuntimeSessionStatusProbeTarget>,
 }
 
 impl RunExposurePlan {
@@ -115,7 +115,7 @@ impl RunExposurePlan {
     fn with_probe(
         summary: RunSummary,
         external_session_ids: Vec<String>,
-        probe_target: super::OpencodeSessionStatusProbeTarget,
+        probe_target: super::RuntimeSessionStatusProbeTarget,
     ) -> Self {
         Self {
             summary,
@@ -127,8 +127,8 @@ impl RunExposurePlan {
     fn is_visible(
         &self,
         statuses_by_target: &HashMap<
-            super::OpencodeSessionStatusProbeTarget,
-            super::OpencodeSessionStatusMap,
+            super::RuntimeSessionStatusProbeTarget,
+            super::RuntimeSessionStatusMap,
         >,
     ) -> Result<bool> {
         let Some(probe_target) = self.probe_target.as_ref() else {
@@ -137,12 +137,12 @@ impl RunExposurePlan {
 
         let statuses = statuses_by_target.get(probe_target).ok_or_else(|| {
             anyhow!(
-                "Missing cached OpenCode session statuses for run {}",
+                "Missing cached runtime session statuses for run {}",
                 self.summary.run_id
             )
         })?;
         Ok(self.external_session_ids.iter().any(|external_session_id| {
-            super::has_live_opencode_session_status(statuses, external_session_id)
+            super::has_live_runtime_session_status(statuses, external_session_id)
         }))
     }
 }
@@ -230,7 +230,7 @@ impl AppService {
         Ok(())
     }
 
-    fn mark_runtime_startup_requested(
+    pub(in crate::app_service) fn mark_runtime_startup_requested(
         &self,
         runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
@@ -249,7 +249,7 @@ impl AppService {
         })
     }
 
-    fn mark_runtime_startup_waiting(
+    pub(in crate::app_service) fn mark_runtime_startup_waiting(
         &self,
         runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
@@ -264,7 +264,7 @@ impl AppService {
         })
     }
 
-    fn mark_runtime_startup_ready(
+    pub(in crate::app_service) fn mark_runtime_startup_ready(
         &self,
         runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
@@ -595,7 +595,7 @@ impl AppService {
 
         let (exposure_plans, probe_targets) = self.build_run_exposure_plans(run_candidates)?;
         let statuses_by_target =
-            self.load_cached_opencode_session_statuses_for_targets(&probe_targets)?;
+            self.load_cached_runtime_session_statuses_for_targets(&probe_targets)?;
         let mut list = self.visible_run_summaries(exposure_plans, &statuses_by_target)?;
 
         list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
@@ -607,7 +607,7 @@ impl AppService {
         run_candidates: Vec<RunExposureCandidate>,
     ) -> Result<(
         Vec<RunExposurePlan>,
-        Vec<super::OpencodeSessionStatusProbeTarget>,
+        Vec<super::RuntimeSessionStatusProbeTarget>,
     )> {
         let mut sessions_by_repo_task = HashMap::new();
         let mut exposure_plans = Vec::with_capacity(run_candidates.len());
@@ -632,10 +632,13 @@ impl AppService {
                 continue;
             };
 
-            let probe_target = super::OpencodeSessionStatusProbeTarget::for_runtime_route(
-                &run.summary.runtime_route,
-                run.worktree_path.as_str(),
-            )?;
+            let probe_target = self
+                .runtime_registry
+                .runtime(&run.summary.runtime_kind)?
+                .session_status_probe_target(
+                    &run.summary.runtime_route,
+                    run.worktree_path.as_str(),
+                )?;
             probe_targets.push(probe_target.clone());
             exposure_plans.push(RunExposurePlan::with_probe(
                 run.summary,
@@ -669,8 +672,8 @@ impl AppService {
         &self,
         exposure_plans: Vec<RunExposurePlan>,
         statuses_by_target: &HashMap<
-            super::OpencodeSessionStatusProbeTarget,
-            super::OpencodeSessionStatusMap,
+            super::RuntimeSessionStatusProbeTarget,
+            super::RuntimeSessionStatusMap,
         >,
     ) -> Result<Vec<RunSummary>> {
         let mut list = Vec::new();
@@ -1000,7 +1003,7 @@ mod tests {
                 AgentRuntimeProcess {
                     summary: runtime,
                     child,
-                    _opencode_process_guard: None,
+                    _runtime_process_guard: None,
                     cleanup_target: None,
                 },
             );
@@ -1624,7 +1627,7 @@ mod tests {
                     started_at: "2026-04-04T16:00:10Z".to_string(),
                 },
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: runtime.repo_path.clone(),
                 task_id: "task-1".to_string(),
                 worktree_path: runtime.working_directory.clone(),
@@ -1770,7 +1773,7 @@ mod tests {
                         started_at: "2026-03-17T11:00:00Z".to_string(),
                     },
                     child: None,
-                    _opencode_process_guard: None,
+                    _runtime_process_guard: None,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
                     worktree_path: "/tmp/repo/worktree".to_string(),
@@ -1827,7 +1830,7 @@ mod tests {
                         started_at: "2026-03-17T11:00:00Z".to_string(),
                     },
                     child: None,
-                    _opencode_process_guard: None,
+                    _runtime_process_guard: None,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
                     worktree_path: "/tmp/repo/worktree".to_string(),
@@ -1888,7 +1891,7 @@ mod tests {
                         started_at: "2026-03-17T11:00:00Z".to_string(),
                     },
                     child: None,
-                    _opencode_process_guard: None,
+                    _runtime_process_guard: None,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
                     worktree_path: "/tmp/repo/worktree".to_string(),
@@ -1957,7 +1960,7 @@ mod tests {
                             started_at: format!("2026-03-17T11:00:0{index}Z"),
                         },
                         child: None,
-                        _opencode_process_guard: None,
+                        _runtime_process_guard: None,
                         repo_path: "/tmp/repo".to_string(),
                         task_id: format!("task-{index}"),
                         worktree_path: format!("/tmp/repo/worktree-{index}"),

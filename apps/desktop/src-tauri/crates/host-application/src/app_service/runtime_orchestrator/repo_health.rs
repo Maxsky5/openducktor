@@ -4,7 +4,7 @@ use super::repo_health_snapshot::{
     RepoRuntimeProgressInput, RuntimeHealthWorkflowStage,
 };
 use super::AppService;
-use crate::app_service::require_opencode_local_http_endpoint;
+use crate::app_service::runtime_registry::{ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure};
 use crate::app_service::service_core::{RepoRuntimeHealthFlight, RepoRuntimeHealthFlightState};
 use crate::app_service::OpencodeStartupWaitFailure;
 use anyhow::{anyhow, Result};
@@ -14,107 +14,11 @@ use host_domain::{
     RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunState,
     RuntimeInstanceSummary, RuntimeRoute,
 };
-use reqwest::blocking::Client;
-use serde::{de::DeserializeOwned, Deserialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use url::{form_urlencoded, Url};
 
-const ODT_MCP_SERVER_NAME: &str = "openducktor";
-const RUNTIME_HEALTH_HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_CONNECT_STARTUP_GRACE_PERIOD: Duration = Duration::from_secs(10);
 const MCP_CONNECT_STATUS_RETRY_DELAY: Duration = Duration::from_millis(250);
-
-#[derive(Clone, Copy)]
-enum RuntimeHealthHttpMethod {
-    Get,
-    Post,
-}
-
-#[derive(Debug)]
-struct RuntimeHealthHttpFailure {
-    failure_kind: RepoRuntimeStartupFailureKind,
-    message: String,
-    is_connect_failure: bool,
-}
-
-impl std::fmt::Display for RuntimeHealthHttpFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.message.as_str())
-    }
-}
-
-impl std::error::Error for RuntimeHealthHttpFailure {}
-
-impl RuntimeHealthHttpFailure {
-    fn error(message: String) -> Self {
-        Self {
-            failure_kind: RepoRuntimeStartupFailureKind::Error,
-            message,
-            is_connect_failure: false,
-        }
-    }
-
-    fn from_request_error(action: &str, error: &reqwest::Error) -> Self {
-        Self {
-            failure_kind: classify_runtime_health_request_failure(error),
-            message: format!("Failed to query OpenCode runtime to {action}: {error}"),
-            is_connect_failure: error.is_connect(),
-        }
-    }
-
-    fn from_response_body_error(action: &str, error: reqwest::Error) -> Self {
-        Self {
-            failure_kind: classify_runtime_health_request_failure(&error),
-            message: format!("Failed to read OpenCode runtime response body for {action}: {error}"),
-            is_connect_failure: error.is_connect(),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-struct RuntimeHealthMcpServerStatus {
-    status: String,
-    error: Option<String>,
-}
-
-struct RepoRuntimeHealthHttpClient<'a> {
-    endpoint: &'a str,
-}
-
-struct RuntimeHealthHttpResponse {
-    status_code: u16,
-    body: String,
-}
-
-struct ResolvedMcpServerStatus {
-    status: Option<String>,
-    error: Option<String>,
-    failure_kind: Option<RepoRuntimeStartupFailureKind>,
-}
-
-impl ResolvedMcpServerStatus {
-    fn connected() -> Self {
-        Self {
-            status: Some("connected".to_string()),
-            error: None,
-            failure_kind: None,
-        }
-    }
-
-    fn unavailable(status: Option<String>, error: String) -> Self {
-        Self {
-            status,
-            error: Some(error),
-            failure_kind: Some(RepoRuntimeStartupFailureKind::Error),
-        }
-    }
-
-    fn is_connected(&self) -> bool {
-        self.status.as_deref() == Some("connected")
-    }
-}
 
 struct CompleteRepoRuntimeHealthInput {
     repo_key: String,
@@ -124,156 +28,6 @@ struct CompleteRepoRuntimeHealthInput {
     host_status: Option<RepoRuntimeStartupStatus>,
     observation: Option<RepoRuntimeHealthObservation>,
     allow_restart: bool,
-}
-
-impl<'a> RepoRuntimeHealthHttpClient<'a> {
-    fn new(endpoint: &'a str) -> Self {
-        Self { endpoint }
-    }
-
-    fn load_mcp_status(
-        &self,
-        working_directory: &str,
-    ) -> std::result::Result<HashMap<String, RuntimeHealthMcpServerStatus>, RuntimeHealthHttpFailure>
-    {
-        self.request_json(
-            RuntimeHealthHttpMethod::Get,
-            Self::mcp_status_path(working_directory).as_str(),
-            "load MCP status",
-        )
-    }
-
-    fn connect_mcp_server(
-        &self,
-        name: &str,
-        working_directory: &str,
-    ) -> std::result::Result<(), RuntimeHealthHttpFailure> {
-        let _: serde_json::Value = self.request_json(
-            RuntimeHealthHttpMethod::Post,
-            Self::connect_mcp_path(name, working_directory).as_str(),
-            "connect MCP server",
-        )?;
-        Ok(())
-    }
-
-    fn load_tool_ids(
-        &self,
-        working_directory: &str,
-    ) -> std::result::Result<Vec<String>, RuntimeHealthHttpFailure> {
-        self.request_json(
-            RuntimeHealthHttpMethod::Get,
-            Self::tool_ids_path(working_directory).as_str(),
-            "list tool ids",
-        )
-    }
-
-    fn request_json<T: DeserializeOwned>(
-        &self,
-        method: RuntimeHealthHttpMethod,
-        request_path: &str,
-        action: &str,
-    ) -> std::result::Result<T, RuntimeHealthHttpFailure> {
-        let RuntimeHealthHttpResponse { status_code, body } =
-            self.send_request(method, request_path, action)?;
-        if !(200..300).contains(&status_code) {
-            return Err(runtime_health_http_status_failure(
-                status_code,
-                body.as_str(),
-                action,
-            ));
-        }
-
-        parse_runtime_health_json(body.as_str(), action)
-    }
-
-    fn send_request(
-        &self,
-        method: RuntimeHealthHttpMethod,
-        request_path: &str,
-        action: &str,
-    ) -> std::result::Result<RuntimeHealthHttpResponse, RuntimeHealthHttpFailure> {
-        let url = self.request_url(request_path, action)?;
-        let client = self.http_client(action)?;
-        let response = self
-            .build_request(&client, method, url)
-            .send()
-            .map_err(|error| RuntimeHealthHttpFailure::from_request_error(action, &error))?;
-        let status_code = response.status().as_u16();
-        let body = response
-            .text()
-            .map_err(|error| RuntimeHealthHttpFailure::from_response_body_error(action, error))?;
-
-        Ok(RuntimeHealthHttpResponse { status_code, body })
-    }
-
-    fn request_url(
-        &self,
-        request_path: &str,
-        action: &str,
-    ) -> std::result::Result<Url, RuntimeHealthHttpFailure> {
-        let endpoint = Url::parse(self.endpoint).map_err(|error| {
-            RuntimeHealthHttpFailure::error(format!(
-                "Invalid OpenCode runtime endpoint {}: {error}",
-                self.endpoint
-            ))
-        })?;
-        endpoint.join(request_path).map_err(|error| {
-            RuntimeHealthHttpFailure::error(format!(
-                "Failed to build OpenCode runtime request URL for {action}: {error}"
-            ))
-        })
-    }
-
-    fn http_client(&self, action: &str) -> std::result::Result<Client, RuntimeHealthHttpFailure> {
-        Client::builder()
-            .timeout(RUNTIME_HEALTH_HTTP_TIMEOUT)
-            .build()
-            .map_err(|error| {
-                RuntimeHealthHttpFailure::error(format!(
-                    "Failed to build OpenCode runtime HTTP client for {action}: {error}"
-                ))
-            })
-    }
-
-    fn build_request(
-        &self,
-        client: &Client,
-        method: RuntimeHealthHttpMethod,
-        url: Url,
-    ) -> reqwest::blocking::RequestBuilder {
-        match method {
-            RuntimeHealthHttpMethod::Get => client.get(url),
-            RuntimeHealthHttpMethod::Post => client.post(url),
-        }
-    }
-
-    fn mcp_status_path(working_directory: &str) -> String {
-        format!(
-            "/mcp?{}",
-            form_urlencoded::Serializer::new(String::new())
-                .append_pair("directory", working_directory)
-                .finish()
-        )
-    }
-
-    fn tool_ids_path(working_directory: &str) -> String {
-        format!(
-            "/experimental/tool/ids?{}",
-            form_urlencoded::Serializer::new(String::new())
-                .append_pair("directory", working_directory)
-                .finish()
-        )
-    }
-
-    fn connect_mcp_path(name: &str, working_directory: &str) -> String {
-        let encoded_name: String = form_urlencoded::byte_serialize(name.as_bytes()).collect();
-        format!(
-            "/mcp/{encoded_name}/connect?{}",
-            form_urlencoded::Serializer::new(String::new())
-                .append_pair("directory", working_directory)
-                .finish()
-        )
-    }
 }
 
 impl AppService {
@@ -515,7 +269,7 @@ impl AppService {
                     })
                     .or_else(|| {
                         cause
-                            .downcast_ref::<RuntimeHealthHttpFailure>()
+                            .downcast_ref::<RuntimeHealthCheckFailure>()
                             .map(|failure| failure.failure_kind)
                     })
             })
@@ -530,83 +284,28 @@ impl AppService {
         })
     }
 
-    fn repo_runtime_should_restart_for_mcp_status_error(message: &str) -> bool {
-        lower_contains_any(
-            message,
-            &[
-                "configinvaliderror",
-                "opencode_config_content",
-                "loglevel",
-                "invalid option",
-            ],
-        )
-    }
-
-    fn repo_runtime_client(
-        runtime: &RuntimeInstanceSummary,
-    ) -> std::result::Result<RepoRuntimeHealthHttpClient<'_>, RuntimeHealthHttpFailure> {
-        let endpoint = require_opencode_local_http_endpoint(
-            &runtime.runtime_route,
-            "runtime MCP health checks",
-        )
-        .map_err(|error| RuntimeHealthHttpFailure::error(error.to_string()))?;
-        Ok(RepoRuntimeHealthHttpClient::new(endpoint))
-    }
-
-    fn repo_runtime_load_mcp_status(
+    fn repo_runtime_delegate(
         &self,
         runtime: &RuntimeInstanceSummary,
-    ) -> std::result::Result<HashMap<String, RuntimeHealthMcpServerStatus>, RuntimeHealthHttpFailure>
-    {
-        Self::repo_runtime_client(runtime)?.load_mcp_status(runtime.working_directory.as_str())
-    }
-
-    fn repo_runtime_connect_mcp_server(
-        &self,
-        runtime: &RuntimeInstanceSummary,
-        name: &str,
-    ) -> std::result::Result<(), RuntimeHealthHttpFailure> {
-        Self::repo_runtime_client(runtime)?
-            .connect_mcp_server(name, runtime.working_directory.as_str())
-    }
-
-    fn repo_runtime_load_tool_ids(
-        &self,
-        runtime: &RuntimeInstanceSummary,
-    ) -> std::result::Result<Vec<String>, RuntimeHealthHttpFailure> {
-        Self::repo_runtime_client(runtime)?.load_tool_ids(runtime.working_directory.as_str())
-    }
-
-    fn repo_runtime_resolve_mcp_status(
-        status_by_server: &HashMap<String, RuntimeHealthMcpServerStatus>,
-    ) -> ResolvedMcpServerStatus {
-        let Some(server_status) = status_by_server.get(ODT_MCP_SERVER_NAME) else {
-            return ResolvedMcpServerStatus::unavailable(
-                None,
-                format!("MCP server '{ODT_MCP_SERVER_NAME}' is not configured for this runtime."),
-            );
-        };
-        if server_status.status == "connected" {
-            return ResolvedMcpServerStatus::connected();
-        }
-
-        ResolvedMcpServerStatus::unavailable(
-            Some(server_status.status.clone()),
-            server_status.error.clone().unwrap_or_else(|| {
-                format!(
-                    "MCP server '{ODT_MCP_SERVER_NAME}' is {}.",
-                    server_status.status
-                )
-            }),
-        )
+    ) -> std::result::Result<
+        Arc<dyn crate::app_service::runtime_registry::AppRuntime>,
+        RuntimeHealthCheckFailure,
+    > {
+        self.runtime_registry
+            .runtime(&runtime.kind)
+            .map_err(|error| RuntimeHealthCheckFailure {
+                failure_kind: RepoRuntimeStartupFailureKind::Error,
+                message: error.to_string(),
+                is_connect_failure: false,
+            })
     }
 
     fn repo_runtime_normalize_mcp_server_status(
         runtime: &RuntimeInstanceSummary,
         host_status: Option<&RepoRuntimeStartupStatus>,
         checked_at: &str,
-        status: ResolvedMcpServerStatus,
-    ) -> ResolvedMcpServerStatus {
+        status: ResolvedRuntimeMcpStatus,
+    ) -> ResolvedRuntimeMcpStatus {
         if status.is_connected() {
             return status;
         }
@@ -619,7 +318,7 @@ impl AppService {
             return status;
         }
 
-        ResolvedMcpServerStatus {
+        ResolvedRuntimeMcpStatus {
             failure_kind: Some(RepoRuntimeStartupFailureKind::Timeout),
             ..status
         }
@@ -630,13 +329,14 @@ impl AppService {
         runtime: &RuntimeInstanceSummary,
         host_status: Option<&RepoRuntimeStartupStatus>,
         initial_checked_at: &str,
-    ) -> std::result::Result<ResolvedMcpServerStatus, RuntimeHealthHttpFailure> {
+    ) -> std::result::Result<ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure> {
+        let runtime_delegate = self.repo_runtime_delegate(runtime)?;
         let mut checked_at = initial_checked_at.to_string();
         let mut latest_status = Self::repo_runtime_normalize_mcp_server_status(
             runtime,
             host_status,
             checked_at.as_str(),
-            Self::repo_runtime_resolve_mcp_status(&self.repo_runtime_load_mcp_status(runtime)?),
+            runtime_delegate.resolve_mcp_status(&runtime_delegate.load_mcp_status(runtime)?),
         );
 
         if latest_status.is_connected()
@@ -660,7 +360,7 @@ impl AppService {
                 runtime,
                 host_status,
                 checked_at.as_str(),
-                Self::repo_runtime_resolve_mcp_status(&self.repo_runtime_load_mcp_status(runtime)?),
+                runtime_delegate.resolve_mcp_status(&runtime_delegate.load_mcp_status(runtime)?),
             );
             if latest_status.is_connected() {
                 return Ok(latest_status);
@@ -674,8 +374,8 @@ impl AppService {
         runtime: &RuntimeInstanceSummary,
         host_status: Option<&RepoRuntimeStartupStatus>,
         checked_at: &str,
-        error: RuntimeHealthHttpFailure,
-    ) -> RuntimeHealthHttpFailure {
+        error: RuntimeHealthCheckFailure,
+    ) -> RuntimeHealthCheckFailure {
         if error.failure_kind == RepoRuntimeStartupFailureKind::Timeout {
             return error;
         }
@@ -683,7 +383,7 @@ impl AppService {
         if error.is_connect_failure
             && repo_runtime_is_within_mcp_startup_grace_window(runtime, host_status, checked_at)
         {
-            return RuntimeHealthHttpFailure {
+            return RuntimeHealthCheckFailure {
                 failure_kind: RepoRuntimeStartupFailureKind::Timeout,
                 ..error
             };
@@ -715,7 +415,7 @@ impl AppService {
         checked_at: &str,
         runtime: &RuntimeInstanceSummary,
         host_status: Option<RepoRuntimeStartupStatus>,
-        error: RuntimeHealthHttpFailure,
+        error: RuntimeHealthCheckFailure,
     ) -> Result<RepoRuntimeHealthCheck> {
         if self.repo_runtime_has_active_run(repo_key, &runtime.runtime_route)? {
             let skipped_message = format!(
@@ -1049,7 +749,8 @@ impl AppService {
             }),
         )?;
 
-        let status_by_server = match self.repo_runtime_load_mcp_status(&runtime) {
+        let runtime_delegate = self.repo_runtime_delegate(&runtime)?;
+        let status_by_server = match runtime_delegate.load_mcp_status(&runtime) {
             Ok(status_by_server) => status_by_server,
             Err(error) => {
                 let error = Self::repo_runtime_normalize_mcp_probe_failure(
@@ -1059,9 +760,7 @@ impl AppService {
                     error,
                 );
                 if allow_restart
-                    && Self::repo_runtime_should_restart_for_mcp_status_error(
-                        error.message.as_str(),
-                    )
+                    && runtime_delegate.should_restart_for_mcp_status_error(error.message.as_str())
                 {
                     return self.recover_repo_runtime_mcp_status_failure(
                         runtime_kind,
@@ -1109,7 +808,7 @@ impl AppService {
             &runtime,
             host_status.as_ref(),
             checked_at.as_str(),
-            Self::repo_runtime_resolve_mcp_status(&status_by_server),
+            runtime_delegate.resolve_mcp_status(&status_by_server),
         );
         if !mcp_status.is_connected() {
             let reconnect_progress = repo_runtime_progress(RepoRuntimeProgressInput {
@@ -1142,7 +841,7 @@ impl AppService {
                 }),
             )?;
 
-            match self.repo_runtime_connect_mcp_server(&runtime, ODT_MCP_SERVER_NAME) {
+            match runtime_delegate.connect_mcp_server(&runtime, "openducktor") {
                 Ok(()) => {
                     mcp_status = match self.repo_runtime_refresh_mcp_status_after_connect(
                         &runtime,
@@ -1202,7 +901,7 @@ impl AppService {
                         error,
                     );
                     let mcp_message = format!(
-                        "Failed to reconnect MCP server '{ODT_MCP_SERVER_NAME}': {}",
+                        "Failed to reconnect MCP server 'openducktor': {}",
                         error.message
                     );
                     return self.store_repo_runtime_health(
@@ -1265,7 +964,7 @@ impl AppService {
         });
 
         let (mcp_ok, mcp_error, mcp_failure_kind, available_tool_ids, progress) = if mcp_ok {
-            match self.repo_runtime_load_tool_ids(&runtime) {
+            match runtime_delegate.load_tool_ids(&runtime) {
                 Ok(tool_ids) => (true, None, None, tool_ids, progress),
                 Err(error) => {
                     let tool_ids_message =
@@ -1321,69 +1020,6 @@ impl AppService {
     }
 }
 
-fn parse_runtime_health_json<T: DeserializeOwned>(
-    body: &str,
-    action: &str,
-) -> std::result::Result<T, RuntimeHealthHttpFailure> {
-    serde_json::from_str::<T>(body).map_err(|error| {
-        RuntimeHealthHttpFailure::error(format!(
-            "Failed to parse OpenCode runtime response for {action}: {error}"
-        ))
-    })
-}
-
-fn runtime_health_http_status_failure(
-    status_code: u16,
-    body: &str,
-    action: &str,
-) -> RuntimeHealthHttpFailure {
-    let detail = runtime_health_http_error_detail(body);
-    let failure_kind = if matches!(status_code, 408 | 504) {
-        RepoRuntimeStartupFailureKind::Timeout
-    } else {
-        RepoRuntimeStartupFailureKind::Error
-    };
-
-    RuntimeHealthHttpFailure {
-        failure_kind,
-        message: match detail {
-            Some(detail) => {
-                format!("OpenCode runtime failed to {action}: HTTP {status_code}: {detail}")
-            }
-            None => format!("OpenCode runtime failed to {action}: HTTP {status_code}"),
-        },
-        is_connect_failure: false,
-    }
-}
-
-fn runtime_health_http_error_detail(body: &str) -> Option<String> {
-    if body.trim().is_empty() {
-        return None;
-    }
-
-    serde_json::from_str::<serde_json::Value>(body)
-        .ok()
-        .and_then(|payload| {
-            payload
-                .get("error")
-                .and_then(|error| error.get("message"))
-                .and_then(|message| message.as_str())
-                .map(str::to_string)
-        })
-        .or_else(|| Some(body.to_string()))
-        .filter(|detail| !detail.trim().is_empty())
-}
-
-fn classify_runtime_health_request_failure(
-    error: &reqwest::Error,
-) -> RepoRuntimeStartupFailureKind {
-    if error.is_timeout() {
-        RepoRuntimeStartupFailureKind::Timeout
-    } else {
-        RepoRuntimeStartupFailureKind::Error
-    }
-}
-
 fn repo_runtime_is_within_mcp_startup_grace_window(
     runtime: &RuntimeInstanceSummary,
     host_status: Option<&RepoRuntimeStartupStatus>,
@@ -1412,16 +1048,11 @@ fn repo_runtime_is_within_mcp_startup_grace_window(
             .is_ok_and(|duration| duration <= MCP_CONNECT_STARTUP_GRACE_PERIOD)
 }
 
-fn lower_contains_any(haystack: &str, needles: &[&str]) -> bool {
-    let normalized = haystack.to_ascii_lowercase();
-    needles.iter().any(|needle| normalized.contains(needle))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        repo_runtime_is_within_mcp_startup_grace_window, RepoRuntimeHealthHttpClient,
-        ResolvedMcpServerStatus, RuntimeHealthMcpServerStatus,
+    use super::repo_runtime_is_within_mcp_startup_grace_window;
+    use crate::app_service::runtime_registry::{
+        ResolvedRuntimeMcpStatus, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
     };
     use host_domain::{
         AgentRuntimeKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RuntimeRole,
@@ -1484,7 +1115,7 @@ mod tests {
         });
 
         let status_by_server =
-            RepoRuntimeHealthHttpClient::new(format!("http://127.0.0.1:{port}").as_str())
+            RuntimeHealthHttpClient::new(format!("http://127.0.0.1:{port}").as_str())
                 .load_mcp_status("/tmp/repo-health-ready")
                 .expect("mcp status should load before socket close");
 
@@ -1496,7 +1127,7 @@ mod tests {
             status_by_server,
             HashMap::from([(
                 "openducktor".to_string(),
-                RuntimeHealthMcpServerStatus {
+                RuntimeMcpServerStatus {
                     status: "connected".to_string(),
                     error: None,
                 },
@@ -1518,7 +1149,7 @@ mod tests {
             .port();
         drop(listener);
 
-        let failure = RepoRuntimeHealthHttpClient::new(format!("http://127.0.0.1:{port}").as_str())
+        let failure = RuntimeHealthHttpClient::new(format!("http://127.0.0.1:{port}").as_str())
             .load_mcp_status("/tmp/repo-health-not-ready")
             .expect_err("connect errors should surface as failures");
 
@@ -1582,7 +1213,7 @@ mod tests {
             &runtime,
             None,
             "2026-04-11T10:00:08Z",
-            ResolvedMcpServerStatus::unavailable(
+            ResolvedRuntimeMcpStatus::unavailable(
                 Some("failed".to_string()),
                 "Connection closed".to_string(),
             ),
@@ -1602,7 +1233,7 @@ mod tests {
             &runtime,
             None,
             "2026-04-11T10:00:21Z",
-            ResolvedMcpServerStatus::unavailable(
+            ResolvedRuntimeMcpStatus::unavailable(
                 Some("failed".to_string()),
                 "Connection closed".to_string(),
             ),

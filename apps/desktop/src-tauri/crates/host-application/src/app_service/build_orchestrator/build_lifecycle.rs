@@ -1,5 +1,5 @@
 use super::super::{
-    emit_event, AppService, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter,
+    emit_event, AppService, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport, RunEmitter,
     RunProcess, RuntimeInstanceSummary, StartupEventContext, StartupEventCorrelation,
     StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
@@ -184,7 +184,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         run_id: &str,
-    ) -> Result<OpencodeStartupReadinessPolicy> {
+    ) -> Result<RuntimeStartupReadinessPolicy> {
         self.runtime_registry
             .runtime(runtime_kind)?
             .startup_policy(self)
@@ -199,7 +199,7 @@ impl AppService {
                         Some(StartupEventCorrelation::new("run_id", run_id)),
                         None,
                     ),
-                    OpencodeStartupWaitReport::zero(),
+                    RuntimeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));
             })
@@ -289,7 +289,7 @@ impl AppService {
         let process = RunProcess {
             summary: summary.clone(),
             child: None,
-            _opencode_process_guard: None,
+            _runtime_process_guard: None,
             repo_path: prerequisites.repo_path,
             task_id,
             worktree_path,

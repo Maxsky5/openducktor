@@ -75,7 +75,7 @@ fn insert_workspace_runtime(service: &AppService, repo_path: &str, port: u16) ->
             AgentRuntimeProcess {
                 summary,
                 child: spawn_sleep_process(30),
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 cleanup_target: None,
             },
         );
@@ -107,6 +107,18 @@ impl AppRuntime for TestRuntimeAdapter {
         _port: u16,
     ) -> Result<std::process::Child> {
         Err(anyhow::anyhow!("spawn should not be used in this test"))
+    }
+
+    fn wait_until_ready(
+        &self,
+        _service: &AppService,
+        _input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
+        _child: &mut std::process::Child,
+        _port: u16,
+        _runtime_id: &str,
+        _startup_policy: crate::app_service::RuntimeStartupReadinessPolicy,
+    ) -> Result<crate::app_service::RuntimeStartupWaitReport> {
+        Err(anyhow::anyhow!("wait should not be used in this test"))
     }
 
     fn runtime_health(&self) -> RuntimeHealth {
@@ -199,6 +211,75 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
     assert!(runtime_check.errors.is_empty());
 
     Ok(())
+}
+
+#[test]
+fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(vec![
+        Arc::new(TestRuntimeAdapter {
+            definition: host_domain::builtin_runtime_registry()
+                .definition_by_str("opencode")
+                .expect("builtin opencode runtime should exist")
+                .clone(),
+            health: RuntimeHealth {
+                kind: "opencode".to_string(),
+                ok: true,
+                version: None,
+                error: None,
+            },
+        }),
+        Arc::new(TestRuntimeAdapter {
+            definition: test_runtime_definition("test-runtime", "Test Runtime"),
+            health: RuntimeHealth {
+                kind: "test-runtime".to_string(),
+                ok: true,
+                version: None,
+                error: None,
+            },
+        }),
+    ])?;
+    let (service, _task_state, _git_state) =
+        build_service_with_runtime_registry(vec![], runtime_registry);
+
+    let definitions = service.runtime_definitions_list()?;
+    let runtime_kinds = definitions
+        .iter()
+        .map(|definition| definition.kind.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(runtime_kinds, vec!["opencode", "test-runtime"]);
+    Ok(())
+}
+
+#[test]
+fn runtime_apis_fail_fast_for_unsupported_runtime_kinds() {
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    for error in [
+        service.runtime_list("missing-runtime", None).unwrap_err(),
+        service
+            .runtime_ensure("missing-runtime", "/tmp/repo")
+            .unwrap_err(),
+        service
+            .runtime_startup_status("missing-runtime", "/tmp/repo")
+            .unwrap_err(),
+        service
+            .repo_runtime_health("missing-runtime", "/tmp/repo")
+            .unwrap_err(),
+    ] {
+        assert_eq!(
+            error.to_string(),
+            "Unsupported agent runtime kind: missing-runtime"
+        );
+    }
 }
 
 #[test]
@@ -1280,7 +1361,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: repo_path.to_string_lossy().to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: repo_path.to_string_lossy().to_string(),
@@ -2016,7 +2097,7 @@ fn task_delete_rejects_live_build_session_status() -> Result<()> {
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: repo_path.to_string_lossy().to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: repo_path.to_string_lossy().to_string(),
@@ -2212,7 +2293,7 @@ fn task_delete_rejects_live_build_session_status_with_stale_run_route_and_repo_r
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: repo_path.to_string_lossy().to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: repo_path.to_string_lossy().to_string(),
@@ -2302,7 +2383,7 @@ fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: repo_path.to_string_lossy().to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: repo_path.to_string_lossy().to_string(),
@@ -2399,7 +2480,7 @@ fn assert_task_reset_implementation_rejects_live_build_session_status(
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: repo_path.to_string_lossy().to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: repo_path.to_string_lossy().to_string(),
@@ -2489,7 +2570,7 @@ fn task_reset_implementation_rejects_live_build_session_status_with_stale_run_ro
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: repo_path.to_string_lossy().to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: repo_path.to_string_lossy().to_string(),
@@ -2604,7 +2685,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: workspace.path.clone(),
                 task_id: "task-1".to_string(),
                 worktree_path: build_worktree.to_string_lossy().to_string(),
@@ -2721,7 +2802,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
                     "startedAt": "2026-03-17T11:00:00Z",
                 }))?,
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: workspace.path.clone(),
                 task_id: "task-1".to_string(),
                 worktree_path: build_worktree.to_string_lossy().to_string(),

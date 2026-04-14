@@ -317,6 +317,13 @@ pub struct RuntimeRegistry {
 
 impl RuntimeRegistry {
     pub fn new(definitions: Vec<RuntimeDefinition>) -> Result<Self> {
+        Self::new_with_default_kind(definitions, None)
+    }
+
+    pub fn new_with_default_kind(
+        definitions: Vec<RuntimeDefinition>,
+        default_kind: Option<AgentRuntimeKind>,
+    ) -> Result<Self> {
         let mut definitions_by_kind = BTreeMap::new();
         for definition in definitions {
             let kind = definition.kind().as_str().trim().to_string();
@@ -339,11 +346,35 @@ impl RuntimeRegistry {
             }
         }
 
-        let default_kind = definitions_by_kind
-            .values()
-            .next()
-            .map(|definition| definition.kind().clone())
-            .ok_or_else(|| anyhow!("Runtime registry requires at least one registered runtime"))?;
+        if definitions_by_kind.is_empty() {
+            return Err(anyhow!(
+                "Runtime registry requires at least one registered runtime"
+            ));
+        }
+
+        let default_kind = match default_kind {
+            Some(default_kind) => {
+                let default_kind_key = default_kind.as_str().trim();
+                if !definitions_by_kind.contains_key(default_kind_key) {
+                    return Err(anyhow!(
+                        "Default runtime '{}' is not registered",
+                        default_kind.as_str()
+                    ));
+                }
+                default_kind
+            }
+            None if definitions_by_kind.len() == 1 => definitions_by_kind
+                .values()
+                .next()
+                .expect("single runtime registry should contain one value")
+                .kind()
+                .clone(),
+            None => {
+                return Err(anyhow!(
+                    "Runtime registry requires an explicit default when registering multiple runtimes"
+                ));
+            }
+        };
 
         Ok(Self {
             definitions_by_kind: Arc::new(definitions_by_kind),
@@ -430,8 +461,11 @@ fn opencode_runtime_definition() -> RuntimeDefinition {
 }
 
 static BUILTIN_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry> = LazyLock::new(|| {
-    RuntimeRegistry::new(vec![opencode_runtime_definition()])
-        .expect("builtin runtime registry should be valid")
+    RuntimeRegistry::new_with_default_kind(
+        vec![opencode_runtime_definition()],
+        Some(AgentRuntimeKind::opencode()),
+    )
+    .expect("builtin runtime registry should be valid")
 });
 
 pub fn builtin_runtime_registry() -> &'static RuntimeRegistry {
@@ -890,10 +924,13 @@ mod tests {
 
     #[test]
     fn runtime_registry_resolves_known_kinds_and_rejects_unknown_entries() -> Result<()> {
-        let registry = RuntimeRegistry::new(vec![
-            runtime_definition("opencode", "OpenCode"),
-            runtime_definition("test-runtime", "Test Runtime"),
-        ])
+        let registry = RuntimeRegistry::new_with_default_kind(
+            vec![
+                runtime_definition("opencode", "OpenCode"),
+                runtime_definition("test-runtime", "Test Runtime"),
+            ],
+            Some(AgentRuntimeKind::opencode()),
+        )
         .expect("runtime registry should build");
 
         assert_eq!(
@@ -915,10 +952,13 @@ mod tests {
 
     #[test]
     fn runtime_registry_exposes_multiple_descriptors_without_generic_code_changes() {
-        let registry = RuntimeRegistry::new(vec![
-            runtime_definition("opencode", "OpenCode"),
-            runtime_definition("test-runtime", "Test Runtime"),
-        ])
+        let registry = RuntimeRegistry::new_with_default_kind(
+            vec![
+                runtime_definition("opencode", "OpenCode"),
+                runtime_definition("test-runtime", "Test Runtime"),
+            ],
+            Some(AgentRuntimeKind::opencode()),
+        )
         .expect("runtime registry should build");
 
         let definitions = registry.definitions();

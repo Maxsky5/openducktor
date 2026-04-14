@@ -280,7 +280,7 @@ fn runs_list_without_filter_hides_non_allowlisted_runs() -> Result<()> {
                     started_at: "2026-02-28T16:00:00Z".to_string(),
                 },
                 child: Some(spawn_sleep_process(30)),
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: "/tmp/outside-allowlist".to_string(),
                 task_id: "task-1".to_string(),
                 worktree_path: "/tmp/outside-allowlist".to_string(),

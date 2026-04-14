@@ -160,9 +160,9 @@ pub struct AppService {
     pub(super) runtime_startup_status: Arc<Mutex<HashMap<String, RuntimeStartupStatusEntry>>>,
     pub(super) repo_runtime_health_snapshots: Arc<Mutex<HashMap<String, RepoRuntimeHealthCheck>>>,
     pub(super) opencode_session_status_cache:
-        Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>>>,
+        Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>>>,
     pub(super) opencode_session_status_flights:
-        Arc<Mutex<HashMap<OpencodeSessionStatusProbeTarget, Arc<OpencodeSessionStatusFlight>>>>,
+        Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, Arc<OpencodeSessionStatusFlight>>>>,
     pub(super) opencode_session_status_probe_limiter: Arc<OpencodeSessionStatusProbeLimiter>,
     pub(super) opencode_process_registry_path: PathBuf,
     pub(super) mcp_bridge_registry_path: PathBuf,
@@ -181,7 +181,7 @@ pub struct AppService {
 pub(crate) struct RunProcess {
     pub(super) summary: RunSummary,
     pub(super) child: Option<Child>,
-    pub(super) _opencode_process_guard: Option<TrackedOpencodeProcessGuard>,
+    pub(super) _runtime_process_guard: Option<TrackedOpencodeProcessGuard>,
     pub(super) repo_path: String,
     pub(super) task_id: String,
     pub(super) worktree_path: String,
@@ -191,7 +191,7 @@ pub(crate) struct RunProcess {
 pub(crate) struct AgentRuntimeProcess {
     pub(super) summary: RuntimeInstanceSummary,
     pub(super) child: Child,
-    pub(super) _opencode_process_guard: Option<TrackedOpencodeProcessGuard>,
+    pub(super) _runtime_process_guard: Option<TrackedOpencodeProcessGuard>,
     pub(super) cleanup_target: Option<RuntimeCleanupTarget>,
 }
 
@@ -224,7 +224,7 @@ pub(crate) struct CachedOpencodeSessionStatusProbe {
 
 #[derive(Clone)]
 pub(crate) enum CachedOpencodeSessionStatusProbeOutcome {
-    Statuses(OpencodeSessionStatusMap),
+    Statuses(RuntimeSessionStatusMap),
     ActionableError(CachedOpencodeSessionStatusProbeError),
 }
 

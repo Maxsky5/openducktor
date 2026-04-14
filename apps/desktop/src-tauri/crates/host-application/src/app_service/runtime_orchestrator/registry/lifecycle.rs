@@ -57,7 +57,7 @@ impl AppService {
             AgentRuntimeProcess {
                 summary: summary.clone(),
                 child: spawned_server.child,
-                _opencode_process_guard: Some(spawned_server.opencode_process_guard),
+                _runtime_process_guard: Some(spawned_server.runtime_process_guard),
                 cleanup_target,
             },
         );

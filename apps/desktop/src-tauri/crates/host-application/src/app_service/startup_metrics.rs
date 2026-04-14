@@ -80,7 +80,7 @@ pub(crate) struct StartupEventContext<'a> {
     role: &'a str,
     port: u16,
     correlation: Option<StartupEventCorrelation<'a>>,
-    policy: Option<OpencodeStartupReadinessPolicy>,
+    policy: Option<RuntimeStartupReadinessPolicy>,
 }
 
 impl<'a> StartupEventContext<'a> {
@@ -91,7 +91,7 @@ impl<'a> StartupEventContext<'a> {
         role: &'a str,
         port: u16,
         correlation: Option<StartupEventCorrelation<'a>>,
-        policy: Option<OpencodeStartupReadinessPolicy>,
+        policy: Option<RuntimeStartupReadinessPolicy>,
     ) -> Self {
         Self {
             runtime_type,
@@ -108,9 +108,9 @@ impl<'a> StartupEventContext<'a> {
 #[derive(Debug, Clone, Copy)]
 enum StartupEventKind {
     WaitBegin,
-    Ready(OpencodeStartupWaitReport),
+    Ready(RuntimeStartupWaitReport),
     Failed {
-        report: OpencodeStartupWaitReport,
+        report: RuntimeStartupWaitReport,
         failure_reason: &'static str,
     },
 }
@@ -131,7 +131,7 @@ impl<'a> StartupEventPayload<'a> {
 
     pub(crate) fn ready(
         context: StartupEventContext<'a>,
-        report: OpencodeStartupWaitReport,
+        report: RuntimeStartupWaitReport,
     ) -> Self {
         Self {
             context,
@@ -141,7 +141,7 @@ impl<'a> StartupEventPayload<'a> {
 
     pub(crate) fn failed(
         context: StartupEventContext<'a>,
-        report: OpencodeStartupWaitReport,
+        report: RuntimeStartupWaitReport,
         failure_reason: &'static str,
     ) -> Self {
         Self {
@@ -161,7 +161,7 @@ impl<'a> StartupEventPayload<'a> {
         }
     }
 
-    fn report(&self) -> Option<OpencodeStartupWaitReport> {
+    fn report(&self) -> Option<RuntimeStartupWaitReport> {
         match self.kind {
             StartupEventKind::WaitBegin => None,
             StartupEventKind::Ready(report) => Some(report),
@@ -270,7 +270,7 @@ impl OpencodeStartupMetrics {
     fn record_terminal(
         &mut self,
         event: &str,
-        report: OpencodeStartupWaitReport,
+        report: RuntimeStartupWaitReport,
         reason: Option<&str>,
     ) -> (OpencodeStartupMetricsSnapshot, Vec<String>) {
         self.ensure_histograms_initialized();
@@ -385,7 +385,7 @@ impl AppService {
     #[cfg(test)]
     pub(crate) fn opencode_startup_readiness_policy(
         &self,
-    ) -> Result<OpencodeStartupReadinessPolicy> {
+    ) -> Result<RuntimeStartupReadinessPolicy> {
         self.runtime_registry
             .runtime(&host_domain::AgentRuntimeKind::opencode())?
             .startup_policy(self)
@@ -488,8 +488,8 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    fn test_startup_policy() -> OpencodeStartupReadinessPolicy {
-        OpencodeStartupReadinessPolicy {
+    fn test_startup_policy() -> RuntimeStartupReadinessPolicy {
+        RuntimeStartupReadinessPolicy {
             timeout: Duration::from_millis(8_000),
             connect_timeout: Duration::from_millis(250),
             initial_retry_delay: Duration::from_millis(25),
@@ -498,8 +498,8 @@ mod tests {
         }
     }
 
-    fn test_startup_report() -> OpencodeStartupWaitReport {
-        OpencodeStartupWaitReport::from_parts(5, Duration::from_millis(420))
+    fn test_startup_report() -> RuntimeStartupWaitReport {
+        RuntimeStartupWaitReport::from_parts(5, Duration::from_millis(420))
     }
 
     #[test]

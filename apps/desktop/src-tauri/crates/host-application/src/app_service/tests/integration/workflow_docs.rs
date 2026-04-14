@@ -684,7 +684,7 @@ fn task_delete_rejects_active_builder_runs() {
                 started_at: "2026-02-20T12:00:00Z".to_string(),
             },
             child: Some(spawn_sleep_process(20)),
-            _opencode_process_guard: None,
+            _runtime_process_guard: None,
             repo_path: repo_path.to_string(),
             task_id: "parent-1".to_string(),
             worktree_path: worktree_path.to_string(),
