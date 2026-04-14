@@ -61,6 +61,53 @@ const buildModel = () => ({
   syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
+const getEditorRoot = (container: HTMLElement): HTMLElement => {
+  const editorRoot = container.querySelector('[contenteditable="true"]');
+  if (!(editorRoot instanceof HTMLElement)) {
+    throw new Error("Expected editable composer root");
+  }
+
+  return editorRoot;
+};
+
+const getLastTextSegment = (container: HTMLElement): HTMLElement => {
+  const textSegments = Array.from(container.querySelectorAll("[data-text-segment-id]"));
+  const editable = textSegments.at(-1);
+  if (!(editable instanceof HTMLElement)) {
+    throw new Error("Expected editable composer text segment");
+  }
+
+  return editable;
+};
+
+const typeIntoComposer = (container: HTMLElement, value: string): void => {
+  const editable = getLastTextSegment(container);
+  editable.textContent = value;
+  const textNode = editable.firstChild;
+  if (textNode) {
+    const range = document.createRange();
+    range.setStart(textNode, value.length);
+    range.collapse(true);
+    const selection = globalThis.getSelection?.();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  fireEvent.input(editable);
+};
+
+const createClipboardData = (file: File) => ({
+  items: [
+    {
+      kind: "file",
+      type: file.type,
+      getAsFile: () => file,
+    },
+  ],
+  types: ["Files"],
+  getData: () => "",
+});
+
 describe("AgentChatComposer attachments", () => {
   test("stages attachments, revalidates on model changes, and removes them", async () => {
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
@@ -182,5 +229,83 @@ describe("AgentChatComposer attachments", () => {
     await waitFor(() => {
       expect(syncBottomAfterComposerLayout.current).toHaveBeenCalledTimes(2);
     });
+  });
+
+  test("pastes unnamed images as attachments without disturbing existing text", async () => {
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          selectedModelDescriptor: {
+            id: "openai/gpt-5.3-codex",
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId: "gpt-5.3-codex",
+            modelName: "GPT-5.3 Codex",
+            variants: ["high"],
+            contextWindow: 400_000,
+            outputLimit: 128_000,
+            attachmentSupport: {
+              image: true,
+              audio: false,
+              video: false,
+              pdf: true,
+            },
+          },
+        }}
+      />,
+    );
+
+    typeIntoComposer(container, "existing text");
+    const unnamedImage = new File(["image"], "", { type: "image/png" });
+
+    fireEvent.paste(getEditorRoot(container), {
+      clipboardData: createClipboardData(unnamedImage),
+    });
+
+    await screen.findByTitle("pasted-image.png");
+    expect(screen.getByRole("button", { name: "Remove pasted-image.png" })).toBeDefined();
+    const contentRoot = container.querySelector("[data-composer-content-root]");
+    expect(contentRoot?.textContent).toContain("existing text");
+  });
+
+  test("shows existing attachment validation errors for pasted images", async () => {
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          selectedModelDescriptor: {
+            id: "openai/gpt-5.3-codex",
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId: "gpt-5.3-codex",
+            modelName: "GPT-5.3 Codex",
+            variants: ["high"],
+            contextWindow: 400_000,
+            outputLimit: 128_000,
+            attachmentSupport: {
+              image: false,
+              audio: false,
+              video: false,
+              pdf: true,
+            },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.paste(getEditorRoot(container), {
+      clipboardData: createClipboardData(
+        new File(["image"], "clipboard-image.png", { type: "image/png" }),
+      ),
+    });
+
+    await screen.findByTitle("clipboard-image.png");
+    expect(
+      screen.getByText("The selected model does not support image attachments."),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Send message" }).getAttribute("disabled"),
+    ).not.toBeNull();
   });
 });

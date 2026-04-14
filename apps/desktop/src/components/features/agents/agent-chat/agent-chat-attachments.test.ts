@@ -26,6 +26,20 @@ describe("agent-chat-attachments", () => {
     expect(buildComposerAttachmentFromFile(file)).toBeNull();
   });
 
+  test("normalizes unnamed browser files to a usable attachment filename", () => {
+    const file = new File(["image"], "", { type: "image/png" });
+
+    const attachment = buildComposerAttachmentFromFile(file);
+
+    expect(attachment).toMatchObject({
+      name: "pasted-image.png",
+      kind: "image",
+      mime: "image/png",
+    });
+    expect(attachment?.file).toBeInstanceOf(File);
+    expect(attachment?.file?.name).toBe("pasted-image.png");
+  });
+
   test("rehydrates uncommon supported extensions from their path", () => {
     const attachment = buildComposerAttachmentFromPath("/tmp/preview.avif");
 

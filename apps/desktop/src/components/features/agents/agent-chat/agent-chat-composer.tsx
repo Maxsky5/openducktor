@@ -576,6 +576,7 @@ export const AgentChatComposer = forwardRef<
           <AgentChatComposerEditor
             draft={draft}
             onDraftChange={handleDraftChange}
+            onAddFiles={handleAddFiles}
             placeholder={composerPlaceholder}
             disabled={isComposerInputDisabled || isSubmitting}
             editorRef={composerEditorRef}

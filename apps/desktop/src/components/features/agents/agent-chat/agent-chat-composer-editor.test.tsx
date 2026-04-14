@@ -120,6 +120,7 @@ const EditorHarness = ({
   onSend,
   initialDraft = createComposerDraft(""),
   disabled = false,
+  onAddFiles,
 }: {
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
@@ -128,6 +129,7 @@ const EditorHarness = ({
   onSend?: () => void;
   initialDraft?: AgentChatComposerDraft;
   disabled?: boolean;
+  onAddFiles?: (files: File[]) => void;
 }): ReactElement => {
   const [draft, setDraft] = useState<AgentChatComposerDraft>(initialDraft);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -148,6 +150,7 @@ const EditorHarness = ({
         slashCommandsError={slashCommandsError}
         isSlashCommandsLoading={false}
         searchFiles={searchFiles}
+        onAddFiles={onAddFiles ?? (() => {})}
       />
       <output data-testid="draft-state">{JSON.stringify(draft)}</output>
     </>
@@ -269,12 +272,19 @@ const selectRangeAcrossTextSegments = (
 const createClipboardData = ({
   plainText = "",
   htmlText = "",
+  items = [],
   types = ["text/plain", "text/html"],
 }: {
   plainText?: string;
   htmlText?: string;
+  items?: Array<{
+    kind: string;
+    type: string;
+    getAsFile: () => File | null;
+  }>;
   types?: string[];
 }) => ({
+  items,
   types,
   getData: (type: string): string => {
     if (type === "text/plain") {
@@ -287,6 +297,12 @@ const createClipboardData = ({
 
     return "";
   },
+});
+
+const createClipboardFileItem = (file: File) => ({
+  kind: "file",
+  type: file.type,
+  getAsFile: () => file,
 });
 
 describe("AgentChatComposerEditor", () => {
@@ -394,6 +410,81 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.getByTestId("draft-state").textContent).toContain("hello bold words");
   });
 
+  test("forwards pasted images to attachment intake without replacing selected text", async () => {
+    const onAddFiles = mock(() => {});
+    const image = new File(["image"], "pasted-image.png", { type: "image/png" });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={createComposerDraft("keep this")}
+        onAddFiles={onAddFiles}
+      />,
+    );
+
+    const editorRoot = selectComposerContentRange(rendered.container);
+    fireEvent.paste(editorRoot, {
+      clipboardData: createClipboardData({
+        items: [createClipboardFileItem(image)],
+        types: ["Files"],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(onAddFiles).toHaveBeenCalledWith([image]);
+    });
+    await expectComposerText(rendered.container, "keep this");
+    expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
+  });
+
+  test("prefers pasted images over clipboard text when both are present", async () => {
+    const onAddFiles = mock(() => {});
+    const image = new File(["image"], "clipboard-image.png", { type: "image/png" });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={createComposerDraft("keep this")}
+        onAddFiles={onAddFiles}
+      />,
+    );
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({
+        plainText: "should not appear",
+        htmlText: "<strong>should not appear</strong>",
+        items: [createClipboardFileItem(image)],
+        types: ["Files", "text/plain", "text/html"],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(onAddFiles).toHaveBeenCalledWith([image]);
+    });
+    await expectComposerText(rendered.container, "keep this");
+    expect(screen.getByTestId("draft-state").textContent).not.toContain("should not appear");
+  });
+
+  test("forwards every supported pasted image from one clipboard event", async () => {
+    const onAddFiles = mock(() => {});
+    const firstImage = new File(["image-1"], "one.png", { type: "image/png" });
+    const secondImage = new File(["image-2"], "two.jpg", { type: "image/jpeg" });
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
+    );
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({
+        items: [createClipboardFileItem(firstImage), createClipboardFileItem(secondImage)],
+        types: ["Files"],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(onAddFiles).toHaveBeenCalledWith([firstImage, secondImage]);
+    });
+  });
+
   test("replaces a full composer selection with pasted plain text", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
@@ -411,27 +502,37 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.getByTestId("draft-state").textContent).toContain("line one\\nline two");
   });
 
-  test("ignores non-text clipboard payloads without clearing the composer", async () => {
-    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+  test("ignores unsupported file-only clipboard payloads without clearing the composer", async () => {
+    const onAddFiles = mock(() => {});
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
+    );
 
     typeIntoEditor(rendered.container, "keep this");
     selectComposerContentRange(rendered.container);
+    const pdf = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
 
     fireEvent.paste(getEditorRoot(rendered.container), {
-      clipboardData: createClipboardData({ types: ["Files"] }),
+      clipboardData: createClipboardData({
+        items: [createClipboardFileItem(pdf)],
+        types: ["Files"],
+      }),
     });
 
     await expectComposerText(rendered.container, "keep this");
     expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
+    expect(onAddFiles).not.toHaveBeenCalled();
   });
 
   test("ignores paste while the composer is disabled", async () => {
+    const onAddFiles = mock(() => {});
     const rendered = render(
       <EditorHarness
         slashCommands={COMMANDS}
         slashCommandsError={null}
         initialDraft={createComposerDraft("keep this")}
         disabled
+        onAddFiles={onAddFiles}
       />,
     );
 
@@ -444,11 +545,16 @@ describe("AgentChatComposerEditor", () => {
       clipboardData: createClipboardData({
         plainText: "should not apply",
         htmlText: "<strong>should not apply</strong>",
+        items: [
+          createClipboardFileItem(new File(["image"], "disabled.png", { type: "image/png" })),
+        ],
+        types: ["Files", "text/plain", "text/html"],
       }),
     });
 
     await expectComposerText(rendered.container, "keep this");
     expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
+    expect(onAddFiles).not.toHaveBeenCalled();
   });
 
   test("replaces selections spanning a file chip with normalized plain text", async () => {
