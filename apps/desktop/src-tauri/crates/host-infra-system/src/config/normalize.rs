@@ -87,7 +87,7 @@ fn normalize_agent_model_default(
 
     if entry.runtime_kind.is_empty() {
         return Err(anyhow!(
-            "{field_name} runtime kind cannot be blank when provider/model are configured."
+            "{field_name} runtime kind is required when provider and model are configured."
         ));
     }
 
@@ -188,9 +188,9 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
         repo.trusted_hooks_fingerprint = None;
     }
     normalize_prompt_overrides(&mut repo.prompt_overrides);
-    normalize_agent_model_default(&mut repo.agent_defaults.spec, "Spec agent default")?;
+    normalize_agent_model_default(&mut repo.agent_defaults.spec, "Specification agent default")?;
     normalize_agent_model_default(&mut repo.agent_defaults.planner, "Planner agent default")?;
-    normalize_agent_model_default(&mut repo.agent_defaults.build, "Build agent default")?;
+    normalize_agent_model_default(&mut repo.agent_defaults.build, "Builder agent default")?;
     normalize_agent_model_default(&mut repo.agent_defaults.qa, "QA agent default")?;
     Ok(())
 }

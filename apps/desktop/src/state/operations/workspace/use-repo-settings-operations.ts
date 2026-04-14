@@ -7,6 +7,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
+import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -18,13 +19,6 @@ import {
 } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "../tasks/task-operations-model";
-
-const AGENT_DEFAULT_LABELS = {
-  spec: "Specification",
-  planner: "Planner",
-  build: "Builder",
-  qa: "QA",
-} as const;
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;
@@ -63,24 +57,7 @@ export function useRepoSettingsOperations({
 
   const toConfigDefault = useCallback(
     (role: keyof RepoSettingsInput["agentDefaults"], entry: RepoAgentDefaultInput | null) => {
-      if (!entry?.providerId.trim() || !entry.modelId.trim()) {
-        return undefined;
-      }
-
-      const runtimeKind = entry.runtimeKind?.trim();
-      if (!runtimeKind) {
-        throw new Error(
-          `${AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`,
-        );
-      }
-
-      return {
-        runtimeKind,
-        providerId: entry.providerId.trim(),
-        modelId: entry.modelId.trim(),
-        ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
-        ...(entry.profileId.trim() ? { profileId: entry.profileId.trim() } : {}),
-      };
+      return normalizeRepoAgentDefaultForSave(role, entry);
     },
     [],
   );

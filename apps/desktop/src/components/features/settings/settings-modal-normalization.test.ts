@@ -195,6 +195,26 @@ describe("settings-modal-normalization", () => {
     expect(normalized.trustedHooksFingerprint).toBe("fingerprint");
   });
 
+  test("rejects configured agent defaults without runtime kind", () => {
+    expect(() =>
+      normalizeRepoConfigForSave({
+        ...createRepoConfig(),
+        agentDefaults: {
+          ...createRepoConfig().agentDefaults,
+          spec: {
+            runtimeKind: "   ",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "spec",
+          },
+        },
+      }),
+    ).toThrow(
+      "Specification agent default runtime kind is required when provider and model are configured.",
+    );
+  });
+
   test("normalizes autopilot settings into canonical event order", () => {
     const normalized = normalizeAutopilotSettingsForSave({
       rules: [

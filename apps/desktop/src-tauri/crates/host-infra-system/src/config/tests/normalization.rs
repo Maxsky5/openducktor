@@ -426,7 +426,7 @@ fn update_repo_config_rejects_blank_runtime_kinds() {
         .expect_err("blank agent runtime kind should fail");
     assert!(blank_agent_runtime_error
         .to_string()
-        .contains("Spec agent default runtime kind cannot be blank"));
+        .contains("Specification agent default runtime kind is required when provider and model are configured."));
 }
 
 #[test]
@@ -487,6 +487,7 @@ fn load_rejects_invalid_persisted_dev_server_rows() {
         "activeRepo": repo_str,
         "repos": {
             repo_str.clone(): {
+                "defaultRuntimeKind": "opencode",
                 "trustedHooks": false,
                 "hooks": { "preStart": [], "postComplete": [] },
                 "devServers": [

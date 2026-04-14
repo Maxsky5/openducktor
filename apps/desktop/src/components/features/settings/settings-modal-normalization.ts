@@ -14,6 +14,7 @@ import {
   DEFAULT_BRANCH_PREFIX,
 } from "@openducktor/contracts";
 import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
+import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
@@ -46,36 +47,11 @@ export const normalizePromptOverridesForSave = (
   return next;
 };
 
-const normalizeAgentDefaultForSave = (
-  entry: RepoConfig["agentDefaults"]["spec"],
-): RepoConfig["agentDefaults"]["spec"] => {
-  if (!entry) {
-    return undefined;
-  }
-
-  const providerId = trimNonEmpty(entry.providerId);
-  const modelId = trimNonEmpty(entry.modelId);
-  if (!providerId || !modelId) {
-    return undefined;
-  }
-
-  const variant = trimNonEmpty(entry.variant ?? "");
-  const profileId = trimNonEmpty(entry.profileId ?? "");
-
-  return {
-    runtimeKind: entry.runtimeKind,
-    providerId,
-    modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
-  };
-};
-
 export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
-  const spec = normalizeAgentDefaultForSave(repo.agentDefaults.spec);
-  const planner = normalizeAgentDefaultForSave(repo.agentDefaults.planner);
-  const build = normalizeAgentDefaultForSave(repo.agentDefaults.build);
-  const qa = normalizeAgentDefaultForSave(repo.agentDefaults.qa);
+  const spec = normalizeRepoAgentDefaultForSave("spec", repo.agentDefaults.spec);
+  const planner = normalizeRepoAgentDefaultForSave("planner", repo.agentDefaults.planner);
+  const build = normalizeRepoAgentDefaultForSave("build", repo.agentDefaults.build);
+  const qa = normalizeRepoAgentDefaultForSave("qa", repo.agentDefaults.qa);
   const { hooks, devServers, trustedHooks } = normalizeRepoScriptsWithTrust(
     {
       hooks: repo.hooks,
