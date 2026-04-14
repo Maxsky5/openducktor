@@ -43,22 +43,35 @@ const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> => ({
   ...DEFAULT_OPEN_BY_ROLE,
 });
 
+const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
+  if (typeof globalThis.localStorage === "undefined") {
+    return null;
+  }
+
+  const raw = globalThis.localStorage.getItem(toRightPanelStorageKey());
+  if (!raw) {
+    return null;
+  }
+
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+
+  return parsed as Record<string, unknown>;
+};
+
 const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
   if (typeof globalThis.localStorage === "undefined") {
     return cloneDefaultOpenByRole();
   }
 
-  const raw = globalThis.localStorage.getItem(toRightPanelStorageKey());
-  if (!raw) {
-    return cloneDefaultOpenByRole();
-  }
-
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const parsed = readPersistedRightPanelPayload();
     const next = cloneDefaultOpenByRole();
-    if (parsed && typeof parsed === "object") {
+    if (parsed) {
       for (const role of RIGHT_PANEL_ROLES) {
-        const value = (parsed as Record<AgentRole, unknown>)[role];
+        const value = parsed[role];
         if (typeof value === "boolean") {
           next[role] = value;
         }
@@ -67,7 +80,7 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
     return next;
   } catch (error) {
     console.error("[agent-studio-right-panel] Failed to parse persisted panel state.", {
-      raw,
+      raw: globalThis.localStorage.getItem(toRightPanelStorageKey()),
       error,
     });
     return cloneDefaultOpenByRole();
@@ -134,7 +147,16 @@ export function useAgentStudioRightPanel({
       return;
     }
 
-    globalThis.localStorage.setItem(toRightPanelStorageKey(), JSON.stringify(isOpenByRole));
+    try {
+      const persisted = readPersistedRightPanelPayload();
+      const nextValue = persisted ? { ...persisted, ...isOpenByRole } : isOpenByRole;
+      globalThis.localStorage.setItem(toRightPanelStorageKey(), JSON.stringify(nextValue));
+    } catch (error) {
+      console.error("[agent-studio-right-panel] Failed to persist panel state.", {
+        nextState: isOpenByRole,
+        error,
+      });
+    }
   }, [isOpenByRole]);
 
   const panelKindForRole = PANEL_KIND_BY_ROLE[role];

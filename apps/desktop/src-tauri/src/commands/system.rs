@@ -1,7 +1,47 @@
-use crate::{as_error, run_service_blocking};
+use crate::{as_error, run_service_blocking, AppState};
 use anyhow::{anyhow, Result};
+use host_domain::{SystemOpenInToolId, SystemOpenInToolInfo};
+use serde::Deserialize;
 use serde_json::json;
 use std::process::{Command, Stdio};
+use tauri::State;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemListOpenInToolsArgs {
+    force_refresh: Option<bool>,
+}
+
+#[tauri::command]
+pub async fn system_list_open_in_tools(
+    state: State<'_, AppState>,
+    args: Option<SystemListOpenInToolsArgs>,
+) -> Result<Vec<SystemOpenInToolInfo>, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("system_list_open_in_tools", move || {
+        service.list_open_in_tools(args.and_then(|value| value.force_refresh).unwrap_or(false))
+    })
+    .await;
+
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn system_open_directory_in_tool(
+    state: State<'_, AppState>,
+    directory_path: String,
+    tool_id: SystemOpenInToolId,
+) -> Result<serde_json::Value, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("system_open_directory_in_tool", move || {
+        service
+            .open_directory_in_tool(&directory_path, tool_id)
+            .map(|_| json!({ "ok": true }))
+    })
+    .await;
+
+    as_error(result)
+}
 
 #[tauri::command]
 pub async fn open_external_url(url: String) -> Result<serde_json::Value, String> {

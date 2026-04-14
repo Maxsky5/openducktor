@@ -1,4 +1,4 @@
-import type { PullRequest } from "@openducktor/contracts";
+import type { PullRequest, SystemOpenInToolId } from "@openducktor/contracts";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentStudioPendingForcePush,
@@ -12,6 +12,8 @@ import type {
 export type AgentStudioGitPanelModel = DiffDataState & {
   contextMode?: "repository" | "worktree";
   pullRequest?: PullRequest | null;
+  openInTargetPath?: string | null;
+  openInDisabledReason?: string | null;
   isCommitting?: boolean;
   isPushing?: boolean;
   isRebasing?: boolean;
@@ -49,6 +51,7 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   askBuilderToResolveGitConflict?: () => Promise<void>;
   pullFromUpstream?: () => Promise<void>;
   onDetectPullRequest?: () => Promise<void> | void;
+  openDirectoryInTool?: (toolId: SystemOpenInToolId) => Promise<void>;
   targetBranchOptions?: ComboboxOption[];
   targetBranchSelectionValue?: string;
   onUpdateTargetBranch?: (selection: string) => Promise<void>;

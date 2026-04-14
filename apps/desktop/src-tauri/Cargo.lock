@@ -1573,6 +1573,7 @@ name = "host-infra-system"
 version = "0.0.5"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "dirs",
  "fs2",

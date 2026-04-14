@@ -13,13 +13,13 @@ import {
 import { memo, type ReactElement, useEffect, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
+import { OpenInMenu } from "./open-in-menu";
 import type { AgentStudioGitPanelModel } from "./types";
 
 const TARGET_BRANCH_LABEL_ID = "agent-studio-git-target-branch-label";
@@ -28,6 +28,8 @@ type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "contextMode"
   | "pullRequest"
+  | "openInTargetPath"
+  | "openInDisabledReason"
   | "branch"
   | "targetBranch"
   | "commitsAheadBehind"
@@ -47,6 +49,7 @@ type GitInfoHeaderProps = Pick<
   | "targetBranchOptions"
   | "targetBranchSelectionValue"
   | "onUpdateTargetBranch"
+  | "openDirectoryInTool"
   | "setDiffScope"
 > & {
   uncommittedFileCount: number;
@@ -127,13 +130,17 @@ function GitActionIconButton({
 type GitInfoHeaderSummaryRowProps = {
   isRepositoryMode: boolean;
   pullRequest: GitInfoHeaderProps["pullRequest"];
-  uncommittedFileCount: number;
+  openInTargetPath: string | null;
+  openInDisabledReason: string | null;
+  onOpenInTool: GitInfoHeaderProps["openDirectoryInTool"];
 };
 
 function GitInfoHeaderSummaryRow({
   isRepositoryMode,
   pullRequest,
-  uncommittedFileCount,
+  openInTargetPath,
+  openInDisabledReason,
+  onOpenInTool,
 }: GitInfoHeaderSummaryRowProps): ReactElement {
   return (
     <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
@@ -142,9 +149,12 @@ function GitInfoHeaderSummaryRow({
       </span>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {pullRequest ? <TaskPullRequestLink pullRequest={pullRequest} /> : null}
-        <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
-          {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
-        </Badge>
+        <OpenInMenu
+          contextMode={isRepositoryMode ? "repository" : "worktree"}
+          targetPath={openInTargetPath}
+          disabledReason={openInDisabledReason}
+          onOpenInTool={onOpenInTool}
+        />
       </div>
     </div>
   );
@@ -512,6 +522,8 @@ function GitInfoHeaderErrors({
 export const GitInfoHeader = memo(function GitInfoHeader({
   contextMode = "worktree",
   pullRequest,
+  openInTargetPath,
+  openInDisabledReason,
   branch,
   targetBranch,
   commitsAheadBehind,
@@ -538,6 +550,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   targetBranchOptions = [],
   targetBranchSelectionValue = "",
   onUpdateTargetBranch,
+  openDirectoryInTool,
 }: GitInfoHeaderProps): ReactElement {
   const [isEditingTargetBranch, setIsEditingTargetBranch] = useState(false);
   const [targetBranchDraft, setTargetBranchDraft] = useState(targetBranchSelectionValue);
@@ -691,7 +704,9 @@ export const GitInfoHeader = memo(function GitInfoHeader({
       <GitInfoHeaderSummaryRow
         isRepositoryMode={isRepositoryMode}
         pullRequest={pullRequest}
-        uncommittedFileCount={uncommittedFileCount}
+        openInTargetPath={openInTargetPath ?? null}
+        openInDisabledReason={openInDisabledReason ?? null}
+        onOpenInTool={openDirectoryInTool}
       />
 
       <GitBranchContextRow

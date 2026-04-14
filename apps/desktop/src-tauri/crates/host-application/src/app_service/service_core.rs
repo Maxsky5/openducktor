@@ -4,7 +4,7 @@ use super::workspace_policy::HookTrustChallenge;
 use super::*;
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, RepoRuntimeHealthCheck, RepoRuntimeStartupFailureKind,
-    RepoRuntimeStartupStage, RepoRuntimeStartupStatus,
+    RepoRuntimeStartupStage, RepoRuntimeStartupStatus, SystemOpenInToolInfo,
 };
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
@@ -167,6 +167,7 @@ pub struct AppService {
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
     pub(super) runtime_check_cache: Arc<Mutex<Option<CachedRuntimeCheck>>>,
+    pub(super) open_in_tool_cache: Arc<Mutex<Option<CachedOpenInToolList>>>,
     pub(super) startup_cancel_epoch: StartupCancelEpoch,
     pub(super) startup_metrics: Arc<Mutex<OpencodeStartupMetrics>>,
     pub(super) enforce_repo_allowlist: bool,
@@ -207,6 +208,11 @@ pub(crate) struct RuntimeCleanupTarget {
 pub(crate) struct CachedRuntimeCheck {
     pub(super) checked_at: Instant,
     pub(super) value: RuntimeCheck,
+}
+
+pub(crate) struct CachedOpenInToolList {
+    pub(super) checked_at: Instant,
+    pub(super) tools: Vec<SystemOpenInToolInfo>,
 }
 
 pub(crate) struct CachedOpencodeSessionStatusProbe {
@@ -285,6 +291,7 @@ impl AppService {
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
             runtime_check_cache: Arc::new(Mutex::new(None)),
+            open_in_tool_cache: Arc::new(Mutex::new(None)),
             startup_cancel_epoch: Arc::new(AtomicU64::new(0)),
             startup_metrics: Arc::new(Mutex::new(OpencodeStartupMetrics::default())),
             enforce_repo_allowlist,

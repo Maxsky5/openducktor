@@ -342,6 +342,8 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
 ) -> tauri::Builder<R> {
     builder.invoke_handler(tauri::generate_handler![
         system_check,
+        system_list_open_in_tools,
+        system_open_directory_in_tool,
         open_external_url,
         runtime_check,
         beads_check,

@@ -5,6 +5,7 @@ mod git_commands;
 mod odt_mcp_commands;
 mod runtime_commands;
 mod server;
+mod system_commands;
 mod task_commands;
 mod workspace_commands;
 

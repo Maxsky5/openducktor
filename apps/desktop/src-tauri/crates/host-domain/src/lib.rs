@@ -37,7 +37,8 @@ pub use store::TaskStore;
 pub use system::{
     BeadsCheck, RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory,
     RepoStoreHealthStatus, RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
-    RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
+    RuntimeCheck, RuntimeHealth, SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo,
+    WorkspaceRecord,
 };
 pub use task::{
     is_syncable_pull_request_state, is_terminal_task_status, CreateTaskInput, IssueType,

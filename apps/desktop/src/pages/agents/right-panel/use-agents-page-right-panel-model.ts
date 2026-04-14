@@ -1,8 +1,10 @@
-import type { GitBranch } from "@openducktor/contracts";
+import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsReadModel } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-read-model";
+import { hostClient } from "@/lib/host-client";
 import {
   canonicalTargetBranch,
   resolveTaskTargetBranchState,
@@ -10,6 +12,7 @@ import {
 } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
+import { buildContinuationTargetQueryOptions } from "@/state/queries/build-runtime";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
   AgentStudioOrchestrationSelectionContext,
@@ -22,6 +25,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
+  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
   session: BuildToolsSessionDescriptor;
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
@@ -37,11 +41,95 @@ export type UseAgentsPageRightPanelModelArgs = {
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
 };
 
+export const resolveBuildContinuationTargetTaskId = ({
+  viewTaskId,
+  viewSelectedTask,
+}: {
+  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+}): string => viewSelectedTask?.id ?? viewTaskId;
+
+function firstNonRepoWorktreePath(repoPath: string, paths: Array<string | null>): string | null {
+  for (const candidate of paths) {
+    if (!candidate || candidate.trim().length === 0) {
+      continue;
+    }
+
+    if (repoPath.trim().length > 0 && candidate === repoPath) {
+      continue;
+    }
+
+    return candidate;
+  }
+
+  return null;
+}
+
+export const resolveAgentStudioGitPanelOpenInTarget = ({
+  contextMode,
+  activeRepo,
+  worktreePath,
+  runWorktreePath,
+  sessionWorkingDirectory,
+  continuationTargetWorkingDirectory,
+  isContinuationTargetResolving,
+}: {
+  contextMode: "repository" | "worktree";
+  activeRepo: string | null;
+  worktreePath: string | null;
+  runWorktreePath: string | null;
+  sessionWorkingDirectory: string | null;
+  continuationTargetWorkingDirectory: string | null;
+  isContinuationTargetResolving: boolean;
+}): { path: string | null; disabledReason: string | null } => {
+  const repoPath = activeRepo ?? "";
+  const resolvedContextWorkingDirectory = firstNonRepoWorktreePath(repoPath, [
+    worktreePath,
+    runWorktreePath,
+    continuationTargetWorkingDirectory,
+    sessionWorkingDirectory,
+  ]);
+
+  if (contextMode === "repository") {
+    if (repoPath.trim().length > 0) {
+      return {
+        path: repoPath,
+        disabledReason: null,
+      };
+    }
+
+    return {
+      path: null,
+      disabledReason: "Repository path is unavailable. Select a repository and try again.",
+    };
+  }
+
+  if (resolvedContextWorkingDirectory) {
+    return {
+      path: resolvedContextWorkingDirectory,
+      disabledReason: null,
+    };
+  }
+
+  if (isContinuationTargetResolving) {
+    return {
+      path: null,
+      disabledReason: "Resolving builder worktree path...",
+    };
+  }
+
+  return {
+    path: null,
+    disabledReason: "Builder worktree path is unavailable. Refresh the Git panel and try again.",
+  };
+};
+
 export function useAgentsPageRightPanelModel({
   activeRepo,
   branches = [],
   activeBranch,
   viewRole,
+  viewTaskId,
   session,
   viewSelectedTask,
   panelKind,
@@ -73,8 +161,32 @@ export function useAgentsPageRightPanelModel({
       runCompletionRecoverySignal,
     });
 
+  const buildContinuationTargetRepoPath = activeRepo ?? "";
+  const buildContinuationTargetTaskId = resolveBuildContinuationTargetTaskId({
+    viewTaskId,
+    viewSelectedTask,
+  });
+  const matchingRunWorktreePath =
+    session.runId == null
+      ? null
+      : (runs.find((run) => run.runId === session.runId)?.worktreePath ?? null);
+  const shouldResolveBuildContinuationTarget =
+    panelKind === "build_tools" &&
+    isPanelOpen &&
+    gitPanelContextMode === "worktree" &&
+    buildContinuationTargetRepoPath.length > 0 &&
+    buildContinuationTargetTaskId.length > 0;
+
   const isActiveBuilderWorking =
     sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
+  const continuationTargetQuery = useQuery({
+    ...buildContinuationTargetQueryOptions(
+      buildContinuationTargetRepoPath,
+      buildContinuationTargetTaskId,
+      hostClient,
+    ),
+    enabled: shouldResolveBuildContinuationTarget,
+  });
   const gitActions = useAgentStudioGitActions({
     repoPath: activeRepo,
     workingDir: diffData.worktreePath,
@@ -116,10 +228,28 @@ export function useAgentsPageRightPanelModel({
         : [],
     });
 
+    const openInTarget = resolveAgentStudioGitPanelOpenInTarget({
+      contextMode: gitPanelContextMode,
+      activeRepo,
+      worktreePath: diffData.worktreePath,
+      runWorktreePath: matchingRunWorktreePath,
+      sessionWorkingDirectory: session.workingDirectory,
+      continuationTargetWorkingDirectory: continuationTargetQuery.data?.workingDirectory ?? null,
+      isContinuationTargetResolving: continuationTargetQuery.isPending,
+    });
+
     return {
       ...diffData,
       contextMode: gitPanelContextMode,
       branch: resolvedGitPanelBranch,
+      openInTargetPath: openInTarget.path,
+      openInDisabledReason: openInTarget.disabledReason,
+      ...(openInTarget.path
+        ? {
+            openDirectoryInTool: (toolId: SystemOpenInToolId) =>
+              hostClient.systemOpenDirectoryInTool(openInTarget.path as string, toolId),
+          }
+        : {}),
       ...(taskTargetBranchState.validationError
         ? {
             targetBranch: taskTargetBranchState.displayTargetBranch,
@@ -156,6 +286,7 @@ export function useAgentsPageRightPanelModel({
     };
   }, [
     branches,
+    activeRepo,
     diffData,
     gitActions,
     gitPanelContextMode,
@@ -165,6 +296,10 @@ export function useAgentsPageRightPanelModel({
     resolvedGitPanelBranch,
     runs,
     setTaskTargetBranch,
+    continuationTargetQuery.data?.workingDirectory,
+    continuationTargetQuery.isPending,
+    matchingRunWorktreePath,
+    session.workingDirectory,
     viewSelectedTask,
   ]);
 

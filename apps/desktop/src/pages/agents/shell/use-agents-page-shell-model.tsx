@@ -412,6 +412,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         branches={branches}
         activeBranch={activeBranch}
         viewRole={selection.viewRole}
+        viewTaskId={selection.viewTaskId}
         session={rightPanelSession}
         viewSelectedTask={selection.viewSelectedTask}
         panelKind={orchestration.rightPanel.panelKind}
