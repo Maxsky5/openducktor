@@ -14,7 +14,7 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.0.3",
+      "version": "0.0.5",
       "dependencies": {
         "@openducktor/adapters-opencode-sdk": "workspace:*",
         "@openducktor/adapters-tauri-host": "workspace:*",
@@ -23,6 +23,7 @@
         "@pierre/diffs": "^1.1.15",
         "@radix-ui/react-collapsible": "^1.1.12",
         "@radix-ui/react-dialog": "^1.1.14",
+        "@radix-ui/react-dismissable-layer": "^1.1.11",
         "@radix-ui/react-popover": "^1.1.15",
         "@radix-ui/react-scroll-area": "^1.2.10",
         "@radix-ui/react-slot": "^1.2.3",
@@ -67,7 +68,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.0.3",
+      "version": "0.0.5",
       "dependencies": {
         "@opencode-ai/sdk": "^1.4.3",
         "@openducktor/contracts": "workspace:*",
@@ -76,7 +77,7 @@
     },
     "packages/adapters-tauri-host": {
       "name": "@openducktor/adapters-tauri-host",
-      "version": "0.0.3",
+      "version": "0.0.5",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -84,21 +85,21 @@
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.0.3",
+      "version": "0.0.5",
       "dependencies": {
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.0.3",
+      "version": "0.0.5",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
       },
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.0.3",
+      "version": "0.0.5",
       "bin": {
         "openducktor-mcp": "./dist/index.js",
       },
