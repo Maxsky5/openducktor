@@ -19,12 +19,13 @@ use std::time::Duration;
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_store, create_failing_opencode,
-    create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    install_fake_dolt, lock_env, make_emitter, make_session, make_task, prepend_path,
-    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, spawn_sleep_process_group,
-    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
-    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_descriptor,
+    builtin_opencode_runtime_route, create_failing_opencode, create_fake_bd, create_fake_opencode,
+    create_orphanable_opencode, empty_patch, init_git_repo, install_fake_dolt, lock_env,
+    make_emitter, make_session, make_task, prepend_path, process_is_alive, remove_env_var,
+    set_env_var, spawn_sleep_process, spawn_sleep_process_group, unique_temp_path,
+    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
+    write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -51,9 +52,9 @@ fn runtime_summary_fixture(
         task_id: Some(task_id.to_string()),
         role,
         working_directory: working_directory.to_string(),
-        runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
+        runtime_route: builtin_opencode_runtime_route(port),
         started_at: "2026-02-20T12:00:00Z".to_string(),
-        descriptor: AgentRuntimeKind::opencode().descriptor(),
+        descriptor: builtin_opencode_runtime_descriptor(),
     }
 }
 
@@ -82,7 +83,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
             summary: RunSummary {
                 run_id: run_id.clone(),
                 runtime_kind: AgentRuntimeKind::opencode(),
-                runtime_route: AgentRuntimeKind::opencode().route_for_port(1),
+                runtime_route: builtin_opencode_runtime_route(1),
                 repo_path: "/tmp/repo".to_string(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),
@@ -237,7 +238,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
             summary: RunSummary {
                 run_id: "run-shutdown-registry-error".to_string(),
                 runtime_kind: AgentRuntimeKind::opencode(),
-                runtime_route: AgentRuntimeKind::opencode().route_for_port(1),
+                runtime_route: builtin_opencode_runtime_route(1),
                 repo_path: "/tmp/repo".to_string(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),

@@ -7,8 +7,8 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use crate::app_service::test_support::{
-    build_service_with_git_state_enforced, init_git_repo, make_emitter, make_task,
-    spawn_sleep_process, unique_temp_path,
+    build_service_with_git_state_enforced, builtin_opencode_runtime_route, init_git_repo,
+    make_emitter, make_task, spawn_sleep_process, unique_temp_path,
 };
 use crate::app_service::RunProcess;
 
@@ -269,7 +269,7 @@ fn runs_list_without_filter_hides_non_allowlisted_runs() -> Result<()> {
                 summary: RunSummary {
                     run_id: run_id.clone(),
                     runtime_kind: AgentRuntimeKind::opencode(),
-                    runtime_route: AgentRuntimeKind::opencode().route_for_port(4010),
+                    runtime_route: builtin_opencode_runtime_route(4010),
                     repo_path: "/tmp/outside-allowlist".to_string(),
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),

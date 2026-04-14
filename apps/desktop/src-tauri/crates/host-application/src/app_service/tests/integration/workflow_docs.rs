@@ -18,12 +18,13 @@ use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_store, create_failing_opencode,
-    create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_opencode_session_status_server, spawn_sleep_process,
-    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
-    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_route,
+    create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
+    empty_patch, init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
+    process_is_alive, remove_env_var, set_env_var, spawn_opencode_session_status_server,
+    spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
+    wait_for_path_exists, wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall,
+    TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -673,7 +674,7 @@ fn task_delete_rejects_active_builder_runs() {
             summary: RunSummary {
                 run_id: "run-1".to_string(),
                 runtime_kind: AgentRuntimeKind::opencode(),
-                runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
+                runtime_route: builtin_opencode_runtime_route(port),
                 repo_path: repo_path.to_string(),
                 task_id: "parent-1".to_string(),
                 branch: "obp/parent-1-cleanup".to_string(),

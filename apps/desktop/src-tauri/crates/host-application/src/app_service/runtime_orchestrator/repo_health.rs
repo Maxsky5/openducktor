@@ -1054,6 +1054,7 @@ mod tests {
     use crate::app_service::runtime_registry::{
         ResolvedRuntimeMcpStatus, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
     };
+    use crate::app_service::test_support::builtin_opencode_runtime_descriptor;
     use host_domain::{
         AgentRuntimeKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RuntimeRole,
         RuntimeRoute,
@@ -1076,7 +1077,7 @@ mod tests {
                 endpoint: "http://127.0.0.1:4321".to_string(),
             },
             started_at: started_at.to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         }
     }
 

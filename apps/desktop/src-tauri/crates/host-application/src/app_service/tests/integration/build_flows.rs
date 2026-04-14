@@ -24,13 +24,13 @@ use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 #[cfg(not(unix))]
 use crate::app_service::test_support::remove_env_var;
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_store, create_failing_opencode,
-    create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    install_fake_dolt, lock_env, make_emitter, make_session, make_task, prepend_path,
-    process_is_alive, set_env_var, set_fake_opencode_and_bridge_binaries, spawn_sleep_process,
-    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
-    wait_for_process_exit, write_executable_script, write_private_file, EnvVarGuard, FakeTaskStore,
-    GitCall, TaskStoreState,
+    build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_route,
+    create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
+    empty_patch, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_session, make_task,
+    prepend_path, process_is_alive, set_env_var, set_fake_opencode_and_bridge_binaries,
+    spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
+    wait_for_path_exists, wait_for_process_exit, write_executable_script, write_private_file,
+    EnvVarGuard, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -470,7 +470,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
             summary: RunSummary {
                 run_id: run_id.clone(),
                 runtime_kind: AgentRuntimeKind::opencode(),
-                runtime_route: AgentRuntimeKind::opencode().route_for_port(1),
+                runtime_route: builtin_opencode_runtime_route(1),
                 repo_path: repo_path.clone(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),

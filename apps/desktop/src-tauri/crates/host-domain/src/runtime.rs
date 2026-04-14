@@ -33,33 +33,6 @@ impl AgentRuntimeKind {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
-
-    pub fn descriptor(&self) -> RuntimeDescriptor {
-        builtin_runtime_registry()
-            .definition(self)
-            .expect("runtime kind should be registered before descriptor lookup")
-            .descriptor()
-            .clone()
-    }
-
-    pub fn endpoint_for_port(&self, port: u16) -> String {
-        match self.route_for_port(port) {
-            RuntimeRoute::LocalHttp { endpoint } => endpoint,
-            RuntimeRoute::Stdio => {
-                panic!(
-                    "runtime kind {} does not support local_http routes",
-                    self.as_str()
-                )
-            }
-        }
-    }
-
-    pub fn route_for_port(&self, port: u16) -> RuntimeRoute {
-        builtin_runtime_registry()
-            .definition(self)
-            .expect("runtime kind should be registered before route lookup")
-            .route_for_port(port)
-    }
 }
 
 impl From<&str> for AgentRuntimeKind {

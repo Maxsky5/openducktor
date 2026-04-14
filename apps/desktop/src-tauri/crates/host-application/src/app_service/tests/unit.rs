@@ -19,9 +19,11 @@ use std::time::{Duration, Instant};
 
 use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry};
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_runtime_registry, make_task,
-    spawn_opencode_session_status_server, spawn_sleep_process, spawn_sleep_process_group,
-    unique_temp_path, wait_for_process_exit, write_private_file, FakeTaskStore, TaskStoreState,
+    build_service_with_git_state, build_service_with_runtime_registry,
+    builtin_opencode_runtime_definition, builtin_opencode_runtime_descriptor,
+    builtin_opencode_runtime_route, make_task, spawn_opencode_session_status_server,
+    spawn_sleep_process, spawn_sleep_process_group, unique_temp_path, wait_for_process_exit,
+    write_private_file, FakeTaskStore, TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -63,9 +65,9 @@ fn insert_workspace_runtime(service: &AppService, repo_path: &str, port: u16) ->
         task_id: None,
         role: RuntimeRole::Workspace,
         working_directory: repo_path.to_string(),
-        runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
+        runtime_route: builtin_opencode_runtime_route(port),
         started_at: "2026-03-17T11:00:00Z".to_string(),
-        descriptor: AgentRuntimeKind::opencode().descriptor(),
+        descriptor: builtin_opencode_runtime_descriptor(),
     };
     service
         .agent_runtimes
@@ -241,31 +243,31 @@ fn test_runtime_definition(kind: &str, label: &str) -> RuntimeDefinition {
 
 #[test]
 fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()> {
-    let runtime_registry = AppRuntimeRegistry::new(vec![
-        Arc::new(TestRuntimeAdapter {
-            definition: host_domain::builtin_runtime_registry()
-                .definition_by_str("opencode")
-                .expect("builtin opencode runtime should exist")
-                .clone(),
-            health: RuntimeHealth {
-                kind: "opencode".to_string(),
-                ok: true,
-                version: Some("1.0.0".to_string()),
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::Default,
-        }),
-        Arc::new(TestRuntimeAdapter {
-            definition: test_runtime_definition("test-runtime", "Test Runtime"),
-            health: RuntimeHealth {
-                kind: "test-runtime".to_string(),
-                ok: true,
-                version: Some("0.1.0".to_string()),
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::Default,
-        }),
-    ])?;
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: Some("1.0.0".to_string()),
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: Some("0.1.0".to_string()),
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
 
@@ -284,31 +286,31 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
 
 #[test]
 fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> {
-    let runtime_registry = AppRuntimeRegistry::new(vec![
-        Arc::new(TestRuntimeAdapter {
-            definition: host_domain::builtin_runtime_registry()
-                .definition_by_str("opencode")
-                .expect("builtin opencode runtime should exist")
-                .clone(),
-            health: RuntimeHealth {
-                kind: "opencode".to_string(),
-                ok: true,
-                version: None,
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::Default,
-        }),
-        Arc::new(TestRuntimeAdapter {
-            definition: test_runtime_definition("test-runtime", "Test Runtime"),
-            health: RuntimeHealth {
-                kind: "test-runtime".to_string(),
-                ok: true,
-                version: None,
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::Default,
-        }),
-    ])?;
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
 
@@ -355,33 +357,33 @@ fn runtime_apis_fail_fast_for_unsupported_runtime_kinds() {
 
 #[test]
 fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Result<()> {
-    let runtime_registry = AppRuntimeRegistry::new(vec![
-        Arc::new(TestRuntimeAdapter {
-            definition: host_domain::builtin_runtime_registry()
-                .definition_by_str("opencode")
-                .expect("builtin opencode runtime should exist")
-                .clone(),
-            health: RuntimeHealth {
-                kind: "opencode".to_string(),
-                ok: true,
-                version: None,
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::Default,
-        }),
-        Arc::new(TestRuntimeAdapter {
-            definition: test_runtime_definition("test-runtime", "Test Runtime"),
-            health: RuntimeHealth {
-                kind: "test-runtime".to_string(),
-                ok: true,
-                version: None,
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::ReturnError(
-                "custom runtime probe hook invoked",
-            ),
-        }),
-    ])?;
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::ReturnError(
+                    "custom runtime probe hook invoked",
+                ),
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
     let (service, task_state, _git_state) = build_service_with_runtime_registry(
         vec![make_task("task-1", "task", TaskStatus::InProgress)],
         runtime_registry,
@@ -444,31 +446,31 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
 
-    let runtime_registry = AppRuntimeRegistry::new(vec![
-        Arc::new(TestRuntimeAdapter {
-            definition: host_domain::builtin_runtime_registry()
-                .definition_by_str("opencode")
-                .expect("builtin opencode runtime should exist")
-                .clone(),
-            health: RuntimeHealth {
-                kind: "opencode".to_string(),
-                ok: true,
-                version: None,
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::Default,
-        }),
-        Arc::new(TestRuntimeAdapter {
-            definition: test_runtime_definition("test-runtime", "Test Runtime"),
-            health: RuntimeHealth {
-                kind: "test-runtime".to_string(),
-                ok: true,
-                version: None,
-                error: None,
-            },
-            session_probe_behavior: SessionProbeBehavior::ReturnNone,
-        }),
-    ])?;
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::ReturnNone,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
     let (service, task_state, _git_state) = build_service_with_runtime_registry(
         vec![make_task("task-1", "task", TaskStatus::InProgress)],
         runtime_registry,

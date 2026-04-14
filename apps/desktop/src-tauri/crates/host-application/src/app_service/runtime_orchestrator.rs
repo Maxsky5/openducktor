@@ -511,24 +511,12 @@ impl AppService {
     }
 
     pub fn runtime_definitions_list(&self) -> Result<Vec<RuntimeDescriptor>> {
-        let definitions = self
+        Ok(self
             .runtime_registry
             .definitions()
             .into_iter()
             .map(|definition| definition.descriptor().clone())
-            .collect::<Vec<_>>();
-        for definition in &definitions {
-            let validation_errors = definition.validate_for_openducktor();
-            if !validation_errors.is_empty() {
-                return Err(anyhow!(
-                    "Runtime '{}' is incompatible with OpenDucktor: {}.",
-                    definition.kind.as_str(),
-                    validation_errors.join("; "),
-                ));
-            }
-        }
-
-        Ok(definitions)
+            .collect::<Vec<_>>())
     }
 
     pub fn runtime_list(
@@ -852,7 +840,9 @@ mod tests {
     use super::{
         AppService, RuntimeEnsureFlightGuard, RuntimeStartupFailure, RuntimeStartupProgress,
     };
-    use crate::app_service::test_support::{build_service_with_state, make_task};
+    use crate::app_service::test_support::{
+        build_service_with_state, builtin_opencode_runtime_descriptor, make_task,
+    };
     use crate::app_service::{AgentRuntimeProcess, RunProcess};
     use anyhow::{anyhow, Result};
     use chrono::{TimeDelta, Utc};
@@ -1172,7 +1162,7 @@ mod tests {
                     endpoint: "http://127.0.0.1:9999".to_string(),
                 },
                 started_at: started_at.to_string(),
-                descriptor: AgentRuntimeKind::opencode().descriptor(),
+                descriptor: builtin_opencode_runtime_descriptor(),
             },
             &RuntimeStartupProgress {
                 started_at_instant,
@@ -1207,7 +1197,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 
@@ -1258,7 +1248,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 
@@ -1307,7 +1297,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 
@@ -1387,7 +1377,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at,
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 
@@ -1448,7 +1438,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at,
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 
@@ -1493,7 +1483,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 
@@ -1540,7 +1530,7 @@ mod tests {
                 endpoint: "http://127.0.0.1:9998".to_string(),
             },
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
         service
@@ -1606,7 +1596,7 @@ mod tests {
                 endpoint: format!("http://127.0.0.1:{port}"),
             },
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
         service.runs.lock().expect("runs lock poisoned").insert(
@@ -1679,7 +1669,7 @@ mod tests {
             working_directory: "/tmp/repo-health-stdio".to_string(),
             runtime_route: RuntimeRoute::Stdio,
             started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         };
         insert_workspace_runtime(&service, runtime.clone())?;
 

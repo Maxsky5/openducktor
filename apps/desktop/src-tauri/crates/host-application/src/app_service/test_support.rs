@@ -86,6 +86,21 @@ pub(crate) fn write_private_file(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn builtin_opencode_runtime_definition() -> host_domain::RuntimeDefinition {
+    host_domain::builtin_runtime_registry()
+        .definition_by_str("opencode")
+        .expect("builtin opencode runtime should exist")
+        .clone()
+}
+
+pub(crate) fn builtin_opencode_runtime_descriptor() -> host_domain::RuntimeDescriptor {
+    builtin_opencode_runtime_definition().descriptor().clone()
+}
+
+pub(crate) fn builtin_opencode_runtime_route(port: u16) -> host_domain::RuntimeRoute {
+    builtin_opencode_runtime_definition().route_for_port(port)
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct TaskStoreState {
     pub(crate) diagnose_calls: Vec<String>,

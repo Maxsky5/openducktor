@@ -393,7 +393,9 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_service::test_support::{build_service_with_state, make_emitter, make_task};
+    use crate::app_service::test_support::{
+        build_service_with_state, builtin_opencode_runtime_descriptor, make_emitter, make_task,
+    };
     use host_domain::{GitTargetBranch, RuntimeRole, TaskStatus};
     use host_infra_system::RepoConfig;
     use std::path::PathBuf;
@@ -409,7 +411,7 @@ mod tests {
             working_directory: "/tmp/repo".to_string(),
             runtime_route: RuntimeRoute::Stdio,
             started_at: "2026-04-13T00:00:00Z".to_string(),
-            descriptor: AgentRuntimeKind::opencode().descriptor(),
+            descriptor: builtin_opencode_runtime_descriptor(),
         }
     }
 

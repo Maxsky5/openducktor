@@ -10,9 +10,10 @@ use std::thread;
 use std::time::Duration;
 
 use crate::app_service::test_support::{
-    build_service_with_store, create_fake_opencode, init_git_repo, install_fake_dolt, lock_env,
-    make_session, make_task, set_env_var, set_fake_opencode_and_bridge_binaries,
-    spawn_sleep_process, unique_temp_path, wait_for_path_exists, wait_for_process_exit,
+    build_service_with_store, builtin_opencode_runtime_descriptor, builtin_opencode_runtime_route,
+    create_fake_opencode, init_git_repo, install_fake_dolt, lock_env, make_session, make_task,
+    set_env_var, set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
+    wait_for_path_exists, wait_for_process_exit,
 };
 use crate::app_service::{
     read_opencode_process_registry, AgentRuntimeProcess, RunProcess,
@@ -34,9 +35,9 @@ fn runtime_summary_fixture(
         task_id: Some(task_id.to_string()),
         role,
         working_directory: working_directory.to_string(),
-        runtime_route: AgentRuntimeKind::opencode().route_for_port(port),
+        runtime_route: builtin_opencode_runtime_route(port),
         started_at: "2026-02-20T12:00:00Z".to_string(),
-        descriptor: AgentRuntimeKind::opencode().descriptor(),
+        descriptor: builtin_opencode_runtime_descriptor(),
     }
 }
 
@@ -44,7 +45,7 @@ fn run_summary_fixture(repo_path: &str, task_id: &str, worktree_path: &str) -> R
     RunSummary {
         run_id: "run-1".to_string(),
         runtime_kind: AgentRuntimeKind::opencode(),
-        runtime_route: AgentRuntimeKind::opencode().route_for_port(4444),
+        runtime_route: builtin_opencode_runtime_route(4444),
         repo_path: repo_path.to_string(),
         task_id: task_id.to_string(),
         branch: format!("obp/{task_id}"),

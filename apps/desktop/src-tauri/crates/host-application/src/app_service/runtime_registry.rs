@@ -387,16 +387,16 @@ pub(crate) struct AppRuntimeRegistry {
 }
 
 impl AppRuntimeRegistry {
-    pub(crate) fn new(runtimes: Vec<Arc<dyn AppRuntime>>) -> Result<Self> {
+    pub(crate) fn new(
+        runtimes: Vec<Arc<dyn AppRuntime>>,
+        default_kind: AgentRuntimeKind,
+    ) -> Result<Self> {
         let definitions = RuntimeRegistry::new_with_default_kind(
             runtimes
                 .iter()
                 .map(|runtime| runtime.definition())
                 .collect(),
-            runtimes
-                .iter()
-                .find(|runtime| runtime.definition().kind().as_str() == "opencode")
-                .map(|runtime| runtime.definition().kind().clone()),
+            Some(default_kind),
         )?;
         let runtimes_by_kind = runtimes
             .into_iter()
@@ -410,8 +410,11 @@ impl AppRuntimeRegistry {
 
     pub(crate) fn builtin() -> Self {
         static BUILTIN: LazyLock<AppRuntimeRegistry> = LazyLock::new(|| {
-            AppRuntimeRegistry::new(vec![Arc::new(OpenCodeRuntime)])
-                .expect("builtin app runtime registry should be valid")
+            AppRuntimeRegistry::new(
+                vec![Arc::new(OpenCodeRuntime)],
+                AgentRuntimeKind::opencode(),
+            )
+            .expect("builtin app runtime registry should be valid")
         });
         BUILTIN.clone()
     }
