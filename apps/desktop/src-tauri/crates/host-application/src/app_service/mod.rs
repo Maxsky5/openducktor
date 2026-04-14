@@ -20,6 +20,7 @@ pub mod build_orchestrator;
 
 mod dev_server_manager;
 mod events;
+mod filesystem;
 mod git_provider;
 mod hook_security;
 mod mcp_bridge_process;

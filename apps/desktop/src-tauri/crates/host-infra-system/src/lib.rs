@@ -1,5 +1,6 @@
 mod beads;
 mod config;
+mod filesystem;
 mod git;
 mod open_in;
 mod process;
@@ -27,6 +28,7 @@ pub use config::{
     RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig,
     SoftGuardrails,
 };
+pub use filesystem::{list_directory, FilesystemListDirectoryError};
 pub use git::GitCliPort;
 pub use open_in::{discover_open_in_tools, open_directory_in_tool};
 pub use process::{

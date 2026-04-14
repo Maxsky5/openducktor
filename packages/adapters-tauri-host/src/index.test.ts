@@ -137,6 +137,38 @@ describe("TauriHostClient", () => {
     expect(rewrittenAfterReplace).toHaveLength(1);
   });
 
+  test("parses filesystem directory listings from the host", async () => {
+    const { client, calls } = createClient((command, args) => {
+      if (command === "filesystem_list_directory") {
+        expect(args).toEqual({ path: "/Users/dev" });
+        return {
+          currentPath: "/Users/dev",
+          parentPath: "/Users",
+          homePath: "/Users/dev",
+          entries: [
+            {
+              name: "repo-one",
+              path: "/Users/dev/repo-one",
+              isDirectory: true,
+              isGitRepo: true,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const listing = await client.filesystemListDirectory("/Users/dev");
+
+    expect(calls).toEqual([
+      {
+        command: "filesystem_list_directory",
+        args: { path: "/Users/dev" },
+      },
+    ]);
+    expect(listing.entries[0]?.isGitRepo).toBe(true);
+  });
+
   test("parses structured repo store diagnostics from beadsCheck", async () => {
     const { client } = createClient((command) => {
       if (command === "beads_check") {
@@ -191,6 +223,7 @@ describe("TauriHostClient", () => {
     // Keep this explicit: importing internal method-group constants from index.ts
     // would make this facade-surface assertion tautological.
     const expectedMethods = [
+      "filesystemListDirectory",
       "workspaceList",
       "workspaceAdd",
       "workspaceSelect",

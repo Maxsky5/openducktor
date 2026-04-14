@@ -35,10 +35,10 @@ pub use runtime::{
 };
 pub use store::TaskStore;
 pub use system::{
-    BeadsCheck, RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory,
-    RepoStoreHealthStatus, RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
-    RuntimeCheck, RuntimeHealth, SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo,
-    WorkspaceRecord,
+    BeadsCheck, DirectoryEntry, DirectoryListing, RepoStoreAttachmentHealth, RepoStoreHealth,
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, RuntimeCheck, RuntimeHealth, SystemCheck,
+    SystemOpenInToolId, SystemOpenInToolInfo, WorkspaceRecord,
 };
 pub use task::{
     is_syncable_pull_request_state, is_terminal_task_status, CreateTaskInput, IssueType,
@@ -118,25 +118,26 @@ mod tests {
             AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
             BeadsCheck, BuildContinuationTarget, BuildContinuationTargetSource, CreateTaskInput,
             DevServerEvent, DevServerGroupState, DevServerScriptState, DevServerScriptStatus,
-            DevServerTerminalChunk, GitBranch, GitCommitAllRequest, GitCommitAllResult,
-            GitConflict, GitConflictAbortRequest, GitConflictAbortResult, GitConflictOperation,
-            GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest,
-            GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-            GitRebaseBranchRequest, GitRebaseBranchResult, GitResetSnapshot,
-            GitResetWorktreeSelection, GitResetWorktreeSelectionRequest,
-            GitResetWorktreeSelectionResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-            GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
-            GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType, PlanSubtaskInput,
-            QaReportDocument, QaVerdict, QaWorkflowVerdict, RepoRuntimeHealthCheck,
-            RepoRuntimeHealthMcp, RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime,
-            RepoRuntimeHealthState, RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind,
-            RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RepoStoreAttachmentHealth,
-            RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
-            RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RunEvent, RunState,
-            RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, SpecDocument,
-            SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo, TaskAction, TaskCard,
-            TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary, TaskMetadata,
-            TaskQaDocumentPresence, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
+            DevServerTerminalChunk, DirectoryEntry, DirectoryListing, GitBranch,
+            GitCommitAllRequest, GitCommitAllResult, GitConflict, GitConflictAbortRequest,
+            GitConflictAbortResult, GitConflictOperation, GitCurrentBranch, GitDiffScope,
+            GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult, GitPushResult,
+            GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
+            GitRebaseBranchResult, GitResetSnapshot, GitResetWorktreeSelection,
+            GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult,
+            GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData,
+            GitWorktreeStatusSnapshot, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData,
+            GitWorktreeSummary, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict,
+            QaWorkflowVerdict, RepoRuntimeHealthCheck, RepoRuntimeHealthMcp,
+            RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime, RepoRuntimeHealthState,
+            RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
+            RepoRuntimeStartupStatus, RepoStoreAttachmentHealth, RepoStoreHealth,
+            RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+            RepoStoreSharedServerOwnershipState, RunEvent, RunState, RunSummary, RuntimeCheck,
+            RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck, SystemOpenInToolId,
+            SystemOpenInToolInfo, TaskAction, TaskCard, TaskDirectMergeResult,
+            TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
+            TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -208,6 +209,8 @@ mod tests {
             DevServerScriptState,
             DevServerScriptStatus,
             DevServerTerminalChunk,
+            DirectoryEntry,
+            DirectoryListing,
             QaVerdict,
             QaWorkflowVerdict,
             RunEvent,
@@ -231,7 +234,6 @@ mod tests {
             WorkspaceRecord,
         );
 
-        // Traits are unsized, so we validate exports via trait objects.
         let _: Option<&dyn GitPort> = None;
         let _: Option<&dyn TaskStore> = None;
     }

@@ -1,5 +1,5 @@
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
-import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { workspaceLabelFromPath } from "@/lib/workspace-label";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import { FolderPickerDialog } from "./folder-picker-dialog";
 
 type OpenRepositoryModalProps = {
   open: boolean;
@@ -28,30 +28,35 @@ export function OpenRepositoryModal({
 }: OpenRepositoryModalProps): ReactElement {
   const { activeRepo, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
     useWorkspaceState();
-  const [isPickingRepo, setIsPickingRepo] = useState(false);
+  const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isModalBusy = isPickingRepo || isSwitchingWorkspace;
+  useEffect(() => {
+    if (!open) {
+      setIsFolderPickerOpen(false);
+    }
+  }, [open]);
+
+  const isModalBusy = isSwitchingWorkspace;
   const sortedRecent = useMemo(
     () => [...workspaces].sort((a, b) => Number(b.isActive) - Number(a.isActive)),
     [workspaces],
   );
 
-  const openSelectedRepo = async (): Promise<void> => {
-    setIsPickingRepo(true);
+  const openSelectedRepo = (): void => {
+    setError(null);
+    setIsFolderPickerOpen(true);
+  };
+
+  const confirmSelectedRepo = async (path: string): Promise<void> => {
     setError(null);
     try {
-      const path = await pickRepositoryDirectory();
-      if (!path) {
-        return;
-      }
-
       await addWorkspace(path);
       onOpenChange(false);
     } catch (reason) {
-      setError(errorMessage(reason));
-    } finally {
-      setIsPickingRepo(false);
+      const message = errorMessage(reason);
+      setError(message);
+      throw reason;
     }
   };
 
@@ -107,11 +112,11 @@ export function OpenRepositoryModal({
             type="button"
             size="lg"
             className="w-full"
-            onClick={() => void openSelectedRepo()}
+            onClick={openSelectedRepo}
             disabled={isModalBusy}
           >
             <FolderOpen className="size-4" />
-            {isPickingRepo ? "Opening directory picker..." : "Choose Repository Folder"}
+            Choose Repository Folder
           </Button>
 
           {error ? (
@@ -163,6 +168,17 @@ export function OpenRepositoryModal({
           </DialogFooter>
         ) : null}
       </DialogContent>
+
+      {isFolderPickerOpen ? (
+        <FolderPickerDialog
+          open={isFolderPickerOpen}
+          onOpenChange={setIsFolderPickerOpen}
+          title="Open Repository"
+          description="Browse to an existing Git repository on disk. OpenDucktor will register the selected path in place."
+          confirmLabel="Open Repository"
+          onConfirm={confirmSelectedRepo}
+        />
+      ) : null}
     </Dialog>
   );
 }

@@ -1,6 +1,7 @@
 pub mod agent_sessions;
 pub mod build;
 pub mod documents;
+pub mod filesystem;
 pub mod git;
 pub(crate) mod issue_type;
 pub mod runtime;

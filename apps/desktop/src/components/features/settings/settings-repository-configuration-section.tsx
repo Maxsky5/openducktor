@@ -1,8 +1,9 @@
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
 import { ChevronDown, ChevronUp, CircleAlert, FolderOpen, Plus, Trash2 } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,10 +24,8 @@ type RepositoryConfigurationSectionProps = {
   selectedRepoBranchesError: string | null;
   isLoadingSettings: boolean;
   isSaving: boolean;
-  isPickingWorktreeBasePath: boolean;
   isLoadingSelectedRepoBranches: boolean;
   onRetrySelectedRepoBranchesLoad: () => void;
-  onPickWorktreeBasePath: () => Promise<void>;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
 };
 
@@ -41,12 +40,12 @@ export function RepositoryConfigurationSection({
   selectedRepoBranchesError,
   isLoadingSettings,
   isSaving,
-  isPickingWorktreeBasePath,
   isLoadingSelectedRepoBranches,
   onRetrySelectedRepoBranchesLoad,
-  onPickWorktreeBasePath,
   onUpdateSelectedRepoConfig,
 }: RepositoryConfigurationSectionProps): ReactElement {
+  const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
+
   if (!selectedRepoConfig) {
     return (
       <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
@@ -113,53 +112,78 @@ export function RepositoryConfigurationSection({
     ? (selectedRepoDevServerValidationErrors ??
       buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []))
     : {};
+  const folderPickerInitialPath =
+    selectedRepoConfig.worktreeBasePath ?? selectedRepoEffectiveWorktreeBasePath;
 
   return (
-    <div className="grid gap-4 p-4">
-      <RepositoryWorktreeBasePathSection
-        isDisabled={isLoadingSettings || isSaving || isPickingWorktreeBasePath}
-        selectedRepoConfig={selectedRepoConfig}
-        selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
-        onPickWorktreeBasePath={onPickWorktreeBasePath}
-        onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
-      />
+    <>
+      <div className="grid gap-4 p-4">
+        <RepositoryWorktreeBasePathSection
+          isDisabled={isLoadingSettings || isSaving}
+          selectedRepoConfig={selectedRepoConfig}
+          selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
+          onPickWorktreeBasePath={() => setIsFolderPickerOpen(true)}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        />
 
-      <RepositoryBranchSettingsSection
-        branchPrefix={selectedRepoConfig.branchPrefix}
-        defaultTargetBranchOptions={defaultTargetBranchOptions}
-        defaultTargetBranchPlaceholder={defaultTargetBranchPlaceholder}
-        isBranchPrefixDisabled={isLoadingSettings || isSaving}
-        isDefaultTargetBranchPickerDisabled={isDefaultTargetBranchPickerDisabled}
-        isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
-        isSaving={isSaving}
-        selectedRepoBranchesError={selectedRepoBranchesError}
-        targetBranchSelectorValue={targetBranchSelectorValue}
-        onRetrySelectedRepoBranchesLoad={onRetrySelectedRepoBranchesLoad}
-        onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
-      />
+        <RepositoryBranchSettingsSection
+          branchPrefix={selectedRepoConfig.branchPrefix}
+          defaultTargetBranchOptions={defaultTargetBranchOptions}
+          defaultTargetBranchPlaceholder={defaultTargetBranchPlaceholder}
+          isBranchPrefixDisabled={isLoadingSettings || isSaving}
+          isDefaultTargetBranchPickerDisabled={isDefaultTargetBranchPickerDisabled}
+          isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
+          isSaving={isSaving}
+          selectedRepoBranchesError={selectedRepoBranchesError}
+          targetBranchSelectorValue={targetBranchSelectorValue}
+          onRetrySelectedRepoBranchesLoad={onRetrySelectedRepoBranchesLoad}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        />
 
-      <RepositoryHookScriptsSection
-        isDisabled={isLoadingSettings || isSaving}
-        postCompleteHooks={selectedRepoConfig.hooks.postComplete}
-        preStartHooks={selectedRepoConfig.hooks.preStart}
-        updateHookDraft={updateHookDraft}
-      />
+        <RepositoryHookScriptsSection
+          isDisabled={isLoadingSettings || isSaving}
+          postCompleteHooks={selectedRepoConfig.hooks.postComplete}
+          preStartHooks={selectedRepoConfig.hooks.preStart}
+          updateHookDraft={updateHookDraft}
+        />
 
-      <RepositoryDevServersSection
-        devServerValidationErrors={devServerValidationErrors}
-        devServers={selectedRepoConfig.devServers}
-        isDisabled={isLoadingSettings || isSaving}
-        updateScriptDraft={updateScriptDraft}
-      />
+        <RepositoryDevServersSection
+          devServerValidationErrors={devServerValidationErrors}
+          devServers={selectedRepoConfig.devServers}
+          isDisabled={isLoadingSettings || isSaving}
+          updateScriptDraft={updateScriptDraft}
+        />
 
-      <RepositoryScriptFingerprintNotice />
+        <RepositoryScriptFingerprintNotice />
 
-      <RepositoryWorktreeFileCopiesSection
-        isDisabled={isLoadingSettings || isSaving}
-        worktreeFileCopies={selectedRepoConfig.worktreeFileCopies}
-        onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
-      />
-    </div>
+        <RepositoryWorktreeFileCopiesSection
+          isDisabled={isLoadingSettings || isSaving}
+          worktreeFileCopies={selectedRepoConfig.worktreeFileCopies}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        />
+      </div>
+
+      {isFolderPickerOpen ? (
+        <FolderPickerDialog
+          open={isFolderPickerOpen}
+          onOpenChange={setIsFolderPickerOpen}
+          title="Select Worktree Base Path"
+          description="Choose the directory where OpenDucktor should create managed worktrees for this repository."
+          confirmLabel="Use This Path"
+          {...(folderPickerInitialPath
+            ? {
+                initialPath: folderPickerInitialPath,
+              }
+            : {})}
+          onConfirm={async (path) => {
+            onUpdateSelectedRepoConfig((repoConfig) => ({
+              ...repoConfig,
+              worktreeBasePath: path,
+            }));
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -173,7 +197,7 @@ function RepositoryWorktreeBasePathSection({
   isDisabled: boolean;
   selectedRepoConfig: RepoConfig;
   selectedRepoEffectiveWorktreeBasePath: string | null;
-  onPickWorktreeBasePath: () => Promise<void>;
+  onPickWorktreeBasePath: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
   return (
