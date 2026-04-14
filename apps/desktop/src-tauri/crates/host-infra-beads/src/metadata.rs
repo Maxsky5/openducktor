@@ -125,13 +125,22 @@ fn normalize_agent_session_entry(entry: &Value) -> Value {
     Value::Object(normalized)
 }
 
-pub(crate) fn parse_agent_sessions(value: &Value) -> Option<Vec<AgentSessionDocument>> {
-    let entries = value
-        .as_array()?
+pub(crate) fn parse_agent_sessions(value: &Value) -> Result<Vec<AgentSessionDocument>> {
+    let entries = value.as_array().ok_or_else(|| {
+        anyhow!(
+            "Invalid openducktor.agentSessions metadata: expected an array of persisted sessions. Fix the saved task metadata and retry."
+        )
+    })?;
+
+    entries
         .iter()
-        .filter_map(|entry| {
-            AgentSessionDocument::deserialize(normalize_agent_session_entry(entry)).ok()
+        .enumerate()
+        .map(|(index, entry)| {
+            AgentSessionDocument::deserialize(normalize_agent_session_entry(entry)).map_err(|error| {
+                anyhow!(
+                    "Invalid openducktor.agentSessions[{index}] metadata: {error}. Fix the saved task metadata and retry."
+                )
+            })
         })
-        .collect::<Vec<_>>();
-    Some(entries)
+        .collect()
 }

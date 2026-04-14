@@ -8,6 +8,7 @@ import type {
 import type { AgentRuntimeConnection } from "@openducktor/core";
 import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
+import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
@@ -24,18 +25,6 @@ export type ResolvedHydrationRuntime =
       runtimeKind: RuntimeKind;
       reason: string;
     };
-
-export const readPersistedRuntimeKind = ({
-  sessionId,
-  runtimeKind,
-  selectedModel,
-}: Pick<AgentSessionRecord, "sessionId" | "runtimeKind" | "selectedModel">): RuntimeKind => {
-  const resolvedRuntimeKind = runtimeKind ?? selectedModel?.runtimeKind;
-  if (!resolvedRuntimeKind) {
-    throw new Error(`Persisted session '${sessionId}' is missing runtime kind metadata.`);
-  }
-  return resolvedRuntimeKind;
-};
 
 export const createHydrationRuntimeResolver = ({
   repoPath,

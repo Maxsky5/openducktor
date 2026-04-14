@@ -126,7 +126,6 @@ pub struct QaReportDocument {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionModelSelection {
-    #[serde(default = "default_runtime_kind")]
     pub runtime_kind: String,
     pub provider_id: String,
     pub model_id: String,
@@ -150,15 +149,10 @@ pub struct AgentSessionDocument {
     pub role: String,
     pub scenario: String,
     pub started_at: String,
-    #[serde(default = "default_runtime_kind")]
     pub runtime_kind: String,
     pub working_directory: String,
     #[serde(default)]
     pub selected_model: Option<AgentSessionModelSelection>,
-}
-
-fn default_runtime_kind() -> String {
-    "opencode".to_string()
 }
 
 /// Consolidated task metadata returned in a single CLI call.

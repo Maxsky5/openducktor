@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use host_domain::{AgentWorkflows, PullRequestRecord, TaskCard};
 
 use crate::metadata::{
@@ -36,7 +36,14 @@ impl BeadsTaskStore {
         };
         let mut agent_sessions = namespace
             .and_then(|ns| ns.get("agentSessions"))
-            .and_then(crate::metadata::parse_agent_sessions)
+            .map(crate::metadata::parse_agent_sessions)
+            .transpose()
+            .with_context(|| {
+                format!(
+                    "Invalid openducktor.agentSessions metadata for issue {}",
+                    issue.id
+                )
+            })?
             .unwrap_or_default();
         agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
@@ -566,6 +566,74 @@ describe("repo-session-hydration-service", () => {
       appQueryClient.getQueryState(runtimeQueryKeys.list("opencode", repoPath))?.isInvalidated,
     ).toBe(true);
     service.dispose();
+  });
+
+  test("reconcile skips deterministic persisted runtime metadata failures without scheduling retries", async () => {
+    let retryRequests = 0;
+    const reconcileCalls: string[] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const consoleError = mock(() => {});
+    const originalConsoleError = console.error;
+    console.error = consoleError as typeof console.error;
+
+    host.runtimeList = async () => [createRuntimeInstance()];
+
+    const invalidTask = taskWithSession("task-invalid", "external-invalid");
+    const invalidSession = invalidTask.agentSessions?.[0];
+    if (!invalidSession) {
+      throw new Error("Expected invalid task session fixture");
+    }
+    invalidTask.agentSessions = [
+      {
+        ...invalidSession,
+        runtimeKind: undefined as unknown as typeof invalidSession.runtimeKind,
+      },
+    ];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => [
+          {
+            externalSessionId: "external-valid",
+            title: "Valid task",
+            workingDirectory: worktreePath,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+        ],
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {
+        retryRequests += 1;
+      },
+    });
+
+    try {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [taskWithSession("task-valid", "external-valid"), invalidTask],
+        runs: [],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+
+      await Bun.sleep(600);
+
+      expect(reconcileCalls).toEqual(["task-valid"]);
+      expect(retryRequests).toBe(0);
+      expect(consoleError).toHaveBeenCalledTimes(1);
+    } finally {
+      console.error = originalConsoleError;
+      service.dispose();
+    }
   });
 
   afterEach(() => {

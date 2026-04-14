@@ -7,7 +7,6 @@ import {
   type AgentUserMessageDisplayPart,
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type {
   AgentChatMessage,
   AgentSessionContextUsage,
@@ -15,29 +14,44 @@ import type {
 } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
+import {
+  readPersistedRuntimeKind,
+  requirePersistedSelectedModelRuntimeKind,
+  requireSelectedModelRuntimeKindForPersistence,
+  requireSessionRuntimeKindForPersistence,
+} from "./session-runtime-metadata";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 
-export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
-  sessionId: session.sessionId,
-  externalSessionId: session.externalSessionId,
-  role: session.role,
-  scenario: session.scenario,
-  startedAt: session.startedAt,
-  runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-  workingDirectory: session.workingDirectory,
-  selectedModel: session.selectedModel
-    ? {
-        runtimeKind:
-          session.selectedModel.runtimeKind ?? session.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-        providerId: session.selectedModel.providerId,
-        modelId: session.selectedModel.modelId,
-        ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
-        ...(session.selectedModel.profileId ? { profileId: session.selectedModel.profileId } : {}),
-      }
-    : null,
-});
+export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
+  const runtimeKind = requireSessionRuntimeKindForPersistence(session);
+
+  return {
+    sessionId: session.sessionId,
+    externalSessionId: session.externalSessionId,
+    role: session.role,
+    scenario: session.scenario,
+    startedAt: session.startedAt,
+    runtimeKind,
+    workingDirectory: session.workingDirectory,
+    selectedModel: session.selectedModel
+      ? {
+          runtimeKind: requireSelectedModelRuntimeKindForPersistence(
+            session.sessionId,
+            runtimeKind,
+            session.selectedModel,
+          ),
+          providerId: session.selectedModel.providerId,
+          modelId: session.selectedModel.modelId,
+          ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
+          ...(session.selectedModel.profileId
+            ? { profileId: session.selectedModel.profileId }
+            : {}),
+        }
+      : null,
+  };
+};
 
 export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
   return defaultAgentScenarioForRole(role);
@@ -47,6 +61,8 @@ export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
 ): AgentSessionState => {
+  const runtimeKind = readPersistedRuntimeKind(session);
+
   return {
     sessionId: session.sessionId,
     externalSessionId: session.externalSessionId ?? session.sessionId,
@@ -57,7 +73,7 @@ export const fromPersistedSessionRecord = (
     // Live state must always be derived from the runtime on hydration/reconciliation.
     status: "stopped",
     startedAt: session.startedAt,
-    runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     runtimeId: null,
     runId: null,
     runtimeRoute: null,
@@ -73,7 +89,16 @@ export const fromPersistedSessionRecord = (
     pendingQuestions: [],
     todos: [],
     modelCatalog: null,
-    selectedModel: normalizePersistedSelection(session.selectedModel),
+    selectedModel: session.selectedModel
+      ? normalizePersistedSelection({
+          ...session.selectedModel,
+          runtimeKind: requirePersistedSelectedModelRuntimeKind(
+            session.sessionId,
+            runtimeKind,
+            session.selectedModel,
+          ),
+        })
+      : null,
     isLoadingModelCatalog: false,
   };
 };

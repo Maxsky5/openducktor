@@ -15,7 +15,7 @@ const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
 export const agentSessionModelSelectionSchema = z.object({
-  runtimeKind: runtimeKindSchema.default("opencode"),
+  runtimeKind: runtimeKindSchema,
   providerId: z.string(),
   modelId: z.string(),
   variant: optionalFromNullable(z.string()),
@@ -58,7 +58,7 @@ export const agentSessionRecordSchema = z.object({
   role: agentSessionRoleSchema,
   scenario: agentSessionScenarioSchema,
   startedAt: z.string(),
-  runtimeKind: runtimeKindSchema.default("opencode"),
+  runtimeKind: runtimeKindSchema,
   workingDirectory: z.string(),
   selectedModel: z.preprocess(
     (value) => (value === undefined ? null : value),

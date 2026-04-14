@@ -66,11 +66,15 @@ pub fn normalize_repo_dev_servers(dev_servers: &mut Vec<RepoDevServerScript>) ->
     Ok(())
 }
 
-fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
+fn normalize_agent_model_default(
+    value: &mut Option<AgentModelDefault>,
+    field_name: &str,
+) -> Result<()> {
     let Some(entry) = value.as_mut() else {
-        return;
+        return Ok(());
     };
 
+    entry.runtime_kind = entry.runtime_kind.trim().to_string();
     entry.provider_id = entry.provider_id.trim().to_string();
     entry.model_id = entry.model_id.trim().to_string();
     entry.variant = normalize_optional_non_empty(entry.variant.take());
@@ -78,7 +82,16 @@ fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
 
     if entry.provider_id.is_empty() || entry.model_id.is_empty() {
         *value = None;
+        return Ok(());
     }
+
+    if entry.runtime_kind.is_empty() {
+        return Err(anyhow!(
+            "{field_name} runtime kind is required when provider and model are configured."
+        ));
+    }
+
+    Ok(())
 }
 
 fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
@@ -146,6 +159,10 @@ pub fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
 }
 
 pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
+    repo.default_runtime_kind = repo.default_runtime_kind.trim().to_string();
+    if repo.default_runtime_kind.is_empty() {
+        return Err(anyhow!("Default runtime kind cannot be blank."));
+    }
     repo.worktree_base_path = normalize_optional_non_empty(repo.worktree_base_path.take());
     let branch_prefix = repo.branch_prefix.trim();
     repo.branch_prefix = if branch_prefix.is_empty() {
@@ -171,10 +188,10 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
         repo.trusted_hooks_fingerprint = None;
     }
     normalize_prompt_overrides(&mut repo.prompt_overrides);
-    normalize_agent_model_default(&mut repo.agent_defaults.spec);
-    normalize_agent_model_default(&mut repo.agent_defaults.planner);
-    normalize_agent_model_default(&mut repo.agent_defaults.build);
-    normalize_agent_model_default(&mut repo.agent_defaults.qa);
+    normalize_agent_model_default(&mut repo.agent_defaults.spec, "Specification agent default")?;
+    normalize_agent_model_default(&mut repo.agent_defaults.planner, "Planner agent default")?;
+    normalize_agent_model_default(&mut repo.agent_defaults.build, "Builder agent default")?;
+    normalize_agent_model_default(&mut repo.agent_defaults.qa, "QA agent default")?;
     Ok(())
 }
 

@@ -34,7 +34,8 @@ impl BeadsTaskStore {
 
         let mut agent_sessions = namespace
             .and_then(|ns| ns.get("agentSessions"))
-            .and_then(parse_agent_sessions)
+            .map(parse_agent_sessions)
+            .transpose()?
             .unwrap_or_default();
         agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
 
@@ -104,9 +105,23 @@ impl BeadsTaskStore {
             return Err(anyhow!("Agent session startedAt is required"));
         }
 
+        session.runtime_kind = session.runtime_kind.trim().to_string();
+        if session.runtime_kind.is_empty() {
+            return Err(anyhow!("Agent session runtimeKind is required"));
+        }
+
         session.working_directory = session.working_directory.trim().to_string();
         if session.working_directory.is_empty() {
             return Err(anyhow!("Agent session workingDirectory is required"));
+        }
+
+        if let Some(selected_model) = session.selected_model.as_mut() {
+            selected_model.runtime_kind = selected_model.runtime_kind.trim().to_string();
+            if selected_model.runtime_kind.is_empty() {
+                return Err(anyhow!(
+                    "Agent session selectedModel.runtimeKind is required"
+                ));
+            }
         }
 
         Ok(session)
@@ -122,7 +137,8 @@ impl BeadsTaskStore {
         let namespace_key = self.current_metadata_namespace();
         let mut entries = metadata_namespace(&metadata_root, &namespace_key)
             .and_then(|ns| ns.get("agentSessions"))
-            .and_then(parse_agent_sessions)
+            .map(parse_agent_sessions)
+            .transpose()?
             .unwrap_or_default();
 
         entries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
@@ -140,7 +156,8 @@ impl BeadsTaskStore {
             self.load_namespace(repo_path, task_id)?;
         let mut sessions = namespace_map
             .get("agentSessions")
-            .and_then(parse_agent_sessions)
+            .map(parse_agent_sessions)
+            .transpose()?
             .unwrap_or_default();
 
         if let Some(existing_index) = sessions
@@ -188,7 +205,8 @@ impl BeadsTaskStore {
             self.load_namespace(repo_path, task_id)?;
         let sessions = namespace_map
             .get("agentSessions")
-            .and_then(parse_agent_sessions)
+            .map(parse_agent_sessions)
+            .transpose()?
             .unwrap_or_default();
         let filtered_sessions = sessions
             .into_iter()

@@ -7,8 +7,11 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
+import {
+  normalizeRepoAgentDefaultForSave,
+  normalizeRepoDefaultRuntimeKindForSave,
+} from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import {
   loadRepoConfigFromQuery,
@@ -55,21 +58,12 @@ export function useRepoSettingsOperations({
     [queryClient],
   );
 
-  const toConfigDefault = useCallback((entry: RepoAgentDefaultInput | null) => {
-    if (!entry?.providerId.trim() || !entry.modelId.trim()) {
-      return undefined;
-    }
-
-    const runtimeKind = entry.runtimeKind?.trim() || DEFAULT_RUNTIME_KIND;
-
-    return {
-      runtimeKind,
-      providerId: entry.providerId.trim(),
-      modelId: entry.modelId.trim(),
-      ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
-      ...(entry.profileId.trim() ? { profileId: entry.profileId.trim() } : {}),
-    };
-  }, []);
+  const toConfigDefault = useCallback(
+    (role: keyof RepoSettingsInput["agentDefaults"], entry: RepoAgentDefaultInput | null) => {
+      return normalizeRepoAgentDefaultForSave(role, entry);
+    },
+    [],
+  );
 
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
     const repo = requireActiveRepo(activeRepo);
@@ -82,10 +76,14 @@ export function useRepoSettingsOperations({
     async (input: RepoSettingsInput) => {
       const repo = requireActiveRepo(activeRepo);
 
-      const specDefault = toConfigDefault(input.agentDefaults.spec);
-      const plannerDefault = toConfigDefault(input.agentDefaults.planner);
-      const buildDefault = toConfigDefault(input.agentDefaults.build);
-      const qaDefault = toConfigDefault(input.agentDefaults.qa);
+      const specDefault = toConfigDefault("spec", input.agentDefaults.spec);
+      const plannerDefault = toConfigDefault("planner", input.agentDefaults.planner);
+      const buildDefault = toConfigDefault("build", input.agentDefaults.build);
+      const qaDefault = toConfigDefault("qa", input.agentDefaults.qa);
+      const defaultRuntimeKind = normalizeRepoDefaultRuntimeKindForSave(
+        input.defaultRuntimeKind,
+        input.defaultRuntimeKind,
+      );
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
@@ -107,7 +105,7 @@ export function useRepoSettingsOperations({
       };
 
       const workspace = await host.workspaceSaveRepoSettings(repo, {
-        defaultRuntimeKind: input.defaultRuntimeKind,
+        defaultRuntimeKind,
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         defaultTargetBranch: normalizedTargetBranch,

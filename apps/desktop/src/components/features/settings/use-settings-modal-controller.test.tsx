@@ -413,4 +413,63 @@ describe("useSettingsModalController", () => {
       await harness.unmount();
     }
   });
+
+  test("surfaces agent default runtime validation errors before saving", async () => {
+    saveSettingsSnapshot = mock(async () => {});
+
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run((state) => {
+        state.updateSelectedRepoAgentDefault("spec", "providerId", "openai");
+        state.updateSelectedRepoAgentDefault("spec", "modelId", "gpt-5");
+        state.updateSelectedRepoAgentDefault("spec", "runtimeKind", "   ");
+      });
+
+      let didSave = true;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+
+      expect(didSave).toBe(false);
+      expect(harness.getLatest().saveError).toBe(
+        "Specification agent default runtime kind is required when provider and model are configured.",
+      );
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces blank repo default runtime validation errors before saving", async () => {
+    saveSettingsSnapshot = mock(async () => {});
+
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run((state) => {
+        state.updateSelectedRepoConfig((repoConfig) => ({
+          ...repoConfig,
+          defaultRuntimeKind: "   ",
+        }));
+      });
+
+      let didSave = true;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+
+      expect(didSave).toBe(false);
+      expect(harness.getLatest().saveError).toBe("Default runtime kind cannot be blank.");
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });
