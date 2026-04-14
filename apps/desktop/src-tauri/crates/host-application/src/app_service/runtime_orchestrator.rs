@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
     RepoRuntimeStartupStatus, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
-    RuntimeRole, RuntimeRoute,
+    RuntimeRole,
 };
 use std::collections::{HashMap, HashSet};
 use std::process::Child;
@@ -627,11 +627,6 @@ impl AppService {
                 continue;
             }
 
-            let RuntimeRoute::LocalHttp { .. } = &run.summary.runtime_route else {
-                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
-                continue;
-            };
-
             let probe_target = self
                 .runtime_registry
                 .runtime(&run.summary.runtime_kind)?
@@ -639,6 +634,10 @@ impl AppService {
                     &run.summary.runtime_route,
                     run.worktree_path.as_str(),
                 )?;
+            let Some(probe_target) = probe_target else {
+                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
+                continue;
+            };
             probe_targets.push(probe_target.clone());
             exposure_plans.push(RunExposurePlan::with_probe(
                 run.summary,

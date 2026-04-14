@@ -31,7 +31,8 @@ use crate::app_service::{
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    RuntimeSessionStatusProbeTarget, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload,
 };
 use host_domain::{DevServerGroupState, DevServerScriptState, DevServerScriptStatus};
 use host_domain::{
@@ -82,10 +83,56 @@ fn insert_workspace_runtime(service: &AppService, repo_path: &str, port: u16) ->
     Ok(())
 }
 
+fn insert_workspace_runtime_for_kind(
+    service: &AppService,
+    runtime_kind: AgentRuntimeKind,
+    repo_path: &str,
+    runtime_route: host_domain::RuntimeRoute,
+) -> Result<()> {
+    let descriptor = service
+        .runtime_registry
+        .definition(&runtime_kind)?
+        .descriptor()
+        .clone();
+    let summary = RuntimeInstanceSummary {
+        kind: runtime_kind,
+        runtime_id: "runtime-workspace-custom".to_string(),
+        repo_path: repo_path.to_string(),
+        task_id: None,
+        role: RuntimeRole::Workspace,
+        working_directory: repo_path.to_string(),
+        runtime_route,
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        descriptor,
+    };
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .insert(
+            "runtime-workspace-custom".to_string(),
+            AgentRuntimeProcess {
+                summary,
+                child: spawn_sleep_process(30),
+                _runtime_process_guard: None,
+                cleanup_target: None,
+            },
+        );
+    Ok(())
+}
+
+#[derive(Clone)]
+enum SessionProbeBehavior {
+    Default,
+    ReturnNone,
+    ReturnError(&'static str),
+}
+
 #[derive(Clone)]
 struct TestRuntimeAdapter {
     definition: RuntimeDefinition,
     health: RuntimeHealth,
+    session_probe_behavior: SessionProbeBehavior,
 }
 
 impl AppRuntime for TestRuntimeAdapter {
@@ -132,6 +179,26 @@ impl AppRuntime for TestRuntimeAdapter {
         _working_directory: &str,
     ) -> Result<()> {
         Err(anyhow::anyhow!("abort should not be used in this test"))
+    }
+
+    fn session_status_probe_target(
+        &self,
+        runtime_route: &host_domain::RuntimeRoute,
+        working_directory: &str,
+    ) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
+        match self.session_probe_behavior {
+            SessionProbeBehavior::Default => match runtime_route {
+                host_domain::RuntimeRoute::LocalHttp { .. } => {
+                    Ok(Some(RuntimeSessionStatusProbeTarget::for_runtime_route(
+                        runtime_route,
+                        working_directory,
+                    )?))
+                }
+                host_domain::RuntimeRoute::Stdio => Ok(None),
+            },
+            SessionProbeBehavior::ReturnNone => Ok(None),
+            SessionProbeBehavior::ReturnError(message) => Err(anyhow::anyhow!(message)),
+        }
     }
 }
 
@@ -186,6 +253,7 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
                 version: Some("1.0.0".to_string()),
                 error: None,
             },
+            session_probe_behavior: SessionProbeBehavior::Default,
         }),
         Arc::new(TestRuntimeAdapter {
             definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -195,6 +263,7 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
                 version: Some("0.1.0".to_string()),
                 error: None,
             },
+            session_probe_behavior: SessionProbeBehavior::Default,
         }),
     ])?;
     let (service, _task_state, _git_state) =
@@ -227,6 +296,7 @@ fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> 
                 version: None,
                 error: None,
             },
+            session_probe_behavior: SessionProbeBehavior::Default,
         }),
         Arc::new(TestRuntimeAdapter {
             definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -236,6 +306,7 @@ fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> 
                 version: None,
                 error: None,
             },
+            session_probe_behavior: SessionProbeBehavior::Default,
         }),
     ])?;
     let (service, _task_state, _git_state) =
@@ -280,6 +351,166 @@ fn runtime_apis_fail_fast_for_unsupported_runtime_kinds() {
             "Unsupported agent runtime kind: missing-runtime"
         );
     }
+}
+
+#[test]
+fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(vec![
+        Arc::new(TestRuntimeAdapter {
+            definition: host_domain::builtin_runtime_registry()
+                .definition_by_str("opencode")
+                .expect("builtin opencode runtime should exist")
+                .clone(),
+            health: RuntimeHealth {
+                kind: "opencode".to_string(),
+                ok: true,
+                version: None,
+                error: None,
+            },
+            session_probe_behavior: SessionProbeBehavior::Default,
+        }),
+        Arc::new(TestRuntimeAdapter {
+            definition: test_runtime_definition("test-runtime", "Test Runtime"),
+            health: RuntimeHealth {
+                kind: "test-runtime".to_string(),
+                ok: true,
+                version: None,
+                error: None,
+            },
+            session_probe_behavior: SessionProbeBehavior::ReturnError(
+                "custom runtime probe hook invoked",
+            ),
+        }),
+    ])?;
+    let (service, task_state, _git_state) = build_service_with_runtime_registry(
+        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        runtime_registry,
+    );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "test-runtime".to_string(),
+        working_directory: "/tmp/repo/worktree".to_string(),
+        selected_model: None,
+    }];
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-1".to_string(),
+            crate::app_service::RunProcess {
+                summary: host_domain::RunSummary {
+                    run_id: "run-1".to_string(),
+                    runtime_kind: AgentRuntimeKind::from("test-runtime"),
+                    runtime_route: host_domain::RuntimeRoute::Stdio,
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: "/tmp/repo/worktree".to_string(),
+                    port: None,
+                    state: host_domain::RunState::Running,
+                    last_message: None,
+                    started_at: "2026-03-17T11:00:00Z".to_string(),
+                },
+                child: None,
+                _runtime_process_guard: None,
+                repo_path: "/tmp/repo".to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: "/tmp/repo/worktree".to_string(),
+                repo_config: host_infra_system::RepoConfig::default(),
+            },
+        );
+
+    let error = service
+        .runs_list(Some("/tmp/repo"))
+        .expect_err("custom runtime probe hook should be consulted for stdio runs");
+    assert!(error
+        .to_string()
+        .contains("custom runtime probe hook invoked"));
+
+    Ok(())
+}
+
+#[test]
+fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-custom-runtime-session");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let runtime_registry = AppRuntimeRegistry::new(vec![
+        Arc::new(TestRuntimeAdapter {
+            definition: host_domain::builtin_runtime_registry()
+                .definition_by_str("opencode")
+                .expect("builtin opencode runtime should exist")
+                .clone(),
+            health: RuntimeHealth {
+                kind: "opencode".to_string(),
+                ok: true,
+                version: None,
+                error: None,
+            },
+            session_probe_behavior: SessionProbeBehavior::Default,
+        }),
+        Arc::new(TestRuntimeAdapter {
+            definition: test_runtime_definition("test-runtime", "Test Runtime"),
+            health: RuntimeHealth {
+                kind: "test-runtime".to_string(),
+                ok: true,
+                version: None,
+                error: None,
+            },
+            session_probe_behavior: SessionProbeBehavior::ReturnNone,
+        }),
+    ])?;
+    let (service, task_state, _git_state) = build_service_with_runtime_registry(
+        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        runtime_registry,
+    );
+    let repo_path_string = repo_path.to_string_lossy().to_string();
+    let _ = service.workspace_add(repo_path_string.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path_string.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            default_runtime_kind: "test-runtime".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "test-runtime".to_string(),
+        working_directory: repo_path_string.clone(),
+        selected_model: None,
+    }];
+    insert_workspace_runtime_for_kind(
+        &service,
+        AgentRuntimeKind::from("test-runtime"),
+        repo_path_string.as_str(),
+        host_domain::RuntimeRoute::Stdio,
+    )?;
+
+    let error = service
+        .task_delete(repo_path_string.as_str(), "task-1", false)
+        .expect_err("custom runtime session should block delete");
+    assert!(error
+        .to_string()
+        .contains("Cannot delete tasks with active builder work in progress"));
+
+    Ok(())
 }
 
 #[test]

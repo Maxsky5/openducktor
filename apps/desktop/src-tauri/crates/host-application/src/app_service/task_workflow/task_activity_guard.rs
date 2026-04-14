@@ -251,15 +251,21 @@ impl<'a> TaskActivityGuard<'a> {
     ) -> Result<Vec<String>> {
         let mut active_roles = HashSet::new();
         for session_probe_plan in session_plans {
+            if session_probe_plan.primary_target.is_none() {
+                active_roles.insert(session_probe_plan.role.clone());
+                continue;
+            }
             let statuses = resolve_session_statuses(
                 session_probe_plan,
                 primary_statuses_by_target,
                 fallback_statuses_by_target,
             )?;
-            if has_live_runtime_session_status(
-                statuses,
-                session_probe_plan.external_session_id.as_str(),
-            ) {
+            if statuses.is_some_and(|statuses| {
+                has_live_runtime_session_status(
+                    statuses,
+                    session_probe_plan.external_session_id.as_str(),
+                )
+            }) {
                 active_roles.insert(session_probe_plan.role.clone());
             }
         }
@@ -347,8 +353,8 @@ impl TaskActivityProbePlan {
             self.session_plans
                 .iter()
                 .filter_map(|session_probe_plan| {
-                    let primary_statuses =
-                        primary_statuses_by_target.get(&session_probe_plan.primary_target)?;
+                    let primary_target = session_probe_plan.primary_target.as_ref()?;
+                    let primary_statuses = primary_statuses_by_target.get(primary_target)?;
                     if primary_statuses.is_empty() {
                         session_probe_plan.fallback_target.clone()
                     } else {
@@ -379,8 +385,12 @@ fn build_run_probe_plans(
                     &run_candidate.runtime_route,
                     run_candidate.worktree_path.as_str(),
                 )?;
-            primary_probe_targets.push(target.clone());
-            Some(target)
+            if let Some(target) = target {
+                primary_probe_targets.push(target.clone());
+                Some(target)
+            } else {
+                None
+            }
         };
         run_plans.push(RunProbePlan {
             worktree_path: run_candidate.worktree_path.clone(),
@@ -418,25 +428,33 @@ fn build_session_probe_plans(
         };
 
         let worktree_key = normalize_path_key(session.working_directory.as_str());
-        let fallback_runtime_kind = parse_runtime_kind(session.runtime_kind.as_str());
+        let fallback_runtime_kind = parse_runtime_kind(service, session.runtime_kind.as_str());
         let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
         let repo_runtime_route = fallback_runtime_kind
             .as_ref()
             .and_then(|kind| repo_runtime_routes_by_kind.get(kind));
         let runtime_kind = worktree_runtime_route
-            .map(|_| parse_runtime_kind(session.runtime_kind.as_str()))
+            .map(|_| parse_runtime_kind(service, session.runtime_kind.as_str()))
             .flatten()
             .or(fallback_runtime_kind);
         let runtime_route = worktree_runtime_route.or(repo_runtime_route);
-        let (Some(runtime_route), Some(runtime_kind)) = (runtime_route, runtime_kind) else {
+        let Some(runtime_route) = runtime_route else {
             continue;
         };
 
-        let primary_target = service
-            .runtime_registry
-            .runtime(&runtime_kind)?
-            .session_status_probe_target(runtime_route, session.working_directory.as_str())?;
-        primary_probe_targets.push(primary_target.clone());
+        let primary_target = runtime_kind
+            .as_ref()
+            .map(|kind| {
+                service
+                    .runtime_registry
+                    .runtime(kind)?
+                    .session_status_probe_target(runtime_route, session.working_directory.as_str())
+            })
+            .transpose()?
+            .flatten();
+        if let Some(target) = primary_target.as_ref() {
+            primary_probe_targets.push(target.clone());
+        }
         let fallback_target = select_fallback_probe_target(
             service,
             runtime_kind,
@@ -480,9 +498,12 @@ fn resolve_session_statuses<'a>(
         RuntimeSessionStatusProbeTarget,
         RuntimeSessionStatusMap,
     >,
-) -> Result<&'a RuntimeSessionStatusMap> {
+) -> Result<Option<&'a RuntimeSessionStatusMap>> {
+    let Some(primary_target) = session_probe_plan.primary_target.as_ref() else {
+        return Ok(None);
+    };
     let primary_statuses = primary_statuses_by_target
-        .get(&session_probe_plan.primary_target)
+        .get(primary_target)
         .ok_or_else(|| {
             anyhow!(
                 "Missing cached runtime session statuses for {}",
@@ -490,11 +511,11 @@ fn resolve_session_statuses<'a>(
             )
         })?;
     if !primary_statuses.is_empty() {
-        return Ok(primary_statuses);
+        return Ok(Some(primary_statuses));
     }
 
     let Some(fallback_target) = session_probe_plan.fallback_target.as_ref() else {
-        return Ok(primary_statuses);
+        return Ok(Some(primary_statuses));
     };
     let fallback_statuses = fallback_statuses_by_target
         .get(fallback_target)
@@ -505,19 +526,22 @@ fn resolve_session_statuses<'a>(
             )
         })?;
     if fallback_statuses.is_empty() {
-        Ok(primary_statuses)
+        Ok(Some(primary_statuses))
     } else {
-        Ok(fallback_statuses)
+        Ok(Some(fallback_statuses))
     }
 }
 
 fn select_fallback_probe_target(
     service: &AppService,
-    runtime_kind: AgentRuntimeKind,
+    runtime_kind: Option<AgentRuntimeKind>,
     worktree_runtime_route: Option<&RuntimeRoute>,
     repo_runtime_route: Option<&RuntimeRoute>,
     working_directory: &str,
 ) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
+    let Some(runtime_kind) = runtime_kind.as_ref() else {
+        return Ok(None);
+    };
     let (Some(primary_route), Some(fallback_route)) = (worktree_runtime_route, repo_runtime_route)
     else {
         return Ok(None);
@@ -526,12 +550,10 @@ fn select_fallback_probe_target(
         return Ok(None);
     }
 
-    Ok(Some(
-        service
-            .runtime_registry
-            .runtime(&runtime_kind)?
-            .session_status_probe_target(fallback_route, working_directory)?,
-    ))
+    service
+        .runtime_registry
+        .runtime(runtime_kind)?
+        .session_status_probe_target(fallback_route, working_directory)
 }
 
 fn dedupe_probe_targets(
@@ -540,10 +562,8 @@ fn dedupe_probe_targets(
     dedupe_runtime_session_probe_targets(targets)
 }
 
-fn parse_runtime_kind(value: &str) -> Option<AgentRuntimeKind> {
-    host_domain::builtin_runtime_registry()
-        .resolve_kind(value)
-        .ok()
+fn parse_runtime_kind(service: &AppService, value: &str) -> Option<AgentRuntimeKind> {
+    service.runtime_registry.resolve_kind(value).ok()
 }
 
 fn collect_build_external_session_ids(
@@ -586,6 +606,6 @@ struct SessionProbePlan {
     worktree_key: String,
     role: String,
     external_session_id: String,
-    primary_target: RuntimeSessionStatusProbeTarget,
+    primary_target: Option<RuntimeSessionStatusProbeTarget>,
     fallback_target: Option<RuntimeSessionStatusProbeTarget>,
 }

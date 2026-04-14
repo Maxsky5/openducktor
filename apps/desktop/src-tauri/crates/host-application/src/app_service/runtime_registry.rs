@@ -367,8 +367,16 @@ pub(crate) trait AppRuntime: Send + Sync {
         &self,
         runtime_route: &RuntimeRoute,
         working_directory: &str,
-    ) -> Result<RuntimeSessionStatusProbeTarget> {
-        RuntimeSessionStatusProbeTarget::for_runtime_route(runtime_route, working_directory)
+    ) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
+        match runtime_route {
+            RuntimeRoute::LocalHttp { .. } => {
+                Ok(Some(RuntimeSessionStatusProbeTarget::for_runtime_route(
+                    runtime_route,
+                    working_directory,
+                )?))
+            }
+            RuntimeRoute::Stdio => Ok(None),
+        }
     }
 }
 

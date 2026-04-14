@@ -44,8 +44,7 @@ impl OpencodeSessionStatusProbeTarget {
         runtime_route: &RuntimeRoute,
         working_directory: &str,
     ) -> Result<Self> {
-        let endpoint =
-            require_local_http_endpoint(runtime_route, "session status probes")?;
+        let endpoint = require_local_http_endpoint(runtime_route, "session status probes")?;
         Ok(Self {
             endpoint: endpoint.to_string(),
             working_directory: working_directory.to_string(),

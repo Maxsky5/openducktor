@@ -55,22 +55,22 @@ pub(crate) type RuntimeStartupWaitReport = opencode_runtime::OpencodeStartupWait
 pub(crate) type OpencodeStartupReadinessPolicy = RuntimeStartupReadinessPolicy;
 #[cfg(test)]
 pub(crate) type OpencodeStartupWaitReport = RuntimeStartupWaitReport;
+#[cfg(test)]
+pub(crate) use opencode_runtime::wait_for_local_server_with_process;
 pub use opencode_runtime::OpencodeStartupWaitFailure;
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    wait_for_local_server_with_process as wait_for_runtime_with_process, wait_for_process_exit_by_pid,
-    StartupCancelEpoch,
+    wait_for_local_server_with_process as wait_for_runtime_with_process,
+    wait_for_process_exit_by_pid, StartupCancelEpoch,
 };
-#[cfg(test)]
-pub(crate) use opencode_runtime::wait_for_local_server_with_process;
 pub(crate) type RuntimeSessionStatusMap = opencode_session_status::OpencodeSessionStatusMap;
 pub(crate) type RuntimeSessionStatusProbeTarget =
     opencode_session_status::OpencodeSessionStatusProbeTarget;
 pub(crate) use opencode_session_status::{
     dedupe_probe_targets as dedupe_runtime_session_probe_targets,
     has_live_opencode_session_status as has_live_runtime_session_status,
-}; 
+};
 #[cfg(test)]
 pub(crate) use process_registry::read_opencode_process_registry;
 pub(crate) type RuntimeProcessGuard = process_registry::TrackedOpencodeProcessGuard;
@@ -128,14 +128,13 @@ pub(crate) fn require_local_http_endpoint<'a>(
 ) -> Result<&'a str> {
     match runtime_route {
         RuntimeRoute::LocalHttp { endpoint } => Ok(endpoint.as_str()),
-        RuntimeRoute::Stdio => Err(anyhow!("Runtime {action} requires a local_http runtime route")),
+        RuntimeRoute::Stdio => Err(anyhow!(
+            "Runtime {action} requires a local_http runtime route"
+        )),
     }
 }
 
-pub(crate) fn require_local_http_port(
-    runtime_route: &RuntimeRoute,
-    action: &str,
-) -> Result<u16> {
+pub(crate) fn require_local_http_port(runtime_route: &RuntimeRoute, action: &str) -> Result<u16> {
     runtime_route
         .local_http_port()
         .ok_or_else(|| anyhow!("Runtime {action} requires a local_http runtime route with a port"))
