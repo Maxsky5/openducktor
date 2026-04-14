@@ -1,5 +1,8 @@
 use host_domain::GitPort;
-use host_domain::{GitFetchRequest, GitPullRequest, GitPullResult, GitPushResult};
+use host_domain::{
+    GitDiffScope, GitFetchRequest, GitPullRequest, GitPullResult, GitPushResult,
+    GitUpstreamAheadBehind,
+};
 use std::fs;
 
 use super::super::GitCliPort;
@@ -18,6 +21,7 @@ fn push_branch_pushes_to_remote_with_typed_result() {
         &repo.path,
         &["remote", "add", "origin", remote_path.as_str()],
     );
+    run_git_ok(&repo.path, &["push", "origin", "main"]);
     let git = GitCliPort::new();
 
     git.switch_branch(&repo.path, "feature/push", true)
@@ -52,6 +56,24 @@ fn push_branch_pushes_to_remote_with_typed_result() {
     assert!(
         ls_remote.contains("refs/heads/feature/push"),
         "remote should contain pushed branch"
+    );
+
+    let local_head = run_git_ok(&repo.path, &["rev-parse", "HEAD"]);
+    let tracked_remote_head = run_git_ok(
+        &repo.path,
+        &["rev-parse", "refs/remotes/origin/feature/push"],
+    );
+    assert_eq!(tracked_remote_head, local_head);
+
+    let status = git
+        .get_worktree_status(&repo.path, "origin/main", GitDiffScope::Target)
+        .expect("worktree status should reflect a freshly pushed upstream branch");
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Tracking {
+            ahead: 0,
+            behind: 0,
+        }
     );
 }
 

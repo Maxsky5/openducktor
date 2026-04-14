@@ -322,6 +322,8 @@ impl GitCliPort {
             ));
         }
 
+        self.sync_pushed_remote_tracking_ref_impl(repo_path, remote.as_str(), branch.as_str())?;
+
         Ok(GitPushResult::Pushed {
             remote,
             branch,
@@ -529,6 +531,36 @@ impl GitCliPort {
             merge_ref: normalized_merge_ref,
             upstream_ref,
         }))
+    }
+
+    fn sync_pushed_remote_tracking_ref_impl(
+        &self,
+        repo_path: &Path,
+        remote: &str,
+        branch: &str,
+    ) -> Result<()> {
+        if remote == "." {
+            return Ok(());
+        }
+
+        let local_branch_ref = normalize_merge_ref(branch);
+        let local_branch_oid =
+            self.run_git(repo_path, &["rev-parse", local_branch_ref.as_str()])?;
+        let local_branch_oid = local_branch_oid.trim();
+        if local_branch_oid.is_empty() {
+            return Err(anyhow!(
+                "git rev-parse returned an empty revision for {}",
+                local_branch_ref
+            ));
+        }
+
+        let upstream_ref = resolve_upstream_ref(remote, local_branch_ref.as_str());
+        self.run_git(
+            repo_path,
+            &["update-ref", upstream_ref.as_str(), local_branch_oid],
+        )?;
+
+        Ok(())
     }
 }
 
