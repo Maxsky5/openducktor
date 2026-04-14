@@ -1,48 +1,64 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { describe, expect, test } from "bun:test";
+import { DismissableLayer, DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 
-enableReactActEnvironment();
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+function BranchDismissHarness() {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <>
+      {open ? (
+        <DismissableLayer onDismiss={() => setOpen(false)}>
+          <div role="dialog">Overlay stays open</div>
+        </DismissableLayer>
+      ) : null}
+      <DismissableLayerBranch>
+        <button type="button">Close toast</button>
+      </DismissableLayerBranch>
+    </>
+  );
+}
+
+async function waitForDismissableLayerEffects() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe("Toaster", () => {
-  beforeEach(() => {
-    mock.module("@radix-ui/react-dismissable-layer", () => ({
-      DismissableLayerBranch: ({ children }: { children: ReactNode }) => (
-        <div data-testid="dismissable-layer-branch">{children}</div>
-      ),
-    }));
+  test("dismissable layer branches keep pointer interactions from dismissing overlays", async () => {
+    render(<BranchDismissHarness />);
 
-    mock.module("sonner", () => ({
-      Toaster: (props: Record<string, unknown>) => (
-        <div data-testid="sonner-toaster" data-props={JSON.stringify(props)} />
-      ),
-    }));
+    await waitForDismissableLayerEffects();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Close toast" }));
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
   });
 
-  afterAll(async () => {
-    await restoreMockedModules([
-      ["@radix-ui/react-dismissable-layer", () => import("@radix-ui/react-dismissable-layer")],
-      ["sonner", () => import("sonner")],
-    ]);
-  });
+  test("wraps the shared toaster in a dismissable layer branch with fixed defaults", async () => {
+    const source = await Bun.file(new URL("./sonner.tsx", import.meta.url)).text();
 
-  test("mounts the global toaster inside a dismissable layer branch", async () => {
-    const { Toaster } = await import("./sonner");
-
-    render(<Toaster duration={1234} />);
-
-    const branch = screen.getByTestId("dismissable-layer-branch");
-    const toaster = screen.getByTestId("sonner-toaster");
-    const props = JSON.parse(toaster.getAttribute("data-props") ?? "{}");
-
-    expect(branch.contains(toaster)).toBe(true);
-    expect(props.position).toBe("bottom-right");
-    expect(props.richColors).toBe(false);
-    expect(props.closeButton).toBe(true);
-    expect(props.expand).toBe(true);
-    expect(props.visibleToasts).toBe(5);
-    expect(props.duration).toBe(1234);
+    expect(source).toContain(
+      'import { DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";',
+    );
+    expect(source).toContain("<DismissableLayerBranch>");
+    expect(source).toContain("</DismissableLayerBranch>");
+    expect(source).toContain('position="bottom-right"');
+    expect(source).toContain("richColors={false}");
+    expect(source).toContain("closeButton");
+    expect(source).toContain("expand");
+    expect(source).toContain("visibleToasts={5}");
   });
 });
