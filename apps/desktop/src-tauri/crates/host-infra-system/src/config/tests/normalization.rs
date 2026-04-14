@@ -331,9 +331,9 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
 }
 
 #[test]
-fn load_rejects_missing_runtime_kinds_in_persisted_repo_config() {
+fn load_rejects_missing_default_runtime_kind_in_persisted_repo_config() {
     let _env_lock = lock_env();
-    let harness = TestStoreHarness::new("reject-missing-runtime-kinds");
+    let harness = TestStoreHarness::new("reject-missing-default-runtime-kind");
     let store = harness.store();
     let root = harness.root();
     let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
@@ -346,6 +346,53 @@ fn load_rejects_missing_runtime_kinds_in_persisted_repo_config() {
         "activeRepo": repo_str,
         "repos": {
             repo_str.clone(): {
+                "branchPrefix": "duck",
+                "trustedHooks": false,
+                "hooks": {
+                    "preStart": [],
+                    "postComplete": []
+                }
+            }
+        },
+        "recentRepos": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store
+        .load()
+        .expect_err("missing default runtime kind should fail");
+    assert!(error.to_string().contains("Failed parsing config file"));
+}
+
+#[test]
+fn load_rejects_missing_agent_default_runtime_kind_in_persisted_repo_config() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("reject-missing-agent-default-runtime-kind");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 1,
+        "activeRepo": repo_str,
+        "repos": {
+            repo_str.clone(): {
+                "defaultRuntimeKind": "opencode",
                 "branchPrefix": "duck",
                 "trustedHooks": false,
                 "hooks": {
@@ -376,7 +423,9 @@ fn load_rejects_missing_runtime_kinds_in_persisted_repo_config() {
             .expect("config file should be private");
     }
 
-    let error = store.load().expect_err("missing runtime kind should fail");
+    let error = store
+        .load()
+        .expect_err("missing agent default runtime kind should fail");
     assert!(error.to_string().contains("Failed parsing config file"));
 }
 

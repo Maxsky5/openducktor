@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   normalizeRepoAgentDefaultForSave,
+  normalizeRepoDefaultRuntimeKindForSave,
   repoAgentDefaultRuntimeKindError,
+  repoDefaultRuntimeKindError,
 } from "./repo-agent-defaults";
 
 describe("repo-agent-defaults", () => {
@@ -49,5 +51,16 @@ describe("repo-agent-defaults", () => {
         modelId: "claude-4",
       }),
     ).toThrow(repoAgentDefaultRuntimeKindError("build"));
+  });
+
+  test("normalizes repo default runtime kinds for save", () => {
+    expect(normalizeRepoDefaultRuntimeKindForSave(" opencode ", "codex")).toBe("opencode");
+    expect(normalizeRepoDefaultRuntimeKindForSave(undefined, "codex")).toBe("codex");
+  });
+
+  test("rejects blank repo default runtime kinds", () => {
+    expect(() => normalizeRepoDefaultRuntimeKindForSave("   ", "opencode")).toThrow(
+      repoDefaultRuntimeKindError(),
+    );
   });
 });

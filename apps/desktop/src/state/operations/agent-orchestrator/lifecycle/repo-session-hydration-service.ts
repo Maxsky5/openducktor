@@ -16,12 +16,15 @@ import { host } from "../../shared/host";
 import { resolveRuntimeRouteConnection } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import {
+  isSessionRuntimeMetadataError,
+  readPersistedRuntimeKind,
+} from "../support/session-runtime-metadata";
+import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
   runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
-import { readPersistedRuntimeKind } from "./hydration-runtime-resolution";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 
@@ -39,6 +42,7 @@ type ReconcilePreloadPlan = {
   preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnectionsByKey: Map<string, AgentRuntimeConnection>;
   preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
+  skippedTaskErrors: Map<string, unknown>;
 };
 
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
@@ -135,24 +139,37 @@ export const createRepoSessionHydrationService = ({
     const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
     const runtimeKinds = new Set<RuntimeKind>();
     const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+    const skippedTaskErrors = new Map<string, unknown>();
 
     for (const { taskId, records } of persistedByTask) {
-      for (const record of records) {
-        const runtimeKind = readPersistedRuntimeKind(record);
-        const externalSessionId = record.externalSessionId ?? record.sessionId;
-        if (!runtimeKind || !externalSessionId) {
-          continue;
-        }
-        runtimeKinds.add(runtimeKind);
-        const liveSessionKey = `${runtimeKind}::${externalSessionId}`;
-        const taskIds = persistedTaskIdsByLiveSessionKey.get(liveSessionKey) ?? new Set<string>();
-        taskIds.add(taskId);
-        persistedTaskIdsByLiveSessionKey.set(liveSessionKey, taskIds);
+      try {
+        for (const record of records) {
+          const runtimeKind = readPersistedRuntimeKind(record);
+          const externalSessionId = record.externalSessionId ?? record.sessionId;
+          if (!externalSessionId) {
+            continue;
+          }
+          runtimeKinds.add(runtimeKind);
+          const liveSessionKey = `${runtimeKind}::${externalSessionId}`;
+          const taskIds = persistedTaskIdsByLiveSessionKey.get(liveSessionKey) ?? new Set<string>();
+          taskIds.add(taskId);
+          persistedTaskIdsByLiveSessionKey.set(liveSessionKey, taskIds);
 
-        const desiredDirectories =
-          desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
-        desiredDirectories.add(record.workingDirectory);
-        desiredDirectoriesByRuntimeKind.set(runtimeKind, desiredDirectories);
+          const desiredDirectories =
+            desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
+          desiredDirectories.add(record.workingDirectory);
+          desiredDirectoriesByRuntimeKind.set(runtimeKind, desiredDirectories);
+        }
+      } catch (error) {
+        if (!isSessionRuntimeMetadataError(error)) {
+          throw error;
+        }
+
+        console.error(
+          `Skipping reconcile preload for task '${taskId}' in repo '${repoPath}' because persisted session runtime metadata is invalid.`,
+          error,
+        );
+        skippedTaskErrors.set(taskId, error);
       }
     }
 
@@ -175,6 +192,7 @@ export const createRepoSessionHydrationService = ({
           preloadedRuntimeLists,
           preloadedRuntimeConnectionsByKey,
           preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
+          skippedTaskErrors,
         };
       }
 
@@ -197,6 +215,7 @@ export const createRepoSessionHydrationService = ({
             preloadedRuntimeLists,
             preloadedRuntimeConnectionsByKey,
             preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
+            skippedTaskErrors,
           };
         }
         ensuredRuntimeForKind = ensuredRuntime;
@@ -257,6 +276,7 @@ export const createRepoSessionHydrationService = ({
             preloadedRuntimeLists,
             preloadedRuntimeConnectionsByKey,
             preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
+            skippedTaskErrors,
           };
         }
         ensuredRuntimeForKind = routeSourceRuntime;
@@ -323,6 +343,7 @@ export const createRepoSessionHydrationService = ({
           preloadedRuntimeLists,
           preloadedRuntimeConnectionsByKey,
           preloadedLiveAgentSessionsByKey,
+          skippedTaskErrors,
         };
       }
 
@@ -359,6 +380,7 @@ export const createRepoSessionHydrationService = ({
       preloadedRuntimeLists,
       preloadedRuntimeConnectionsByKey,
       preloadedLiveAgentSessionsByKey,
+      skippedTaskErrors,
     };
   };
 
@@ -477,6 +499,11 @@ export const createRepoSessionHydrationService = ({
 
         if (plan.taskIdsToReconcile.size === 0) {
           for (const { taskId } of plan.persistedByTask) {
+            if (plan.skippedTaskErrors.has(taskId)) {
+              reconciledTaskIds.delete(taskId);
+              clearRetry("reconcile", repoPath, taskId);
+              continue;
+            }
             clearRetry("reconcile", repoPath, taskId);
           }
           return;
@@ -515,6 +542,11 @@ export const createRepoSessionHydrationService = ({
         }
 
         for (const { taskId } of plan.persistedByTask) {
+          if (plan.skippedTaskErrors.has(taskId)) {
+            reconciledTaskIds.delete(taskId);
+            clearRetry("reconcile", repoPath, taskId);
+            continue;
+          }
           if (failedTaskErrors.has(taskId)) {
             continue;
           }

@@ -215,6 +215,15 @@ describe("settings-modal-normalization", () => {
     );
   });
 
+  test("rejects blank repo default runtime kinds", () => {
+    expect(() =>
+      normalizeRepoConfigForSave({
+        ...createRepoConfig(),
+        defaultRuntimeKind: "   ",
+      }),
+    ).toThrow("Default runtime kind cannot be blank.");
+  });
+
   test("normalizes autopilot settings into canonical event order", () => {
     const normalized = normalizeAutopilotSettingsForSave({
       rules: [

@@ -24,6 +24,26 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
   return `${REPO_AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
 };
 
+export const repoDefaultRuntimeKindError = (): string => {
+  return "Default runtime kind cannot be blank.";
+};
+
+export const normalizeRepoDefaultRuntimeKindForSave = (
+  runtimeKind: string | null | undefined,
+  fallbackRuntimeKind: string,
+): string => {
+  const normalizedRuntimeKind = trimNonEmpty(runtimeKind);
+  if (normalizedRuntimeKind) {
+    return normalizedRuntimeKind;
+  }
+
+  if (runtimeKind == null) {
+    return fallbackRuntimeKind;
+  }
+
+  throw new Error(repoDefaultRuntimeKindError());
+};
+
 export const normalizeRepoAgentDefaultForSave = (
   role: RepoAgentDefaultRole,
   entry: RepoAgentDefaultDraft | null | undefined,

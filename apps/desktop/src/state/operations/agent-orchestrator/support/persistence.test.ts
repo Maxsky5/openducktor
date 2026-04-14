@@ -124,6 +124,24 @@ describe("agent-orchestrator/support/persistence", () => {
     );
   });
 
+  test("rejects persisted selected models whose runtime kind disagrees with the session", () => {
+    expect(() =>
+      fromPersistedSessionRecord(
+        {
+          ...recordFixture,
+          selectedModel: {
+            runtimeKind: "claude-code",
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        },
+        "task-1",
+      ),
+    ).toThrow(
+      "Persisted session 'session-1' selected model runtime kind does not match session runtime kind.",
+    );
+  });
+
   test("rejects persisting sessions without a top-level runtime kind", () => {
     const session = {
       ...fromPersistedSessionRecord(recordFixture, "task-1"),
@@ -146,6 +164,21 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
       "Session 'session-1' selected model is missing runtime kind metadata.",
+    );
+  });
+
+  test("rejects persisting selected models whose runtime kind disagrees with the session", () => {
+    const session: AgentSessionState = {
+      ...fromPersistedSessionRecord(recordFixture, "task-1"),
+      selectedModel: {
+        runtimeKind: "claude-code",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    } as NonNullable<AgentSessionState>;
+
+    expect(() => toPersistedSessionRecord(session)).toThrow(
+      "Session 'session-1' selected model runtime kind does not match session runtime kind.",
     );
   });
 

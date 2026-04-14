@@ -34,10 +34,10 @@ import {
   historyToSessionContextUsage,
 } from "../support/persistence";
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
+import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
-  readPersistedRuntimeKind,
 } from "./hydration-runtime-resolution";
 import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";

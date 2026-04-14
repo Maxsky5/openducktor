@@ -574,6 +574,37 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("saveRepoSettings rejects blank repo default runtime kinds", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
+
+    const original = {
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
+    };
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await expect(
+        harness.getLatest().saveRepoSettings({
+          ...inputFixture,
+          defaultRuntimeKind: "   " as RepoSettingsInput["defaultRuntimeKind"],
+        }),
+      ).rejects.toThrow("Default runtime kind cannot be blank.");
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
+    }
+  });
+
   test("loads settings snapshot through atomic IPC route", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});

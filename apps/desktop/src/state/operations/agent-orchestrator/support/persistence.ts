@@ -14,49 +14,15 @@ import type {
 } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
+import {
+  readPersistedRuntimeKind,
+  requirePersistedSelectedModelRuntimeKind,
+  requireSelectedModelRuntimeKindForPersistence,
+  requireSessionRuntimeKindForPersistence,
+} from "./session-runtime-metadata";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
-
-const requirePersistedSessionRuntimeKind = (
-  session: Pick<AgentSessionRecord, "sessionId" | "runtimeKind">,
-): NonNullable<AgentSessionRecord["runtimeKind"]> => {
-  if (session.runtimeKind) {
-    return session.runtimeKind;
-  }
-  throw new Error(`Persisted session '${session.sessionId}' is missing runtime kind metadata.`);
-};
-
-const requirePersistedSelectedModelRuntimeKind = (
-  sessionId: string,
-  selectedModel: NonNullable<AgentSessionRecord["selectedModel"]>,
-): NonNullable<typeof selectedModel.runtimeKind> => {
-  if (selectedModel.runtimeKind) {
-    return selectedModel.runtimeKind;
-  }
-  throw new Error(
-    `Persisted session '${sessionId}' selected model is missing runtime kind metadata.`,
-  );
-};
-
-const requireSessionRuntimeKindForPersistence = (
-  session: Pick<AgentSessionState, "sessionId" | "runtimeKind">,
-): NonNullable<AgentSessionState["runtimeKind"]> => {
-  if (session.runtimeKind) {
-    return session.runtimeKind;
-  }
-  throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
-};
-
-const requireSelectedModelRuntimeKindForPersistence = (
-  sessionId: string,
-  selectedModel: NonNullable<AgentSessionState["selectedModel"]>,
-): NonNullable<typeof selectedModel.runtimeKind> => {
-  if (selectedModel.runtimeKind) {
-    return selectedModel.runtimeKind;
-  }
-  throw new Error(`Session '${sessionId}' selected model is missing runtime kind metadata.`);
-};
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   const runtimeKind = requireSessionRuntimeKindForPersistence(session);
@@ -73,6 +39,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
       ? {
           runtimeKind: requireSelectedModelRuntimeKindForPersistence(
             session.sessionId,
+            runtimeKind,
             session.selectedModel,
           ),
           providerId: session.selectedModel.providerId,
@@ -94,7 +61,7 @@ export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
 ): AgentSessionState => {
-  const runtimeKind = requirePersistedSessionRuntimeKind(session);
+  const runtimeKind = readPersistedRuntimeKind(session);
 
   return {
     sessionId: session.sessionId,
@@ -127,6 +94,7 @@ export const fromPersistedSessionRecord = (
           ...session.selectedModel,
           runtimeKind: requirePersistedSelectedModelRuntimeKind(
             session.sessionId,
+            runtimeKind,
             session.selectedModel,
           ),
         })
