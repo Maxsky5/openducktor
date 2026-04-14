@@ -67,7 +67,7 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     uncommittedFileCount: 1,
     isLoading: false,
     error: null,
-    refresh: () => {},
+    refresh: async () => {},
     setDiffScope: () => {},
     isCommitting: false,
     isPushing: false,
@@ -354,7 +354,7 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("renders branch context labels and git action controls", async () => {
-    const refresh = mock(() => {});
+    const refresh = mock(async () => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
     let renderer: RenderResult | null = null;
     await act(async () => {
@@ -622,7 +622,7 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("renders repository mode without target branch or rebase action", async () => {
-    const refresh = mock(() => {});
+    const refresh = mock(async () => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
     const commitAll = mock(async (_message: string) => true);
     const pushBranch = mock(async () => {});
@@ -783,7 +783,7 @@ describe("AgentStudioGitPanel", () => {
   test("switches diff scope and validates commit-all message input", async () => {
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
     const commitAll = mock(async (_message: string) => true);
-    const refresh = mock(() => {});
+    const refresh = mock(async () => {});
 
     let renderer: RenderResult | null = null;
     await act(async () => {

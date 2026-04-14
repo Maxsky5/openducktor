@@ -198,6 +198,10 @@ const dispatchDiffRefresh = (): void => {
   document.dispatchEvent(new Event("visibilitychange"));
 };
 
+const dispatchScheduledRefresh = (): void => {
+  globalThis.dispatchEvent(new Event("focus"));
+};
+
 beforeAll(async () => {
   ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
 });
@@ -434,6 +438,235 @@ describe("useAgentStudioDiffData", () => {
       );
       expect(harness.getLatest().error).toBeNull();
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("soft refresh reloads local status without fetching remote", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.refresh("soft");
+      });
+
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(0);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refresh returns a promise that settles after the queued soft reload finishes", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      const deferredRefresh = createDeferred<GitWorktreeStatus>();
+      gitGetWorktreeStatusMock.mockImplementationOnce(
+        async (
+          _repoPath: string,
+          targetBranch: string,
+          diffScope?: "target" | "uncommitted",
+          workingDir?: string,
+        ): Promise<GitWorktreeStatus> =>
+          deferredRefresh.promise.then((snapshot) => ({
+            ...snapshot,
+            snapshot: {
+              ...snapshot.snapshot,
+              targetBranch,
+              diffScope: diffScope ?? snapshot.snapshot.diffScope,
+              effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+            },
+          })),
+      );
+
+      let didSettle = false;
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((state) => {
+        refreshPromise = state.refresh("soft");
+        void refreshPromise.then(() => {
+          didSettle = true;
+        });
+      });
+
+      expect(harness.getLatest().isLoading).toBe(true);
+      expect(didSettle).toBe(false);
+
+      if (!refreshPromise) {
+        throw new Error("Expected refresh promise");
+      }
+
+      await harness.run(async () => {
+        deferredRefresh.resolve(
+          withSnapshotHashes({
+            currentBranch: { name: "feature/task-10", detached: false },
+            fileStatuses: [{ path: "src/after-refresh.ts", status: "M", staged: false }],
+            fileDiffs: [],
+            targetAheadBehind: { ahead: 0, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: "/repo",
+              targetBranch: "origin/main",
+              diffScope: "uncommitted",
+              observedAtMs: 1731000001111,
+            },
+          }),
+        );
+
+        await refreshPromise;
+      });
+      await harness.waitFor((state) => !state.isLoading);
+      expect(didSettle).toBe(true);
+      expect(harness.getLatest().fileStatuses[0]?.path).toBe("src/after-refresh.ts");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("scheduled refresh fetches at most once within the cooldown window", async () => {
+    const originalDateNow = Date.now;
+    let nowMs = 1_731_000_000_000;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      Date.now = () => nowMs;
+      await harness.run(() => {
+        dispatchScheduledRefresh();
+      });
+      Date.now = originalDateNow;
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+
+      Date.now = () => nowMs;
+      await harness.run(() => {
+        dispatchScheduledRefresh();
+      });
+      Date.now = originalDateNow;
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+
+      nowMs += 5 * 60 * 1000 + 1;
+      Date.now = () => nowMs;
+      await harness.run(() => {
+        dispatchScheduledRefresh();
+      });
+      Date.now = originalDateNow;
+      await harness.waitFor(() => gitFetchRemoteMock.mock.calls.length >= 2);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(2);
+    } finally {
+      Date.now = originalDateNow;
+      await harness.unmount();
+    }
+  });
+
+  test("manual refresh bypasses the scheduled refresh cooldown", async () => {
+    const originalDateNow = Date.now;
+    let nowMs = 1_731_000_000_000;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      Date.now = () => nowMs;
+      await harness.run(() => {
+        dispatchScheduledRefresh();
+      });
+      Date.now = originalDateNow;
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+
+      nowMs += 60_000;
+      Date.now = () => nowMs;
+      await harness.run((state) => {
+        state.refresh();
+      });
+      Date.now = originalDateNow;
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(2);
+    } finally {
+      Date.now = originalDateNow;
+      await harness.unmount();
+    }
+  });
+
+  test("scheduled refresh updates the cooldown when fetch is skipped for no remote", async () => {
+    const originalDateNow = Date.now;
+    let nowMs = 1_731_000_000_000;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      gitFetchRemoteMock.mockResolvedValueOnce({
+        outcome: "skipped_no_remote",
+        output:
+          "Skipped git fetch because no applicable remote is configured for this repo or branch.",
+      });
+
+      Date.now = () => nowMs;
+      await harness.run(() => {
+        dispatchScheduledRefresh();
+      });
+      Date.now = originalDateNow;
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+
+      nowMs += 60_000;
+      Date.now = () => nowMs;
+      await harness.run(() => {
+        dispatchScheduledRefresh();
+      });
+      Date.now = originalDateNow;
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 2);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitFetchRemoteMock).toHaveBeenCalledTimes(1);
+    } finally {
+      Date.now = originalDateNow;
       await harness.unmount();
     }
   });
@@ -2810,6 +3043,95 @@ describe("useAgentStudioDiffData", () => {
     } finally {
       await harness.unmount();
       pendingRunsList.reject(new Error("cleanup"));
+    }
+  });
+
+  test("keeps polling listeners stable across rerenders with unchanged inputs", async () => {
+    const originalWindowAddEventListener = globalThis.addEventListener.bind(globalThis);
+    const originalWindowRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
+    const originalDocumentAddEventListener = document.addEventListener.bind(document);
+    const originalDocumentRemoveEventListener = document.removeEventListener.bind(document);
+    const windowAddEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean,
+      ) => {
+        originalWindowAddEventListener(type, listener, options);
+      },
+    );
+    const windowRemoveEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: EventListenerOptions | boolean,
+      ) => {
+        originalWindowRemoveEventListener(type, listener, options);
+      },
+    );
+    const documentAddEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean,
+      ) => {
+        originalDocumentAddEventListener(type, listener, options);
+      },
+    );
+    const documentRemoveEventListenerMock = mock(
+      (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: EventListenerOptions | boolean,
+      ) => {
+        originalDocumentRemoveEventListener(type, listener, options);
+      },
+    );
+    globalThis.addEventListener = windowAddEventListenerMock as typeof globalThis.addEventListener;
+    globalThis.removeEventListener =
+      windowRemoveEventListenerMock as typeof globalThis.removeEventListener;
+    document.addEventListener = documentAddEventListenerMock as typeof document.addEventListener;
+    document.removeEventListener =
+      documentRemoveEventListenerMock as typeof document.removeEventListener;
+
+    const pollingArgs = {
+      ...createBaseArgs(),
+      enablePolling: true,
+    } satisfies HookArgs;
+    const harness = createHookHarness(pollingArgs);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      expect(windowAddEventListenerMock).toHaveBeenCalledWith("focus", expect.any(Function));
+      expect(documentAddEventListenerMock).toHaveBeenCalledWith(
+        "visibilitychange",
+        expect.any(Function),
+      );
+      expect(windowRemoveEventListenerMock).not.toHaveBeenCalled();
+      expect(documentRemoveEventListenerMock).not.toHaveBeenCalled();
+
+      windowAddEventListenerMock.mockClear();
+      windowRemoveEventListenerMock.mockClear();
+      documentAddEventListenerMock.mockClear();
+      documentRemoveEventListenerMock.mockClear();
+
+      await harness.update(pollingArgs);
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(windowAddEventListenerMock).not.toHaveBeenCalled();
+      expect(windowRemoveEventListenerMock).not.toHaveBeenCalled();
+      expect(documentAddEventListenerMock).not.toHaveBeenCalled();
+      expect(documentRemoveEventListenerMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      globalThis.addEventListener = originalWindowAddEventListener;
+      globalThis.removeEventListener = originalWindowRemoveEventListener;
+      document.addEventListener = originalDocumentAddEventListener;
+      document.removeEventListener = originalDocumentRemoveEventListener;
     }
   });
 

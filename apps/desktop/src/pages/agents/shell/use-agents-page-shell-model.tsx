@@ -1,14 +1,5 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import {
-  type MutableRefObject,
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
 import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
@@ -22,6 +13,7 @@ import {
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
@@ -54,6 +46,10 @@ import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
+import {
+  useForwardedWorktreeRefresh,
+  type WorktreeRefreshRef,
+} from "./use-forwarded-worktree-refresh";
 
 type AgentsPageShellModel = {
   activeRepo: string | null;
@@ -86,7 +82,7 @@ const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRuntime({
   refreshWorktreeRef,
   ...args
 }: UseAgentsPageRightPanelModelArgs & {
-  refreshWorktreeRef: MutableRefObject<(() => void) | null>;
+  refreshWorktreeRef: WorktreeRefreshRef;
 }): ReactElement | null {
   const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
 
@@ -115,11 +111,9 @@ function AgentsPageBuildWorktreeRefreshRuntime({
   viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
   isSessionHistoryHydrating: boolean;
-  refreshWorktreeRef: MutableRefObject<(() => void) | null>;
+  refreshWorktreeRef: WorktreeRefreshRef;
 }): null {
-  const refreshWorktree = useCallback(() => {
-    refreshWorktreeRef.current?.();
-  }, [refreshWorktreeRef]);
+  const refreshWorktree = useForwardedWorktreeRefresh(refreshWorktreeRef);
 
   useAgentStudioBuildWorktreeRefresh({
     viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
@@ -182,7 +176,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
-  const rightPanelRefreshWorktreeRef = useRef<(() => void) | null>(null);
+  const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
 
   const {

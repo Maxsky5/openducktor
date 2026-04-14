@@ -95,6 +95,7 @@ type OrchestrationState = {
 type RightPanelState = {
   isRightPanelVisible: boolean;
   rightPanelModel: { kind: string };
+  refreshWorktree: (mode?: "hard" | "soft" | "scheduled") => Promise<void>;
 };
 
 type AgentsPageShellModelState = {
@@ -260,9 +261,11 @@ let orchestrationState: OrchestrationState = {
     rightPanelToggleModel,
   },
 };
+const refreshWorktreeMock = mock(async (_mode?: "hard" | "soft" | "scheduled") => {});
 let rightPanelState: RightPanelState = {
   isRightPanelVisible: true,
   rightPanelModel,
+  refreshWorktree: refreshWorktreeMock,
 };
 
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
@@ -551,7 +554,9 @@ beforeEach(async () => {
   rightPanelState = {
     isRightPanelVisible: true,
     rightPanelModel,
+    refreshWorktree: refreshWorktreeMock,
   };
+  refreshWorktreeMock.mockClear();
 });
 
 afterEach(async () => {

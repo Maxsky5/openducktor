@@ -189,7 +189,7 @@ export function useAgentStudioGitResetActions({
       });
 
       try {
-        await refreshDiffData();
+        await refreshDiffData("soft");
       } catch (error) {
         const message = toErrorMessage(error, "Reset was applied, but diff refresh failed.");
         setResetError(message);
