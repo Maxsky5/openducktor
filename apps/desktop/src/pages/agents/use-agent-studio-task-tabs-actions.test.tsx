@@ -146,8 +146,11 @@ describe("useTaskTabActions", () => {
       expect(navigateToTaskIntent).toHaveBeenCalledWith("task-3");
       expect(globalThis.document.activeElement).toBe(nextTrigger);
     } finally {
-      await harness.unmount();
-      nextTrigger.remove();
+      try {
+        await harness.unmount();
+      } finally {
+        nextTrigger.remove();
+      }
     }
   });
 

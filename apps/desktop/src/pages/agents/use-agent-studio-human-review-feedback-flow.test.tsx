@@ -15,13 +15,13 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioHumanReviewFeedbackFlow>[0];
 
-const MODEL_SELECTION = {
+const createModelSelection = () => ({
   runtimeKind: "opencode" as const,
   providerId: "openai",
   modelId: "gpt-5",
   variant: "default",
   profileId: "builder",
-};
+});
 
 const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createTaskCardFixture({
@@ -94,7 +94,7 @@ const updateFeedbackModal = async (
   },
 ) => {
   await harness.run((state) => {
-    if (target) {
+    if (target !== undefined) {
       state.humanReviewFeedbackModal?.onTargetChange(target);
     }
     if (message !== undefined) {
@@ -366,7 +366,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       requestedStarts.push(request);
       return executeWithDecision({
         startMode: "fresh",
-        selectedModel: MODEL_SELECTION,
+        selectedModel: createModelSelection(),
       });
     };
     const harness = createHookHarness(
@@ -406,7 +406,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_after_human_request_changes",
-      selectedModel: MODEL_SELECTION,
+      selectedModel: createModelSelection(),
       startMode: "fresh",
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-build-new", [
@@ -437,7 +437,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       ) => {
         return executeWithDecision({
           startMode: "fresh",
-          selectedModel: MODEL_SELECTION,
+          selectedModel: createModelSelection(),
         });
       };
       const harness = createHookHarness(
@@ -467,7 +467,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         taskId: "task-1",
         role: "build",
         scenario: "build_after_human_request_changes",
-        selectedModel: MODEL_SELECTION,
+        selectedModel: createModelSelection(),
         startMode: "fresh",
       });
       expect(sendAgentMessage).toHaveBeenCalledWith("session-build-new", [
