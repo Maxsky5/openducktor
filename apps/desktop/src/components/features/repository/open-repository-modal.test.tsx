@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
-import { createQueryClient } from "@/lib/query-client";
+import { createElement, type ReactNode, useEffect } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -23,6 +23,22 @@ const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unkn
 
 const addWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
 const selectWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
+
+function SeedFilesystemDirectory(): ReactNode {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    queryClient.setQueryData(filesystemQueryKeys.directory(), {
+      currentPath: "/repo",
+      currentPathIsGitRepo: true,
+      parentPath: "/",
+      homePath: "/repo",
+      entries: [],
+    });
+  }, [queryClient]);
+
+  return null;
+}
 
 describe("OpenRepositoryModal", () => {
   let OpenRepositoryModal: (props: {
@@ -113,23 +129,15 @@ describe("OpenRepositoryModal", () => {
       throw "bd not found in PATH";
     });
 
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(filesystemQueryKeys.directory(), {
-      currentPath: "/repo",
-      currentPathIsGitRepo: true,
-      parentPath: "/",
-      homePath: "/repo",
-      entries: [],
-    });
-
     const { container, unmount } = render(
-      <QueryClientProvider client={queryClient}>
+      <QueryProvider useIsolatedClient>
+        <SeedFilesystemDirectory />
         {createElement(OpenRepositoryModal, {
           open: true,
           canClose: false,
           onOpenChange: () => {},
         })}
-      </QueryClientProvider>,
+      </QueryProvider>,
     );
 
     const primaryButton = container.querySelector("button");

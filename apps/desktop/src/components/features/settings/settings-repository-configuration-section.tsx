@@ -31,6 +31,18 @@ type RepositoryConfigurationSectionProps = {
 
 type UpdateSelectedRepoConfig = RepositoryConfigurationSectionProps["onUpdateSelectedRepoConfig"];
 
+export function resolveFolderPickerInitialPath(
+  selectedRepoConfig: RepoConfig,
+  selectedRepoEffectiveWorktreeBasePath: string | null,
+): string | undefined {
+  const configuredPath = selectedRepoConfig.worktreeBasePath?.trim();
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  return selectedRepoEffectiveWorktreeBasePath ?? undefined;
+}
+
 export function RepositoryConfigurationSection({
   selectedRepoConfig,
   selectedRepoDevServerValidationErrors,
@@ -112,8 +124,10 @@ export function RepositoryConfigurationSection({
     ? (selectedRepoDevServerValidationErrors ??
       buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []))
     : {};
-  const folderPickerInitialPath =
-    selectedRepoConfig.worktreeBasePath ?? selectedRepoEffectiveWorktreeBasePath;
+  const folderPickerInitialPath = resolveFolderPickerInitialPath(
+    selectedRepoConfig,
+    selectedRepoEffectiveWorktreeBasePath,
+  );
 
   return (
     <>

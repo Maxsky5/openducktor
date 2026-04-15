@@ -144,10 +144,32 @@ export function FolderPickerDialog({
     requireGitRepo && confirmedListing && !confirmedListing.currentPathIsGitRepo
       ? "Only Git repositories can be opened. Navigate into a repository before continuing."
       : null;
+  const canDismiss = !isSubmitting;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl px-5 pb-8 pt-6 sm:px-6">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!canDismiss && !nextOpen) {
+          return;
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent
+        className="max-w-4xl px-5 pb-8 pt-6 sm:px-6"
+        {...(canDismiss ? {} : { closeButton: null })}
+        onEscapeKeyDown={(event) => {
+          if (!canDismiss) {
+            event.preventDefault();
+          }
+        }}
+        onPointerDownOutside={(event) => {
+          if (!canDismiss) {
+            event.preventDefault();
+          }
+        }}
+      >
         <DialogHeader className="px-1">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -308,7 +330,12 @@ export function FolderPickerDialog({
         </DialogBody>
 
         <DialogFooter className="mt-4 justify-between border-t border-border px-1 pt-5">
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isSubmitting}
+            onClick={() => onOpenChange(false)}
+          >
             Cancel
           </Button>
           <Button

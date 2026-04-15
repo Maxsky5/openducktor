@@ -1,16 +1,19 @@
 import { expect, test } from "bun:test";
 import type { RepoConfig } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, useState } from "react";
-import { createQueryClient } from "@/lib/query-client";
+import { createElement, type ReactNode, useEffect, useState } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
+import {
+  RepositoryConfigurationSection,
+  resolveFolderPickerInitialPath,
+} from "./settings-repository-configuration-section";
 
 enableReactActEnvironment();
 
-const baseRepoConfig: RepoConfig = {
+const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
@@ -26,23 +29,32 @@ const baseRepoConfig: RepoConfig = {
   worktreeFileCopies: [],
   promptOverrides: {},
   agentDefaults: {},
-};
+  ...overrides,
+});
+
+function SeedFilesystemDirectory({ path }: { path: string }): ReactNode {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    queryClient.setQueryData(filesystemQueryKeys.directory(), {
+      currentPath: path,
+      currentPathIsGitRepo: false,
+      parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
+      homePath: path,
+      entries: [],
+    });
+  }, [path, queryClient]);
+
+  return null;
+}
 
 test("RepositoryConfigurationSection applies the confirmed worktree base path", async () => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(filesystemQueryKeys.directory(), {
-    currentPath: "/tmp/worktrees",
-    currentPathIsGitRepo: false,
-    parentPath: "/tmp",
-    homePath: "/tmp/worktrees",
-    entries: [],
-  });
-
   const Wrapper = () => {
-    const [selectedRepoConfig, setSelectedRepoConfig] = useState(baseRepoConfig);
+    const [selectedRepoConfig, setSelectedRepoConfig] = useState(createRepoConfig());
 
     return (
-      <QueryClientProvider client={queryClient}>
+      <QueryProvider useIsolatedClient>
+        <SeedFilesystemDirectory path="/tmp/worktrees" />
         <RepositoryConfigurationSection
           selectedRepoConfig={selectedRepoConfig}
           selectedRepoEffectiveWorktreeBasePath={null}
@@ -56,7 +68,7 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
             setSelectedRepoConfig((current) => updater(current));
           }}
         />
-      </QueryClientProvider>
+      </QueryProvider>
     );
   };
 
@@ -74,4 +86,13 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
   } finally {
     rendered.unmount();
   }
+});
+
+test("resolveFolderPickerInitialPath falls back to the effective worktree path when the override is blank", () => {
+  expect(
+    resolveFolderPickerInitialPath(
+      createRepoConfig({ worktreeBasePath: "   " }),
+      "/effective/worktrees",
+    ),
+  ).toBe("/effective/worktrees");
 });

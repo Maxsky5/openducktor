@@ -33,7 +33,7 @@ pub fn list_directory(
     Ok(DirectoryListing {
         current_path: current_path_display,
         current_path_is_git_repo: current_path.join(".git").exists(),
-        parent_path: current_path.parent().map(|path| path_display(path)),
+        parent_path: current_path.parent().map(path_display),
         home_path: resolve_home_path().map(|path| path_display(&path)),
         entries,
     })
@@ -95,22 +95,18 @@ fn read_directory_entries(
         })?;
 
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
-
-        let file_type =
-            entry
-                .file_type()
-                .map_err(|error| FilesystemListDirectoryError::ReadFailed {
-                    path: current_path_display.to_string(),
-                    source: error,
-                })?;
-        if !file_type.is_dir() {
-            continue;
-        }
 
         let entry_path = entry.path();
+        let metadata = fs::metadata(&entry_path).map_err(|error| {
+            FilesystemListDirectoryError::ReadFailed {
+                path: current_path_display.to_string(),
+                source: error,
+            }
+        })?;
+        if !metadata.is_dir() {
+            continue;
+        }
+
         entries.push(DirectoryEntry {
             name,
             path: path_display(&entry_path),
@@ -143,6 +139,8 @@ mod tests {
     use super::{list_directory, FilesystemListDirectoryError};
     use host_test_support::{lock_env, EnvVarGuard};
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -188,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn list_directory_hides_hidden_entries_marks_git_repos_and_sorts_results() {
+    fn list_directory_includes_hidden_entries_marks_git_repos_and_sorts_results() {
         let root = TempDirFixture::new("visible");
         fs::create_dir(root.path.join("zeta")).expect("zeta directory should exist");
         fs::create_dir(root.path.join("Alpha")).expect("alpha directory should exist");
@@ -208,7 +206,38 @@ mod tests {
                 .iter()
                 .map(|entry| (entry.name.as_str(), entry.is_git_repo))
                 .collect::<Vec<_>>(),
-            vec![("Alpha", false), ("repo-a", true), ("zeta", false)]
+            vec![
+                (".hidden-repo", false),
+                ("Alpha", false),
+                ("repo-a", true),
+                ("zeta", false),
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_directory_includes_symlinked_directories() {
+        let root = TempDirFixture::new("symlinked-directory");
+        let target_path = root.path.join("target-repo");
+        let symlink_path = root.path.join("linked-repo");
+        fs::create_dir(&target_path).expect("target directory should exist");
+        fs::create_dir(target_path.join(".git")).expect("target git metadata should exist");
+        unix_fs::symlink(&target_path, &symlink_path).expect("directory symlink should exist");
+
+        let listing = list_directory(Some(root.path.to_string_lossy().as_ref()))
+            .expect("directory listing should succeed");
+        let canonical_root_path =
+            fs::canonicalize(&root.path).expect("root path should canonicalize");
+        let listed_symlink_path = canonical_root_path.join("linked-repo");
+
+        assert_eq!(
+            listing
+                .entries
+                .iter()
+                .find(|entry| entry.name == "linked-repo")
+                .map(|entry| (entry.path.as_str(), entry.is_directory, entry.is_git_repo)),
+            Some((listed_symlink_path.to_string_lossy().as_ref(), true, true))
         );
     }
 

@@ -352,4 +352,56 @@ describe("FolderPickerDialog", () => {
       rendered.unmount();
     }
   });
+
+  test("keeps the dialog locked open while confirmation is in flight", async () => {
+    let resolveConfirm: (() => void) | undefined;
+    const onConfirm = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveConfirm = resolve;
+        }),
+    );
+    const onOpenChange = mock((_open: boolean) => {});
+
+    const rendered = render(
+      <QueryProvider useIsolatedClient>
+        <FolderPickerDialog
+          open
+          onOpenChange={onOpenChange}
+          title="Pick a folder"
+          description="Browse the filesystem"
+          confirmLabel="Select Folder"
+          onConfirm={onConfirm}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await screen.findByText("/Users/dev");
+
+      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith("/Users/dev");
+        expect(
+          (screen.getByRole("button", { name: /cancel/i }) as HTMLButtonElement).disabled,
+        ).toBe(true);
+        expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      if (!resolveConfirm) {
+        throw new Error("resolveConfirm was not assigned");
+      }
+      resolveConfirm();
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+    } finally {
+      rendered.unmount();
+    }
+  });
 });
