@@ -75,6 +75,56 @@ const waitForFeedbackModal = async (
   return modal;
 };
 
+const openFeedbackModal = async (harness: ReturnType<typeof createHookHarness>) => {
+  await harness.mount();
+  await harness.run((state) => {
+    state.openHumanReviewFeedback();
+  });
+  return waitForFeedbackModal(harness);
+};
+
+const updateFeedbackModal = async (
+  harness: ReturnType<typeof createHookHarness>,
+  {
+    target,
+    message,
+  }: {
+    target?: string;
+    message?: string;
+  },
+) => {
+  await harness.run((state) => {
+    if (target) {
+      state.humanReviewFeedbackModal?.onTargetChange(target);
+    }
+    if (message !== undefined) {
+      state.humanReviewFeedbackModal?.onMessageChange(message);
+    }
+  });
+};
+
+const confirmFeedbackModal = async (harness: ReturnType<typeof createHookHarness>) => {
+  await harness.run(async (state) => {
+    await state.humanReviewFeedbackModal?.onConfirm();
+  });
+};
+
+const expectBuilderSelectionUpdate = (
+  updateCalls: Array<Record<string, string | undefined>>,
+  sessionId: string,
+) => {
+  expect(updateCalls).toEqual([
+    {
+      task: "task-1",
+      session: sessionId,
+      agent: "build",
+      scenario: undefined,
+      autostart: undefined,
+      start: undefined,
+    },
+  ]);
+};
+
 describe("useAgentStudioHumanReviewFeedbackFlow", () => {
   test("intercepts only build-after-human-request-changes session creation", async () => {
     const harness = createHookHarness(createBaseArgs());
@@ -132,12 +182,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback();
-    });
-
-    const modal = await waitForFeedbackModal(harness);
+    const modal = await openFeedbackModal(harness);
 
     expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
     expect(modal.selectedTarget).toBe("session-build-latest");
@@ -223,18 +268,9 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         }),
       );
 
-      await harness.mount();
-      await harness.run((state) => {
-        state.openHumanReviewFeedback();
-      });
-      await waitForFeedbackModal(harness);
-
-      await harness.run((state) => {
-        state.humanReviewFeedbackModal?.onMessageChange("   ");
-      });
-      await harness.run(async (state) => {
-        await state.humanReviewFeedbackModal?.onConfirm();
-      });
+      await openFeedbackModal(harness);
+      await updateFeedbackModal(harness, { message: "   " });
+      await confirmFeedbackModal(harness);
 
       expect(toastErrorMock).toHaveBeenCalledWith("Feedback message is required.");
       expect(humanRequestChangesTask).toHaveBeenCalledTimes(0);
@@ -284,19 +320,12 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         }),
       );
 
-      await harness.mount();
-      await harness.run((state) => {
-        state.openHumanReviewFeedback();
+      await openFeedbackModal(harness);
+      await updateFeedbackModal(harness, {
+        target: "session-build-older",
+        message: "  Apply the requested human changes.  ",
       });
-      await waitForFeedbackModal(harness);
-
-      await harness.run((state) => {
-        state.humanReviewFeedbackModal?.onTargetChange("session-build-older");
-        state.humanReviewFeedbackModal?.onMessageChange("  Apply the requested human changes.  ");
-      });
-      await harness.run(async (state) => {
-        await state.humanReviewFeedbackModal?.onConfirm();
-      });
+      await confirmFeedbackModal(harness);
 
       expect(humanRequestChangesTask).toHaveBeenCalledWith(
         "task-1",
@@ -310,16 +339,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         { kind: "text", text: "Apply the requested human changes." },
       ]);
       expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
-      expect(updateCalls).toEqual([
-        {
-          task: "task-1",
-          session: "session-build-older",
-          agent: "build",
-          scenario: undefined,
-          autostart: undefined,
-          start: undefined,
-        },
-      ]);
+      expectBuilderSelectionUpdate(updateCalls, "session-build-older");
       expect(toastErrorMock).toHaveBeenCalledWith(
         "Changes requested, but refreshing Builder sessions failed.",
       );
@@ -363,19 +383,12 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback();
+    await openFeedbackModal(harness);
+    await updateFeedbackModal(harness, {
+      target: NEW_BUILDER_SESSION_TARGET,
+      message: "  Ship the requested fixes.  ",
     });
-    await waitForFeedbackModal(harness);
-
-    await harness.run((state) => {
-      state.humanReviewFeedbackModal?.onTargetChange(NEW_BUILDER_SESSION_TARGET);
-      state.humanReviewFeedbackModal?.onMessageChange("  Ship the requested fixes.  ");
-    });
-    await harness.run(async (state) => {
-      await state.humanReviewFeedbackModal?.onConfirm();
-    });
+    await confirmFeedbackModal(harness);
     await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
 
     expect(requestedStarts).toEqual([
@@ -403,16 +416,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: "task-1",
       sessionId: "session-build-new",
     });
-    expect(updateCalls).toEqual([
-      {
-        task: "task-1",
-        session: "session-build-new",
-        agent: "build",
-        scenario: undefined,
-        autostart: undefined,
-        start: undefined,
-      },
-    ]);
+    expectBuilderSelectionUpdate(updateCalls, "session-build-new");
     expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
 
     await harness.unmount();
@@ -450,19 +454,12 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         }),
       );
 
-      await harness.mount();
-      await harness.run((state) => {
-        state.openHumanReviewFeedback();
+      await openFeedbackModal(harness);
+      await updateFeedbackModal(harness, {
+        target: NEW_BUILDER_SESSION_TARGET,
+        message: "  Ship the requested fixes.  ",
       });
-      await waitForFeedbackModal(harness);
-
-      await harness.run((state) => {
-        state.humanReviewFeedbackModal?.onTargetChange(NEW_BUILDER_SESSION_TARGET);
-        state.humanReviewFeedbackModal?.onMessageChange("  Ship the requested fixes.  ");
-      });
-      await harness.run(async (state) => {
-        await state.humanReviewFeedbackModal?.onConfirm();
-      });
+      await confirmFeedbackModal(harness);
       await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
 
       expect(humanRequestChangesTask).toHaveBeenCalledWith("task-1", "Ship the requested fixes.");
@@ -480,16 +477,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         taskId: "task-1",
         sessionId: "session-build-new",
       });
-      expect(updateCalls).toEqual([
-        {
-          task: "task-1",
-          session: "session-build-new",
-          agent: "build",
-          scenario: undefined,
-          autostart: undefined,
-          start: undefined,
-        },
-      ]);
+      expectBuilderSelectionUpdate(updateCalls, "session-build-new");
       expect(toastErrorMock).toHaveBeenCalledWith(
         "Changes requested, but feedback message failed.",
         { description: "detached send failed" },
@@ -510,19 +498,12 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         }),
       );
 
-      await harness.mount();
-      await harness.run((state) => {
-        state.openHumanReviewFeedback();
+      await openFeedbackModal(harness);
+      await updateFeedbackModal(harness, {
+        target: "session-build-missing",
+        message: "Apply the latest review feedback.",
       });
-      await waitForFeedbackModal(harness);
-
-      await harness.run((state) => {
-        state.humanReviewFeedbackModal?.onTargetChange("session-build-missing");
-        state.humanReviewFeedbackModal?.onMessageChange("Apply the latest review feedback.");
-      });
-      await harness.run(async (state) => {
-        await state.humanReviewFeedbackModal?.onConfirm();
-      });
+      await confirmFeedbackModal(harness);
 
       expect(toastErrorMock).toHaveBeenCalledWith(
         "The selected builder session is no longer available for this task.",
