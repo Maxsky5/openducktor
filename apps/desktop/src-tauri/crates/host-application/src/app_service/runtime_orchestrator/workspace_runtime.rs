@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn ensure_workspace_runtime_records_timeout_failure_status_at_module_seam() -> Result<()> {
+    fn ensure_workspace_runtime_records_child_exit_failure_status_at_module_seam() -> Result<()> {
         let _env_lock = lock_env();
         let root = unique_temp_path("workspace-runtime-startup-failure-status");
         let repo = root.join("repo");

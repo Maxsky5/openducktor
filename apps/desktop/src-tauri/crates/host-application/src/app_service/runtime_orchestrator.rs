@@ -8,6 +8,9 @@ mod startup;
 mod startup_status;
 mod workspace_runtime;
 
+pub(crate) use self::start_pipeline::RuntimeStartInput;
+pub(in crate::app_service) use self::startup_status::RuntimeStartupProgress;
+
 use super::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{AgentRuntimeKind, RuntimeDescriptor, RuntimeInstanceSummary};
@@ -88,8 +91,8 @@ mod tests {
     use chrono::{TimeDelta, Utc};
     use host_domain::{
         now_rfc3339, AgentRuntimeKind, RepoRuntimeHealthMcp, RepoRuntimeHealthObservation,
-        RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus, RunSummary,
-        RuntimeRoute,
+        RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus,
+        RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary, RuntimeRoute,
     };
     use host_infra_system::RepoConfig;
     use std::io::{Read, Write};

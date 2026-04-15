@@ -1,6 +1,6 @@
 use super::super::{
-    AppService, RuntimeCleanupTarget, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
-    TrackedOpencodeProcessGuard,
+    AppService, RuntimeCleanupTarget, RuntimeProcessGuard, RuntimeStartupReadinessPolicy,
+    RuntimeStartupWaitReport,
 };
 use super::startup_status::RuntimeStartupProgress;
 use anyhow::Result;
@@ -9,10 +9,10 @@ use std::process::Child;
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
-pub(super) struct RuntimeExistingLookup<'a> {
-    pub(super) repo_key: &'a str,
-    pub(super) role: RuntimeRole,
-    pub(super) task_id: Option<&'a str>,
+pub(crate) struct RuntimeExistingLookup<'a> {
+    pub(crate) repo_key: &'a str,
+    pub(crate) role: RuntimeRole,
+    pub(crate) task_id: Option<&'a str>,
 }
 
 pub(crate) struct RuntimePostStartPolicy<'a> {
@@ -41,7 +41,7 @@ pub(super) struct SpawnedRuntimeServer {
     pub(super) runtime_id: String,
     pub(super) runtime_route: RuntimeRoute,
     pub(super) child: Option<Child>,
-    pub(super) _runtime_process_guard: Option<TrackedOpencodeProcessGuard>,
+    pub(super) _runtime_process_guard: Option<RuntimeProcessGuard>,
     pub(super) startup_started_at_instant: Instant,
     pub(super) startup_started_at: String,
     pub(super) startup_report: RuntimeStartupWaitReport,
@@ -99,12 +99,12 @@ mod tests {
         let fake_opencode = root.join("opencode");
         create_fake_opencode(&fake_opencode)?;
         let _dolt_guard = install_fake_dolt(&root)?;
-        let pid_file = root.join("spawned-runtime.pid");
+        let starts_file = root.join("spawned-runtime.starts");
         let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
         let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
-        let _pid_guard = set_env_var(
-            "OPENDUCKTOR_TEST_PID_FILE",
-            pid_file.to_string_lossy().as_ref(),
+        let _starts_guard = set_env_var(
+            "OPENDUCKTOR_TEST_STARTS_FILE",
+            starts_file.to_string_lossy().as_ref(),
         );
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
@@ -163,10 +163,10 @@ mod tests {
             });
 
             assert!(wait_for_path_exists(
-                pid_file.as_path(),
+                starts_file.as_path(),
                 Duration::from_secs(2)
             ));
-            let spawned_pid = fs::read_to_string(pid_file.as_path())?
+            let spawned_pid = fs::read_to_string(starts_file.as_path())?
                 .trim()
                 .parse::<i32>()
                 .expect("spawned runtime pid should parse as i32");
