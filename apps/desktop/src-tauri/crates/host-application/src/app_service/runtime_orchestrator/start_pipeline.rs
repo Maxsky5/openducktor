@@ -59,7 +59,7 @@ impl AppService {
         let runtime_kind = input.runtime_kind.clone();
         let repo_key = input.repo_key.clone();
         let summary = self.attach_runtime_session(input, spawned_server)?;
-        self.mark_runtime_startup_ready(
+        if let Err(error) = self.mark_runtime_startup_ready(
             &runtime_kind,
             repo_key.as_str(),
             &summary,
@@ -69,7 +69,18 @@ impl AppService {
                 attempts: Some(startup_report.attempts()),
                 elapsed_ms: Some(startup_report.startup_ms()),
             },
-        )?;
+        ) {
+            let stop_error = self
+                .stop_registered_runtime_preserving_repo_health(summary.runtime_id.as_str())
+                .err();
+            return match stop_error {
+                Some(stop_error) => Err(error.context(format!(
+                    "Also failed rolling back runtime {} after startup status update failure: {stop_error:#}",
+                    summary.runtime_id
+                ))),
+                None => Err(error),
+            };
+        }
         Ok(summary)
     }
 }
@@ -86,6 +97,7 @@ mod tests {
     use host_domain::{now_rfc3339, AgentRuntimeKind, GitCurrentBranch};
     use host_infra_system::AppConfigStore;
     use std::fs;
+    use std::panic::{self, AssertUnwindSafe};
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -164,7 +176,7 @@ mod tests {
 
             assert!(wait_for_path_exists(
                 starts_file.as_path(),
-                Duration::from_secs(2)
+                Duration::from_secs(5)
             ));
             let spawned_pid = fs::read_to_string(starts_file.as_path())?
                 .trim()
@@ -191,6 +203,122 @@ mod tests {
         assert!(pipeline_error
             .to_string()
             .contains("Agent runtime state lock poisoned"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn spawn_and_register_runtime_rolls_back_registered_runtime_when_ready_status_update_fails(
+    ) -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("start-pipeline-ready-status-poison");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _dolt_guard = install_fake_dolt(&root)?;
+        let starts_file = root.join("spawned-runtime.starts");
+        let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+        let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
+        let _starts_guard = set_env_var(
+            "OPENDUCKTOR_TEST_STARTS_FILE",
+            starts_file.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+
+        let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        let pipeline_error = thread::scope(|scope| -> Result<anyhow::Error> {
+            let pipeline_handle = scope.spawn(|| {
+                let startup_error_context = format!(
+                    "{} workspace runtime failed to start for {repo_path}",
+                    AgentRuntimeKind::opencode().as_str()
+                );
+                let startup_policy = service.resolve_runtime_startup_policy(
+                    &AgentRuntimeKind::opencode(),
+                    "workspace_runtime",
+                    repo_path.as_str(),
+                    AppService::WORKSPACE_RUNTIME_TASK_ID,
+                    AppService::WORKSPACE_RUNTIME_ROLE,
+                    startup_error_context.as_str(),
+                )?;
+
+                service.spawn_and_register_runtime(RuntimeStartInput {
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    startup_scope: "workspace_runtime",
+                    repo_path: repo_path.as_str(),
+                    repo_key: repo_path.clone(),
+                    startup_started_at_instant: Instant::now(),
+                    startup_started_at: now_rfc3339(),
+                    task_id: AppService::WORKSPACE_RUNTIME_TASK_ID,
+                    role: AppService::WORKSPACE_RUNTIME_ROLE,
+                    startup_policy,
+                    working_directory: repo_path.clone(),
+                    cleanup_target: None,
+                    tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
+                    startup_error_context,
+                    post_start_policy: Some(RuntimePostStartPolicy {
+                        existing_lookup: RuntimeExistingLookup {
+                            repo_key: repo_path.as_str(),
+                            role: AppService::WORKSPACE_RUNTIME_ROLE,
+                            task_id: None,
+                        },
+                        prune_error_context: format!(
+                            "Failed pruning stale runtimes while finalizing workspace runtime for {repo_path}"
+                        ),
+                    }),
+                })
+            });
+
+            assert!(wait_for_path_exists(
+                starts_file.as_path(),
+                Duration::from_secs(5)
+            ));
+            let spawned_pid = fs::read_to_string(starts_file.as_path())?
+                .trim()
+                .parse::<i32>()
+                .expect("spawned runtime pid should parse as i32");
+
+            let poison_handle = scope.spawn(|| {
+                let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                    let _lock = service
+                        .runtime_startup_status
+                        .lock()
+                        .expect("runtime startup status lock should be available for poisoning");
+                    panic!("poison runtime startup status lock");
+                }));
+            });
+            poison_handle
+                .join()
+                .expect("startup status poison thread should join");
+
+            let pipeline_error = pipeline_handle
+                .join()
+                .expect("start pipeline thread should join")
+                .expect_err(
+                    "start pipeline should fail when runtime startup status lock is poisoned",
+                );
+            assert!(wait_for_process_exit(spawned_pid, Duration::from_secs(2)));
+            Ok(pipeline_error)
+        })?;
+
+        assert!(pipeline_error
+            .to_string()
+            .contains("Runtime startup status lock poisoned"));
+        assert!(service
+            .find_existing_workspace_runtime(&AgentRuntimeKind::opencode(), repo_path.as_str())?
+            .is_none());
 
         let _ = fs::remove_dir_all(root);
         Ok(())

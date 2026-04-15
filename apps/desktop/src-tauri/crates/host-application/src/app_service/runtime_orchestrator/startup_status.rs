@@ -78,10 +78,14 @@ impl AppService {
     ) -> Result<()> {
         self.update_runtime_startup_status(runtime_kind, repo_key, |entry| {
             entry.stage = RepoRuntimeStartupStage::WaitingForRuntime;
+            entry.runtime = None;
             entry.started_at = Some(progress.started_at.clone());
             entry.started_at_instant = Some(progress.started_at_instant);
             entry.elapsed_ms = None;
             entry.attempts = progress.attempts;
+            entry.failure_kind = None;
+            entry.failure_reason = None;
+            entry.detail = None;
         })
     }
 
@@ -154,6 +158,8 @@ impl AppService {
         let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         let status_key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key.as_str());
+        let existing_runtime =
+            self.find_existing_workspace_runtime(&runtime_kind, repo_key.as_str())?;
 
         if let Some(snapshot) = self
             .runtime_startup_status
@@ -162,18 +168,13 @@ impl AppService {
             .get(status_key.as_str())
             .cloned()
         {
-            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady
-                || self
-                    .find_existing_workspace_runtime(&runtime_kind, repo_key.as_str())?
-                    .is_some()
+            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady || existing_runtime.is_some()
             {
                 return Ok(snapshot.to_public_status());
             }
         }
 
-        if let Some(runtime) =
-            self.find_existing_workspace_runtime(&runtime_kind, repo_key.as_str())?
-        {
+        if let Some(runtime) = existing_runtime {
             return Ok(RepoRuntimeStartupStatus {
                 runtime_kind,
                 repo_path: repo_key,
@@ -278,6 +279,78 @@ mod tests {
         assert_eq!(failed_status.failure_reason.as_deref(), Some("timeout"));
         assert_eq!(failed_status.attempts, Some(4));
         assert_eq!(failed_status.elapsed_ms, Some(4200));
+
+        Ok(())
+    }
+
+    #[test]
+    fn mark_runtime_startup_waiting_clears_stale_ready_and_failure_fields() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/runtime-waiting-reset";
+        let started_at_instant = Instant::now();
+        let started_at = "2026-04-04T16:00:00Z";
+
+        service.mark_runtime_startup_failed(
+            &AgentRuntimeKind::opencode(),
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(3),
+                elapsed_ms: Some(1200),
+            },
+            RuntimeStartupFailure {
+                failure_kind: RepoRuntimeStartupFailureKind::Error,
+                failure_reason: "child_exited".to_string(),
+                detail: "startup failed".to_string(),
+            },
+        )?;
+
+        service.mark_runtime_startup_ready(
+            &AgentRuntimeKind::opencode(),
+            repo_path,
+            &host_domain::RuntimeInstanceSummary {
+                kind: AgentRuntimeKind::opencode(),
+                runtime_id: "runtime-ready".to_string(),
+                repo_path: repo_path.to_string(),
+                task_id: None,
+                role: RuntimeRole::Workspace,
+                working_directory: repo_path.to_string(),
+                runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                    endpoint: "http://127.0.0.1:9999".to_string(),
+                },
+                started_at: started_at.to_string(),
+                descriptor: builtin_opencode_runtime_descriptor(),
+            },
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(2),
+                elapsed_ms: Some(1000),
+            },
+        )?;
+
+        service.mark_runtime_startup_waiting(
+            &AgentRuntimeKind::opencode(),
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(4),
+                elapsed_ms: None,
+            },
+        )?;
+
+        let waiting_status = service.runtime_startup_status("opencode", repo_path)?;
+        assert_eq!(
+            waiting_status.stage,
+            RepoRuntimeStartupStage::WaitingForRuntime
+        );
+        assert!(waiting_status.runtime.is_none());
+        assert_eq!(waiting_status.failure_kind, None);
+        assert_eq!(waiting_status.failure_reason, None);
+        assert_eq!(waiting_status.detail, None);
+        assert_eq!(waiting_status.attempts, Some(4));
 
         Ok(())
     }
