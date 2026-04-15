@@ -1,7 +1,9 @@
 use super::super::super::{
     terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
 };
-use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
+use super::super::start_pipeline::{
+    RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer,
+};
 use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, RuntimeInstanceSummary};
 use host_infra_system::stop_shared_dolt_server_for_current_owner;
@@ -58,7 +60,7 @@ impl AppService {
             AgentRuntimeProcess {
                 summary: summary.clone(),
                 child: spawned_server.child,
-                _runtime_process_guard: spawned_server.runtime_process_guard,
+                _runtime_process_guard: spawned_server._runtime_process_guard,
                 cleanup_target,
             },
         );
@@ -130,12 +132,36 @@ impl AppService {
         let mut runtime = runtimes
             .remove(runtime_id)
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
-        self.clear_runtime_startup_status_for_runtime(&runtime.summary)?;
-        if clear_repo_runtime_health {
-            self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)?;
+        let cleanup_result = Self::cleanup_runtime_process(&mut runtime);
+        let clear_startup_result = self.clear_runtime_startup_status_for_runtime(&runtime.summary);
+        let clear_repo_health_result = if clear_repo_runtime_health {
+            self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)
+        } else {
+            Ok(())
+        };
+
+        let mut errors = Vec::new();
+        if let Err(error) = cleanup_result {
+            errors.push(format!(
+                "Failed shutting down runtime {runtime_id}: {error:#}"
+            ));
         }
-        Self::cleanup_runtime_process(&mut runtime)?;
-        Ok(true)
+        if let Err(error) = clear_startup_result {
+            errors.push(format!(
+                "Failed clearing startup status for runtime {runtime_id}: {error:#}"
+            ));
+        }
+        if let Err(error) = clear_repo_health_result {
+            errors.push(format!(
+                "Failed clearing repo runtime health status for runtime {runtime_id}: {error:#}"
+            ));
+        }
+
+        if errors.is_empty() {
+            Ok(true)
+        } else {
+            Err(anyhow!(errors.join("\n")))
+        }
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime(

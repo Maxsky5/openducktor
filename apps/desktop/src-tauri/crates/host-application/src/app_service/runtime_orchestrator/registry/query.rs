@@ -1,5 +1,5 @@
 use super::super::super::{AgentRuntimeProcess, AppService};
-use super::super::RuntimeExistingLookup;
+use super::super::start_pipeline::RuntimeExistingLookup;
 use anyhow::{anyhow, Result};
 use host_domain::RuntimeInstanceSummary;
 use std::collections::{HashMap, HashSet};
