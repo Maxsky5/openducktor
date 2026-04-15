@@ -7,7 +7,7 @@ impl AppService {
         repo_key: &str,
         health: RepoRuntimeHealthCheck,
     ) -> Result<()> {
-        let key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key);
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
         let mut statuses = self
             .repo_runtime_health_snapshots
             .lock()
@@ -21,7 +21,7 @@ impl AppService {
         runtime_kind: &AgentRuntimeKind,
         repo_key: &str,
     ) -> Result<()> {
-        let key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key);
+        let key = Self::runtime_ensure_flight_key(runtime_kind, repo_key);
         let mut statuses = self
             .repo_runtime_health_snapshots
             .lock()

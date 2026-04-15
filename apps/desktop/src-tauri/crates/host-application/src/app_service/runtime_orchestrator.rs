@@ -22,26 +22,26 @@ pub(super) struct RuntimeExistingLookup<'a> {
     task_id: Option<&'a str>,
 }
 
-pub(super) struct RuntimePostStartPolicy<'a> {
+pub(crate) struct RuntimePostStartPolicy<'a> {
     existing_lookup: RuntimeExistingLookup<'a>,
     prune_error_context: String,
 }
 
-pub(in crate::app_service) struct RuntimeStartInput<'a> {
-    pub(in crate::app_service) runtime_kind: AgentRuntimeKind,
-    pub(in crate::app_service) startup_scope: &'a str,
-    pub(in crate::app_service) repo_path: &'a str,
-    pub(in crate::app_service) repo_key: String,
-    pub(in crate::app_service) startup_started_at_instant: Instant,
-    pub(in crate::app_service) startup_started_at: String,
-    pub(in crate::app_service) task_id: &'a str,
-    pub(in crate::app_service) role: RuntimeRole,
-    pub(in crate::app_service) startup_policy: super::RuntimeStartupReadinessPolicy,
-    pub(in crate::app_service) working_directory: String,
-    pub(in crate::app_service) cleanup_target: Option<super::RuntimeCleanupTarget>,
-    pub(in crate::app_service) tracking_error_context: &'static str,
-    pub(in crate::app_service) startup_error_context: String,
-    pub(in crate::app_service) post_start_policy: Option<RuntimePostStartPolicy<'a>>,
+pub(crate) struct RuntimeStartInput<'a> {
+    pub(crate) runtime_kind: AgentRuntimeKind,
+    pub(crate) startup_scope: &'a str,
+    pub(crate) repo_path: &'a str,
+    pub(crate) repo_key: String,
+    pub(crate) startup_started_at_instant: Instant,
+    pub(crate) startup_started_at: String,
+    pub(crate) task_id: &'a str,
+    pub(crate) role: RuntimeRole,
+    pub(crate) startup_policy: super::RuntimeStartupReadinessPolicy,
+    pub(crate) working_directory: String,
+    pub(crate) cleanup_target: Option<super::RuntimeCleanupTarget>,
+    pub(crate) tracking_error_context: &'static str,
+    pub(crate) startup_error_context: String,
+    pub(crate) post_start_policy: Option<RuntimePostStartPolicy<'a>>,
 }
 
 #[derive(Clone)]

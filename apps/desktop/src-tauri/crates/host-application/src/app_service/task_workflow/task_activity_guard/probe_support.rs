@@ -125,8 +125,7 @@ pub(super) fn build_session_probe_plans(
             .as_ref()
             .and_then(|kind| repo_runtime_routes_by_kind.get(kind));
         let runtime_kind = worktree_runtime_route
-            .map(|_| parse_runtime_kind(service, session.runtime_kind.as_str()))
-            .flatten()
+            .and_then(|_| parse_runtime_kind(service, session.runtime_kind.as_str()))
             .or(fallback_runtime_kind);
         let runtime_route = worktree_runtime_route.or(repo_runtime_route);
         let Some(runtime_route) = runtime_route else {

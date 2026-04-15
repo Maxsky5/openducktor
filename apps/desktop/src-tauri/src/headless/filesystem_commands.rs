@@ -22,14 +22,15 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
 async fn handle_filesystem_list_directory(state: &HeadlessState, args: Value) -> CommandResult {
     let FilesystemListDirectoryArgs { path } = deserialize_args(args)?;
     let service = state.service.clone();
-    let listing = tokio::task::spawn_blocking(move || service.filesystem_list_directory(path.as_deref()))
-        .await
-        .map_err(|error| {
-            HeadlessCommandError::internal(format!(
-                "filesystem_list_directory worker join failure: {error}"
-            ))
-        })?
-        .map_err(map_filesystem_list_directory_error)?;
+    let listing =
+        tokio::task::spawn_blocking(move || service.filesystem_list_directory(path.as_deref()))
+            .await
+            .map_err(|error| {
+                HeadlessCommandError::internal(format!(
+                    "filesystem_list_directory worker join failure: {error}"
+                ))
+            })?
+            .map_err(map_filesystem_list_directory_error)?;
 
     serialize_value(listing)
 }

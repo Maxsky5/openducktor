@@ -578,7 +578,7 @@ mod tests {
         build_service_with_state, builtin_opencode_runtime_route,
     };
     use anyhow::Result;
-    use host_domain::{AgentRuntimeKind, RuntimeRoute};
+    use host_domain::RuntimeRoute;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
