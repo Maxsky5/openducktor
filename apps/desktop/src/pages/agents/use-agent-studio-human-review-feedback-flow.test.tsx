@@ -195,7 +195,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     await harness.unmount();
   });
 
-  test("opens the feedback modal after delayed builder-session hydration", async () => {
+  test("opens the feedback modal immediately and adopts delayed builder-session hydration", async () => {
     const bootstrapTaskSessions = mock(async () => {});
     const harness = createHookHarness(
       createBaseArgs({
@@ -204,12 +204,11 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback();
-    });
-
-    expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
+    const initialModal = await openFeedbackModal(harness);
+    expect(initialModal.selectedTarget).toBe(NEW_BUILDER_SESSION_TARGET);
+    expect(initialModal.targetOptions.map((option) => option.value)).toEqual([
+      NEW_BUILDER_SESSION_TARGET,
+    ]);
 
     await harness.update(
       createBaseArgs({
