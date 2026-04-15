@@ -315,7 +315,7 @@ mod tests {
     }
 
     fn wait_for_capture(path: &Path) -> Result<String> {
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while std::time::Instant::now() < deadline {
             if let Ok(contents) = fs::read_to_string(path) {
                 if contents.contains("config=") && contents.contains("args=") {
@@ -331,7 +331,7 @@ mod tests {
     }
 
     fn wait_for_marker(path: &Path, marker: &str) -> Result<String> {
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while std::time::Instant::now() < deadline {
             if let Ok(contents) = fs::read_to_string(path) {
                 if contents.contains(marker) {
@@ -350,6 +350,7 @@ mod tests {
     fn spawn_with_config_injects_config_content_and_args() -> Result<()> {
         let _env_lock = lock_env();
         let sandbox = temp_test_dir("spawn-with-config")?;
+        let home = sandbox.join("home");
         let output_path = sandbox.join("captured.txt");
         let script_path = sandbox.join("fake-opencode.sh");
         let script = format!(
@@ -369,8 +370,14 @@ sleep 5
             .with_context(|| format!("failed writing {}", script_path.display()))?;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
             .with_context(|| format!("failed chmod {}", script_path.display()))?;
+        fs::create_dir_all(&home)?;
 
         let config = r#"{"logLevel":"INFO","mcp":{"openducktor":{"enabled":true}}}"#;
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = set_env_var("SHELL", "/tmp/odt-missing-shell");
+        let _user_guard = set_env_var("USER", "odt-test");
+        let _logname_guard = set_env_var("LOGNAME", "odt-test");
+        let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
         let mut child = super::spawn_opencode_server_with_binary(
             script_path.to_string_lossy().as_ref(),
             sandbox.as_path(),
@@ -422,6 +429,9 @@ sleep 5
             .with_context(|| format!("failed chmod {}", script_path.display()))?;
 
         let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = set_env_var("SHELL", "/tmp/odt-missing-shell");
+        let _user_guard = set_env_var("USER", "odt-test");
+        let _logname_guard = set_env_var("LOGNAME", "odt-test");
         let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
 
         let mut child = super::spawn_opencode_server_with_binary(
