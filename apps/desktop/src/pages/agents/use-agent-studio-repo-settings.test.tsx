@@ -9,6 +9,9 @@ import {
 const hostMock = {
   workspaceGetRepoConfig: mock(
     async (_repoPath: string): Promise<RepoConfig> => ({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/worktrees",
       branchPrefix: "codex/",
@@ -98,6 +101,9 @@ describe("useAgentStudioRepoSettings", () => {
     hostMock.workspaceGetRepoConfig.mockClear();
     hostMock.workspaceGetRepoConfig.mockImplementation(
       async (repoPath: string): Promise<RepoConfig> => ({
+        workspaceId: repoPath === "/repo-a" ? "repo-a" : "repo-b",
+        workspaceName: repoPath === "/repo-a" ? "Repo A" : "Repo B",
+        repoPath,
         defaultRuntimeKind: "opencode",
         worktreeBasePath: repoPath === "/repo-a" ? "/worktrees/a" : "/worktrees/b",
         branchPrefix: repoPath === "/repo-a" ? "feature-a/" : "feature-b/",

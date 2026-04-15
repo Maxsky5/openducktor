@@ -13,8 +13,10 @@ export const IsolatedQueryWrapper = ({ children }: PropsWithChildren) => (
   <QueryProvider useIsolatedClient>{children}</QueryProvider>
 );
 
-export const workspace = (path: string, isActive = false): WorkspaceRecord => ({
-  path,
+export const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
   isActive,
   hasConfig: true,
   configuredWorktreeBasePath: null,
@@ -25,7 +27,7 @@ export const workspace = (path: string, isActive = false): WorkspaceRecord => ({
 export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   workspaceList: async () => [],
   workspaceAdd: async (repoPath: string) => workspace(repoPath),
-  workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
+  workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
   workspaceGetRepoConfig: async () => {
     throw new Error("workspaceGetRepoConfig not configured");
   },

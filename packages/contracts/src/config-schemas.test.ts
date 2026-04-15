@@ -1,16 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { AUTOPILOT_EVENT_IDS, repoConfigSchema, settingsSnapshotSchema } from "./config-schemas";
 
+const baseRepoConfigInput = {
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
+  defaultRuntimeKind: "opencode",
+};
+
 describe("config-schemas", () => {
   test("defaults dev servers to an empty array", () => {
-    const parsed = repoConfigSchema.parse({ defaultRuntimeKind: "opencode" });
+    const parsed = repoConfigSchema.parse(baseRepoConfigInput);
     expect(parsed.devServers).toEqual([]);
   });
 
   test("requires named dev server commands", () => {
     expect(() =>
       repoConfigSchema.parse({
-        defaultRuntimeKind: "opencode",
+        ...baseRepoConfigInput,
         devServers: [
           {
             id: "frontend",
@@ -24,7 +31,7 @@ describe("config-schemas", () => {
 
   test("trims dev server fields and rejects duplicate ids", () => {
     const parsed = repoConfigSchema.parse({
-      defaultRuntimeKind: "opencode",
+      ...baseRepoConfigInput,
       devServers: [
         {
           id: " frontend ",
@@ -44,7 +51,7 @@ describe("config-schemas", () => {
 
     expect(() =>
       repoConfigSchema.parse({
-        defaultRuntimeKind: "opencode",
+        ...baseRepoConfigInput,
         devServers: [
           { id: "frontend", name: "Frontend", command: "bun run dev" },
           { id: " frontend ", name: "Backend", command: "bun run api" },
@@ -56,7 +63,7 @@ describe("config-schemas", () => {
   test("rejects whitespace-only dev server fields", () => {
     expect(() =>
       repoConfigSchema.parse({
-        defaultRuntimeKind: "opencode",
+        ...baseRepoConfigInput,
         devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
       }),
     ).toThrow("Dev server command cannot be blank.");
@@ -70,7 +77,7 @@ describe("config-schemas", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
 
@@ -81,7 +88,7 @@ describe("config-schemas", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
 
@@ -93,13 +100,13 @@ describe("config-schemas", () => {
     const first = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
     const second = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
 
@@ -111,7 +118,7 @@ describe("config-schemas", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
       autopilot: {
         rules: [
@@ -140,7 +147,7 @@ describe("config-schemas", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
       autopilot: {
         rules: [

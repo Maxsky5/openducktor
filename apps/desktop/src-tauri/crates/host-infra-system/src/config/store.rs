@@ -1,5 +1,7 @@
-use super::migrate::{canonicalize_workspace_key, migrate_repos_to_canonical_keys};
-use super::normalize::{normalize_global_config, normalize_repo_config, normalize_runtime_config};
+use super::migrate::canonicalize_repo_path;
+use super::normalize::{
+    normalize_global_config, normalize_hook_set, normalize_repo_config, normalize_runtime_config,
+};
 use super::persistence::{
     load_config_or_default, resolve_default_path, save_config,
     should_enforce_private_parent_permissions,
@@ -20,23 +22,55 @@ fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
     })
 }
 
-fn default_worktree_base_path(repo_path: &str) -> Result<String> {
+fn validate_git_repo_path(repo_path: &str) -> Result<String> {
+    let path = Path::new(repo_path);
+    if !path.exists() {
+        return Err(anyhow!("Workspace path does not exist: {repo_path}"));
+    }
+    if !path.join(".git").exists() {
+        return Err(anyhow!("Workspace is not a git repository: {repo_path}"));
+    }
+    canonicalize_repo_path(repo_path)
+}
+
+fn default_worktree_base_path(repo_path: &str, workspace_id: &str) -> Result<String> {
     path_buf_to_utf8(
         resolve_default_worktree_base_dir(Path::new(repo_path))?,
         &format!(
-            "Failed converting default worktree base path to UTF-8 for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath"
+            "Failed converting default worktree base path to UTF-8 for {repo_path}. Ensure HOME is set or configure workspaces.{workspace_id}.worktreeBasePath"
         ),
     )
 }
 
-fn effective_worktree_base_path(repo_path: &str, repo: &RepoConfig) -> Result<String> {
+fn effective_worktree_base_path(repo: &RepoConfig) -> Result<String> {
     match repo.worktree_base_path.as_ref() {
         Some(configured_path) => path_buf_to_utf8(
             parse_user_path(configured_path)?,
-            &format!("Failed converting configured worktree base path to UTF-8 for {repo_path}"),
+            &format!(
+                "Failed converting configured worktree base path to UTF-8 for {}",
+                repo.repo_path
+            ),
         ),
-        None => default_worktree_base_path(repo_path),
+        None => default_worktree_base_path(&repo.repo_path, &repo.workspace_id),
     }
+}
+
+fn ensure_repo_path_available(
+    config: &GlobalConfig,
+    repo_path: &str,
+    current_workspace_id: Option<&str>,
+) -> Result<()> {
+    let conflict = config.workspaces.iter().find(|(workspace_id, workspace)| {
+        workspace.repo_path == repo_path && current_workspace_id != Some(workspace_id.as_str())
+    });
+
+    if let Some((workspace_id, _)) = conflict {
+        return Err(anyhow!(
+            "Repository path is already registered to workspace {workspace_id}: {repo_path}"
+        ));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -110,86 +144,93 @@ impl AppConfigStore {
     pub fn list_workspaces(&self) -> Result<Vec<WorkspaceRecord>> {
         let config = self.load()?;
         let mut records: Vec<WorkspaceRecord> = config
-            .repos
+            .workspaces
             .iter()
-            .map(|(path, repo)| workspace_record_from_repo(&config, path, repo))
+            .map(|(workspace_id, repo)| workspace_record_from_repo(&config, workspace_id, repo))
             .collect::<Result<Vec<_>>>()?;
 
-        records.sort_by(|a, b| a.path.cmp(&b.path));
+        records.sort_by(|a, b| {
+            a.workspace_name
+                .cmp(&b.workspace_name)
+                .then_with(|| a.workspace_id.cmp(&b.workspace_id))
+        });
         Ok(records)
     }
 
-    pub fn add_workspace(&self, repo_path: &str) -> Result<WorkspaceRecord> {
-        let path = Path::new(repo_path);
-        if !path.exists() {
-            return Err(anyhow!("Workspace path does not exist: {repo_path}"));
-        }
-        if !path.join(".git").exists() {
-            return Err(anyhow!("Workspace is not a git repository: {repo_path}"));
-        }
+    pub fn add_workspace(
+        &self,
+        workspace_id: &str,
+        workspace_name: &str,
+        repo_path: &str,
+    ) -> Result<WorkspaceRecord> {
+        let canonical_repo_path = validate_git_repo_path(repo_path)?;
+        let mut repo_config = RepoConfig {
+            workspace_id: workspace_id.to_string(),
+            workspace_name: workspace_name.to_string(),
+            repo_path: canonical_repo_path,
+            ..RepoConfig::default()
+        };
+        normalize_repo_config(&mut repo_config)?;
 
-        let workspace_key = canonicalize_workspace_key(repo_path)?;
-        self.update_workspace(workspace_key, |config, workspace_key| {
+        let workspace_id = repo_config.workspace_id.clone();
+        self.update_workspace(workspace_id, move |config, workspace_id| {
+            if config.workspaces.contains_key(workspace_id) {
+                return Err(anyhow!(
+                    "Workspace already exists in config: {workspace_id}"
+                ));
+            }
+            ensure_repo_path_available(config, &repo_config.repo_path, None)?;
             config
-                .repos
-                .entry(workspace_key.to_string())
-                .or_insert_with(RepoConfig::default);
-            config.active_repo = Some(workspace_key.to_string());
+                .workspaces
+                .insert(workspace_id.to_string(), repo_config);
+            config.active_workspace = Some(workspace_id.to_string());
             Ok(())
         })
     }
 
-    pub fn select_workspace(&self, repo_path: &str) -> Result<WorkspaceRecord> {
-        let workspace_key = workspace_lookup_key(repo_path);
-        self.update_workspace(workspace_key, |config, workspace_key| {
-            if !config.repos.contains_key(workspace_key) {
-                return Err(anyhow!("Workspace not found in config: {repo_path}"));
+    pub fn select_workspace(&self, workspace_id: &str) -> Result<WorkspaceRecord> {
+        self.update_workspace(workspace_id.to_string(), |config, workspace_id| {
+            if !config.workspaces.contains_key(workspace_id) {
+                return Err(anyhow!("Workspace not found in config: {workspace_id}"));
             }
-            config.active_repo = Some(workspace_key.to_string());
+            config.active_workspace = Some(workspace_id.to_string());
             Ok(())
         })
     }
 
     pub fn update_repo_config(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         mut repo_config: RepoConfig,
     ) -> Result<WorkspaceRecord> {
+        repo_config.workspace_id = workspace_id.to_string();
+        repo_config.repo_path = validate_git_repo_path(&repo_config.repo_path)?;
         normalize_repo_config(&mut repo_config)?;
 
-        let workspace_key = workspace_lookup_key(repo_path);
-        self.update_workspace(workspace_key, move |config, workspace_key| {
-            if !config.repos.contains_key(workspace_key) {
+        let workspace_id = repo_config.workspace_id.clone();
+        self.update_workspace(workspace_id, move |config, workspace_id| {
+            if !config.workspaces.contains_key(workspace_id) {
                 return Err(anyhow!(
-                    "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
+                    "Workspace not found in config: {workspace_id}. Add/select the workspace before updating configuration."
                 ));
             }
-            config.repos.insert(workspace_key.to_string(), repo_config);
-            if config.active_repo.is_none() {
-                config.active_repo = Some(workspace_key.to_string());
+            ensure_repo_path_available(config, &repo_config.repo_path, Some(workspace_id))?;
+            config.workspaces.insert(workspace_id.to_string(), repo_config);
+            if config.active_workspace.is_none() {
+                config.active_workspace = Some(workspace_id.to_string());
             }
             Ok(())
         })
     }
 
-    pub fn update_repo_hooks(
-        &self,
-        repo_path: &str,
-        mut hooks: HookSet,
-    ) -> Result<WorkspaceRecord> {
-        let workspace_key = workspace_lookup_key(repo_path);
-        let mut normalized_repo = RepoConfig {
-            hooks,
-            ..RepoConfig::default()
-        };
-        normalize_repo_config(&mut normalized_repo)?;
-        hooks = normalized_repo.hooks;
+    pub fn update_repo_hooks(&self, workspace_id: &str, hooks: HookSet) -> Result<WorkspaceRecord> {
+        let hooks = normalize_hook_set(hooks);
 
-        self.update_workspace(workspace_key, move |config, workspace_key| {
+        self.update_workspace(workspace_id.to_string(), move |config, workspace_id| {
             let repo = config
-                .repos
-                .get_mut(workspace_key)
-                .ok_or_else(|| anyhow!("Repository is not configured"))?;
+                .workspaces
+                .get_mut(workspace_id)
+                .ok_or_else(|| anyhow!("Workspace is not configured"))?;
             let previous_hooks = repo.hooks.clone();
             repo.hooks = hooks;
             if repo.hooks != previous_hooks {
@@ -203,36 +244,57 @@ impl AppConfigStore {
         })
     }
 
-    pub fn repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
-        let workspace_key = workspace_lookup_key(repo_path);
-
+    pub fn repo_config(&self, workspace_id: &str) -> Result<RepoConfig> {
         let config = self.load()?;
         config
-            .repos
-            .get(&workspace_key)
+            .workspaces
+            .get(workspace_id)
             .cloned()
-            .ok_or_else(|| anyhow!("Repository is not configured in {}", self.path.display()))
+            .ok_or_else(|| anyhow!("Workspace is not configured in {}", self.path.display()))
     }
 
-    pub fn repo_config_optional(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
-        let workspace_key = workspace_lookup_key(repo_path);
-
+    pub fn repo_config_optional(&self, workspace_id: &str) -> Result<Option<RepoConfig>> {
         let config = self.load()?;
-        Ok(config.repos.get(&workspace_key).cloned())
+        Ok(config.workspaces.get(workspace_id).cloned())
+    }
+
+    pub fn find_workspace_by_repo_path(&self, repo_path: &str) -> Result<Option<WorkspaceRecord>> {
+        let config = self.load()?;
+        let canonical_repo_path = canonicalize_repo_path(repo_path)?;
+        config
+            .workspaces
+            .iter()
+            .find(|(_, workspace)| workspace.repo_path == canonical_repo_path)
+            .map(|(workspace_id, repo)| workspace_record_from_repo(&config, workspace_id, repo))
+            .transpose()
+    }
+
+    pub fn repo_config_by_repo_path(&self, repo_path: &str) -> Result<RepoConfig> {
+        self.repo_config_optional_by_repo_path(repo_path)?
+            .ok_or_else(|| anyhow!("Workspace is not configured in {}", self.path.display()))
+    }
+
+    pub fn repo_config_optional_by_repo_path(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
+        let canonical_repo_path = canonicalize_repo_path(repo_path)?;
+        let config = self.load()?;
+        Ok(config
+            .workspaces
+            .values()
+            .find(|workspace| workspace.repo_path == canonical_repo_path)
+            .cloned())
     }
 
     pub fn set_repo_trust_hooks(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         trusted: bool,
         trusted_fingerprint: Option<String>,
     ) -> Result<WorkspaceRecord> {
-        let workspace_key = workspace_lookup_key(repo_path);
-        self.update_workspace(workspace_key, move |config, workspace_key| {
+        self.update_workspace(workspace_id.to_string(), move |config, workspace_id| {
             let repo = config
-                .repos
-                .get_mut(workspace_key)
-                .ok_or_else(|| anyhow!("Repository is not configured"))?;
+                .workspaces
+                .get_mut(workspace_id)
+                .ok_or_else(|| anyhow!("Workspace is not configured"))?;
             repo.trusted_hooks = trusted;
             repo.trusted_hooks_fingerprint = if trusted { trusted_fingerprint } else { None };
             Ok(())
@@ -255,13 +317,13 @@ impl AppConfigStore {
 
     fn update_workspace(
         &self,
-        workspace_key: String,
+        workspace_id: String,
         update: impl FnOnce(&mut GlobalConfig, &str) -> Result<()>,
     ) -> Result<WorkspaceRecord> {
         self.update_config(|config| {
-            update(config, &workspace_key)?;
-            touch_recent(&mut config.recent_repos, &workspace_key);
-            workspace_record(config, &workspace_key)
+            update(config, &workspace_id)?;
+            touch_recent(&mut config.recent_workspaces, &workspace_id);
+            workspace_record(config, &workspace_id)
         })
     }
 }
@@ -358,80 +420,52 @@ impl RuntimeConfigStore {
     }
 }
 
-pub(crate) fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
-    recent.retain(|entry| entry != repo_path);
-    recent.insert(0, repo_path.to_string());
+pub(crate) fn touch_recent(recent: &mut Vec<String>, workspace_id: &str) {
+    recent.retain(|entry| entry != workspace_id);
+    recent.insert(0, workspace_id.to_string());
     recent.truncate(20);
 }
 
 fn migrate_loaded_global_config(config: &mut GlobalConfig) {
-    // Pass active_repo to prefer the user's current configuration on collision.
-    let canonical_repos =
-        migrate_repos_to_canonical_keys(&mut config.repos, config.active_repo.as_ref());
-    config.repos = canonical_repos;
-
-    if let Some(active) = &config.active_repo {
-        if let Ok(canonical_active) = canonicalize_workspace_key(active) {
-            if config.repos.contains_key(&canonical_active) {
-                config.active_repo = Some(canonical_active);
-            }
+    for repo in config.workspaces.values_mut() {
+        if let Ok(canonical_repo_path) = canonicalize_repo_path(&repo.repo_path) {
+            repo.repo_path = canonical_repo_path;
         }
     }
-
-    let mut canonical_recent: Vec<String> = Vec::new();
-    for recent in &config.recent_repos {
-        match canonicalize_workspace_key(recent) {
-            Ok(canonical_recent_key) => {
-                if config.repos.contains_key(&canonical_recent_key)
-                    && !canonical_recent.contains(&canonical_recent_key)
-                {
-                    canonical_recent.push(canonical_recent_key);
-                }
-            }
-            Err(_) => {
-                if !canonical_recent.contains(recent) {
-                    canonical_recent.push(recent.clone());
-                }
-            }
-        }
-    }
-    config.recent_repos = canonical_recent;
 }
 
-fn workspace_lookup_key(repo_path: &str) -> String {
-    canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string())
-}
-
-fn workspace_record(config: &GlobalConfig, workspace_key: &str) -> Result<WorkspaceRecord> {
+fn workspace_record(config: &GlobalConfig, workspace_id: &str) -> Result<WorkspaceRecord> {
     let repo = config
-        .repos
-        .get(workspace_key)
+        .workspaces
+        .get(workspace_id)
         .ok_or_else(|| anyhow!("Workspace disappeared from config"))?;
-    workspace_record_from_repo(config, workspace_key, repo)
+    workspace_record_from_repo(config, workspace_id, repo)
 }
 
 fn workspace_record_from_repo(
     config: &GlobalConfig,
-    workspace_key: &str,
+    workspace_id: &str,
     repo: &RepoConfig,
 ) -> Result<WorkspaceRecord> {
-    let default_worktree_base_path = match default_worktree_base_path(workspace_key) {
+    let default_worktree_base_path = match default_worktree_base_path(&repo.repo_path, workspace_id) {
         Ok(path) => Some(path),
         Err(_error) if repo.worktree_base_path.is_some() => None,
         Err(error) => {
             return Err(error).with_context(|| {
                 format!(
-                    "Failed resolving default worktree base path for workspace {}. Ensure HOME is set or configure repos.{}.worktreeBasePath",
-                    workspace_key,
-                    workspace_key
+                    "Failed resolving default worktree base path for workspace {}. Ensure HOME is set or configure workspaces.{}.worktreeBasePath",
+                    workspace_id,
+                    workspace_id
                 )
             })
         }
     };
-    let effective_worktree_base_path = effective_worktree_base_path(workspace_key, repo)?;
+    let effective_worktree_base_path = effective_worktree_base_path(repo)?;
     Ok(WorkspaceRecord {
-        path: workspace_key.to_string(),
-        is_active: config.active_repo.as_deref() == Some(workspace_key),
+        workspace_id: repo.workspace_id.clone(),
+        workspace_name: repo.workspace_name.clone(),
+        repo_path: repo.repo_path.clone(),
+        is_active: config.active_workspace.as_deref() == Some(workspace_id),
         has_config: true,
         configured_worktree_base_path: repo.worktree_base_path.clone(),
         default_worktree_base_path,

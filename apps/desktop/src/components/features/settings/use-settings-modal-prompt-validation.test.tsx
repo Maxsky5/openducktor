@@ -34,8 +34,11 @@ const createSnapshot = (): SettingsSnapshot => ({
       enabled: true,
     },
   },
-  repos: {
-    "/repo-a": {
+  workspaces: {
+    "repo-a": {
+      workspaceId: "repo-a",
+      workspaceName: "Repo A",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/a",
       branchPrefix: "obp",
@@ -56,7 +59,10 @@ const createSnapshot = (): SettingsSnapshot => ({
       },
       agentDefaults: {},
     },
-    "/repo-b": {
+    "repo-b": {
+      workspaceId: "repo-b",
+      workspaceName: "Repo B",
+      repoPath: "/repo-b",
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/b",
       branchPrefix: "obp",
@@ -102,7 +108,7 @@ describe("useSettingsModalPromptValidation", () => {
   test("derives global and repo validation counts with tab-level aggregation", async () => {
     const harness = createHookHarness({
       snapshotDraft: createSnapshot(),
-      selectedRepoPath: "/repo-a",
+      selectedRepoPath: "repo-a",
     });
 
     await harness.mount();
@@ -110,7 +116,7 @@ describe("useSettingsModalPromptValidation", () => {
 
     expect(latest.hasPromptValidationErrors).toBe(true);
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
-    expect(latest.promptValidationState.repoErrorCountByPath["/repo-a"]).toBe(1);
+    expect(latest.promptValidationState.repoErrorCountByPath["repo-a"]).toBe(1);
     expect(latest.promptValidationState.totalErrorCount).toBe(2);
     expect(latest.globalPromptRoleTabErrorCounts.spec).toBe(1);
     expect(latest.selectedRepoPromptRoleTabErrorCounts.build).toBe(1);

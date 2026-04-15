@@ -267,7 +267,10 @@ export const createEnsureSessionReady = ({
     if (!requestedRuntimeKind && !runtime.runtimeKind) {
       throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
     }
-    const resolvedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind!;
+    const resolvedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
+    if (!resolvedRuntimeKind) {
+      throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+    }
     const runtimeConnection = requireRuntimeConnectionSupport(
       resolvedRuntimeKind,
       resolveRuntimeConnection(runtime),

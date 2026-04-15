@@ -226,8 +226,10 @@ const createHookHarness = (initialArgs: HookArgs) => {
   };
 };
 
-const workspace = (path: string, isActive = false): WorkspaceRecord => ({
-  path,
+const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
   isActive,
   hasConfig: true,
   configuredWorktreeBasePath: null,
@@ -249,10 +251,13 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
   autopilot: {
     rules: [],
   },
-  repos: Object.fromEntries(
+  workspaces: Object.fromEntries(
     repoPaths.map((repoPath) => [
-      repoPath,
+      repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
       {
+        workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
+        workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+        repoPath,
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -538,6 +543,9 @@ describe("use-workspace-operations", () => {
     }>();
     const runtimeEnsure = mock(async () => runtimeDeferred.promise);
     const workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-a",
+      workspaceName: "repo-a",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -594,7 +602,7 @@ describe("use-workspace-operations", () => {
       await harness.mount();
       let selectPromise: Promise<void> | null = null;
       await harness.run((value) => {
-        selectPromise = value.selectWorkspace("/repo-a");
+        selectPromise = value.selectWorkspace("repo-a");
       });
 
       if (!selectPromise) {
@@ -611,7 +619,7 @@ describe("use-workspace-operations", () => {
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).toHaveBeenCalled();
       expect(clearActiveBeadsCheck).toHaveBeenCalled();
-      expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
+      expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a", "opencode");
     } finally {
       runtimeDeferred.resolve(runtimeValue);
@@ -637,6 +645,9 @@ describe("use-workspace-operations", () => {
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
     );
     hostClient.workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-a",
+      workspaceName: "repo-a",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -705,7 +716,7 @@ describe("use-workspace-operations", () => {
       }
 
       await act(async () => {
-        await latest?.selectWorkspace("/repo-a");
+        await latest?.selectWorkspace("repo-a");
       });
 
       await waitFor(() => {
@@ -725,6 +736,9 @@ describe("use-workspace-operations", () => {
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
     );
     const workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-a",
+      workspaceName: "repo-a",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -838,7 +852,7 @@ describe("use-workspace-operations", () => {
 
       let selectPromise: Promise<void> | null = null;
       await act(async () => {
-        selectPromise = latestValueBeforeSelect.selectWorkspace("/repo-a");
+        selectPromise = latestValueBeforeSelect.selectWorkspace("repo-a");
       });
       await flush();
 
@@ -954,14 +968,14 @@ describe("use-workspace-operations", () => {
       let thrown: unknown = null;
       await harness.run(async (value) => {
         try {
-          await value.selectWorkspace("/repo-a");
+          await value.selectWorkspace("repo-a");
         } catch (error) {
           thrown = error;
         }
       });
 
       expect(thrown).toBeInstanceOf(Error);
-      expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
+      expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).not.toHaveBeenCalled();
       expect(clearActiveBeadsCheck).not.toHaveBeenCalled();
@@ -999,6 +1013,9 @@ describe("use-workspace-operations", () => {
       throw new Error("workspace list failed");
     });
     const workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-a",
+      workspaceName: "repo-a",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1124,7 +1141,7 @@ describe("use-workspace-operations", () => {
 
       const latestValueBeforeSelect: ReturnType<typeof useWorkspaceOperations> = latest;
       await act(async () => {
-        await latestValueBeforeSelect.selectWorkspace("/repo-a");
+        await latestValueBeforeSelect.selectWorkspace("repo-a");
       });
       await flush();
 

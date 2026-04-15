@@ -15,8 +15,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::app_service::test_support::{
-    build_service_with_store, init_git_repo, lock_env, make_session, make_task, prepend_path,
-    set_env_var, unique_temp_path, write_executable_script, GitCall,
+    add_workspace_with_repo_config, build_service_with_store, init_git_repo, lock_env,
+    make_session, make_task, prepend_path, set_env_var, unique_temp_path,
+    workspace_get_repo_config_by_repo_path, workspace_update_repo_config_by_repo_path,
+    write_executable_script, GitCall,
 };
 use crate::app_service::RepoPullRequestSyncResult;
 use crate::RepoConfigUpdate;
@@ -67,6 +69,7 @@ fn base_repo_config(worktree_base: &Path) -> RepoConfig {
         worktree_file_copies: Vec::new(),
         prompt_overrides: Default::default(),
         agent_defaults: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -183,8 +186,11 @@ fn setup_pull_request_workflow_fixture(
         config_store,
     );
     let repo_path = repo.to_string_lossy().to_string();
-    service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    add_workspace_with_repo_config(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -460,7 +466,11 @@ fn task_direct_merge_with_publish_target_stays_resumable_until_completion() -> R
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
 
     let task =
         service.task_direct_merge(repo_path.as_str(), "task-1", GitMergeMethod::Rebase, None)?;
@@ -627,7 +637,7 @@ fn task_direct_merge_local_only_closes_task_records_metadata_and_cleans_builder_
         remote: None,
         branch: "release/2026.03".to_string(),
     };
-    service.workspace_update_repo_config(repo_path.as_str(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, repo_path.as_str(), repo_config)?;
 
     let task = service.task_direct_merge(
         repo_path.as_str(),
@@ -704,7 +714,11 @@ fn task_direct_merge_complete_uses_safe_branch_delete_when_squash_branch_is_alre
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
 
     task_state
         .lock()
@@ -785,7 +799,11 @@ fn task_direct_merge_complete_skips_ancestry_probe_when_squash_source_branch_is_
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
 
     task_state
         .lock()
@@ -857,7 +875,11 @@ fn task_approval_context_reports_missing_builder_worktree_for_review_tasks() -> 
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
 
     fs::create_dir_all(&missing_worktree_path)?;
     let mut session = make_session("task-1", "session-build");
@@ -903,7 +925,11 @@ fn task_approval_context_still_errors_when_builder_context_is_missing() -> Resul
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
 
     let error = service
         .task_approval_context_get(repo_path.as_str(), "task-1")
@@ -945,7 +971,11 @@ fn task_approval_context_still_errors_for_detached_builder_branch() -> Result<()
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
     git_state
         .lock()
         .expect("git state lock poisoned")
@@ -992,7 +1022,11 @@ fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_work
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
     service.workspace_merge_repo_config(
         repo_path.as_str(),
         RepoConfigUpdate {
@@ -1073,7 +1107,11 @@ fn task_approval_context_reports_global_merge_default_and_dirty_worktree() -> Re
         &_task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), base_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        base_repo_config(&worktree_base),
+    )?;
     service.workspace_update_global_git_config(host_infra_system::GlobalGitConfig {
         default_merge_method: host_infra_system::GitMergeMethod::Rebase,
     })?;
@@ -1154,7 +1192,11 @@ fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
         &git_state,
     )?;
     run_git(&repo, &["remote", "remove", "origin"])?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
 
     {
         let mut git = git_state.lock().expect("git state lock poisoned");
@@ -1309,7 +1351,11 @@ fn task_approval_context_reports_pull_request_unavailable_when_github_auth_is_mi
             "git@github.com:someone/else.git",
         ],
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
 
     let context = expect_ready_approval_context(
         service.task_approval_context_get(repo_path.as_str(), "task-1")?,
@@ -1365,7 +1411,8 @@ fn task_approval_context_uses_configured_github_host_for_auth_status() -> Result
         &git_state,
     )?;
     configure_github_remote(&repo, "upstream", "github.mycorp.com")?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         github_repo_config_for_host(&worktree_base, "github.mycorp.com"),
     )?;
@@ -1408,7 +1455,11 @@ fn task_pull_request_unlink_clears_linked_pull_request() -> Result<()> {
     let repo_path = repo.to_string_lossy().to_string();
     let _ = run_git(&repo, &["remote", "remove", "origin"]);
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     task_state
         .lock()
         .expect("task state lock poisoned")
@@ -1497,7 +1548,11 @@ fn task_pull_request_upsert_creates_pr_without_transitioning_ai_review_status() 
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
 
     let linked =
         service.task_pull_request_upsert(repo_path.as_str(), "task-1", "Create PR", "Body")?;
@@ -1595,7 +1650,8 @@ fn task_pull_request_upsert_reuses_existing_open_pull_request() -> Result<()> {
         &git_state,
     )?;
     configure_github_remote(&repo, "upstream", "github.mycorp.com")?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         github_repo_config_for_host(&worktree_base, "github.mycorp.com"),
     )?;
@@ -1697,7 +1753,11 @@ fn task_pull_request_upsert_reuses_existing_draft_pull_request() -> Result<()> {
         &task_state,
         &git_state,
     )?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     task_state
         .lock()
         .expect("task state lock poisoned")
@@ -1778,7 +1838,11 @@ fn task_pull_request_detect_links_existing_pull_request_for_builder_branch() -> 
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -1867,7 +1931,7 @@ fn task_pull_request_detect_finds_pull_request_even_when_base_differs_from_defau
     service.workspace_add(repo_path.as_str())?;
     let mut repo_config = github_repo_config(&worktree_base);
     repo_config.default_target_branch.branch = "origin/main".to_string();
-    service.workspace_update_repo_config(repo_path.as_str(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, repo_path.as_str(), repo_config)?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -1931,7 +1995,11 @@ fn task_pull_request_detect_queries_by_branch_with_head_owner_filter() -> Result
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2004,7 +2072,11 @@ fn task_pull_request_detect_prefers_open_pull_request_over_merged_match() -> Res
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2080,7 +2152,11 @@ fn task_pull_request_detect_returns_merged_when_no_open_pull_request_exists() ->
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2163,7 +2239,11 @@ fn task_pull_request_detect_prefers_latest_merged_pull_request_when_branch_has_h
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2213,7 +2293,11 @@ fn task_pull_request_detect_returns_not_found_when_no_pull_request_matches() -> 
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2262,7 +2346,11 @@ fn task_pull_request_detect_rejects_tasks_that_already_have_a_linked_pull_reques
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2328,7 +2416,11 @@ fn task_pull_request_detect_requires_matching_push_remote() -> Result<()> {
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2635,7 +2727,11 @@ fn task_pull_request_detect_blocks_when_direct_merge_is_pending() -> Result<()> 
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2694,7 +2790,11 @@ fn task_pull_request_link_merged_blocks_when_direct_merge_is_pending() -> Result
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2804,7 +2904,11 @@ fn repo_pull_request_sync_does_not_discover_pull_requests_for_unlinked_tasks() -
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -2889,7 +2993,11 @@ fn repo_pull_request_sync_ignores_terminal_tasks_and_terminal_pull_requests() ->
     );
     let repo_path = repo.to_string_lossy().to_string();
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        github_repo_config(&worktree_base),
+    )?;
     {
         let mut state = task_state.lock().expect("task state lock poisoned");
         state.pull_requests.insert(
@@ -3021,7 +3129,7 @@ fn auto_detect_git_provider_enables_github_from_remote_when_gh_is_missing() -> R
 
     service.auto_detect_git_provider_for_repo(repo_path.as_str())?;
 
-    let repo_config = service.workspace_get_repo_config(repo_path.as_str())?;
+    let repo_config = workspace_get_repo_config_by_repo_path(&service, repo_path.as_str())?;
     let github = repo_config
         .git
         .providers
@@ -3090,11 +3198,11 @@ fn auto_detect_git_provider_preserves_explicit_github_disable() -> Result<()> {
             }),
         },
     );
-    service.workspace_update_repo_config(repo_path.as_str(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, repo_path.as_str(), repo_config)?;
 
     service.auto_detect_git_provider_for_repo(repo_path.as_str())?;
 
-    let repo_config = service.workspace_get_repo_config(repo_path.as_str())?;
+    let repo_config = workspace_get_repo_config_by_repo_path(&service, repo_path.as_str())?;
     let github = repo_config
         .git
         .providers

@@ -239,6 +239,9 @@ describe("useAgentStudioSessionActions", () => {
     await clearAppQueryClient();
     host.workspaceGetRepoConfig = async () =>
       ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
@@ -255,7 +258,7 @@ describe("useAgentStudioSessionActions", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
   });

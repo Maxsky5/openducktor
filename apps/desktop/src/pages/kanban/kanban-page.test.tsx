@@ -66,7 +66,7 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   autopilot: {
     rules: [],
   },
-  repos: {},
+  workspaces: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
 const tasksListMock = mock(async () => [currentTaskFixture]);
@@ -203,6 +203,9 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
 };
 
 const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "codex/",
@@ -560,7 +563,7 @@ describe("KanbanPage session start modal flow", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     }));
     tasksListMock.mockImplementation(async () => [currentTaskFixture]);

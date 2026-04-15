@@ -33,6 +33,9 @@ describe("agent-orchestrator-runtime", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
     host.workspaceGetRepoConfig = async () => ({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/tmp/repo",
       defaultRuntimeKind: "opencode",
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -392,6 +395,9 @@ describe("agent-orchestrator-runtime", () => {
   test("maps repo role defaults into model selection", async () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     host.workspaceGetRepoConfig = async () => ({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/tmp/repo",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -435,6 +441,9 @@ describe("agent-orchestrator-runtime", () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     host.workspaceGetRepoConfig = async () => ({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/tmp/repo",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -476,7 +485,7 @@ describe("agent-orchestrator-runtime", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {
         "kickoff.spec_initial": {
           template: "global kickoff {{task.id}}",
@@ -523,6 +532,9 @@ describe("agent-orchestrator-runtime", () => {
     );
 
     host.workspaceGetRepoConfig = async () => ({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/tmp/repo",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -553,7 +565,7 @@ describe("agent-orchestrator-runtime", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides,
     });
 

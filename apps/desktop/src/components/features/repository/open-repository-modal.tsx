@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
-import { workspaceLabelFromPath } from "@/lib/workspace-label";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { FolderPickerDialog } from "./folder-picker-dialog";
 
@@ -60,11 +59,18 @@ export function OpenRepositoryModal({
     }
   };
 
-  const selectRecentWorkspace = async (repoPath: string): Promise<void> => {
+  const selectRecentWorkspace = async (workspaceId: string): Promise<void> => {
     setError(null);
     try {
-      if (repoPath !== activeRepo) {
-        await selectWorkspace(repoPath);
+      const selectedWorkspace = workspaces.find(
+        (workspace) => workspace.workspaceId === workspaceId,
+      );
+      if (!selectedWorkspace) {
+        throw new Error("Workspace not found.");
+      }
+
+      if (selectedWorkspace.repoPath !== activeRepo) {
+        await selectWorkspace(workspaceId);
       }
       onOpenChange(false);
     } catch (reason) {
@@ -133,17 +139,17 @@ export function OpenRepositoryModal({
               <div className="grid gap-2 sm:grid-cols-2">
                 {sortedRecent.map((workspace) => (
                   <Button
-                    key={workspace.path}
+                    key={workspace.workspaceId}
                     type="button"
                     variant="outline"
                     className="h-auto justify-between gap-3 overflow-hidden px-3 py-2 text-left"
                     disabled={isModalBusy}
-                    onClick={() => void selectRecentWorkspace(workspace.path)}
+                    onClick={() => void selectRecentWorkspace(workspace.workspaceId)}
                   >
                     <span className="truncate text-sm font-semibold text-foreground">
-                      {workspaceLabelFromPath(workspace.path, { includeParent: true })}
+                      {workspace.workspaceName}
                     </span>
-                    {workspace.path === activeRepo ? (
+                    {workspace.repoPath === activeRepo ? (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-border bg-success-surface px-2 py-0.5 text-[11px] font-semibold text-success-muted">
                         <CheckCircle2 className="size-3" />
                         Active

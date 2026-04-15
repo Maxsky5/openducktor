@@ -57,7 +57,7 @@ export type WorkspaceRepoHooksInput = {
 
 export type TrustedHooksChallenge = {
   nonce: string;
-  repoPath: string;
+  workspaceId: string;
   fingerprint: string;
   expiresAt: string;
   preStartCount: number;
@@ -102,7 +102,7 @@ const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => 
 
   return {
     nonce: readString("nonce"),
-    repoPath: readString("repoPath"),
+    workspaceId: readString("workspaceId"),
     fingerprint: readString("fingerprint"),
     expiresAt: readString("expiresAt"),
     preStartCount: readCount("preStartCount"),
@@ -138,18 +138,21 @@ const workspaceAdd = async (invokeFn: InvokeFn, repoPath: string): Promise<Works
   return workspaceRecordSchema.parse(payload);
 };
 
-const workspaceSelect = async (invokeFn: InvokeFn, repoPath: string): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_select", { repoPath });
+const workspaceSelect = async (
+  invokeFn: InvokeFn,
+  workspaceId: string,
+): Promise<WorkspaceRecord> => {
+  const payload = await invokeFn("workspace_select", { workspaceId });
   return workspaceRecordSchema.parse(payload);
 };
 
 const workspaceUpdateRepoConfig = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  workspaceId: string,
   config: WorkspaceRepoConfigInput,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn("workspace_update_repo_config", {
-    repoPath,
+    workspaceId,
     config,
   });
   return workspaceRecordSchema.parse(payload);
@@ -157,11 +160,11 @@ const workspaceUpdateRepoConfig = async (
 
 const workspaceSaveRepoSettings = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  workspaceId: string,
   settings: WorkspaceRepoSettingsInput,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn("workspace_save_repo_settings", {
-    repoPath,
+    workspaceId,
     settings,
   });
   return workspaceRecordSchema.parse(payload);
@@ -169,11 +172,11 @@ const workspaceSaveRepoSettings = async (
 
 const workspaceUpdateRepoHooks = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  workspaceId: string,
   hooks: WorkspaceRepoHooksInput,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn("workspace_update_repo_hooks", {
-    repoPath,
+    workspaceId,
     hooks,
   });
   return workspaceRecordSchema.parse(payload);
@@ -181,9 +184,9 @@ const workspaceUpdateRepoHooks = async (
 
 const workspaceGetRepoConfig = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  workspaceId: string,
 ): Promise<RepoConfig> => {
-  const payload = await invokeFn("workspace_get_repo_config", { repoPath });
+  const payload = await invokeFn("workspace_get_repo_config", { workspaceId });
   return repoConfigSchema.parse(payload);
 };
 
@@ -217,12 +220,12 @@ const workspaceDetectGithubRepository = async (
 
 const workspaceSetTrustedHooks = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  workspaceId: string,
   trusted: boolean,
   challenge?: TrustedHooksProof,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn("workspace_set_trusted_hooks", {
-    repoPath,
+    workspaceId,
     trusted,
     ...(challenge
       ? {
@@ -236,10 +239,10 @@ const workspaceSetTrustedHooks = async (
 
 const workspacePrepareTrustedHooksChallenge = async (
   invokeFn: InvokeFn,
-  repoPath: string,
+  workspaceId: string,
 ): Promise<TrustedHooksChallenge> => {
   const payload = await invokeFn("workspace_prepare_trusted_hooks_challenge", {
-    repoPath,
+    workspaceId,
   });
   return parseTrustedHooksChallenge(payload);
 };
@@ -281,33 +284,33 @@ export class TauriWorkspaceClient {
     return workspaceAdd(this.invokeFn, repoPath);
   }
 
-  async workspaceSelect(repoPath: string): Promise<WorkspaceRecord> {
-    return workspaceSelect(this.invokeFn, repoPath);
+  async workspaceSelect(workspaceId: string): Promise<WorkspaceRecord> {
+    return workspaceSelect(this.invokeFn, workspaceId);
   }
 
   async workspaceUpdateRepoConfig(
-    repoPath: string,
+    workspaceId: string,
     config: WorkspaceRepoConfigInput,
   ): Promise<WorkspaceRecord> {
-    return workspaceUpdateRepoConfig(this.invokeFn, repoPath, config);
+    return workspaceUpdateRepoConfig(this.invokeFn, workspaceId, config);
   }
 
   async workspaceSaveRepoSettings(
-    repoPath: string,
+    workspaceId: string,
     settings: WorkspaceRepoSettingsInput,
   ): Promise<WorkspaceRecord> {
-    return workspaceSaveRepoSettings(this.invokeFn, repoPath, settings);
+    return workspaceSaveRepoSettings(this.invokeFn, workspaceId, settings);
   }
 
   async workspaceUpdateRepoHooks(
-    repoPath: string,
+    workspaceId: string,
     hooks: WorkspaceRepoHooksInput,
   ): Promise<WorkspaceRecord> {
-    return workspaceUpdateRepoHooks(this.invokeFn, repoPath, hooks);
+    return workspaceUpdateRepoHooks(this.invokeFn, workspaceId, hooks);
   }
 
-  async workspaceGetRepoConfig(repoPath: string): Promise<RepoConfig> {
-    return workspaceGetRepoConfig(this.invokeFn, repoPath);
+  async workspaceGetRepoConfig(workspaceId: string): Promise<RepoConfig> {
+    return workspaceGetRepoConfig(this.invokeFn, workspaceId);
   }
 
   async workspaceGetSettingsSnapshot(): Promise<SettingsSnapshot> {
@@ -326,16 +329,16 @@ export class TauriWorkspaceClient {
     return workspaceDetectGithubRepository(this.invokeFn, repoPath);
   }
 
-  async workspacePrepareTrustedHooksChallenge(repoPath: string): Promise<TrustedHooksChallenge> {
-    return workspacePrepareTrustedHooksChallenge(this.invokeFn, repoPath);
+  async workspacePrepareTrustedHooksChallenge(workspaceId: string): Promise<TrustedHooksChallenge> {
+    return workspacePrepareTrustedHooksChallenge(this.invokeFn, workspaceId);
   }
 
   async workspaceSetTrustedHooks(
-    repoPath: string,
+    workspaceId: string,
     trusted: boolean,
     challenge?: TrustedHooksProof,
   ): Promise<WorkspaceRecord> {
-    return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted, challenge);
+    return workspaceSetTrustedHooks(this.invokeFn, workspaceId, trusted, challenge);
   }
 
   async workspaceStageLocalAttachment(input: {

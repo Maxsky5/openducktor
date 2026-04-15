@@ -22,7 +22,7 @@ const hostMock = {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     }),
   ),
@@ -47,8 +47,8 @@ type HookArgs = Parameters<typeof useAgentStudioChatSettings>[0];
 const createSettingsSnapshot = (
   showThinkingMessages = false,
   includeChat = true,
-): SettingsSnapshot =>
-  ({
+): SettingsSnapshot => {
+  const snapshot = {
     theme: "light",
     git: {
       defaultMergeMethod: "merge_commit",
@@ -56,10 +56,19 @@ const createSettingsSnapshot = (
     kanban: {
       doneVisibleDays: 1,
     },
-    ...(includeChat ? { chat: { showThinkingMessages } } : {}),
-    repos: {},
+    autopilot: {
+      rules: [],
+    },
+    workspaces: {},
     globalPromptOverrides: {},
-  }) as SettingsSnapshot;
+  } as Omit<SettingsSnapshot, "chat"> & { chat?: SettingsSnapshot["chat"] };
+
+  if (includeChat) {
+    snapshot.chat = { showThinkingMessages };
+  }
+
+  return snapshot as SettingsSnapshot;
+};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioChatSettings, initialProps);

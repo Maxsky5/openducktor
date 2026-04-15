@@ -1,3 +1,8 @@
+use super::migrate::{
+    canonicalize_repo_path, current_global_config_version, default_theme,
+    derive_workspace_name_from_repo_path, migrate_legacy_repos_to_canonical_paths,
+    propose_workspace_id, uniquify_workspace_id, LegacyGlobalConfigV1, LegacyRepoConfigV1,
+};
 use host_domain::{
     default_runtime_kind as registry_default_runtime_kind, RuntimeRegistry,
     RuntimeStartupReadinessConfig, DEFAULT_BRANCH_PREFIX,
@@ -334,6 +339,12 @@ const fn default_prompt_override_enabled() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {
+    #[serde(default)]
+    pub workspace_id: String,
+    #[serde(default)]
+    pub workspace_name: String,
+    #[serde(default)]
+    pub repo_path: String,
     pub default_runtime_kind: String,
     pub worktree_base_path: Option<String>,
     #[serde(default = "default_branch_prefix")]
@@ -372,6 +383,9 @@ pub(super) fn default_runtime_kind() -> String {
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
+            workspace_id: String::new(),
+            workspace_name: String::new(),
+            repo_path: String::new(),
             default_runtime_kind: default_runtime_kind(),
             worktree_base_path: None,
             branch_prefix: default_branch_prefix(),
@@ -428,15 +442,11 @@ pub struct SchedulerConfig {
 
 pub type OpencodeStartupReadinessConfig = RuntimeStartupReadinessConfig;
 
-fn default_theme() -> String {
-    "light".to_string()
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlobalConfig {
+struct PersistedGlobalConfigV2 {
     pub version: u8,
-    pub active_repo: Option<String>,
+    pub active_workspace: Option<String>,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
@@ -450,26 +460,170 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
     #[serde(default)]
-    pub repos: HashMap<String, RepoConfig>,
+    pub workspaces: HashMap<String, RepoConfig>,
     #[serde(default)]
-    pub recent_repos: Vec<String>,
+    pub recent_workspaces: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum PersistedGlobalConfig {
+    V2(PersistedGlobalConfigV2),
+    V1(LegacyGlobalConfigV1),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(try_from = "PersistedGlobalConfig", into = "PersistedGlobalConfigV2")]
+pub struct GlobalConfig {
+    pub version: u8,
+    pub active_workspace: Option<String>,
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(default)]
+    pub git: GlobalGitConfig,
+    #[serde(default)]
+    pub chat: ChatSettings,
+    #[serde(default)]
+    pub kanban: KanbanSettings,
+    #[serde(default)]
+    pub autopilot: AutopilotSettings,
+    #[serde(default)]
+    pub global_prompt_overrides: PromptOverrides,
+    #[serde(default)]
+    pub workspaces: HashMap<String, RepoConfig>,
+    #[serde(default)]
+    pub recent_workspaces: Vec<String>,
+}
+
+impl TryFrom<PersistedGlobalConfig> for GlobalConfig {
+    type Error = String;
+
+    fn try_from(value: PersistedGlobalConfig) -> Result<Self, Self::Error> {
+        match value {
+            PersistedGlobalConfig::V2(config) => {
+                if config.version != current_global_config_version() {
+                    return Err(format!(
+                        "Unsupported config version {}. Expected {}.",
+                        config.version,
+                        current_global_config_version()
+                    ));
+                }
+
+                Ok(Self {
+                    version: config.version,
+                    active_workspace: config.active_workspace,
+                    theme: config.theme,
+                    git: config.git,
+                    chat: config.chat,
+                    kanban: config.kanban,
+                    autopilot: config.autopilot,
+                    global_prompt_overrides: config.global_prompt_overrides,
+                    workspaces: config.workspaces,
+                    recent_workspaces: config.recent_workspaces,
+                })
+            }
+            PersistedGlobalConfig::V1(legacy) => migrate_legacy_global_config(legacy),
+        }
+    }
+}
+
+impl From<GlobalConfig> for PersistedGlobalConfigV2 {
+    fn from(value: GlobalConfig) -> Self {
+        Self {
+            version: value.version,
+            active_workspace: value.active_workspace,
+            theme: value.theme,
+            git: value.git,
+            chat: value.chat,
+            kanban: value.kanban,
+            autopilot: value.autopilot,
+            global_prompt_overrides: value.global_prompt_overrides,
+            workspaces: value.workspaces,
+            recent_workspaces: value.recent_workspaces,
+        }
+    }
 }
 
 impl Default for GlobalConfig {
     fn default() -> Self {
         Self {
-            version: 1,
-            active_repo: None,
+            version: current_global_config_version(),
+            active_workspace: None,
             theme: default_theme(),
             git: GlobalGitConfig::default(),
             chat: ChatSettings::default(),
             kanban: KanbanSettings::default(),
             autopilot: AutopilotSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
-            repos: HashMap::new(),
-            recent_repos: Vec::new(),
+            workspaces: HashMap::new(),
+            recent_workspaces: Vec::new(),
         }
     }
+}
+
+fn migrate_legacy_global_config(legacy: LegacyGlobalConfigV1) -> Result<GlobalConfig, String> {
+    if legacy.version != 1 {
+        return Err(format!(
+            "Unsupported legacy config version {}. Expected 1.",
+            legacy.version
+        ));
+    }
+
+    let active_repo = legacy.active_repo.as_ref().and_then(|value| {
+        canonicalize_repo_path(value)
+            .ok()
+            .or_else(|| Some(value.clone()))
+    });
+
+    let mut repos = legacy.repos;
+    let canonical_repos =
+        migrate_legacy_repos_to_canonical_paths(&mut repos, legacy.active_repo.as_ref());
+    let mut workspaces = HashMap::new();
+    let mut repo_path_to_workspace_id = HashMap::new();
+
+    let mut entries: Vec<(String, LegacyRepoConfigV1)> = canonical_repos.into_iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (repo_path, legacy_repo) in entries {
+        let workspace_name = derive_workspace_name_from_repo_path(&repo_path);
+        let workspace_id =
+            uniquify_workspace_id(&propose_workspace_id(&workspace_name), &workspaces);
+        let mut repo = RepoConfig::from(legacy_repo);
+        repo.workspace_id = workspace_id.clone();
+        repo.workspace_name = workspace_name;
+        repo.repo_path = repo_path.clone();
+        repo_path_to_workspace_id.insert(repo_path, workspace_id.clone());
+        workspaces.insert(workspace_id, repo);
+    }
+
+    let active_workspace = active_repo
+        .as_ref()
+        .and_then(|repo_path| repo_path_to_workspace_id.get(repo_path))
+        .cloned();
+    let mut recent_workspaces = Vec::new();
+    for recent_repo in legacy.recent_repos {
+        let canonical_recent = canonicalize_repo_path(&recent_repo).unwrap_or(recent_repo);
+        let Some(workspace_id) = repo_path_to_workspace_id.get(&canonical_recent) else {
+            continue;
+        };
+        if !recent_workspaces.contains(workspace_id) {
+            recent_workspaces.push(workspace_id.clone());
+        }
+    }
+
+    Ok(GlobalConfig {
+        version: current_global_config_version(),
+        active_workspace,
+        theme: legacy.theme,
+        git: legacy.git,
+        chat: legacy.chat,
+        kanban: legacy.kanban,
+        autopilot: legacy.autopilot,
+        global_prompt_overrides: legacy.global_prompt_overrides,
+        workspaces,
+        recent_workspaces,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

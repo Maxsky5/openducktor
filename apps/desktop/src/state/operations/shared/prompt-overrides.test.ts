@@ -4,6 +4,9 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const createRepoConfig = (): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   branchPrefix: "odt/",
   defaultTargetBranch: {
@@ -32,7 +35,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
-  repos: {},
+  workspaces: {},
   chat: { showThinkingMessages: false },
   kanban: { doneVisibleDays: 1 },
   autopilot: { rules: [] },

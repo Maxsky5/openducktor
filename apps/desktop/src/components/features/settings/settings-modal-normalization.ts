@@ -64,6 +64,9 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   );
 
   return {
+    workspaceId: repo.workspaceId,
+    workspaceName: repo.workspaceName.trim(),
+    repoPath: repo.repoPath.trim(),
     defaultRuntimeKind: normalizeRepoDefaultRuntimeKindForSave(
       repo.defaultRuntimeKind,
       DEFAULT_RUNTIME_KIND,
@@ -117,9 +120,9 @@ export const normalizeAutopilotSettingsForSave = (
 };
 
 export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSnapshot => {
-  const repos = Object.fromEntries(
-    Object.entries(snapshot.repos).map(([repoPath, repoConfig]) => [
-      repoPath,
+  const workspaces = Object.fromEntries(
+    Object.entries(snapshot.workspaces).map(([workspaceId, repoConfig]) => [
+      workspaceId,
       normalizeRepoConfigForSave(repoConfig),
     ]),
   );
@@ -130,7 +133,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
     chat: snapshot.chat,
     kanban: snapshot.kanban,
     autopilot: normalizeAutopilotSettingsForSave(snapshot.autopilot),
-    repos,
+    workspaces,
     globalPromptOverrides: normalizePromptOverridesForSave(snapshot.globalPromptOverrides),
   };
 };
@@ -139,11 +142,16 @@ export const pickInitialRepoPath = (
   snapshot: SettingsSnapshot,
   activeRepo: string | null,
 ): string | null => {
-  const repoPaths = Object.keys(snapshot.repos).sort();
-  if (activeRepo && snapshot.repos[activeRepo]) {
-    return activeRepo;
+  const workspaceIds = Object.keys(snapshot.workspaces).sort();
+  if (activeRepo) {
+    const matchingWorkspaceId = Object.entries(snapshot.workspaces).find(
+      ([, workspace]) => workspace.repoPath === activeRepo,
+    )?.[0];
+    if (matchingWorkspaceId) {
+      return matchingWorkspaceId;
+    }
   }
-  return repoPaths[0] ?? null;
+  return workspaceIds[0] ?? null;
 };
 
 export type PromptInheritedPreview = {

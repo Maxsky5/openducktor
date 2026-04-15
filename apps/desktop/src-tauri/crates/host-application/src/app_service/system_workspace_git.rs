@@ -12,10 +12,11 @@ use host_domain::{
     SystemOpenInToolId, SystemOpenInToolInfo, WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, copy_configured_worktree_files, discover_open_in_tools,
-    open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
-    remove_worktree_path_if_present, repo_script_fingerprint, resolve_effective_worktree_base_dir,
-    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
+    command_exists, copy_configured_worktree_files, derive_workspace_name_from_repo_path,
+    discover_open_in_tools, open_directory_in_tool as open_directory_in_tool_with_system,
+    propose_workspace_id, remove_worktree, remove_worktree_path_if_present,
+    repo_script_fingerprint, resolve_effective_worktree_base_dir, run_command,
+    run_command_allow_failure_with_env, uniquify_workspace_id, version_command, AutopilotSettings,
     ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
@@ -63,6 +64,18 @@ type SettingsSnapshotTuple = (
     HashMap<String, RepoConfig>,
     PromptOverrides,
 );
+
+fn build_initial_workspace_identity(
+    existing_workspaces: &HashMap<String, RepoConfig>,
+    repo_path: &str,
+) -> (String, String) {
+    let workspace_name = derive_workspace_name_from_repo_path(repo_path);
+    let workspace_id = uniquify_workspace_id(
+        propose_workspace_id(&workspace_name).as_str(),
+        existing_workspaces,
+    );
+    (workspace_id, workspace_name)
+}
 
 fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String {
     working_dir
@@ -124,7 +137,7 @@ impl AppService {
             return Ok(true);
         }
 
-        let repo_config = self.config_store.repo_config(repo_path)?;
+        let repo_config = self.config_store.repo_config_by_repo_path(repo_path)?;
         let managed_worktree_base = resolve_effective_worktree_base_dir(
             repo_path_ref,
             repo_config.worktree_base_path.as_deref(),
@@ -367,42 +380,47 @@ impl AppService {
     }
 
     pub fn workspace_add(&self, repo_path: &str) -> Result<WorkspaceRecord> {
-        let workspace = self.config_store.add_workspace(repo_path)?;
+        let config = self.config_store.load()?;
+        let (workspace_id, workspace_name) =
+            build_initial_workspace_identity(&config.workspaces, repo_path);
+        let workspace =
+            self.config_store
+                .add_workspace(&workspace_id, &workspace_name, repo_path)?;
         self.auto_detect_git_provider_for_repo(repo_path)?;
         Ok(workspace)
     }
 
-    pub fn workspace_select(&self, repo_path: &str) -> Result<WorkspaceRecord> {
-        let workspace = self.config_store.select_workspace(repo_path)?;
-        self.auto_detect_git_provider_for_repo(repo_path)?;
+    pub fn workspace_select(&self, workspace_id: &str) -> Result<WorkspaceRecord> {
+        let workspace = self.config_store.select_workspace(workspace_id)?;
+        self.auto_detect_git_provider_for_repo(workspace.repo_path.as_str())?;
         Ok(workspace)
     }
 
     pub fn workspace_update_repo_config(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         config: RepoConfig,
     ) -> Result<WorkspaceRecord> {
-        self.config_store.update_repo_config(repo_path, config)
+        self.config_store.update_repo_config(workspace_id, config)
     }
 
     pub fn workspace_update_repo_hooks(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         hooks: HookSet,
     ) -> Result<WorkspaceRecord> {
-        self.config_store.update_repo_hooks(repo_path, hooks)
+        self.config_store.update_repo_hooks(workspace_id, hooks)
     }
 
-    pub fn workspace_get_repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
-        self.config_store.repo_config(repo_path)
+    pub fn workspace_get_repo_config(&self, workspace_id: &str) -> Result<RepoConfig> {
+        self.config_store.repo_config(workspace_id)
     }
 
     pub fn workspace_get_repo_config_optional(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
     ) -> Result<Option<RepoConfig>> {
-        self.config_store.repo_config_optional(repo_path)
+        self.config_store.repo_config_optional(workspace_id)
     }
 
     pub fn workspace_get_settings_snapshot(&self) -> Result<SettingsSnapshotTuple> {
@@ -413,7 +431,7 @@ impl AppService {
             config.chat,
             config.kanban,
             config.autopilot,
-            config.repos,
+            config.workspaces,
             config.global_prompt_overrides,
         ))
     }
@@ -427,10 +445,10 @@ impl AppService {
         snapshot: WorkspaceSettingsSnapshotUpdate,
     ) -> Result<()> {
         let mut config = self.config_store.load()?;
-        for repo_path in snapshot.repos.keys() {
-            if !config.repos.contains_key(repo_path) {
+        for workspace_id in snapshot.workspaces.keys() {
+            if !config.workspaces.contains_key(workspace_id) {
                 return Err(anyhow!(
-                    "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
+                    "Workspace not found in config: {workspace_id}. Add/select the workspace before updating configuration."
                 ));
             }
         }
@@ -443,25 +461,25 @@ impl AppService {
         };
         config.autopilot = snapshot.autopilot;
         config.global_prompt_overrides = snapshot.global_prompt_overrides;
-        for (repo_path, repo_config) in snapshot.repos {
-            config.repos.insert(repo_path, repo_config);
+        for (workspace_id, repo_config) in snapshot.workspaces {
+            config.workspaces.insert(workspace_id, repo_config);
         }
         self.config_store.save(&config)
     }
 
     pub(super) fn workspace_persist_trusted_hooks(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         trusted: bool,
         expected_fingerprint: Option<&str>,
     ) -> Result<WorkspaceRecord> {
         if trusted {
-            let config = self.config_store.repo_config(repo_path)?;
+            let config = self.config_store.repo_config(workspace_id)?;
             let current_fingerprint = repo_script_fingerprint(&config.hooks, &config.dev_servers);
             if let Some(expected) = expected_fingerprint {
                 if expected != current_fingerprint {
                     return Err(anyhow!(
-                        "Hook trust challenge is stale for {repo_path}; hooks changed before confirmation."
+                        "Hook trust challenge is stale for workspace {workspace_id}; hooks changed before confirmation."
                     ));
                 }
             } else {
@@ -471,14 +489,14 @@ impl AppService {
             }
 
             return self.config_store.set_repo_trust_hooks(
-                repo_path,
+                workspace_id,
                 true,
                 Some(current_fingerprint),
             );
         }
 
         self.config_store
-            .set_repo_trust_hooks(repo_path, false, None)
+            .set_repo_trust_hooks(workspace_id, false, None)
     }
 
     pub fn set_theme(&self, theme: &str) -> Result<()> {
@@ -518,7 +536,9 @@ impl AppService {
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
         }
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        let repo_config = self
+            .config_store
+            .repo_config_by_repo_path(repo_path.as_str())?;
 
         self.git_port.create_worktree(
             Path::new(&repo_path),

@@ -28,8 +28,8 @@ use crate::app_service::test_support::{
     empty_patch, init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
     process_is_alive, remove_env_var, set_env_var, spawn_opencode_session_status_server,
     spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
-    wait_for_path_exists, wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall,
-    TaskStoreState,
+    wait_for_path_exists, wait_for_process_exit, workspace_update_repo_config_by_repo_path,
+    write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -205,7 +205,8 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
         },
     );
     service.workspace_add(repo_path)?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -223,6 +224,7 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -268,7 +270,8 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
         },
     );
     service.workspace_add(repo_path)?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -286,6 +289,7 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
     git_state
@@ -380,7 +384,8 @@ fn task_delete_rejects_branch_still_checked_out_in_remaining_worktree() -> Resul
         },
     );
     service.workspace_add(repo_path)?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -398,6 +403,7 @@ fn task_delete_rejects_branch_still_checked_out_in_remaining_worktree() -> Resul
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
     git_state
@@ -473,7 +479,8 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
         },
     );
     service.workspace_add(repo_path)?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -491,6 +498,7 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
     git_state
@@ -582,6 +590,7 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         )
         .expect("repo config update should succeed");
@@ -660,6 +669,7 @@ fn task_delete_rejects_active_builder_runs() {
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         )
         .expect("repo config update should succeed");
@@ -708,6 +718,7 @@ fn task_delete_rejects_active_builder_runs() {
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         },
     );
@@ -763,7 +774,8 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
         },
     );
     service.workspace_add(repo_path)?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path,
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -781,6 +793,7 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
     git_state
@@ -875,7 +888,8 @@ fn task_delete_only_removes_task_managed_worktrees() -> Result<()> {
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -969,7 +983,8 @@ fn task_delete_reports_partial_cleanup_progress_when_store_delete_fails() -> Res
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1043,7 +1058,8 @@ fn task_delete_skips_detached_managed_worktree() -> Result<()> {
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2367,7 +2383,8 @@ fn agent_session_upsert_accepts_working_directory_inside_effective_worktree_base
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),

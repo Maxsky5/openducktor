@@ -44,7 +44,7 @@ describe("OdtHostBridgeClient", () => {
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
-          repoPath: "/repo",
+          workspaceId: "repo",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -58,7 +58,7 @@ describe("OdtHostBridgeClient", () => {
 
     await expect(client.ready()).resolves.toEqual({
       bridgeVersion: 1,
-      repoPath: "/repo",
+      workspaceId: "repo",
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
     });
   });

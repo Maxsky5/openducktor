@@ -1,4 +1,4 @@
-use super::{lock_env, EnvVarGuard, RepoConfig, TestStoreHarness};
+use super::{lock_env, workspace_identity, EnvVarGuard, RepoConfig, TestStoreHarness};
 use crate::GitTargetBranch;
 use host_domain::DEFAULT_BRANCH_PREFIX;
 use serde_json::json;
@@ -11,10 +11,10 @@ fn load_missing_returns_default_config() {
     let harness = TestStoreHarness::new("load-default");
     let store = harness.store();
     let config = store.load().expect("load default");
-    assert_eq!(config.version, 1);
+    assert_eq!(config.version, 2);
     assert!(!config.chat.show_thinking_messages);
     assert_eq!(config.kanban.done_visible_days, 1);
-    assert!(config.repos.is_empty());
+    assert!(config.workspaces.is_empty());
 }
 
 #[test]
@@ -58,12 +58,18 @@ fn update_repo_config_normalizes_blank_worktree_path() {
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
-    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
     let updated = store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_id: workspace_id.clone(),
+                workspace_name,
+                repo_path,
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some("   ".to_string()),
                 branch_prefix: "duck".to_string(),
@@ -90,7 +96,7 @@ fn update_repo_config_normalizes_blank_worktree_path() {
         .as_deref()
         .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
-    let loaded = store.repo_config(&repo_str).expect("load repo config");
+    let loaded = store.repo_config(&workspace_id).expect("load repo config");
     assert!(loaded.worktree_base_path.is_none());
     assert_eq!(loaded.branch_prefix, "duck");
     assert_eq!(loaded.default_target_branch.canonical(), "origin/main");
@@ -106,12 +112,17 @@ fn update_repo_config_rejects_duplicate_dev_server_ids() {
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
-    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
     let error = store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_name,
+                repo_path,
                 dev_servers: vec![
                     crate::RepoDevServerScript {
                         id: "frontend".to_string(),
@@ -144,12 +155,18 @@ fn update_repo_config_preserves_explicit_local_default_target_branch() {
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
-    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
     store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_id: workspace_id.clone(),
+                workspace_name,
+                repo_path,
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "duck".to_string(),
@@ -169,7 +186,7 @@ fn update_repo_config_preserves_explicit_local_default_target_branch() {
         )
         .expect("update config");
 
-    let loaded = store.repo_config(&repo_str).expect("load repo config");
+    let loaded = store.repo_config(&workspace_id).expect("load repo config");
     assert_eq!(loaded.default_target_branch.canonical(), "main");
 }
 
@@ -183,12 +200,18 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
-    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
     store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_id: workspace_id.clone(),
+                workspace_name,
+                repo_path,
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "duck".to_string(),
@@ -208,7 +231,7 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
         )
         .expect("update config");
 
-    let loaded = store.repo_config(&repo_str).expect("load repo config");
+    let loaded = store.repo_config(&workspace_id).expect("load repo config");
     assert_eq!(
         loaded.default_target_branch.remote.as_deref(),
         Some("origin")
@@ -287,6 +310,9 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     let workspaces = store.list_workspaces().expect("list workspaces");
     assert_eq!(workspaces.len(), 1);
     assert!(workspaces[0].has_config);
+    assert_eq!(workspaces[0].workspace_id, "repo");
+    assert_eq!(workspaces[0].workspace_name, "repo");
+    assert_eq!(workspaces[0].repo_path, repo_str);
     assert!(workspaces[0].configured_worktree_base_path.is_none());
     assert!(workspaces[0]
         .effective_worktree_base_path
@@ -298,7 +324,7 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     assert_eq!(config.kanban.done_visible_days, 1);
 
     let repo_config = store
-        .repo_config(workspaces[0].path.as_str())
+        .repo_config(workspaces[0].workspace_id.as_str())
         .expect("repo config");
     assert!(repo_config.worktree_base_path.is_none());
     assert_eq!(repo_config.branch_prefix, DEFAULT_BRANCH_PREFIX);
@@ -439,13 +465,18 @@ fn update_repo_config_rejects_blank_runtime_kinds() {
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
-    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
 
     let blank_repo_runtime_error = store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_name: workspace_name.clone(),
+                repo_path: repo_path.clone(),
                 default_runtime_kind: "   ".to_string(),
                 ..RepoConfig::default()
             },
@@ -457,8 +488,10 @@ fn update_repo_config_rejects_blank_runtime_kinds() {
 
     let blank_agent_runtime_error = store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_name,
+                repo_path,
                 agent_defaults: crate::AgentDefaults {
                     spec: Some(crate::AgentModelDefault {
                         runtime_kind: "   ".to_string(),

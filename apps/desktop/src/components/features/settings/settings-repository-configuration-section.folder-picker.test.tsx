@@ -14,6 +14,9 @@ import {
 enableReactActEnvironment();
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",

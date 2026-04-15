@@ -524,7 +524,9 @@ pub(crate) fn resolve_effective_worktree_base_path(
     Ok(service
         .workspace_list()?
         .into_iter()
-        .find(|workspace| normalize_path_for_comparison(workspace.path.as_str()) == normalized_repo)
+        .find(|workspace| {
+            normalize_path_for_comparison(workspace.repo_path.as_str()) == normalized_repo
+        })
         .and_then(|workspace| workspace.effective_worktree_base_path))
 }
 

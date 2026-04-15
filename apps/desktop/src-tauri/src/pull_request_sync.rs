@@ -54,7 +54,7 @@ fn run_pull_request_sync_iteration(
     let active_repo_path = list_workspaces()?
         .into_iter()
         .find(|workspace| workspace.is_active)
-        .map(|workspace| workspace.path);
+        .map(|workspace| workspace.repo_path);
 
     let Some(active_repo_path) = active_repo_path else {
         *previous_repo_path = None;
@@ -116,7 +116,9 @@ mod tests {
 
     fn workspace(path: &str, is_active: bool) -> WorkspaceRecord {
         WorkspaceRecord {
-            path: path.to_string(),
+            workspace_id: path.trim_start_matches('/').replace('/', "-"),
+            workspace_name: path.trim_start_matches('/').to_string(),
+            repo_path: path.to_string(),
             is_active,
             has_config: true,
             configured_worktree_base_path: None,

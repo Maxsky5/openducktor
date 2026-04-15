@@ -14,6 +14,9 @@ import type { PreparedRepoSwitch } from "./workspace-operations-types";
 type EmptyObject = Record<string, never>;
 
 type RepoConfigFixture = {
+  workspaceId: string;
+  workspaceName: string;
+  repoPath: string;
   defaultRuntimeKind: "opencode";
   branchPrefix: string;
   defaultTargetBranch: { remote: string; branch: string };
@@ -136,6 +139,9 @@ describe("use-workspace-selection-operations", () => {
     workspaceHost.workspaceSelect = mock(async () => workspace("/repo-a", true));
     workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     workspaceHost.workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-a",
+      workspaceName: "repo-a",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -165,7 +171,7 @@ describe("use-workspace-selection-operations", () => {
     try {
       await harness.mount();
       await harness.run(async (value) => {
-        await value.selectWorkspace("/repo-a");
+        await value.selectWorkspace("repo-a");
       });
 
       expect(callOrder.slice(0, 4)).toEqual([
@@ -215,14 +221,19 @@ describe("use-workspace-selection-operations", () => {
     const workspaceList = mock(async () => [workspace("/repo-a", true)]);
     workspaceList.mockImplementationOnce(async () => [workspace("/repo-a", true)]);
     workspaceList.mockImplementationOnce(async () => [workspace("/repo-b", true)]);
-    workspaceHost.workspaceSelect = mock(async (repoPath: string) => workspace(repoPath, true));
+    workspaceHost.workspaceSelect = mock(async (workspaceId: string) =>
+      workspace(`/${workspaceId}`, true),
+    );
     workspaceHost.workspaceList = workspaceList;
-    workspaceHost.workspaceGetRepoConfig = mock(async (repoPath: string) => {
-      if (repoPath === "/repo-a") {
+    workspaceHost.workspaceGetRepoConfig = mock(async (workspaceId: string) => {
+      if (workspaceId === "repo-a") {
         return repoAConfigDeferred.promise;
       }
 
       return {
+        workspaceId: "repo-b",
+        workspaceName: "repo-b",
+        repoPath: "/repo-b",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -253,13 +264,16 @@ describe("use-workspace-selection-operations", () => {
     try {
       await harness.mount();
       await harness.run(async (value) => {
-        await value.selectWorkspace("/repo-a");
+        await value.selectWorkspace("repo-a");
       });
       await harness.run(async (value) => {
-        await value.selectWorkspace("/repo-b");
+        await value.selectWorkspace("repo-b");
       });
 
       repoAConfigDeferred.resolve({
+        workspaceId: "repo-a",
+        workspaceName: "repo-a",
+        repoPath: "/repo-a",
         defaultRuntimeKind: "opencode",
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -283,6 +297,9 @@ describe("use-workspace-selection-operations", () => {
       expect(runtimeEnsure).toHaveBeenCalledWith("/repo-b", "opencode");
     } finally {
       repoAConfigDeferred.resolve({
+        workspaceId: "repo-a",
+        workspaceName: "repo-a",
+        repoPath: "/repo-a",
         defaultRuntimeKind: "opencode",
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },

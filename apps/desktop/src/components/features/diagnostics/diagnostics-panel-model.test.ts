@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { BeadsCheck, RuntimeDescriptor, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  BeadsCheck,
+  RuntimeDescriptor,
+  RuntimeInstanceSummary,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   type BeadsCheckFixtureOverrides,
@@ -87,6 +92,21 @@ const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck 
     overrides,
   );
 
+const makeWorkspace = (
+  repoPath: string,
+  overrides: Partial<WorkspaceRecord> = {},
+): WorkspaceRecord => ({
+  workspaceId: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+  isActive: true,
+  hasConfig: true,
+  configuredWorktreeBasePath: "/worktrees",
+  defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+  effectiveWorktreeBasePath: "/worktrees",
+  ...overrides,
+});
+
 describe("buildDiagnosticsPanelModel", () => {
   test("returns no-repository summary and empty-state messages when no repository is selected", () => {
     const model = buildDiagnosticsPanelModel({
@@ -114,14 +134,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("returns checking summary while diagnostics are loading", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -140,14 +153,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("keeps summary in checking state while runtime health is still pending", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -176,14 +182,12 @@ describe("buildDiagnosticsPanelModel", () => {
   test("returns setup-needed summary when no effective worktree directory is available", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
+      activeWorkspace: makeWorkspace("/repo", {
         hasConfig: false,
         configuredWorktreeBasePath: null,
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
-      },
+      }),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -222,14 +226,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("renders first-class repo store diagnostics rows from structured health", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -302,14 +299,10 @@ describe("buildDiagnosticsPanelModel", () => {
   test("treats repositories using the default worktree path as healthy", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
+      activeWorkspace: makeWorkspace("/repo", {
         configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
         effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-      },
+      }),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -351,14 +344,11 @@ describe("buildDiagnosticsPanelModel", () => {
   test("builds keyed rows for repository and runtime mcp sections", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/Users/dev/fairnest",
-      activeWorkspace: {
-        path: "/Users/dev/fairnest",
-        isActive: true,
-        hasConfig: true,
+      activeWorkspace: makeWorkspace("/Users/dev/fairnest", {
         configuredWorktreeBasePath: "/Users/dev/worktrees",
         defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
         effectiveWorktreeBasePath: "/Users/dev/worktrees",
-      },
+      }),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -415,14 +405,12 @@ describe("buildDiagnosticsPanelModel", () => {
   test("includes critical reasons and section errors when checks fail", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
+      activeWorkspace: makeWorkspace("/repo", {
         hasConfig: false,
         configuredWorktreeBasePath: null,
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
-      },
+      }),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -494,14 +482,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("falls back to mcpError when server error is absent", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -544,14 +525,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("shows timeout-specific badges and messages while runtime health is warming up", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -627,14 +601,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("keeps runtime and mcp progress details scoped to the relevant section", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -712,14 +679,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("keeps the summary in checking while a settled runtime health entry is still checking", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -762,14 +722,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("shows timeout-specific cli tools and beads states instead of leaving them checking", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -821,14 +774,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("keeps hard failures ahead of retrying summary state", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -884,14 +830,7 @@ describe("buildDiagnosticsPanelModel", () => {
   test("treats GitHub CLI auth failures as CLI issues even without query failure classification", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
-      activeWorkspace: {
-        path: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
-        effectiveWorktreeBasePath: "/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,

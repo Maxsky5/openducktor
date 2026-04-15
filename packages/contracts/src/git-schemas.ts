@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const workspaceRecordSchema = z.object({
-  path: z.string(),
+  workspaceId: z.string(),
+  workspaceName: z.string(),
+  repoPath: z.string(),
   isActive: z.boolean(),
   hasConfig: z.boolean(),
   configuredWorktreeBasePath: z.string().nullable(),

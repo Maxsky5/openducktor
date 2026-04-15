@@ -10,7 +10,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   chat: { showThinkingMessages: false },
   kanban: { doneVisibleDays: 1 },
   autopilot: { rules: [] },
-  repos: {},
+  workspaces: {},
   globalPromptOverrides: {},
   ...overrides,
 });
@@ -29,6 +29,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   getCatalogForRuntime: () => null,
   getCatalogErrorForRuntime: () => null,
   isCatalogLoadingForRuntime: () => false,
+  workspaces: [],
   repoPaths: [],
   selectedRepoPath: null,
   selectedRepoConfig: null,

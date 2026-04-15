@@ -50,7 +50,7 @@ describe("resolveStoreContext", () => {
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
-          repoPath: "/repo",
+          workspaceId: "repo",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -107,7 +107,7 @@ describe("resolveStoreContext", () => {
       if (url === "http://127.0.0.1:14327/invoke/odt_mcp_ready") {
         return jsonResponse({
           bridgeVersion: 1,
-          repoPath: "/repo",
+          workspaceId: "repo",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -139,7 +139,7 @@ describe("resolveStoreContext", () => {
       if (url === "http://127.0.0.1:14328/invoke/odt_mcp_ready") {
         return jsonResponse({
           bridgeVersion: 1,
-          repoPath: "/repo",
+          workspaceId: "repo",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }

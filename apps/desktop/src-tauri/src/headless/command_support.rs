@@ -112,7 +112,7 @@ impl HookTrustConfirmationPort for HeadlessHookTrustConfirmationPort {
     fn confirm_trusted_hooks(&self, request: &HookTrustConfirmationRequest) -> anyhow::Result<()> {
         Err(anyhow!(
             "Trusted hook confirmation for '{}' requires the desktop shell. Browser mode cannot open the native confirmation dialog.",
-            request.repo_path
+            request.workspace_id
         ))
     }
 }

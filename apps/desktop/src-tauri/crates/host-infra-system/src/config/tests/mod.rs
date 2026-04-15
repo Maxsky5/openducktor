@@ -97,3 +97,17 @@ pub(super) fn unique_temp_path(name: &str) -> PathBuf {
 pub(super) fn fake_git_workspace(path: &Path) {
     fs::create_dir_all(path.join(".git")).expect("git directory should be created");
 }
+
+pub(super) fn workspace_identity(path: &Path) -> (String, String, String) {
+    let repo_path = fs::canonicalize(path)
+        .expect("workspace path should canonicalize")
+        .to_string_lossy()
+        .to_string();
+    let workspace_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .expect("workspace path should have a file name")
+        .to_string();
+    let workspace_id = workspace_name.to_lowercase();
+    (workspace_id, workspace_name, repo_path)
+}

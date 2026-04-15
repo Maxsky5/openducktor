@@ -53,6 +53,7 @@ export function SettingsModalContent({
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
     repoPaths,
+    selectedRepoWorkspace,
     selectedRepoPath,
     selectedRepoConfig,
     selectedRepoEffectiveWorktreeBasePath,
@@ -167,7 +168,7 @@ export function SettingsModalContent({
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
       <RepositorySidebar
-        repoPaths={repoPaths}
+        workspaces={controller.workspaces}
         selectedRepoPath={selectedRepoPath}
         selectedRepositorySection={repositorySection}
         disabled={isInteractionDisabled}
@@ -202,7 +203,7 @@ export function SettingsModalContent({
 
         {repositorySection === "git" ? (
           <RepositoryGitSection
-            selectedRepoPath={selectedRepoPath}
+            selectedRepoPath={selectedRepoWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
             runtimeCheck={controller.runtimeCheck}
             disabled={isInteractionDisabled}

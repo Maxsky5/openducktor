@@ -117,23 +117,21 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
@@ -257,23 +255,21 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "develop".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "develop".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
@@ -345,23 +341,21 @@ fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
     task_state.lock().expect("task state lock poisoned").tasks[0].target_branch =
         Some(host_domain::GitTargetBranch {
@@ -413,23 +407,21 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: vec![".env".to_string()],
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: vec![".env".to_string()],
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
@@ -488,23 +480,21 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),
             worktree_path: repo_path.clone(),
-            repo_config: RepoConfig {
-                default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: None,
-                branch_prefix: "odt".to_string(),
-                default_target_branch: host_infra_system::GitTargetBranch {
-                    remote: Some("origin".to_string()),
-                    branch: "main".to_string(),
-                },
-                git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+            repo_config: RepoConfig { default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: None,
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
             },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(), ..Default::default() },
         },
     );
 
@@ -572,23 +562,21 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
@@ -653,23 +641,21 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
@@ -738,23 +724,21 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     };
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_failure_hooks)),
-            hooks: pre_start_failure_hooks,
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_failure_hooks)),
+        hooks: pre_start_failure_hooks,
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let pre_start_error = service
@@ -775,23 +759,21 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     };
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&post_complete_failure_hooks)),
-            hooks: post_complete_failure_hooks,
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: Some(hook_set_fingerprint(&post_complete_failure_hooks)),
+        hooks: post_complete_failure_hooks,
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
@@ -883,23 +865,21 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: vec![".env".to_string()],
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: vec![".env".to_string()],
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let error = service
@@ -966,23 +946,21 @@ fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: None,
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: None,
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
@@ -1023,23 +1001,21 @@ fn build_start_reports_home_or_override_guidance_when_default_worktree_resolutio
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: None,
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: None,
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     #[cfg(unix)]
@@ -1089,26 +1065,24 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: false,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet {
-                pre_start: vec!["echo pre-hook".to_string()],
-                post_complete: Vec::new(),
-            },
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: false,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet {
+            pre_start: vec!["echo pre-hook".to_string()],
+            post_complete: Vec::new(),
+        },
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let error = service
@@ -1150,23 +1124,21 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let error = service
@@ -1211,23 +1183,21 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     {
@@ -1284,23 +1254,21 @@ fn build_start_reports_missing_task_from_targeted_lookup() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let error = service
@@ -1338,23 +1306,21 @@ fn build_start_preserves_transition_validation_with_targeted_lookup() -> Result<
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let error = service
@@ -1409,23 +1375,21 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let error = service
@@ -1467,23 +1431,21 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     write_private_file(&config_path, "{ invalid json")?;
@@ -1540,23 +1502,21 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
+        RepoConfig { default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
         },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), ..Default::default() },
     )?;
 
     let shared_runtime = service.runtime_ensure("opencode", repo_path.as_str())?;

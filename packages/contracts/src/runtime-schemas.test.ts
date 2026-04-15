@@ -35,6 +35,13 @@ import {
   taskCardSchema,
 } from "./index";
 
+const baseRepoConfigInput = {
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
+  defaultRuntimeKind: "opencode",
+};
+
 describe("runtime schemas", () => {
   test("task card parses workflow status from host payloads", () => {
     const parsed = taskCardSchema.parse({
@@ -175,7 +182,7 @@ describe("runtime schemas", () => {
 
   test("repo config accepts null worktree base path", () => {
     const parsed = repoConfigSchema.parse({
-      defaultRuntimeKind: "opencode",
+      ...baseRepoConfigInput,
       worktreeBasePath: null,
       branchPrefix: "obp",
       trustedHooks: false,
@@ -194,7 +201,7 @@ describe("runtime schemas", () => {
 
   test("repo config parses agent defaults", () => {
     const parsed = repoConfigSchema.parse({
-      defaultRuntimeKind: "opencode",
+      ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: true,
@@ -219,7 +226,7 @@ describe("runtime schemas", () => {
 
   test("repo config parses prompt overrides and keeps base version metadata", () => {
     const parsed = repoConfigSchema.parse({
-      defaultRuntimeKind: "opencode",
+      ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: false,
@@ -242,7 +249,7 @@ describe("runtime schemas", () => {
 
   test("repo config allows empty prompt override templates", () => {
     const parsed = repoConfigSchema.parse({
-      defaultRuntimeKind: "opencode",
+      ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: false,
@@ -262,7 +269,7 @@ describe("runtime schemas", () => {
 
   test("repo config normalizes null agent default fields and entries", () => {
     const parsed = repoConfigSchema.parse({
-      defaultRuntimeKind: "opencode",
+      ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
       trustedHooks: true,
@@ -1004,6 +1011,9 @@ describe("runtime schemas", () => {
   test("repo config rejects missing runtime-bearing defaults", () => {
     expect(() =>
       repoConfigSchema.parse({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
         branchPrefix: "obp",
         trustedHooks: false,
         hooks: { preStart: [], postComplete: [] },
@@ -1012,7 +1022,7 @@ describe("runtime schemas", () => {
 
     expect(() =>
       repoConfigSchema.parse({
-        defaultRuntimeKind: "opencode",
+        ...baseRepoConfigInput,
         branchPrefix: "obp",
         trustedHooks: false,
         hooks: { preStart: [], postComplete: [] },

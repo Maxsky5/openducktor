@@ -346,7 +346,7 @@ export type QaRejectedResult = z.infer<typeof qaRejectedResultSchema>;
 export const odtHostBridgeReadySchema = z
   .object({
     bridgeVersion: z.literal(1),
-    repoPath: z.string().trim().min(1),
+    workspaceId: z.string().trim().min(1),
     toolNames: z.array(z.string().trim().min(1)).min(1),
   })
   .strict();

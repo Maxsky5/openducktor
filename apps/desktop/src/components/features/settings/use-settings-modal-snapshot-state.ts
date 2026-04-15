@@ -38,14 +38,14 @@ export const useSettingsModalSnapshotState = ({
     if (!snapshotDraft) {
       return [];
     }
-    return Object.keys(snapshotDraft.repos).sort();
+    return Object.keys(snapshotDraft.workspaces).sort();
   }, [snapshotDraft]);
 
   const selectedRepoConfig = useMemo(() => {
     if (!snapshotDraft || !selectedRepoPath) {
       return null;
     }
-    return snapshotDraft.repos[selectedRepoPath] ?? null;
+    return snapshotDraft.workspaces[selectedRepoPath] ?? null;
   }, [selectedRepoPath, snapshotDraft]);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export const useSettingsModalSnapshotState = ({
       return;
     }
 
-    if (selectedRepoPath && snapshotDraft.repos[selectedRepoPath]) {
+    if (selectedRepoPath && snapshotDraft.workspaces[selectedRepoPath]) {
       return;
     }
 

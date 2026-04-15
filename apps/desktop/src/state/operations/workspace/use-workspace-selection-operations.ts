@@ -30,7 +30,7 @@ type UseWorkspaceSelectionOperationsResult = {
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (repoPath: string) => Promise<void>;
-  selectWorkspace: (repoPath: string) => Promise<void>;
+  selectWorkspace: (workspaceId: string) => Promise<void>;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
@@ -52,11 +52,11 @@ export function useWorkspaceSelectionOperations({
 
   activeRepoRef.current = activeRepo;
 
-  const markWorkspaceActiveLocally = useCallback((repoPath: string): void => {
+  const markWorkspaceActiveLocally = useCallback((workspaceId: string): void => {
     setWorkspaces((current) => {
       let hasMatch = false;
       const next = current.map((workspace) => {
-        const isActive = workspace.path === repoPath;
+        const isActive = workspace.workspaceId === workspaceId;
         hasMatch ||= isActive;
 
         if (workspace.isActive === isActive) {
@@ -77,7 +77,7 @@ export function useWorkspaceSelectionOperations({
     (records: WorkspaceRecord[]): void => {
       setWorkspaces(records);
       const selectedWorkspace = records.find((entry) => entry.isActive);
-      setActiveRepo(selectedWorkspace?.path ?? null);
+      setActiveRepo(selectedWorkspace?.repoPath ?? null);
     },
     [setActiveRepo],
   );
@@ -86,7 +86,7 @@ export function useWorkspaceSelectionOperations({
     (record: WorkspaceRecord): void => {
       setWorkspaces((current) => {
         const next = current
-          .filter((entry) => entry.path !== record.path)
+          .filter((entry) => entry.workspaceId !== record.workspaceId)
           .map((entry) => {
             if (!record.isActive || !entry.isActive) {
               return entry;
@@ -98,12 +98,12 @@ export function useWorkspaceSelectionOperations({
             };
           });
         next.push(record);
-        next.sort((left, right) => left.path.localeCompare(right.path));
+        next.sort((left, right) => left.workspaceName.localeCompare(right.workspaceName));
         return next;
       });
 
       if (record.isActive) {
-        setActiveRepo(record.path);
+        setActiveRepo(record.repoPath);
       }
     },
     [setActiveRepo],
@@ -135,21 +135,21 @@ export function useWorkspaceSelectionOperations({
       await refreshWorkspaceCachesAfterMutation();
       await refreshWorkspaces();
       toast.success("Repository added", {
-        description: workspace.path,
+        description: workspace.repoPath,
       });
     },
     [hostClient, refreshWorkspaceCachesAfterMutation, refreshWorkspaces],
   );
 
   const selectWorkspace = useCallback(
-    async (repoPath: string): Promise<void> => {
+    async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
       const previousRepo = activeRepoRef.current;
 
       setIsSwitchingWorkspace(true);
 
       try {
-        await hostClient.workspaceSelect(repoPath);
+        const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
         await refreshWorkspaceCachesAfterMutation();
 
         if (workspaceSwitchVersionRef.current !== switchVersion) {
@@ -161,18 +161,18 @@ export function useWorkspaceSelectionOperations({
         clearBranchData();
         preparedRepoSwitchRef.current = {
           previousRepo,
-          nextRepo: repoPath,
+          nextRepo: selectedWorkspace.repoPath,
         };
-        setActiveRepo(repoPath);
+        setActiveRepo(selectedWorkspace.repoPath);
 
-        void loadRepoConfigFromQuery(queryClient, repoPath, hostClient)
+        void loadRepoConfigFromQuery(queryClient, selectedWorkspace.workspaceId, hostClient)
           .then((repoConfig) => {
             if (workspaceSwitchVersionRef.current !== switchVersion) {
               return;
             }
 
             return hostClient.runtimeEnsure(
-              repoPath,
+              selectedWorkspace.repoPath,
               repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
             );
           })
@@ -197,7 +197,7 @@ export function useWorkspaceSelectionOperations({
             return;
           }
 
-          markWorkspaceActiveLocally(repoPath);
+          markWorkspaceActiveLocally(selectedWorkspace.workspaceId);
           toast.error("Repository switched, but workspace refresh failed", {
             description: errorMessage(error),
           });

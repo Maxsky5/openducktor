@@ -50,15 +50,15 @@ export const useSettingsModalDraftActions = ({
           return current;
         }
 
-        const existingRepo = current.repos[selectedRepoPath];
+        const existingRepo = current.workspaces[selectedRepoPath];
         if (!existingRepo) {
           return current;
         }
 
         return {
           ...current,
-          repos: {
-            ...current.repos,
+          workspaces: {
+            ...current.workspaces,
             [selectedRepoPath]: updater(existingRepo),
           },
         };

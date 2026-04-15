@@ -8,7 +8,6 @@ use host_infra_system::{
     RepoConfig, RepoDevServerScript, RepoGitConfig,
 };
 use std::collections::HashMap;
-use std::path::Path;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
@@ -49,13 +48,13 @@ pub struct WorkspaceSettingsSnapshotUpdate {
     pub chat: ChatSettings,
     pub kanban: KanbanSettings,
     pub autopilot: AutopilotSettings,
-    pub repos: HashMap<String, RepoConfig>,
+    pub workspaces: HashMap<String, RepoConfig>,
     pub global_prompt_overrides: PromptOverrides,
 }
 
 #[derive(Debug, Clone)]
 pub struct HookTrustConfirmationRequest {
-    pub repo_path: String,
+    pub workspace_id: String,
     pub hooks: HookSet,
     pub dev_servers: Vec<RepoDevServerScript>,
 }
@@ -68,7 +67,7 @@ pub trait HookTrustConfirmationPort: Send {
 #[serde(rename_all = "camelCase")]
 pub struct PreparedHookTrustChallenge {
     pub nonce: String,
-    pub repo_path: String,
+    pub workspace_id: String,
     pub fingerprint: String,
     pub expires_at: DateTime<Utc>,
     pub pre_start_count: usize,
@@ -77,7 +76,7 @@ pub struct PreparedHookTrustChallenge {
 
 #[derive(Debug, Clone)]
 pub(super) struct HookTrustChallenge {
-    repo_path: String,
+    workspace_id: String,
     fingerprint: String,
     expires_at: SystemTime,
 }
@@ -85,10 +84,10 @@ pub(super) struct HookTrustChallenge {
 impl AppService {
     pub fn workspace_merge_repo_config(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         update: RepoConfigUpdate,
     ) -> Result<WorkspaceRecord> {
-        let existing = self.workspace_get_repo_config_optional(repo_path)?;
+        let existing = self.workspace_get_repo_config_optional(workspace_id)?;
         let defaults = RepoConfig::default();
         let dev_servers = normalize_dev_servers(
             update
@@ -99,7 +98,18 @@ impl AppService {
         let keep_existing_trust = existing
             .as_ref()
             .is_some_and(|entry| entry.dev_servers == dev_servers);
+        let workspace_name = existing
+            .as_ref()
+            .map(|entry| entry.workspace_name.clone())
+            .unwrap_or_else(|| workspace_id.to_string());
+        let repo_path = existing
+            .as_ref()
+            .map(|entry| entry.repo_path.clone())
+            .unwrap_or_default();
         let repo_config = RepoConfig {
+            workspace_id: workspace_id.to_string(),
+            workspace_name,
+            repo_path,
             default_runtime_kind: update
                 .default_runtime_kind
                 .or_else(|| {
@@ -165,22 +175,22 @@ impl AppService {
                 .unwrap_or_default(),
         };
 
-        self.workspace_update_repo_config(repo_path, repo_config)
+        self.workspace_update_repo_config(workspace_id, repo_config)
     }
 
     pub fn workspace_save_repo_settings<P: HookTrustConfirmationPort + ?Sized>(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         settings: RepoSettingsUpdate,
         confirmation_port: &P,
     ) -> Result<WorkspaceRecord> {
         let existing = self
-            .workspace_get_repo_config_optional(repo_path)?
+            .workspace_get_repo_config_optional(workspace_id)?
             .unwrap_or_default();
 
         let (normalized_hooks, normalized_dev_servers, trusted_hooks_fingerprint) = self
             .normalize_hooks_with_trust_confirmation(
-                repo_path,
+                workspace_id,
                 &existing,
                 settings.trusted_hooks,
                 settings.hooks.unwrap_or_else(|| existing.hooks.clone()),
@@ -191,6 +201,9 @@ impl AppService {
             )?;
 
         let final_repo_config = RepoConfig {
+            workspace_id: existing.workspace_id.clone(),
+            workspace_name: existing.workspace_name.clone(),
+            repo_path: existing.repo_path.clone(),
             default_runtime_kind: normalize_runtime_kind(settings.default_runtime_kind)?
                 .unwrap_or(existing.default_runtime_kind),
             worktree_base_path: settings.worktree_base_path.or(existing.worktree_base_path),
@@ -212,15 +225,14 @@ impl AppService {
             agent_defaults: settings.agent_defaults.unwrap_or(existing.agent_defaults),
         };
 
-        self.workspace_update_repo_config(repo_path, final_repo_config)
+        self.workspace_update_repo_config(workspace_id, final_repo_config)
     }
 
     pub fn workspace_prepare_trusted_hooks_challenge(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
     ) -> Result<PreparedHookTrustChallenge> {
-        let repo_config = self.workspace_get_repo_config(repo_path)?;
-        let canonical_repo_path = canonical_repo_key(repo_path);
+        let repo_config = self.workspace_get_repo_config(workspace_id)?;
         let fingerprint = repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         let nonce = format!("hooks-trust-{}", Uuid::new_v4().simple());
         let expires_at = SystemTime::now()
@@ -235,7 +247,7 @@ impl AppService {
             challenges.insert(
                 nonce.clone(),
                 HookTrustChallenge {
-                    repo_path: canonical_repo_path.clone(),
+                    workspace_id: workspace_id.to_string(),
                     fingerprint: fingerprint.clone(),
                     expires_at,
                 },
@@ -244,7 +256,7 @@ impl AppService {
 
         Ok(PreparedHookTrustChallenge {
             nonce,
-            repo_path: canonical_repo_path,
+            workspace_id: workspace_id.to_string(),
             fingerprint,
             expires_at: DateTime::<Utc>::from(expires_at),
             pre_start_count: repo_config.hooks.pre_start.len(),
@@ -257,15 +269,15 @@ impl AppService {
         mut update: WorkspaceSettingsSnapshotUpdate,
         confirmation_port: &P,
     ) -> Result<Vec<WorkspaceRecord>> {
-        for (repo_path, repo_config) in update.repos.iter_mut() {
+        for (workspace_id, repo_config) in update.workspaces.iter_mut() {
             let existing = self
-                .workspace_get_repo_config_optional(repo_path)?
+                .workspace_get_repo_config_optional(workspace_id)?
                 .unwrap_or_default();
             let submitted_hooks = std::mem::take(&mut repo_config.hooks);
             let submitted_dev_servers = std::mem::take(&mut repo_config.dev_servers);
             let (normalized_hooks, normalized_dev_servers, trusted_hooks_fingerprint) = self
                 .normalize_hooks_with_trust_confirmation(
-                    repo_path,
+                    workspace_id,
                     &existing,
                     repo_config.trusted_hooks,
                     submitted_hooks,
@@ -283,14 +295,14 @@ impl AppService {
 
     pub fn workspace_set_trusted_hooks<P: HookTrustConfirmationPort + ?Sized>(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         trusted: bool,
         challenge_nonce: Option<&str>,
         challenge_fingerprint: Option<&str>,
         confirmation_port: &P,
     ) -> Result<WorkspaceRecord> {
         if !trusted {
-            return self.workspace_persist_trusted_hooks(repo_path, false, None);
+            return self.workspace_persist_trusted_hooks(workspace_id, false, None);
         }
 
         let nonce = challenge_nonce
@@ -302,7 +314,6 @@ impl AppService {
             .filter(|value| !value.is_empty())
             .ok_or_else(|| anyhow!("Hook trust confirmation requires challenge fingerprint."))?;
 
-        let canonical_repo_path = canonical_repo_key(repo_path);
         let challenge = {
             let mut challenges = self.hook_trust_challenges.lock().map_err(|_| {
                 anyhow!("Hook trust challenge lock poisoned in `workspace_set_trusted_hooks`")
@@ -316,7 +327,7 @@ impl AppService {
 
             validate_trust_challenge_entry(
                 &challenge,
-                canonical_repo_path.as_str(),
+                workspace_id,
                 expected_fingerprint,
                 SystemTime::now(),
             )?;
@@ -324,7 +335,7 @@ impl AppService {
             challenge
         };
 
-        let repo_config = self.workspace_get_repo_config(repo_path)?;
+        let repo_config = self.workspace_get_repo_config(workspace_id)?;
         let latest_fingerprint =
             repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
         if latest_fingerprint != challenge.fingerprint {
@@ -334,17 +345,21 @@ impl AppService {
         }
 
         confirmation_port.confirm_trusted_hooks(&HookTrustConfirmationRequest {
-            repo_path: canonical_repo_path,
+            workspace_id: workspace_id.to_string(),
             hooks: repo_config.hooks.clone(),
             dev_servers: repo_config.dev_servers.clone(),
         })?;
 
-        self.workspace_persist_trusted_hooks(repo_path, true, Some(challenge.fingerprint.as_str()))
+        self.workspace_persist_trusted_hooks(
+            workspace_id,
+            true,
+            Some(challenge.fingerprint.as_str()),
+        )
     }
 
     fn normalize_hooks_with_trust_confirmation<P: HookTrustConfirmationPort + ?Sized>(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         existing: &RepoConfig,
         trusted_hooks: bool,
         hooks: HookSet,
@@ -361,7 +376,7 @@ impl AppService {
 
         if trusted_hooks && !trust_already_approved_for_same_hooks {
             confirmation_port.confirm_trusted_hooks(&HookTrustConfirmationRequest {
-                repo_path: canonical_repo_key(repo_path),
+                workspace_id: workspace_id.to_string(),
                 hooks: normalized_hooks.clone(),
                 dev_servers: normalized_dev_servers.clone(),
             })?;
@@ -402,13 +417,6 @@ fn normalize_runtime_kind(value: Option<String>) -> Result<Option<String>> {
     Ok(Some(trimmed.to_string()))
 }
 
-fn canonical_repo_key(repo_path: &str) -> String {
-    std::fs::canonicalize(Path::new(repo_path))
-        .ok()
-        .and_then(|path| path.to_str().map(|value| value.to_string()))
-        .unwrap_or_else(|| repo_path.trim().to_string())
-}
-
 fn prune_expired_hook_trust_challenges(challenges: &mut HashMap<String, HookTrustChallenge>) {
     let now = SystemTime::now();
     challenges.retain(|_, challenge| challenge.expires_at > now);
@@ -416,13 +424,13 @@ fn prune_expired_hook_trust_challenges(challenges: &mut HashMap<String, HookTrus
 
 fn validate_trust_challenge_entry(
     challenge: &HookTrustChallenge,
-    canonical_repo_path: &str,
+    workspace_id: &str,
     expected_fingerprint: &str,
     now: SystemTime,
 ) -> Result<()> {
-    if challenge.repo_path != canonical_repo_path {
+    if challenge.workspace_id != workspace_id {
         return Err(anyhow!(
-            "Hook trust challenge repository mismatch. Retry confirmation."
+            "Hook trust challenge workspace mismatch. Retry confirmation."
         ));
     }
     if challenge.fingerprint != expected_fingerprint {
@@ -439,8 +447,8 @@ fn validate_trust_challenge_entry(
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_repo_key, normalize_hook_set, validate_trust_challenge_entry, AppService,
-        HookTrustChallenge, RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
+        normalize_hook_set, validate_trust_challenge_entry, AppService, HookTrustChallenge,
+        RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
     };
     use crate::app_service::test_support::{
         lock_env, set_env_var, unique_temp_path, EnvVarGuard, FakeTaskStore, TaskStoreState,
@@ -492,6 +500,7 @@ mod tests {
 
     struct WorkspacePolicyFixture {
         service: AppService,
+        workspace_id: String,
         repo_path: String,
         root: PathBuf,
         _env_lock: std::sync::MutexGuard<'static, ()>,
@@ -512,13 +521,15 @@ mod tests {
         let repo = root.join("repo");
         fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
         let repo_path = repo.to_string_lossy().to_string();
+        let workspace_id = "repo".to_string();
+        let workspace_name = "repo".to_string();
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         config_store
-            .add_workspace(repo_path.as_str())
+            .add_workspace(&workspace_id, &workspace_name, repo_path.as_str())
             .expect("workspace should be allowlisted");
         config_store
-            .update_repo_hooks(repo_path.as_str(), hooks)
+            .update_repo_hooks(&workspace_id, hooks)
             .expect("hooks should persist");
 
         let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -529,6 +540,7 @@ mod tests {
 
         WorkspacePolicyFixture {
             service,
+            workspace_id,
             repo_path,
             root,
             _env_lock: env_lock,
@@ -561,23 +573,23 @@ mod tests {
         let trusted_fingerprint = hook_set_fingerprint(
             &fixture
                 .service
-                .workspace_get_repo_config(&fixture.repo_path)?
+                .workspace_get_repo_config(&fixture.workspace_id)?
                 .hooks,
         );
         fixture.service.workspace_update_repo_config(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoConfig {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: Some(trusted_fingerprint.clone()),
                 branch_prefix: "abc".to_string(),
                 ..fixture
                     .service
-                    .workspace_get_repo_config(&fixture.repo_path)?
+                    .workspace_get_repo_config(&fixture.workspace_id)?
             },
         )?;
 
         fixture.service.workspace_merge_repo_config(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoConfigUpdate {
                 default_target_branch: Some(host_infra_system::GitTargetBranch {
                     remote: Some("origin".to_string()),
@@ -589,7 +601,7 @@ mod tests {
 
         let updated = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert_eq!(updated.default_target_branch.canonical(), "origin/release");
         assert_eq!(updated.branch_prefix, "abc");
         assert!(updated.trusted_hooks);
@@ -605,7 +617,7 @@ mod tests {
     fn workspace_merge_repo_config_clears_trust_when_dev_servers_change() -> Result<()> {
         let fixture = setup_fixture("merge-repo-config-dev-servers", HookSet::default());
         fixture.service.workspace_update_repo_config(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoConfig {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: Some(repo_script_fingerprint(
@@ -623,12 +635,12 @@ mod tests {
                 }],
                 ..fixture
                     .service
-                    .workspace_get_repo_config(&fixture.repo_path)?
+                    .workspace_get_repo_config(&fixture.workspace_id)?
             },
         )?;
 
         fixture.service.workspace_merge_repo_config(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoConfigUpdate {
                 dev_servers: Some(vec![RepoDevServerScript {
                     id: "frontend".to_string(),
@@ -641,7 +653,7 @@ mod tests {
 
         let updated = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert!(!updated.trusted_hooks);
         assert!(updated.trusted_hooks_fingerprint.is_none());
         Ok(())
@@ -663,7 +675,7 @@ mod tests {
             }],
         );
         fixture.service.workspace_update_repo_config(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoConfig {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: Some(fingerprint.clone()),
@@ -674,12 +686,12 @@ mod tests {
                 }],
                 ..fixture
                     .service
-                    .workspace_get_repo_config(&fixture.repo_path)?
+                    .workspace_get_repo_config(&fixture.workspace_id)?
             },
         )?;
 
         fixture.service.workspace_merge_repo_config(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoConfigUpdate {
                 dev_servers: Some(vec![
                     RepoDevServerScript {
@@ -699,7 +711,7 @@ mod tests {
 
         let updated = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert!(updated.trusted_hooks);
         assert_eq!(
             updated.trusted_hooks_fingerprint.as_deref(),
@@ -724,7 +736,7 @@ mod tests {
         let error = fixture
             .service
             .workspace_save_repo_settings(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 RepoSettingsUpdate {
                     default_runtime_kind: Some("   ".to_string()),
                     worktree_base_path: None,
@@ -755,7 +767,7 @@ mod tests {
         let error = fixture
             .service
             .workspace_save_repo_settings(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 RepoSettingsUpdate {
                     default_runtime_kind: None,
                     worktree_base_path: None,
@@ -795,7 +807,7 @@ mod tests {
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
         fixture.service.workspace_save_repo_settings(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             RepoSettingsUpdate {
                 default_runtime_kind: Some("  claude-code  ".to_string()),
                 worktree_base_path: None,
@@ -814,7 +826,7 @@ mod tests {
 
         let persisted = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert_eq!(persisted.default_runtime_kind, "claude-code");
         Ok(())
     }
@@ -835,7 +847,7 @@ mod tests {
         let error = fixture
             .service
             .workspace_save_repo_settings(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 RepoSettingsUpdate {
                     default_runtime_kind: None,
                     worktree_base_path: None,
@@ -861,7 +873,7 @@ mod tests {
 
         let persisted = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert!(!persisted.trusted_hooks);
         assert!(persisted.trusted_hooks_fingerprint.is_none());
         Ok(())
@@ -879,7 +891,7 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, kanban, autopilot, mut repos, mut global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, autopilot, mut workspaces, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         chat.show_thinking_messages = true;
         global_prompt_overrides.insert(
@@ -890,9 +902,8 @@ mod tests {
                 enabled: true,
             },
         );
-        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
-        let repo_config = repos
-            .get_mut(repo_key.as_str())
+        let repo_config = workspaces
+            .get_mut(fixture.workspace_id.as_str())
             .ok_or_else(|| anyhow!("repo config missing"))?;
         repo_config.trusted_hooks = true;
         repo_config.hooks = HookSet {
@@ -908,7 +919,7 @@ mod tests {
                 chat,
                 kanban,
                 autopilot,
-                repos,
+                workspaces,
                 global_prompt_overrides,
             },
             &confirmation,
@@ -916,7 +927,7 @@ mod tests {
 
         let persisted = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         let normalized_hooks = HookSet {
             pre_start: vec!["echo pre".to_string()],
             post_complete: vec!["echo post".to_string()],
@@ -937,7 +948,7 @@ mod tests {
         let fixture = setup_fixture("snapshot-chat-roundtrip", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (theme, git, mut chat, kanban, autopilot, repos, global_prompt_overrides) =
+        let (theme, git, mut chat, kanban, autopilot, workspaces, global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert_eq!(chat, ChatSettings::default());
         chat.show_thinking_messages = true;
@@ -949,7 +960,7 @@ mod tests {
                 chat,
                 kanban,
                 autopilot,
-                repos,
+                workspaces,
                 global_prompt_overrides,
             },
             &confirmation,
@@ -980,7 +991,7 @@ mod tests {
             &fixture.service,
             nonce,
             HookTrustChallenge {
-                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
+                workspace_id: fixture.workspace_id.clone(),
                 fingerprint: fingerprint.clone(),
                 expires_at: SystemTime::now()
                     .checked_sub(Duration::from_secs(1))
@@ -991,7 +1002,7 @@ mod tests {
         let error = fixture
             .service
             .workspace_set_trusted_hooks(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 true,
                 Some(nonce),
                 Some(fingerprint.as_str()),
@@ -1012,7 +1023,7 @@ mod tests {
             &fixture.service,
             nonce,
             HookTrustChallenge {
-                repo_path: "/tmp/not-the-same-repo".to_string(),
+                workspace_id: "different-workspace".to_string(),
                 fingerprint: fingerprint.clone(),
                 expires_at: SystemTime::now()
                     .checked_add(Duration::from_secs(60))
@@ -1023,19 +1034,19 @@ mod tests {
         let mismatch = fixture
             .service
             .workspace_set_trusted_hooks(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 true,
                 Some(nonce),
                 Some(fingerprint.as_str()),
                 &confirmation,
             )
             .expect_err("repo mismatch should fail");
-        assert!(mismatch.to_string().contains("repository mismatch"));
+        assert!(mismatch.to_string().contains("workspace mismatch"));
 
         let replay = fixture
             .service
             .workspace_set_trusted_hooks(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 true,
                 Some(nonce),
                 Some(fingerprint.as_str()),
@@ -1058,10 +1069,10 @@ mod tests {
         let confirmation = RecordingHookTrustConfirmationPort::default();
         let challenge = fixture
             .service
-            .workspace_prepare_trusted_hooks_challenge(fixture.repo_path.as_str())?;
+            .workspace_prepare_trusted_hooks_challenge(fixture.workspace_id.as_str())?;
 
         fixture.service.workspace_set_trusted_hooks(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             true,
             Some(challenge.nonce.as_str()),
             Some(challenge.fingerprint.as_str()),
@@ -1070,7 +1081,7 @@ mod tests {
 
         let repo_config = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert!(repo_config.trusted_hooks);
         assert_eq!(
             repo_config.trusted_hooks_fingerprint.as_deref(),
@@ -1090,10 +1101,10 @@ mod tests {
         let confirmation = RecordingHookTrustConfirmationPort::default();
         let challenge = fixture
             .service
-            .workspace_prepare_trusted_hooks_challenge(fixture.repo_path.as_str())?;
+            .workspace_prepare_trusted_hooks_challenge(fixture.workspace_id.as_str())?;
 
         fixture.service.workspace_update_repo_hooks(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             HookSet {
                 pre_start: vec!["echo changed".to_string()],
                 post_complete: Vec::new(),
@@ -1103,7 +1114,7 @@ mod tests {
         let stale = fixture
             .service
             .workspace_set_trusted_hooks(
-                fixture.repo_path.as_str(),
+                fixture.workspace_id.as_str(),
                 true,
                 Some(challenge.nonce.as_str()),
                 Some(challenge.fingerprint.as_str()),
@@ -1126,13 +1137,13 @@ mod tests {
         let confirmation = RecordingHookTrustConfirmationPort::default();
         let fingerprint = hook_set_fingerprint(&hooks);
         fixture.service.workspace_persist_trusted_hooks(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             true,
             Some(fingerprint.as_str()),
         )?;
 
         fixture.service.workspace_set_trusted_hooks(
-            fixture.repo_path.as_str(),
+            fixture.workspace_id.as_str(),
             false,
             None,
             None,
@@ -1141,7 +1152,7 @@ mod tests {
 
         let repo_config = fixture
             .service
-            .workspace_get_repo_config(&fixture.repo_path)?;
+            .workspace_get_repo_config(&fixture.workspace_id)?;
         assert!(!repo_config.trusted_hooks);
         assert!(repo_config.trusted_hooks_fingerprint.is_none());
         assert_eq!(confirmation.request_count(), 0);
@@ -1159,22 +1170,23 @@ mod tests {
     }
 
     #[test]
-    fn validate_trust_challenge_entry_checks_repo_and_fingerprint_and_expiry() -> Result<()> {
+    fn validate_trust_challenge_entry_checks_workspace_and_fingerprint_and_expiry() -> Result<()> {
         let now = SystemTime::now();
         let challenge = HookTrustChallenge {
-            repo_path: "/repo".to_string(),
+            workspace_id: "workspace".to_string(),
             fingerprint: "abc".to_string(),
             expires_at: now
                 .checked_add(Duration::from_secs(5))
                 .ok_or_else(|| anyhow!("challenge expiry"))?,
         };
-        assert!(validate_trust_challenge_entry(&challenge, "/repo", "abc", now).is_ok());
+        assert!(validate_trust_challenge_entry(&challenge, "workspace", "abc", now).is_ok());
 
-        let repo_error = validate_trust_challenge_entry(&challenge, "/repo-2", "abc", now)
-            .expect_err("repo mismatch should fail");
-        assert!(repo_error.to_string().contains("repository mismatch"));
+        let workspace_error =
+            validate_trust_challenge_entry(&challenge, "other-workspace", "abc", now)
+                .expect_err("workspace mismatch should fail");
+        assert!(workspace_error.to_string().contains("workspace mismatch"));
 
-        let fingerprint_error = validate_trust_challenge_entry(&challenge, "/repo", "def", now)
+        let fingerprint_error = validate_trust_challenge_entry(&challenge, "workspace", "def", now)
             .expect_err("fingerprint mismatch should fail");
         assert!(fingerprint_error
             .to_string()
@@ -1186,15 +1198,9 @@ mod tests {
                 .ok_or_else(|| anyhow!("expired instant"))?,
             ..challenge
         };
-        let expired_error = validate_trust_challenge_entry(&expired, "/repo", "abc", now)
+        let expired_error = validate_trust_challenge_entry(&expired, "workspace", "abc", now)
             .expect_err("expired challenge should fail");
         assert!(expired_error.to_string().contains("expired"));
         Ok(())
-    }
-
-    #[test]
-    fn canonical_repo_key_keeps_input_when_path_does_not_exist() {
-        let missing_path = "/this/path/should/not/exist-for-openducktor";
-        assert_eq!(canonical_repo_key(missing_path), missing_path.to_string());
     }
 }

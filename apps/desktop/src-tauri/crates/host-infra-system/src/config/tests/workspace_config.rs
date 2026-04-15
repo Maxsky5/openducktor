@@ -1,4 +1,6 @@
-use super::{fake_git_workspace, lock_env, EnvVarGuard, RepoConfig, TestStoreHarness};
+use super::{
+    fake_git_workspace, lock_env, workspace_identity, EnvVarGuard, RepoConfig, TestStoreHarness,
+};
 use crate::GitTargetBranch;
 use std::ffi::OsString;
 use std::fs;
@@ -20,31 +22,37 @@ fn workspace_add_select_and_update_persist_state() {
     let repo_a_str = repo_a.to_string_lossy().to_string();
     let repo_b_str = repo_b.to_string_lossy().to_string();
     let worktrees_path = root.join("worktrees").to_string_lossy().to_string();
-    // Canonical form (resolved absolute path)
-    let repo_a_canonical = fs::canonicalize(&repo_a)
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+    let (workspace_a_id, workspace_a_name, repo_a_canonical) = workspace_identity(&repo_a);
+    let (workspace_b_id, workspace_b_name, _repo_b_canonical) = workspace_identity(&repo_b);
 
-    let added = store.add_workspace(&repo_a_str).expect("add workspace");
+    let added = store
+        .add_workspace(&workspace_a_id, &workspace_a_name, &repo_a_str)
+        .expect("add workspace");
     assert!(added.is_active);
     assert!(added.has_config);
-    // Path should now be in canonical form
-    assert_eq!(added.path, repo_a_canonical);
+    assert_eq!(added.workspace_id, workspace_a_id);
+    assert_eq!(added.workspace_name, workspace_a_name);
+    assert_eq!(added.repo_path, repo_a_canonical);
     assert!(added
         .effective_worktree_base_path
         .as_deref()
         .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
-    store.add_workspace(&repo_b_str).expect("add second");
-    let selected = store.select_workspace(&repo_a_str).expect("select");
+    store
+        .add_workspace(&workspace_b_id, &workspace_b_name, &repo_b_str)
+        .expect("add second");
+    let selected = store.select_workspace(&workspace_a_id).expect("select");
     assert!(selected.is_active);
-    assert_eq!(selected.path, repo_a_canonical);
+    assert_eq!(selected.workspace_id, workspace_a_id);
+    assert_eq!(selected.repo_path, repo_a_canonical);
 
     let updated = store
         .update_repo_config(
-            &repo_a_str,
+            &workspace_a_id,
             RepoConfig {
+                workspace_id: workspace_a_id.clone(),
+                workspace_name: workspace_a_name.clone(),
+                repo_path: repo_a_canonical.clone(),
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(worktrees_path.clone()),
                 branch_prefix: "duck".to_string(),
@@ -75,19 +83,19 @@ fn workspace_add_select_and_update_persist_state() {
 
     let workspaces = store.list_workspaces().expect("list workspaces");
     assert_eq!(workspaces.len(), 2);
-    // Paths should be in canonical form
-    assert_eq!(workspaces[0].path, repo_a_canonical);
-    assert!(workspaces[0].is_active);
+    assert!(workspaces.iter().any(|workspace| {
+        workspace.workspace_id == workspace_a_id && workspace.repo_path == repo_a_canonical
+    }));
 
     let loaded = store.load().expect("load final");
     assert_eq!(
-        loaded.recent_repos.first().map(String::as_str),
-        Some(repo_a_canonical.as_str())
+        loaded.recent_workspaces.first().map(String::as_str),
+        Some(workspace_a_id.as_str())
     );
     assert_eq!(
         loaded
-            .repos
-            .get(&repo_a_canonical)
+            .workspaces
+            .get(&workspace_a_id)
             .and_then(|entry| entry.worktree_base_path.as_deref()),
         Some(worktrees_path.as_str())
     );
@@ -100,15 +108,25 @@ fn add_workspace_rejects_missing_and_non_git_paths() {
     let store = harness.store();
     let root = harness.root();
     let missing = root.join("missing");
+    let (missing_workspace_id, missing_workspace_name, missing_repo_path) = (
+        "missing".to_string(),
+        "missing".to_string(),
+        missing.to_string_lossy().to_string(),
+    );
     let missing_error = store
-        .add_workspace(missing.to_string_lossy().as_ref())
+        .add_workspace(
+            &missing_workspace_id,
+            &missing_workspace_name,
+            &missing_repo_path,
+        )
         .expect_err("missing path should fail");
     assert!(missing_error.to_string().contains("does not exist"));
 
     let non_git = root.join("plain-folder");
     fs::create_dir_all(&non_git).expect("plain folder should be created");
+    let non_git_repo_path = non_git.to_string_lossy().to_string();
     let non_git_error = store
-        .add_workspace(non_git.to_string_lossy().as_ref())
+        .add_workspace("plain-folder", "plain-folder", &non_git_repo_path)
         .expect_err("non-git path should fail");
     assert!(non_git_error.to_string().contains("not a git repository"));
 }
@@ -120,37 +138,37 @@ fn select_and_repo_config_accessors_report_missing_entries() {
     let store = harness.store();
     let root = harness.root();
     let missing_repo = root.join("missing-repo");
-    let missing_repo_str = missing_repo.to_string_lossy().to_string();
+    let missing_workspace_id = "missing-repo".to_string();
 
     let select_error = store
-        .select_workspace(missing_repo_str.as_str())
+        .select_workspace(missing_workspace_id.as_str())
         .expect_err("missing workspace select should fail");
     assert!(select_error
         .to_string()
         .contains("Workspace not found in config"));
 
     let config_error = store
-        .repo_config(missing_repo_str.as_str())
+        .repo_config(missing_workspace_id.as_str())
         .expect_err("repo config should fail when missing");
     assert!(config_error
         .to_string()
-        .contains("Repository is not configured"));
+        .contains("Workspace is not configured"));
 
     let optional = store
-        .repo_config_optional(missing_repo_str.as_str())
+        .repo_config_optional(missing_workspace_id.as_str())
         .expect("optional lookup should succeed");
     assert!(optional.is_none());
 
     let trust_error = store
         .set_repo_trust_hooks(
-            missing_repo_str.as_str(),
+            missing_workspace_id.as_str(),
             true,
             Some("fingerprint".to_string()),
         )
         .expect_err("set trust should fail when repo missing");
     assert!(trust_error
         .to_string()
-        .contains("Repository is not configured"));
+        .contains("Workspace is not configured"));
 }
 
 #[test]
@@ -161,10 +179,10 @@ fn update_repo_config_rejects_unknown_workspace() {
     let root = harness.root();
     let repo = root.join("missing-repo");
     fake_git_workspace(&repo);
-    let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, _workspace_name, _repo_path) = workspace_identity(&repo);
 
     let error = store
-        .update_repo_config(repo_str.as_str(), RepoConfig::default())
+        .update_repo_config(workspace_id.as_str(), RepoConfig::default())
         .expect_err("unknown workspace should be rejected");
 
     assert!(error.to_string().contains("Workspace not found in config"));
@@ -182,16 +200,21 @@ fn explicit_worktree_override_does_not_require_home_for_workspace_records() {
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
     let override_path = root.join("custom-worktrees").to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     {
         let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
-        store.add_workspace(&repo_str).expect("add workspace");
+        store
+            .add_workspace(&workspace_id, &workspace_name, &repo_str)
+            .expect("add workspace");
     }
     let _home_guard = EnvVarGuard::set_os("HOME", OsString::from_vec(vec![0xFF]));
     let updated = store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_name,
+                repo_path,
                 worktree_base_path: Some(override_path.clone()),
                 ..RepoConfig::default()
             },
@@ -220,14 +243,19 @@ fn explicit_worktree_override_expands_home_shorthand_for_effective_path() {
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
-    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
 
     let updated = store
         .update_repo_config(
-            &repo_str,
+            &workspace_id,
             RepoConfig {
+                workspace_name,
+                repo_path,
                 worktree_base_path: Some("~/custom-worktrees".to_string()),
                 ..RepoConfig::default()
             },

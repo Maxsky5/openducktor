@@ -267,7 +267,19 @@ describe("use-agent-orchestrator-operations", () => {
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
       ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        trustedHooks: false,
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeFileCopies: [],
         promptOverrides: {},
+        agentDefaults: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
       theme: "light" as const,
@@ -283,7 +295,7 @@ describe("use-agent-orchestrator-operations", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
     host.runtimeList = async () => [];
@@ -652,6 +664,9 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -790,6 +805,9 @@ describe("use-agent-orchestrator-operations", () => {
         source: "active_build_run",
       });
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1066,6 +1084,9 @@ describe("use-agent-orchestrator-operations", () => {
 
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
         repoConfigDeferred.resolve({
+          workspaceId: "repo-a",
+          workspaceName: "Repo A",
+          repoPath: "/tmp/repo-a",
           defaultRuntimeKind: "opencode" as const,
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1134,6 +1155,9 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo-a",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1438,6 +1462,9 @@ describe("use-agent-orchestrator-operations", () => {
         return runningRunFixture;
       };
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -2235,6 +2262,9 @@ describe("use-agent-orchestrator-operations", () => {
           throw new Error("temporary repo config failure");
         }
         return {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/tmp/repo",
           defaultRuntimeKind: "opencode" as const,
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },

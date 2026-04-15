@@ -30,6 +30,9 @@ const createDeferred = <T,>() => {
 };
 
 const baseRepoConfig: RepoConfig = {
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",

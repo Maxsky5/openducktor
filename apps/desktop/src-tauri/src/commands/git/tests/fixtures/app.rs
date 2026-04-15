@@ -88,8 +88,14 @@ pub(crate) fn setup_command_git_fixture_with_summary(
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     if authorize_repo {
+        let workspace_id = "repo";
+        let workspace_name = "repo";
         config_store
-            .add_workspace(repo.to_string_lossy().as_ref())
+            .add_workspace(
+                workspace_id,
+                workspace_name,
+                repo.to_string_lossy().as_ref(),
+            )
             .expect("workspace should be allowlisted");
     }
 

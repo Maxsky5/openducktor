@@ -29,7 +29,7 @@ use host_domain::{
     RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
     RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RunEvent, RunState,
     RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -75,6 +75,89 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         updated_at: "2026-01-01T00:00:00Z".to_string(),
         created_at: "2026-01-01T00:00:00Z".to_string(),
     }
+}
+
+pub(crate) fn repo_config_for_workspace(
+    workspace: &WorkspaceRecord,
+    mut repo_config: RepoConfig,
+) -> RepoConfig {
+    repo_config.workspace_id = workspace.workspace_id.clone();
+    repo_config.workspace_name = workspace.workspace_name.clone();
+    repo_config.repo_path = workspace.repo_path.clone();
+    repo_config
+}
+
+pub(crate) fn add_workspace_with_repo_config(
+    service: &AppService,
+    repo_path: &str,
+    repo_config: RepoConfig,
+) -> Result<WorkspaceRecord> {
+    let workspace = service.workspace_add(repo_path)?;
+    service.workspace_update_repo_config(
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(&workspace, repo_config),
+    )?;
+    Ok(workspace)
+}
+
+pub(crate) fn workspace_for_repo_path(
+    service: &AppService,
+    repo_path: &str,
+) -> Result<WorkspaceRecord> {
+    service
+        .config_store
+        .find_workspace_by_repo_path(repo_path)?
+        .ok_or_else(|| anyhow!("Workspace is not configured in {repo_path}"))
+}
+
+pub(crate) fn workspace_id_for_repo_path(service: &AppService, repo_path: &str) -> Result<String> {
+    Ok(workspace_for_repo_path(service, repo_path)?.workspace_id)
+}
+
+pub(crate) fn workspace_update_repo_config_by_repo_path(
+    service: &AppService,
+    repo_path: &str,
+    repo_config: RepoConfig,
+) -> Result<WorkspaceRecord> {
+    let workspace = workspace_for_repo_path(service, repo_path)?;
+    service.workspace_update_repo_config(
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(&workspace, repo_config),
+    )
+}
+
+pub(crate) fn workspace_get_repo_config_by_repo_path(
+    service: &AppService,
+    repo_path: &str,
+) -> Result<RepoConfig> {
+    let workspace_id = workspace_id_for_repo_path(service, repo_path)?;
+    service.workspace_get_repo_config(workspace_id.as_str())
+}
+
+pub(crate) fn workspace_select_by_repo_path(
+    service: &AppService,
+    repo_path: &str,
+) -> Result<WorkspaceRecord> {
+    let workspace_id = workspace_id_for_repo_path(service, repo_path)?;
+    service.workspace_select(workspace_id.as_str())
+}
+
+pub(crate) fn workspace_persist_trusted_hooks_by_repo_path(
+    service: &AppService,
+    repo_path: &str,
+    trusted: bool,
+    trusted_fingerprint: Option<&str>,
+) -> Result<WorkspaceRecord> {
+    let workspace_id = workspace_id_for_repo_path(service, repo_path)?;
+    service.workspace_persist_trusted_hooks(workspace_id.as_str(), trusted, trusted_fingerprint)
+}
+
+pub(crate) fn workspace_get_repo_config_optional_by_repo_path(
+    service: &AppService,
+    repo_path: &str,
+) -> Result<Option<RepoConfig>> {
+    let workspace_id = workspace_id_for_repo_path(service, repo_path)?;
+    service.workspace_get_repo_config_optional(workspace_id.as_str())
 }
 
 pub(crate) fn write_private_file(path: &Path, contents: &str) -> Result<()> {

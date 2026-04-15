@@ -1,12 +1,13 @@
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import { toRepositorySelectorOptions } from "./repository-selector-model";
 
 type RepositorySelectorProps = {
-  repoPaths: string[];
+  workspaces: WorkspaceRecord[];
   value: string;
-  onValueChange: (repoPath: string) => void;
+  onValueChange: (workspaceId: string) => void;
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
@@ -16,7 +17,7 @@ type RepositorySelectorProps = {
 };
 
 export function RepositorySelector({
-  repoPaths,
+  workspaces,
   value,
   onValueChange,
   disabled = false,
@@ -27,8 +28,8 @@ export function RepositorySelector({
   errorCountByPath,
 }: RepositorySelectorProps) {
   const options = useMemo(
-    () => toRepositorySelectorOptions(repoPaths, errorCountByPath),
-    [errorCountByPath, repoPaths],
+    () => toRepositorySelectorOptions(workspaces, errorCountByPath),
+    [errorCountByPath, workspaces],
   );
 
   if (options.length === 0) {

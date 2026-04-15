@@ -18,7 +18,9 @@ import {
 } from "./app-state-context-values";
 
 const workspace = (path: string, isActive = false): WorkspaceRecord => ({
-  path,
+  workspaceId: path.split("/").filter(Boolean).at(-1) ?? "repo",
+  workspaceName: path.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath: path,
   isActive,
   hasConfig: true,
   configuredWorktreeBasePath: null,
@@ -29,7 +31,7 @@ const workspace = (path: string, isActive = false): WorkspaceRecord => ({
 describe("app-state-context-values", () => {
   test("finds active workspace by path", () => {
     const workspaces = [workspace("/repo-a"), workspace("/repo-b", true)];
-    expect(findActiveWorkspace(workspaces, "/repo-b")?.path).toBe("/repo-b");
+    expect(findActiveWorkspace(workspaces, "/repo-b")?.repoPath).toBe("/repo-b");
     expect(findActiveWorkspace(workspaces, "/missing")).toBeNull();
     expect(findActiveWorkspace(workspaces, null)).toBeNull();
   });
@@ -75,7 +77,7 @@ describe("app-state-context-values", () => {
         autopilot: {
           rules: [],
         },
-        repos: {},
+        workspaces: {},
         globalPromptOverrides: {},
       }),
       detectGithubRepository: async () => null,
@@ -83,7 +85,7 @@ describe("app-state-context-values", () => {
       saveSettingsSnapshot: async () => {},
     });
 
-    expect(value.activeWorkspace?.path).toBe("/repo-a");
+    expect(value.activeWorkspace?.repoPath).toBe("/repo-a");
   });
 
   test("returns identity for other context builders", () => {

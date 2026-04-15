@@ -87,17 +87,18 @@ impl AppService {
         let repo_key_filter = repo_path
             .map(|path| self.resolve_authorized_repo_path(path))
             .transpose()?;
-        let allowlisted_repo_keys = if repo_key_filter.is_none() && self.enforce_repo_allowlist {
-            Some(
-                self.config_store
-                    .list_workspaces()?
-                    .into_iter()
-                    .map(|workspace| workspace.path)
-                    .collect::<HashSet<_>>(),
-            )
-        } else {
-            None
-        };
+        let allowlisted_repo_keys: Option<HashSet<String>> =
+            if repo_key_filter.is_none() && self.enforce_repo_allowlist {
+                Some(
+                    self.config_store
+                        .list_workspaces()?
+                        .into_iter()
+                        .map(|workspace| Self::repo_key(workspace.repo_path.as_str()))
+                        .collect::<HashSet<_>>(),
+                )
+            } else {
+                None
+            };
         let runs = self
             .runs
             .lock()

@@ -1,16 +1,16 @@
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { workspaceNameFromPath } from "@/lib/workspace-label";
 
 export const toRepositorySelectorOptions = (
-  repoPaths: string[],
+  workspaces: WorkspaceRecord[],
   errorCountByPath: Partial<Record<string, number>> = {},
 ): ComboboxOption[] => {
-  return repoPaths.map((repoPath) => {
-    const repoErrorCount = errorCountByPath[repoPath] ?? 0;
+  return workspaces.map((workspace) => {
+    const repoErrorCount = errorCountByPath[workspace.repoPath] ?? 0;
     return {
-      value: repoPath,
-      label: workspaceNameFromPath(repoPath),
-      searchKeywords: repoPath.split("/").filter(Boolean),
+      value: workspace.workspaceId,
+      label: workspace.workspaceName,
+      searchKeywords: [workspace.workspaceName, ...workspace.repoPath.split("/").filter(Boolean)],
       ...(repoErrorCount > 0
         ? {
             accentColor: "hsl(var(--destructive))",

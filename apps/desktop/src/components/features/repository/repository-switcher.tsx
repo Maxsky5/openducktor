@@ -10,21 +10,24 @@ type RepositorySwitcherProps = {
 export function RepositorySwitcher({ className, triggerClassName }: RepositorySwitcherProps = {}) {
   const { workspaces, activeRepo, selectWorkspace, isSwitchingWorkspace } = useWorkspaceState();
 
-  const repoPaths = useMemo(() => workspaces.map((workspace) => workspace.path), [workspaces]);
+  const activeWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.repoPath === activeRepo) ?? null,
+    [activeRepo, workspaces],
+  );
 
-  if (repoPaths.length === 0) {
+  if (workspaces.length === 0) {
     return null;
   }
 
-  const selectedValue = activeRepo ?? repoPaths[0] ?? "";
+  const selectedValue = activeWorkspace?.workspaceId ?? workspaces[0]?.workspaceId ?? "";
 
   return (
     <RepositorySelector
-      repoPaths={repoPaths}
+      workspaces={workspaces}
       value={selectedValue}
       disabled={isSwitchingWorkspace}
       onValueChange={(value) => {
-        if (!value || value === activeRepo) {
+        if (!value || value === activeWorkspace?.workspaceId) {
           return;
         }
         void selectWorkspace(value).catch(() => {

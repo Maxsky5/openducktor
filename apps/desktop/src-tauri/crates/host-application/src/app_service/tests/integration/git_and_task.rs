@@ -27,10 +27,10 @@ use crate::app_service::opencode_runtime::test_support::{
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_store, create_failing_opencode,
-    create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
+    add_workspace_with_repo_config, build_service_with_git_state, build_service_with_store,
+    create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
+    empty_patch, init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
+    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
     wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
     write_executable_script, write_private_file, FakeTaskStore, GitCall, TaskStoreState,
 };
@@ -329,8 +329,8 @@ fn git_create_worktree_copies_configured_files() -> Result<()> {
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let service = AppService::new(task_store, config_store);
     let repo_path = repo.to_string_lossy().to_string();
-    service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    let _workspace = add_workspace_with_repo_config(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -348,6 +348,7 @@ fn git_create_worktree_copies_configured_files() -> Result<()> {
             worktree_file_copies: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -384,8 +385,8 @@ fn git_create_worktree_cleans_up_when_configured_file_copy_fails() -> Result<()>
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let service = AppService::new(task_store, config_store);
     let repo_path = repo.to_string_lossy().to_string();
-    service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    let _workspace = add_workspace_with_repo_config(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -403,6 +404,7 @@ fn git_create_worktree_cleans_up_when_configured_file_copy_fails() -> Result<()>
             worktree_file_copies: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 

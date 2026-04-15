@@ -8,6 +8,9 @@ import { RepositoryConfigurationSection } from "./settings-repository-configurat
 enableReactActEnvironment();
 
 const baseRepoConfig: RepoConfig = {
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
