@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub(crate) const OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH: &str = "runtime/opencode-processes.json";
@@ -17,6 +18,8 @@ pub(crate) const OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH: &str = "runtime/openco
 #[derive(Clone, Default)]
 pub(crate) struct OpenCodeProcessTracker {
     tracked_processes: Arc<Mutex<HashMap<u32, usize>>>,
+    termination_gate: Arc<Mutex<()>>,
+    terminating: Arc<AtomicBool>,
 }
 
 impl OpenCodeProcessTracker {
@@ -26,6 +29,13 @@ impl OpenCodeProcessTracker {
         instance_pid: u32,
         pid: u32,
     ) -> Result<RuntimeProcessGuard> {
+        let _termination_gate = self
+            .termination_gate
+            .lock()
+            .map_err(|_| anyhow!("OpenCode process tracker shutdown gate lock poisoned"))?;
+        if self.terminating.load(Ordering::Acquire) {
+            return Err(anyhow!("OpenCode process tracker is shutting down"));
+        }
         track_pending_opencode_process(&self.tracked_processes, registry_path, instance_pid, pid)
     }
 
@@ -34,6 +44,13 @@ impl OpenCodeProcessTracker {
         registry_path: &Path,
         instance_pid: u32,
     ) -> Result<()> {
+        {
+            let _termination_gate = self
+                .termination_gate
+                .lock()
+                .map_err(|_| anyhow!("OpenCode process tracker shutdown gate lock poisoned"))?;
+            self.terminating.store(true, Ordering::Release);
+        }
         terminate_pending_opencode_processes(&self.tracked_processes, registry_path, instance_pid)
     }
 }
@@ -435,5 +452,23 @@ mod tests {
             .join(".openducktor-local")
             .join(PathBuf::from(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH));
         assert_eq!(registry_path, expected);
+    }
+
+    #[test]
+    fn open_code_process_tracker_rejects_new_tracks_after_termination_begins() -> Result<()> {
+        let tracker = OpenCodeProcessTracker::default();
+        let root = unique_temp_path("process-tracker-shutdown-gate");
+        let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
+
+        tracker.terminate_tracked_processes(registry_path.as_path(), 42)?;
+
+        let error = tracker
+            .track_process(registry_path.as_path(), 42, 99)
+            .err()
+            .expect("tracker should reject new processes after shutdown begins");
+        assert!(error.to_string().contains("shutting down"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
     }
 }

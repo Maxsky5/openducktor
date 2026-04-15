@@ -15,12 +15,6 @@ pub(crate) use process_lifecycle::{
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
     wait_for_process_exit_by_pid,
 };
-#[cfg(test)]
-pub(crate) use process_registry::{
-    opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
-    OpenCodeProcessTracker,
-};
-#[cfg(not(test))]
 pub(crate) use process_registry::{
     opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
     OpenCodeProcessTracker,
