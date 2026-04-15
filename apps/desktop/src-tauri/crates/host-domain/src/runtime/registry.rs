@@ -1,21 +1,9 @@
+use super::RuntimeRoute;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, LazyLock};
-use url::Url;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunState {
-    Starting,
-    Running,
-    Blocked,
-    AwaitingDoneConfirmation,
-    Completed,
-    Failed,
-    Stopped,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(transparent)]
@@ -45,38 +33,6 @@ impl From<String> for AgentRuntimeKind {
     fn from(value: String) -> Self {
         Self::new(value)
     }
-}
-
-// Keep this list in sync with `agentToolNameValues` in
-// `packages/contracts/src/agent-workflow-schemas.ts`.
-const ODT_WORKFLOW_TOOL_NAMES: [&str; 10] = [
-    "odt_read_task",
-    "odt_read_task_documents",
-    "odt_set_spec",
-    "odt_set_plan",
-    "odt_build_blocked",
-    "odt_build_resumed",
-    "odt_build_completed",
-    "odt_set_pull_request",
-    "odt_qa_approved",
-    "odt_qa_rejected",
-];
-
-const OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES: [&str; 2] = ["openducktor_", "functions.openducktor_"];
-
-fn opencode_workflow_tool_aliases_by_canonical() -> BTreeMap<String, Vec<String>> {
-    ODT_WORKFLOW_TOOL_NAMES
-        .iter()
-        .map(|tool_name| {
-            (
-                (*tool_name).to_string(),
-                OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES
-                    .iter()
-                    .map(|prefix| format!("{prefix}{tool_name}"))
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect()
 }
 
 impl fmt::Display for AgentRuntimeKind {
@@ -382,6 +338,38 @@ impl RuntimeRegistry {
     }
 }
 
+// Keep this list in sync with `agentToolNameValues` in
+// `packages/contracts/src/agent-workflow-schemas.ts`.
+const ODT_WORKFLOW_TOOL_NAMES: [&str; 10] = [
+    "odt_read_task",
+    "odt_read_task_documents",
+    "odt_set_spec",
+    "odt_set_plan",
+    "odt_build_blocked",
+    "odt_build_resumed",
+    "odt_build_completed",
+    "odt_set_pull_request",
+    "odt_qa_approved",
+    "odt_qa_rejected",
+];
+
+const OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES: [&str; 2] = ["openducktor_", "functions.openducktor_"];
+
+fn opencode_workflow_tool_aliases_by_canonical() -> BTreeMap<String, Vec<String>> {
+    ODT_WORKFLOW_TOOL_NAMES
+        .iter()
+        .map(|tool_name| {
+            (
+                (*tool_name).to_string(),
+                OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES
+                    .iter()
+                    .map(|prefix| format!("{prefix}{tool_name}"))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect()
+}
+
 fn local_http_endpoint_for_port(port: u16) -> String {
     let mut endpoint = String::new();
     endpoint.push_str("http://127.0.0.1:");
@@ -449,324 +437,12 @@ pub fn default_runtime_kind() -> AgentRuntimeKind {
     builtin_runtime_registry().default_kind().clone()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeRoute {
-    LocalHttp { endpoint: String },
-    Stdio,
-}
-
-impl RuntimeRoute {
-    pub fn local_http_port(&self) -> Option<u16> {
-        match self {
-            Self::LocalHttp { endpoint } => Url::parse(endpoint).ok()?.port(),
-            Self::Stdio => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeRole {
-    Workspace,
-    Spec,
-    Planner,
-    Build,
-    Qa,
-}
-
-impl RuntimeRole {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Workspace => "workspace",
-            Self::Spec => "spec",
-            Self::Planner => "planner",
-            Self::Build => "build",
-            Self::Qa => "qa",
-        }
-    }
-}
-
-impl fmt::Display for RuntimeRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum BuildContinuationTargetSource {
-    ActiveBuildRun,
-    BuilderSession,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct BuildContinuationTarget {
-    pub working_directory: String,
-    pub source: BuildContinuationTargetSource,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunSummary {
-    pub run_id: String,
-    pub runtime_kind: AgentRuntimeKind,
-    pub runtime_route: RuntimeRoute,
-    pub repo_path: String,
-    pub task_id: String,
-    pub branch: String,
-    pub worktree_path: String,
-    pub port: Option<u16>,
-    pub state: RunState,
-    pub last_message: Option<String>,
-    pub started_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeInstanceSummary {
-    pub kind: AgentRuntimeKind,
-    pub runtime_id: String,
-    pub repo_path: String,
-    pub task_id: Option<String>,
-    pub role: RuntimeRole,
-    pub working_directory: String,
-    pub runtime_route: RuntimeRoute,
-    pub started_at: String,
-    pub descriptor: RuntimeDescriptor,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RepoRuntimeStartupStage {
-    Idle,
-    StartupRequested,
-    WaitingForRuntime,
-    RuntimeReady,
-    StartupFailed,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RepoRuntimeStartupFailureKind {
-    Timeout,
-    Error,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoRuntimeStartupStatus {
-    pub runtime_kind: AgentRuntimeKind,
-    pub repo_path: String,
-    pub stage: RepoRuntimeStartupStage,
-    pub runtime: Option<RuntimeInstanceSummary>,
-    pub started_at: Option<String>,
-    pub updated_at: String,
-    pub elapsed_ms: Option<u64>,
-    pub attempts: Option<u32>,
-    pub failure_kind: Option<RepoRuntimeStartupFailureKind>,
-    pub failure_reason: Option<String>,
-    pub detail: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RepoRuntimeHealthState {
-    Idle,
-    Checking,
-    Ready,
-    Error,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RepoRuntimeHealthObservation {
-    ObservedExistingRuntime,
-    ObservingExistingStartup,
-    StartedByDiagnostics,
-    RestartedForMcp,
-    RestartSkippedActiveRun,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoRuntimeHealthRuntime {
-    pub status: RepoRuntimeHealthState,
-    pub stage: RepoRuntimeStartupStage,
-    pub observation: Option<RepoRuntimeHealthObservation>,
-    pub instance: Option<RuntimeInstanceSummary>,
-    pub started_at: Option<String>,
-    pub updated_at: String,
-    pub elapsed_ms: Option<u64>,
-    pub attempts: Option<u32>,
-    pub detail: Option<String>,
-    pub failure_kind: Option<RepoRuntimeStartupFailureKind>,
-    pub failure_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RepoRuntimeMcpStatus {
-    WaitingForRuntime,
-    Checking,
-    Reconnecting,
-    Connected,
-    Error,
-    Unsupported,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoRuntimeHealthMcp {
-    pub supported: bool,
-    pub status: RepoRuntimeMcpStatus,
-    pub server_name: String,
-    pub server_status: Option<String>,
-    pub tool_ids: Vec<String>,
-    pub detail: Option<String>,
-    pub failure_kind: Option<RepoRuntimeStartupFailureKind>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoRuntimeHealthCheck {
-    pub status: RepoRuntimeHealthState,
-    pub checked_at: String,
-    pub runtime: RepoRuntimeHealthRuntime,
-    pub mcp: Option<RepoRuntimeHealthMcp>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DevServerScriptStatus {
-    Stopped,
-    Starting,
-    Running,
-    Stopping,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct DevServerTerminalChunk {
-    pub script_id: String,
-    pub sequence: u64,
-    pub data: String,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct DevServerScriptState {
-    pub script_id: String,
-    pub name: String,
-    pub command: String,
-    pub status: DevServerScriptStatus,
-    pub pid: Option<u32>,
-    pub started_at: Option<String>,
-    pub exit_code: Option<i32>,
-    pub last_error: Option<String>,
-    #[serde(default)]
-    pub buffered_terminal_chunks: Vec<DevServerTerminalChunk>,
-    #[serde(skip)]
-    pub next_terminal_sequence: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct DevServerGroupState {
-    pub repo_path: String,
-    pub task_id: String,
-    pub worktree_path: Option<String>,
-    #[serde(default)]
-    pub scripts: Vec<DevServerScriptState>,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[serde(rename_all_fields = "camelCase")]
-pub enum DevServerEvent {
-    Snapshot {
-        state: DevServerGroupState,
-    },
-    ScriptStatusChanged {
-        repo_path: String,
-        task_id: String,
-        script: DevServerScriptState,
-        updated_at: String,
-    },
-    TerminalChunk {
-        repo_path: String,
-        task_id: String,
-        terminal_chunk: DevServerTerminalChunk,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub enum RunEvent {
-    RunStarted {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-    AgentThought {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-    ToolExecution {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-    PermissionRequired {
-        run_id: String,
-        message: String,
-        command: Option<String>,
-        timestamp: String,
-    },
-    PostHookStarted {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-    PostHookFailed {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-    ReadyForManualDoneConfirmation {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-    RunFinished {
-        run_id: String,
-        message: String,
-        timestamp: String,
-        success: bool,
-    },
-    Error {
-        run_id: String,
-        message: String,
-        timestamp: String,
-    },
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        local_http_route_for_port, AgentRuntimeKind, DevServerEvent, DevServerGroupState,
-        DevServerScriptState, DevServerScriptStatus, DevServerTerminalChunk, RuntimeCapabilities,
-        RuntimeDefinition, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRegistry,
-        RuntimeRoute, RuntimeStartupReadinessConfig, RuntimeSupportedScope,
-        REQUIRED_RUNTIME_SUPPORTED_SCOPES,
+        local_http_route_for_port, AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition,
+        RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
+        RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
     use anyhow::Result;
     use std::collections::BTreeMap;
@@ -942,93 +618,5 @@ mod tests {
             definitions[1].route_for_port(4311).local_http_port(),
             Some(4311)
         );
-    }
-
-    #[test]
-    fn dev_server_event_serializes_with_expected_shape() {
-        let event = DevServerEvent::TerminalChunk {
-            repo_path: "/repo".to_string(),
-            task_id: "task-1".to_string(),
-            terminal_chunk: DevServerTerminalChunk {
-                script_id: "server-1".to_string(),
-                sequence: 3,
-                data: "\u{1b}[32mready\u{1b}[0m\r\n".to_string(),
-                timestamp: "2026-03-19T00:00:00Z".to_string(),
-            },
-        };
-
-        let json = serde_json::to_value(event).expect("event should serialize");
-        assert_eq!(json["type"], "terminal_chunk");
-        assert_eq!(json["repoPath"], "/repo");
-        assert_eq!(json["taskId"], "task-1");
-        assert_eq!(json["terminalChunk"]["sequence"], 3);
-        assert_eq!(
-            json["terminalChunk"]["data"],
-            "\u{1b}[32mready\u{1b}[0m\r\n"
-        );
-    }
-
-    #[test]
-    fn dev_server_group_state_supports_buffered_terminal_chunks() {
-        let state = DevServerGroupState {
-            repo_path: "/repo".to_string(),
-            task_id: "task-1".to_string(),
-            worktree_path: Some("/repo/.worktrees/task-1".to_string()),
-            scripts: vec![DevServerScriptState {
-                script_id: "server-1".to_string(),
-                name: "Backend".to_string(),
-                command: "bun run dev".to_string(),
-                status: DevServerScriptStatus::Running,
-                pid: Some(1234),
-                started_at: Some("2026-03-19T00:00:00Z".to_string()),
-                exit_code: None,
-                last_error: None,
-                buffered_terminal_chunks: vec![DevServerTerminalChunk {
-                    script_id: "server-1".to_string(),
-                    sequence: 1,
-                    data: "started\r\n".to_string(),
-                    timestamp: "2026-03-19T00:00:00Z".to_string(),
-                }],
-                next_terminal_sequence: 2,
-            }],
-            updated_at: "2026-03-19T00:00:00Z".to_string(),
-        };
-
-        let json = serde_json::to_value(state).expect("state should serialize");
-        assert_eq!(
-            json["scripts"][0]["bufferedTerminalChunks"][0]["data"],
-            "started\r\n"
-        );
-    }
-
-    #[test]
-    fn local_http_route_port_supports_paths() {
-        let route = RuntimeRoute::LocalHttp {
-            endpoint: "http://127.0.0.1:4321/api/runtime".to_string(),
-        };
-
-        assert_eq!(route.local_http_port(), Some(4321));
-    }
-
-    #[test]
-    fn local_http_route_port_rejects_invalid_endpoints() {
-        let route = RuntimeRoute::LocalHttp {
-            endpoint: "127.0.0.1:4321".to_string(),
-        };
-
-        assert_eq!(route.local_http_port(), None);
-    }
-
-    #[test]
-    fn stdio_route_serializes_without_endpoint_fields() {
-        let json = serde_json::to_value(RuntimeRoute::Stdio).expect("route should serialize");
-
-        assert_eq!(json["type"], "stdio");
-        assert!(json.get("endpoint").is_none());
-    }
-
-    #[test]
-    fn stdio_route_has_no_http_port() {
-        assert_eq!(RuntimeRoute::Stdio.local_http_port(), None);
     }
 }
