@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
   type TaskCard,
 } from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import {
+  createLiveAgentSessionSnapshotFixture,
+  createLocalHttpRuntimeConnection,
+} from "@/state/operations/agent-orchestrator/test-utils";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { host } from "../../shared/host";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
+import { createRuntimeResolutionPlannerStage } from "./load-sessions-stages";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
 
 const createDeferred = <T>() => {
@@ -238,6 +244,143 @@ describe("repo-session-hydration-service", () => {
       })?.externalSessionId,
     ).toBe("external-1");
     expect(reconcileCalls.sort()).toEqual(["task-1", "task-2"]);
+    service.dispose();
+  });
+
+  test("reconcile preloads live snapshots for later reattach without rescanning", async () => {
+    const liveSnapshot = createLiveAgentSessionSnapshotFixture({
+      title: "Builder Session",
+      workingDirectory: worktreePath,
+    });
+    const runtimeConnection = createLocalHttpRuntimeConnection({
+      endpoint: "http://127.0.0.1:4555",
+      workingDirectory: worktreePath,
+    });
+    let preloadScanCalls = 0;
+    let reattachScanCalls = 0;
+    let reusedStoredSnapshot: string | null = null;
+    let reusedPreloadedSnapshot: string | null = null;
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [createRuntimeInstance()];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => {
+          preloadScanCalls += 1;
+          return [liveSnapshot];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({
+          taskId,
+          persistedRecords,
+          preloadedRuns,
+          preloadedRuntimeLists,
+          preloadedRuntimeConnectionsByKey,
+          preloadedLiveAgentSessionsByKey,
+          allowRuntimeEnsure,
+        }) => {
+          const record = persistedRecords?.[0] as AgentSessionRecord | undefined;
+          if (!record) {
+            throw new Error("Expected persisted session record for reattach verification");
+          }
+
+          const plannerOptions = {
+            ...(persistedRecords ? { persistedRecords } : {}),
+            ...(preloadedRuns ? { preloadedRuns } : {}),
+            ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
+            ...(preloadedRuntimeConnectionsByKey ? { preloadedRuntimeConnectionsByKey } : {}),
+            ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),
+            ...(allowRuntimeEnsure !== undefined ? { allowRuntimeEnsure } : {}),
+          };
+
+          const createPlanner = (store?: LiveAgentSessionStore) =>
+            createRuntimeResolutionPlannerStage({
+              intent: {
+                repoPath,
+                taskId,
+                mode: "reconcile_live",
+                requestedSessionId: null,
+                requestedHistoryKey: null,
+                shouldHydrateRequestedSession: false,
+                shouldReconcileLiveSessions: true,
+                historyPolicy: "none",
+              },
+              options: plannerOptions,
+              adapter: {
+                hasSession: () => false,
+                loadSessionHistory: async () => [],
+                resumeSession: async (input) => ({
+                  sessionId: input.sessionId,
+                  externalSessionId: input.externalSessionId,
+                  role: input.role,
+                  scenario: input.scenario,
+                  startedAt: "2026-02-22T08:00:00.000Z",
+                  status: "idle",
+                  runtimeKind: input.runtimeKind,
+                }),
+                listLiveAgentSessionSnapshots: async () => {
+                  reattachScanCalls += 1;
+                  return [];
+                },
+              },
+              sessionsRef: { current: {} },
+              ...(store ? { liveAgentSessionStore: store } : {}),
+              recordsToHydrate: persistedRecords ?? [],
+              historyHydrationSessionIds: new Set<string>(),
+            });
+
+          const storedPlanner = await createPlanner(liveAgentSessionStore);
+          const storedResolution = await storedPlanner.resolveHydrationRuntime(record);
+          if (!storedResolution.ok) {
+            throw new Error(`Expected runtime resolution to succeed for ${taskId}`);
+          }
+          reusedStoredSnapshot =
+            (await storedPlanner.loadLiveAgentSessionSnapshot(record, storedResolution))
+              ?.externalSessionId ?? null;
+
+          liveAgentSessionStore.clearRepo(repoPath);
+
+          const preloadedPlanner = await createPlanner();
+          const preloadedResolution = await preloadedPlanner.resolveHydrationRuntime(record);
+          if (!preloadedResolution.ok) {
+            throw new Error(`Expected preloaded runtime resolution to succeed for ${taskId}`);
+          }
+          reusedPreloadedSnapshot =
+            (await preloadedPlanner.loadLiveAgentSessionSnapshot(record, preloadedResolution))
+              ?.externalSessionId ?? null;
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskWithSession("task-1", liveSnapshot.externalSessionId)],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(preloadScanCalls).toBe(1);
+    expect(reattachScanCalls).toBe(0);
+    if (reusedStoredSnapshot === null || reusedPreloadedSnapshot === null) {
+      throw new Error("Expected stored and preloaded live snapshot reuse to succeed");
+    }
+    expect(reusedStoredSnapshot === liveSnapshot.externalSessionId).toBe(true);
+    expect(reusedPreloadedSnapshot === liveSnapshot.externalSessionId).toBe(true);
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection,
+        workingDirectory: worktreePath,
+        externalSessionId: liveSnapshot.externalSessionId,
+      }),
+    ).toBeNull();
     service.dispose();
   });
 

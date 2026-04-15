@@ -1,5 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import {
+  createLiveAgentSessionSnapshotFixture,
+  createLocalHttpRuntimeConnection,
+  createStdioRuntimeConnection,
+} from "../test-utils";
 import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
@@ -7,26 +12,14 @@ import {
   runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
 
-const localRuntimeConnection: AgentRuntimeConnection = {
-  type: "local_http",
+const localRuntimeConnection = createLocalHttpRuntimeConnection({
   endpoint: " http://127.0.0.1:4444 ",
-  workingDirectory: "/tmp/runtime-root",
-};
-
-const stdioRuntimeConnection: AgentRuntimeConnection = {
-  type: "stdio",
-  workingDirectory: "/tmp/runtime-root/",
-};
-
-const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot => ({
-  externalSessionId,
-  title: `Session ${externalSessionId}`,
-  workingDirectory: "/tmp/repo/worktree",
-  startedAt: "2026-02-22T08:00:00.000Z",
-  status: { type: "busy" },
-  pendingPermissions: [],
-  pendingQuestions: [],
 });
+
+const stdioRuntimeConnection = createStdioRuntimeConnection("/tmp/runtime-root/");
+
+const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot =>
+  createLiveAgentSessionSnapshotFixture({ externalSessionId });
 
 describe("live-agent-session-cache", () => {
   test("builds cache keys from transport identity and normalized working directories", () => {

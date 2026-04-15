@@ -1,31 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import {
+  createLiveAgentSessionSnapshotFixture,
+  createLocalHttpRuntimeConnection,
+  createStdioRuntimeConnection,
+} from "../test-utils";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 
-const localRuntimeConnection: AgentRuntimeConnection = {
-  type: "local_http",
-  endpoint: "http://127.0.0.1:4444",
-  workingDirectory: "/tmp/runtime-root",
-};
+const localRuntimeConnection = createLocalHttpRuntimeConnection();
 
-const stdioRuntimeConnection: AgentRuntimeConnection = {
-  type: "stdio",
-  workingDirectory: "/tmp/runtime-root/",
-};
+const stdioRuntimeConnection = createStdioRuntimeConnection("/tmp/runtime-root/");
 
 const createSnapshot = (
   externalSessionId: string,
   workingDirectory: string,
-): LiveAgentSessionSnapshot => ({
-  externalSessionId,
-  title: `Session ${externalSessionId}`,
-  workingDirectory,
-  startedAt: "2026-02-22T08:00:00.000Z",
-  status: { type: "busy" },
-  pendingPermissions: [],
-  pendingQuestions: [],
-});
+): LiveAgentSessionSnapshot =>
+  createLiveAgentSessionSnapshotFixture({ externalSessionId, workingDirectory });
 
 describe("live-agent-session-store", () => {
   test("returns matching snapshots for the same repo and lookup key", () => {
