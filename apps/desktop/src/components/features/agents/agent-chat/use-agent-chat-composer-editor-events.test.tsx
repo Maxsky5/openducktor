@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createTextSegment, type AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import { type AgentChatComposerDraft, createTextSegment } from "./agent-chat-composer-draft";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import type {
   ActiveTextSelection,

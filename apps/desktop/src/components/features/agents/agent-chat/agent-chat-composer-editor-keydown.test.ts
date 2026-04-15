@@ -1,12 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSlashCommand } from "@openducktor/core";
 import {
+  type AgentChatComposerDraft,
   createFileReferenceSegment,
   createTextSegment,
-  type AgentChatComposerDraft,
 } from "./agent-chat-composer-draft";
-import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
+import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import type { FileMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,

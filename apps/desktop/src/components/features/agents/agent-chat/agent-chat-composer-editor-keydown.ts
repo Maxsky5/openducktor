@@ -1,9 +1,9 @@
 import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
+  type AgentChatComposerDraft,
   applyComposerDraftEdit,
   draftHasMeaningfulContent,
-  type AgentChatComposerDraft,
 } from "./agent-chat-composer-draft";
 import type { FileMenuState, SlashMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {

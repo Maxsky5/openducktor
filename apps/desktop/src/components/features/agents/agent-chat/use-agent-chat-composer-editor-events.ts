@@ -1,20 +1,20 @@
 import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import {
+  type MutableRefObject,
   type ClipboardEvent as ReactClipboardEvent,
   type FocusEvent as ReactFocusEvent,
   type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type MutableRefObject,
   useCallback,
 } from "react";
 import { classifyAttachment } from "./agent-chat-attachments";
-import { type AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
+import type { AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
+import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
 import {
   getComposerContentRoot,
   replaceComposerSelectionWithText,
 } from "./agent-chat-composer-selection";
-import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
 import {
   AUTOCOMPLETE_NAVIGATION_KEYS,
   type FileMenuState,
