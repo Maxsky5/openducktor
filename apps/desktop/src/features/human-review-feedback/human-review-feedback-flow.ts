@@ -42,8 +42,11 @@ type PrepareHumanReviewFeedbackInput = {
 };
 
 type PrepareHumanReviewFeedbackResult =
-  | { kind: "ready"; state: HumanReviewFeedbackState }
-  | { kind: "pending_hydration"; pendingHydration: PendingHumanReviewHydration }
+  | {
+      kind: "ready";
+      state: HumanReviewFeedbackState;
+      pendingHydration: PendingHumanReviewHydration | null;
+    }
   | { kind: "failed" };
 
 type SubmitHumanReviewFeedbackInput = {
@@ -104,11 +107,13 @@ export const prepareHumanReviewFeedback = async ({
     return {
       kind: "ready",
       state: createState(builderSessions),
+      pendingHydration: null,
     };
   }
 
   return {
-    kind: "pending_hydration",
+    kind: "ready",
+    state: createState(builderSessions),
     pendingHydration: { taskId, baselineSessions },
   };
 };

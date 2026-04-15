@@ -1065,8 +1065,9 @@ describe("KanbanPage session start modal flow", () => {
     const [specSession] = currentSessionsFixture;
     expect(specSession).toBeDefined();
     currentSessionsFixture = specSession ? [specSession] : [];
+    const sessionsBeforeBootstrap = currentSessionsFixture;
     bootstrapTaskSessionsMock.mockImplementationOnce(async () => {
-      currentSessionsFixture = [...currentSessionsFixture];
+      currentSessionsFixture = sessionsBeforeBootstrap;
     });
     const renderer = await renderPage();
 
@@ -1080,6 +1081,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual([
       expect.objectContaining({ value: "new_session" }),
     ]);
+    expect(latestHumanReviewFeedbackModalModel?.open).toBe(true);
 
     await act(async () => {
       renderer.unmount();

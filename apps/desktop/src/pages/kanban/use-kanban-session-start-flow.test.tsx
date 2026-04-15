@@ -633,6 +633,32 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("human review opens feedback immediately in new-session mode when bootstrap keeps an empty session list", async () => {
+    const [task] = createBaseArgs().tasks;
+    expect(task).toBeDefined();
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      tasks: task ? [task] : [],
+      sessions: [],
+      bootstrapTaskSessions: mock(async () => {}),
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onHumanRequestChanges("TASK-1");
+    });
+
+    const feedbackModal = harness.getLatest().humanReviewFeedbackModal;
+    expect(feedbackModal).not.toBeNull();
+    expect(feedbackModal?.open).toBe(true);
+    expect(feedbackModal?.selectedTarget).toBe("new_session");
+    expect(feedbackModal?.targetOptions).toEqual([
+      expect.objectContaining({ value: "new_session" }),
+    ]);
+
+    await harness.unmount();
+  });
+
   test("ai review new-session feedback opens the shared start modal in fresh mode", async () => {
     const bootstrapTaskSessions = mock(async () => {});
     const harness = createHookHarness({

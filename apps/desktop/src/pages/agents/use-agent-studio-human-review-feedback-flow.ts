@@ -120,6 +120,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     if (isSubmittingHumanReviewFeedback) {
       return;
     }
+
+    setPendingHumanReviewHydration(null);
     setHumanReviewFeedbackState(null);
   }, [isSubmittingHumanReviewFeedback]);
 
@@ -168,12 +170,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
       });
 
       if (result.kind === "ready") {
-        setHumanReviewFeedbackState(result.state);
-        return;
-      }
-
-      if (result.kind === "pending_hydration") {
         setPendingHumanReviewHydration(result.pendingHydration);
+        setHumanReviewFeedbackState(result.state);
         return;
       }
 
@@ -192,9 +190,11 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         state: humanReviewFeedbackState,
         humanRequestChangesTask,
         dismissFeedbackModal: () => {
+          setPendingHumanReviewHydration(null);
           setHumanReviewFeedbackState(null);
         },
         startNewSession: async (request) => {
+          setPendingHumanReviewHydration(null);
           const workflow = await executeRequestedSessionStart(
             {
               taskId: request.taskId,

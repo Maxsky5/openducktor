@@ -305,6 +305,7 @@ export function useKanbanSessionStartFlow({
       return;
     }
 
+    setPendingHumanReviewHydration(null);
     setHumanReviewFeedbackState(null);
   }, [isSubmittingHumanReviewFeedback]);
 
@@ -470,12 +471,8 @@ export function useKanbanSessionStartFlow({
         });
 
         if (result.kind === "ready") {
-          setHumanReviewFeedbackState(result.state);
-          return;
-        }
-
-        if (result.kind === "pending_hydration") {
           setPendingHumanReviewHydration(result.pendingHydration);
+          setHumanReviewFeedbackState(result.state);
           return;
         }
 
@@ -496,9 +493,11 @@ export function useKanbanSessionStartFlow({
         state: humanReviewFeedbackState,
         humanRequestChangesTask,
         dismissFeedbackModal: () => {
+          setPendingHumanReviewHydration(null);
           setHumanReviewFeedbackState(null);
         },
         startNewSession: async (request) => {
+          setPendingHumanReviewHydration(null);
           setHumanReviewFeedbackState(null);
           void startSessionIntent({
             taskId: request.taskId,

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { toast } from "sonner";
 import type { SessionStartExistingSessionOption } from "@/features/session-start";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -57,7 +58,33 @@ describe("human-review-feedback-flow", () => {
     });
 
     expect(bootstrapTaskSessions).toHaveBeenCalledWith("TASK-1");
-    expect(result).toEqual({ kind: "ready", state });
+    expect(result).toEqual({ kind: "ready", state, pendingHydration: null });
+  });
+
+  test("prepareHumanReviewFeedback returns ready state with new-session default when no builder sessions exist", async () => {
+    const bootstrapTaskSessions = mock(async () => {});
+    const state = createState({
+      builderSessions: [],
+      selectedTarget: NEW_BUILDER_SESSION_TARGET,
+    });
+    const baselineSessions: AgentSessionSummary[] = [];
+
+    const result = await prepareHumanReviewFeedback({
+      taskId: "TASK-1",
+      baselineSessions,
+      bootstrapTaskSessions,
+      getBuilderSessions: () => [],
+      createState: () => state,
+    });
+
+    expect(result).toEqual({
+      kind: "ready",
+      state,
+      pendingHydration: {
+        taskId: "TASK-1",
+        baselineSessions,
+      },
+    });
   });
 
   test("prepareHumanReviewFeedback reports bootstrap failures with the canonical toast", async () => {
