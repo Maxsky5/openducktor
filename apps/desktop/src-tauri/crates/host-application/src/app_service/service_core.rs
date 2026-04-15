@@ -268,7 +268,7 @@ impl AppService {
             task_store,
             config_store,
             git_port,
-            AppRuntimeRegistry::builtin(),
+            AppRuntimeRegistry::builtin_for_service(),
             enforce_repo_allowlist,
         )
     }

@@ -1,11 +1,6 @@
 #![allow(unused_imports)]
 
 use super::build_orchestrator::{BuildResponseAction, CleanupMode};
-pub(crate) use super::opencode_runtime::{
-    read_opencode_process_registry, with_locked_opencode_process_registry,
-    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
-    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
-};
 use super::runtime_registry::AppRuntimeRegistry;
 use super::{
     allows_transition, build_opencode_config_content, build_opencode_startup_event_payload,

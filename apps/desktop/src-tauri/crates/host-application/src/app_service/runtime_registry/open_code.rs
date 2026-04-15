@@ -4,7 +4,7 @@ use super::health_http::{
 use super::AppRuntime;
 use crate::app_service::opencode_runtime::{
     opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
-    terminate_pending_opencode_processes, track_pending_opencode_process,
+    OpenCodeProcessTracker,
 };
 use crate::app_service::{
     read_opencode_version, require_local_http_endpoint, require_local_http_port,
@@ -21,13 +21,12 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Child;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::form_urlencoded;
 
 #[derive(Default)]
 pub(crate) struct OpenCodeRuntime {
-    tracked_processes: Arc<Mutex<HashMap<u32, usize>>>,
+    process_tracker: OpenCodeProcessTracker,
 }
 
 impl OpenCodeRuntime {
@@ -170,8 +169,7 @@ impl AppRuntime for OpenCodeRuntime {
     }
 
     fn track_process(&self, service: &AppService, child_id: u32) -> Result<RuntimeProcessGuard> {
-        track_pending_opencode_process(
-            &self.tracked_processes,
+        self.process_tracker.track_process(
             opencode_process_registry_path(&service.config_store).as_path(),
             service.instance_pid,
             child_id,
@@ -247,7 +245,7 @@ impl AppRuntime for OpenCodeRuntime {
                         Some(startup_policy),
                     ),
                     error.report(),
-                    error.reason,
+                    error.reason(),
                 ));
                 Err(anyhow!(error).context(input.startup_error_context.clone()))
             }
@@ -282,8 +280,7 @@ impl AppRuntime for OpenCodeRuntime {
     }
 
     fn terminate_tracked_processes(&self, service: &AppService) -> Result<()> {
-        terminate_pending_opencode_processes(
-            &self.tracked_processes,
+        self.process_tracker.terminate_tracked_processes(
             opencode_process_registry_path(&service.config_store).as_path(),
             service.instance_pid,
         )

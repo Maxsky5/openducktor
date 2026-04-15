@@ -183,7 +183,7 @@ impl AppRuntimeRegistry {
         })
     }
 
-    pub(crate) fn builtin() -> Self {
+    pub(crate) fn builtin_for_service() -> Self {
         AppRuntimeRegistry::new(
             vec![Arc::new(OpenCodeRuntime::default())],
             AgentRuntimeKind::opencode(),
@@ -216,5 +216,28 @@ impl AppRuntimeRegistry {
 
     pub(crate) fn runtime_definitions(&self) -> &RuntimeRegistry {
         &self.definitions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_for_service_creates_distinct_runtime_instances() {
+        let first = AppRuntimeRegistry::builtin_for_service();
+        let second = AppRuntimeRegistry::builtin_for_service();
+
+        let first_runtime = first
+            .runtime(&AgentRuntimeKind::opencode())
+            .expect("first runtime");
+        let second_runtime = second
+            .runtime(&AgentRuntimeKind::opencode())
+            .expect("second runtime");
+
+        assert!(
+            !Arc::ptr_eq(&first_runtime, &second_runtime),
+            "builtin runtime registries should create per-service runtime instances"
+        );
     }
 }

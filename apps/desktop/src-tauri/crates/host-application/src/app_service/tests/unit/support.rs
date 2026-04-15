@@ -37,8 +37,8 @@ pub(super) use crate::app_service::{
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    RuntimeProcessGuard, RuntimeSessionStatusProbeTarget, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload,
+    RuntimeProcessGuard, RuntimeSessionStatusProbeTarget, RuntimeStartupFailureReason,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
 };
 
 pub(super) fn init_git_repo(path: &std::path::Path) -> Result<()> {

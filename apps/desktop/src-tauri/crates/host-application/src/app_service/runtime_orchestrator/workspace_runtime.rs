@@ -108,12 +108,12 @@ impl AppService {
                     .find_map(|cause| cause.downcast_ref::<RuntimeStartupWaitFailure>());
                 let (failure_kind, failure_reason, attempts, elapsed_ms) = match startup_failure {
                     Some(failure) => (
-                        if failure.reason == "timeout" {
+                        if failure.reason().is_timeout() {
                             RepoRuntimeStartupFailureKind::Timeout
                         } else {
                             RepoRuntimeStartupFailureKind::Error
                         },
-                        failure.reason,
+                        failure.reason().as_str(),
                         Some(failure.report().attempts()),
                         Some(failure.report().startup_ms()),
                     ),

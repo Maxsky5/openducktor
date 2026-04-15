@@ -201,10 +201,7 @@ pub(crate) fn runtime_ensure_failure_kind(error: &anyhow::Error) -> Option<&'sta
     error.chain().find_map(|cause| {
         cause
             .downcast_ref::<host_application::RuntimeStartupWaitFailure>()
-            .map(|failure| match failure.reason {
-                "timeout" => "timeout",
-                _ => "error",
-            })
+            .map(|failure| if failure.reason().is_timeout() { "timeout" } else { "error" })
     })
 }
 

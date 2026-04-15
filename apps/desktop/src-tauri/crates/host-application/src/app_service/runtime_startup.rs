@@ -1,6 +1,35 @@
 use host_domain::RuntimeStartupReadinessConfig;
 use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeStartupFailureReason {
+    InvalidAddress,
+    ChildStateCheckFailed,
+    ChildExited,
+    Timeout,
+    Cancelled,
+    ProbeDisconnected,
+    StartupConfigInvalid,
+}
+
+impl RuntimeStartupFailureReason {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidAddress => "invalid_address",
+            Self::ChildStateCheckFailed => "child_state_check_failed",
+            Self::ChildExited => "child_exited",
+            Self::Timeout => "timeout",
+            Self::Cancelled => "cancelled",
+            Self::ProbeDisconnected => "probe_disconnected",
+            Self::StartupConfigInvalid => "startup_config_invalid",
+        }
+    }
+
+    pub const fn is_timeout(self) -> bool {
+        matches!(self, Self::Timeout)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeStartupReadinessPolicy {
     pub timeout: Duration,
@@ -82,13 +111,25 @@ impl RuntimeStartupWaitReport {
 
 #[derive(Debug, Clone)]
 pub struct RuntimeStartupWaitFailure {
-    pub port: u16,
-    pub reason: &'static str,
-    pub details: String,
+    port: u16,
+    reason: RuntimeStartupFailureReason,
+    details: String,
     report: RuntimeStartupWaitReport,
 }
 
 impl RuntimeStartupWaitFailure {
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn reason(&self) -> RuntimeStartupFailureReason {
+        self.reason
+    }
+
+    pub fn details(&self) -> &str {
+        self.details.as_str()
+    }
+
     pub(crate) fn report(&self) -> RuntimeStartupWaitReport {
         self.report
     }
@@ -99,7 +140,7 @@ impl std::fmt::Display for RuntimeStartupWaitFailure {
         write!(
             f,
             "Runtime startup probe failed reason={} port={} startupMs={} attempts={} details={}",
-            self.reason,
+            self.reason.as_str(),
             self.port,
             self.report.startup_ms(),
             self.report.attempts(),
@@ -118,7 +159,7 @@ pub(crate) fn startup_wait_report(started_at: Instant, attempts: u32) -> Runtime
 }
 
 pub(crate) fn startup_wait_failure(
-    reason: &'static str,
+    reason: RuntimeStartupFailureReason,
     port: u16,
     details: String,
     report: RuntimeStartupWaitReport,

@@ -50,7 +50,7 @@ pub use odt_mcp::{
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
     OdtTaskResult, OdtTaskSummary,
 };
-pub use runtime_startup::RuntimeStartupWaitFailure;
+pub use runtime_startup::{RuntimeStartupFailureReason, RuntimeStartupWaitFailure};
 pub(crate) use runtime_startup::{
     startup_wait_failure, startup_wait_report, RuntimeStartupReadinessPolicy,
     RuntimeStartupWaitReport,

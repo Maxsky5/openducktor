@@ -21,18 +21,21 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
+use crate::app_service::opencode_runtime::test_support::{
+    read_opencode_process_registry, with_locked_opencode_process_registry,
+    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
 #[cfg(not(unix))]
 use crate::app_service::test_support::remove_env_var;
 use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_route,
     create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
     empty_patch, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_session, make_task,
-    prepend_path, process_is_alive, read_opencode_process_registry, set_env_var,
-    set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    with_locked_opencode_process_registry, write_executable_script, write_private_file,
-    EnvVarGuard, FakeTaskStore, GitCall, OpencodeProcessRegistryInstance, TaskStoreState,
-    TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    prepend_path, process_is_alive, set_env_var, set_fake_opencode_and_bridge_binaries,
+    spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
+    wait_for_path_exists, wait_for_process_exit, write_executable_script, write_private_file,
+    EnvVarGuard, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,

@@ -263,7 +263,7 @@ fn wait_for_local_server_with_process_returns_early_when_child_exits() {
     )
     .expect_err("should report early process exit");
     assert!(error.to_string().contains("startup failed"));
-    assert_eq!(error.reason, "child_exited");
+    assert_eq!(error.reason(), RuntimeStartupFailureReason::ChildExited);
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn wait_for_local_server_with_process_times_out_when_child_stays_alive() {
     )
     .expect_err("should time out when child remains alive and port stays closed");
     terminate_child_process(&mut child);
-    assert_eq!(error.reason, "timeout");
+    assert_eq!(error.reason(), RuntimeStartupFailureReason::Timeout);
 }
 
 #[test]
@@ -330,7 +330,7 @@ fn wait_for_local_server_with_process_honors_total_timeout_budget_when_connect_t
 
         match result {
             Err(error) => {
-                assert_eq!(error.reason, "timeout");
+                assert_eq!(error.reason(), RuntimeStartupFailureReason::Timeout);
                 assert!(
                     elapsed < Duration::from_secs(2),
                     "startup wait should not exceed total budget window, elapsed={elapsed:?}"
@@ -375,5 +375,5 @@ fn wait_for_local_server_with_process_honors_cancellation_epoch() {
     )
     .expect_err("should stop waiting when cancellation epoch changes");
     terminate_child_process(&mut child);
-    assert_eq!(error.reason, "cancelled");
+    assert_eq!(error.reason(), RuntimeStartupFailureReason::Cancelled);
 }

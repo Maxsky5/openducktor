@@ -14,6 +14,30 @@ use std::sync::{Arc, Mutex};
 
 pub(crate) const OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH: &str = "runtime/opencode-processes.json";
 
+#[derive(Clone, Default)]
+pub(crate) struct OpenCodeProcessTracker {
+    tracked_processes: Arc<Mutex<HashMap<u32, usize>>>,
+}
+
+impl OpenCodeProcessTracker {
+    pub(crate) fn track_process(
+        &self,
+        registry_path: &Path,
+        instance_pid: u32,
+        pid: u32,
+    ) -> Result<RuntimeProcessGuard> {
+        track_pending_opencode_process(&self.tracked_processes, registry_path, instance_pid, pid)
+    }
+
+    pub(crate) fn terminate_tracked_processes(
+        &self,
+        registry_path: &Path,
+        instance_pid: u32,
+    ) -> Result<()> {
+        terminate_pending_opencode_processes(&self.tracked_processes, registry_path, instance_pid)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct OpencodeProcessRegistryInstance {
     pub(crate) parent_pid: u32,
@@ -72,6 +96,23 @@ impl Drop for TrackedOpencodeProcessGuard {
                 Ok(())
             },
         );
+    }
+}
+
+#[cfg(test)]
+impl TrackedOpencodeProcessGuard {
+    pub(crate) fn new_for_test(
+        tracked_processes: Arc<Mutex<HashMap<u32, usize>>>,
+        opencode_process_registry_path: PathBuf,
+        parent_pid: u32,
+        child_pid: u32,
+    ) -> Self {
+        Self {
+            tracked_opencode_processes: tracked_processes,
+            opencode_process_registry_path,
+            parent_pid,
+            child_pid,
+        }
     }
 }
 

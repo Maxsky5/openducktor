@@ -9,12 +9,14 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
+use crate::app_service::opencode_runtime::test_support::{
+    read_opencode_process_registry, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
 use crate::app_service::test_support::{
     build_service_with_store, builtin_opencode_runtime_descriptor, builtin_opencode_runtime_route,
     create_fake_opencode, init_git_repo, install_fake_dolt, lock_env, make_session, make_task,
-    read_opencode_process_registry, set_env_var, set_fake_opencode_and_bridge_binaries,
-    spawn_sleep_process, unique_temp_path, wait_for_path_exists, wait_for_process_exit,
-    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    set_env_var, set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
+    wait_for_path_exists, wait_for_process_exit,
 };
 use crate::app_service::{AgentRuntimeProcess, RunProcess};
 

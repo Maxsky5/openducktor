@@ -1,8 +1,8 @@
 use super::policy::StartupCancelEpoch;
 use super::probe_runtime::{LocalServerProbe, LocalServerProbeEvent, LocalServerProbeState};
 use crate::app_service::{
-    startup_wait_failure, startup_wait_report, RuntimeStartupReadinessPolicy,
-    RuntimeStartupWaitFailure, RuntimeStartupWaitReport,
+    startup_wait_failure, startup_wait_report, RuntimeStartupFailureReason,
+    RuntimeStartupReadinessPolicy, RuntimeStartupWaitFailure, RuntimeStartupWaitReport,
 };
 #[cfg(test)]
 use anyhow::{anyhow, Context, Result};
@@ -54,9 +54,9 @@ pub(crate) fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> 
             "{}",
             startup_wait_failure(
                 match state {
-                    LocalServerProbeState::TimedOut => "timeout",
-                    LocalServerProbeState::Cancelled => "cancelled",
-                    LocalServerProbeState::Ready => "ready",
+                    LocalServerProbeState::TimedOut => RuntimeStartupFailureReason::Timeout,
+                    LocalServerProbeState::Cancelled => RuntimeStartupFailureReason::Cancelled,
+                    LocalServerProbeState::Ready => unreachable!("ready state handled above"),
                 },
                 port,
                 format!("OpenCode runtime did not become reachable on 127.0.0.1:{port}"),
@@ -86,7 +86,7 @@ pub(crate) fn wait_for_local_server_with_process(
     let started_at = Instant::now();
     let address: SocketAddr = format!("127.0.0.1:{port}").parse().map_err(|error| {
         startup_wait_failure(
-            "invalid_address",
+            RuntimeStartupFailureReason::InvalidAddress,
             port,
             format!("Invalid localhost address: {error}"),
             startup_wait_report(started_at, 0),
@@ -100,7 +100,7 @@ pub(crate) fn wait_for_local_server_with_process(
     loop {
         if let Some(status) = child.try_wait().map_err(|error| {
             startup_wait_failure(
-                "child_state_check_failed",
+                RuntimeStartupFailureReason::ChildStateCheckFailed,
                 port,
                 format!("Failed checking OpenCode process state: {error}"),
                 startup_wait_report(started_at, probe.attempts()),
@@ -116,7 +116,7 @@ pub(crate) fn wait_for_local_server_with_process(
                 format!("process exited with status {status}")
             };
             return Err(startup_wait_failure(
-                "child_exited",
+                RuntimeStartupFailureReason::ChildExited,
                 port,
                 format!("OpenCode process exited before runtime became reachable: {details}"),
                 startup_wait_report(started_at, probe.attempts()),
@@ -133,7 +133,7 @@ pub(crate) fn wait_for_local_server_with_process(
                 report,
             }) => {
                 return Err(startup_wait_failure(
-                    "timeout",
+                    RuntimeStartupFailureReason::Timeout,
                     port,
                     format!("Timed out waiting for OpenCode runtime on 127.0.0.1:{port}"),
                     report,
@@ -144,7 +144,7 @@ pub(crate) fn wait_for_local_server_with_process(
                 report,
             }) => {
                 return Err(startup_wait_failure(
-                    "cancelled",
+                    RuntimeStartupFailureReason::Cancelled,
                     port,
                     "Startup cancelled while waiting for OpenCode runtime readiness".to_string(),
                     report,
@@ -157,7 +157,7 @@ pub(crate) fn wait_for_local_server_with_process(
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(startup_wait_failure(
-                    "probe_disconnected",
+                    RuntimeStartupFailureReason::ProbeDisconnected,
                     port,
                     "Startup probe channel disconnected before readiness result".to_string(),
                     startup_wait_report(started_at, probe.attempts()),
