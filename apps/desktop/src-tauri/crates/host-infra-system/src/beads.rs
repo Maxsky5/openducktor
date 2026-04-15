@@ -3,6 +3,7 @@ mod repo_paths;
 #[path = "beads/shared_dolt_server.rs"]
 mod shared_dolt_server;
 
+pub(crate) use repo_paths::adopt_legacy_workspace_namespace;
 pub use repo_paths::{
     compute_beads_database_name, compute_beads_database_name_for_workspace, compute_repo_id,
     compute_repo_slug, compute_workspace_repo_id, resolve_beads_root,

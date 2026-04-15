@@ -7,6 +7,7 @@ use super::persistence::{
     should_enforce_private_parent_permissions,
 };
 use super::types::{repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
+use crate::beads::adopt_legacy_workspace_namespace;
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{RuntimeRegistry, WorkspaceRecord};
@@ -426,12 +427,22 @@ pub(crate) fn touch_recent(recent: &mut Vec<String>, workspace_id: &str) {
     recent.truncate(20);
 }
 
-fn migrate_loaded_global_config(config: &mut GlobalConfig) {
+fn migrate_loaded_global_config(config: &mut GlobalConfig) -> Result<()> {
     for repo in config.workspaces.values_mut() {
         if let Ok(canonical_repo_path) = canonicalize_repo_path(&repo.repo_path) {
             repo.repo_path = canonical_repo_path;
         }
+
+        adopt_legacy_workspace_namespace(Path::new(&repo.repo_path), &repo.workspace_id)
+            .with_context(|| {
+                format!(
+                    "Failed adopting legacy durable namespace for workspace {} ({})",
+                    repo.workspace_id, repo.repo_path
+                )
+            })?;
     }
+
+    Ok(())
 }
 
 fn workspace_record(config: &GlobalConfig, workspace_id: &str) -> Result<WorkspaceRecord> {

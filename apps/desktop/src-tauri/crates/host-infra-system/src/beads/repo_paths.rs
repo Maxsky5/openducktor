@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fmt;
@@ -151,6 +152,54 @@ pub fn resolve_workspace_beads_paths(workspace_id: &str) -> Result<RepoBeadsPath
     })
 }
 
+pub(crate) fn adopt_legacy_workspace_namespace(repo_path: &Path, workspace_id: &str) -> Result<()> {
+    let legacy_paths = resolve_repo_beads_paths(repo_path)?;
+    let workspace_paths = resolve_workspace_beads_paths(workspace_id)?;
+    let legacy_worktree_dir = resolve_default_worktree_base_dir(repo_path)?;
+    let workspace_worktree_dir = resolve_default_worktree_base_dir_for_workspace(workspace_id)?;
+
+    ensure_adoption_target_available(
+        "Beads attachment root",
+        &legacy_paths.attachment_root,
+        &workspace_paths.attachment_root,
+    )?;
+    ensure_adoption_target_available(
+        "shared Dolt database directory",
+        &legacy_paths.live_database_dir,
+        &workspace_paths.live_database_dir,
+    )?;
+    ensure_adoption_target_available(
+        "default worktree directory",
+        &legacy_worktree_dir,
+        &workspace_worktree_dir,
+    )?;
+
+    let moved_attachment = adopt_directory_if_present(
+        "Beads attachment root",
+        &legacy_paths.attachment_root,
+        &workspace_paths.attachment_root,
+    )?;
+    let moved_database = adopt_directory_if_present(
+        "shared Dolt database directory",
+        &legacy_paths.live_database_dir,
+        &workspace_paths.live_database_dir,
+    )?;
+    adopt_directory_if_present(
+        "default worktree directory",
+        &legacy_worktree_dir,
+        &workspace_worktree_dir,
+    )?;
+
+    if moved_attachment || moved_database {
+        rewrite_attachment_metadata_database(
+            &workspace_paths.attachment_dir,
+            workspace_paths.database_name.as_str(),
+        )?;
+    }
+
+    Ok(())
+}
+
 pub fn resolve_default_worktree_base_dir(repo_path: &Path) -> Result<PathBuf> {
     resolve_repo_scoped_openducktor_dir(repo_path, "worktrees")
 }
@@ -176,6 +225,83 @@ fn resolve_repo_scoped_openducktor_dir(repo_path: &Path, namespace: &str) -> Res
     let base_dir = resolve_openducktor_base_dir()?;
     let repo_id = compute_repo_id(repo_path)?;
     Ok(base_dir.join(namespace).join(repo_id))
+}
+
+fn ensure_adoption_target_available(label: &str, source: &Path, target: &Path) -> Result<()> {
+    if source == target || !source.exists() || !target.exists() {
+        return Ok(());
+    }
+
+    Err(anyhow::anyhow!(
+        "Cannot adopt legacy {label}: both legacy source {} and workspace target {} exist",
+        source.display(),
+        target.display()
+    ))
+}
+
+fn adopt_directory_if_present(label: &str, source: &Path, target: &Path) -> Result<bool> {
+    if source == target || !source.exists() {
+        return Ok(false);
+    }
+
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "Failed creating parent directory for adopted {label} at {}",
+                parent.display()
+            )
+        })?;
+    }
+
+    fs::rename(source, target).with_context(|| {
+        format!(
+            "Failed adopting legacy {label} from {} to {}",
+            source.display(),
+            target.display()
+        )
+    })?;
+
+    Ok(true)
+}
+
+fn rewrite_attachment_metadata_database(beads_dir: &Path, database_name: &str) -> Result<()> {
+    let metadata_path = beads_dir.join("metadata.json");
+    if !metadata_path.exists() {
+        return Ok(());
+    }
+
+    let metadata = fs::read_to_string(&metadata_path).with_context(|| {
+        format!(
+            "Failed reading attachment metadata {}",
+            metadata_path.display()
+        )
+    })?;
+    let mut payload: Value = serde_json::from_str(&metadata).with_context(|| {
+        format!(
+            "Failed parsing attachment metadata {} while adopting legacy Beads namespace",
+            metadata_path.display()
+        )
+    })?;
+    let object = payload.as_object_mut().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Failed adopting legacy Beads namespace: attachment metadata {} is not a JSON object",
+            metadata_path.display()
+        )
+    })?;
+    object.insert(
+        "dolt_database".to_string(),
+        Value::String(database_name.to_string()),
+    );
+
+    fs::write(&metadata_path, serde_json::to_string(&payload)?).with_context(|| {
+        format!(
+            "Failed rewriting attachment metadata {} for adopted workspace database {}",
+            metadata_path.display(),
+            database_name
+        )
+    })?;
+
+    Ok(())
 }
 
 pub(crate) fn canonical_or_absolute(path: &Path) -> Result<PathBuf> {

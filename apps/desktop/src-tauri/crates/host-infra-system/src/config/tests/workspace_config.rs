@@ -1,7 +1,12 @@
 use super::{
     fake_git_workspace, lock_env, workspace_identity, EnvVarGuard, RepoConfig, TestStoreHarness,
 };
-use crate::GitTargetBranch;
+use crate::{
+    compute_beads_database_name, compute_beads_database_name_for_workspace,
+    resolve_repo_beads_attachment_dir, resolve_repo_live_database_dir,
+    resolve_workspace_beads_attachment_dir, resolve_workspace_live_database_dir, GitTargetBranch,
+};
+use serde_json::json;
 use std::ffi::OsString;
 use std::fs;
 #[cfg(unix)]
@@ -136,8 +141,6 @@ fn select_and_repo_config_accessors_report_missing_entries() {
     let _env_lock = lock_env();
     let harness = TestStoreHarness::new("workspace-missing-config");
     let store = harness.store();
-    let root = harness.root();
-    let missing_repo = root.join("missing-repo");
     let missing_workspace_id = "missing-repo".to_string();
 
     let select_error = store
@@ -182,7 +185,15 @@ fn update_repo_config_rejects_unknown_workspace() {
     let (workspace_id, _workspace_name, _repo_path) = workspace_identity(&repo);
 
     let error = store
-        .update_repo_config(workspace_id.as_str(), RepoConfig::default())
+        .update_repo_config(
+            workspace_id.as_str(),
+            RepoConfig {
+                workspace_id: workspace_id.clone(),
+                workspace_name: "Missing Repo".to_string(),
+                repo_path: repo.to_string_lossy().to_string(),
+                ..RepoConfig::default()
+            },
+        )
         .expect_err("unknown workspace should be rejected");
 
     assert!(error.to_string().contains("Workspace not found in config"));
@@ -270,4 +281,114 @@ fn explicit_worktree_override_expands_home_shorthand_for_effective_path() {
         updated.effective_worktree_base_path.as_deref(),
         Some(root.join("custom-worktrees").to_string_lossy().as_ref())
     );
+}
+
+#[test]
+fn load_adopts_legacy_beads_namespace_into_workspace_identity() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("workspace-adopt-legacy-beads");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    fake_git_workspace(&repo);
+
+    let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
+
+    let legacy_attachment_dir =
+        resolve_repo_beads_attachment_dir(repo.as_path()).expect("legacy attachment dir");
+    let legacy_live_database_dir =
+        resolve_repo_live_database_dir(repo.as_path()).expect("legacy live db dir");
+    fs::create_dir_all(&legacy_attachment_dir).expect("create legacy attachment dir");
+    fs::create_dir_all(&legacy_live_database_dir).expect("create legacy live db dir");
+    fs::write(
+        legacy_attachment_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": compute_beads_database_name(repo.as_path()).expect("legacy db name"),
+        })
+        .to_string(),
+    )
+    .expect("write legacy metadata");
+    fs::write(legacy_attachment_dir.join("task.json"), "legacy-task").expect("write marker");
+    fs::write(legacy_live_database_dir.join("db.txt"), "legacy-db").expect("write db marker");
+
+    let workspace_record = store
+        .list_workspaces()
+        .expect("list workspaces after adoption")
+        .into_iter()
+        .find(|workspace| workspace.workspace_id == workspace_id)
+        .expect("workspace should exist");
+
+    let workspace_attachment_dir =
+        resolve_workspace_beads_attachment_dir(&workspace_id).expect("workspace attachment dir");
+    let workspace_live_database_dir =
+        resolve_workspace_live_database_dir(&workspace_id).expect("workspace live db dir");
+
+    assert_eq!(workspace_record.repo_path, repo_path);
+    assert!(!legacy_attachment_dir.exists());
+    assert!(!legacy_live_database_dir.exists());
+    assert_eq!(
+        fs::read_to_string(workspace_attachment_dir.join("task.json")).expect("task marker"),
+        "legacy-task"
+    );
+    assert_eq!(
+        fs::read_to_string(workspace_live_database_dir.join("db.txt")).expect("db marker"),
+        "legacy-db"
+    );
+
+    let metadata: serde_json::Value = serde_json::from_str(
+        fs::read_to_string(workspace_attachment_dir.join("metadata.json"))
+            .expect("workspace metadata")
+            .as_str(),
+    )
+    .expect("parse workspace metadata");
+    assert_eq!(
+        metadata
+            .get("dolt_database")
+            .and_then(|value| value.as_str()),
+        Some(
+            compute_beads_database_name_for_workspace(&workspace_id)
+                .expect("workspace db name")
+                .as_str()
+        )
+    );
+}
+
+#[test]
+fn load_rejects_conflicting_legacy_and_workspace_beads_namespaces() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("workspace-adopt-legacy-conflict");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    fake_git_workspace(&repo);
+
+    let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, _) = workspace_identity(&repo);
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
+
+    let legacy_attachment_dir =
+        resolve_repo_beads_attachment_dir(repo.as_path()).expect("legacy attachment dir");
+    let workspace_attachment_dir =
+        resolve_workspace_beads_attachment_dir(&workspace_id).expect("workspace attachment dir");
+    fs::create_dir_all(&legacy_attachment_dir).expect("create legacy dir");
+    fs::create_dir_all(&workspace_attachment_dir).expect("create workspace dir");
+
+    let error = store
+        .load()
+        .expect_err("conflicting namespaces should fail");
+    let error_message = format!("{error:#}");
+    assert!(error_message.contains("Cannot adopt legacy Beads attachment root"));
 }

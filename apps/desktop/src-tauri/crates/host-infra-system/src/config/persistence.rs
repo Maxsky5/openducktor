@@ -61,7 +61,7 @@ pub(super) fn load_config_or_default<T, Normalize, PostLoad>(
 where
     T: DeserializeOwned + Default,
     Normalize: FnOnce(&mut T) -> Result<()>,
-    PostLoad: FnOnce(&mut T),
+    PostLoad: FnOnce(&mut T) -> Result<()>,
 {
     if !path.exists() {
         return Ok(T::default());
@@ -75,7 +75,8 @@ where
         .with_context(|| format!("Failed parsing config file {}", path.display()))?;
     normalize(&mut parsed)
         .with_context(|| format!("Failed normalizing config file {}", path.display()))?;
-    post_load(&mut parsed);
+    post_load(&mut parsed)
+        .with_context(|| format!("Failed finalizing config file {}", path.display()))?;
     Ok(parsed)
 }
 
