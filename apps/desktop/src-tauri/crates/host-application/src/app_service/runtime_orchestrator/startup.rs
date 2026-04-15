@@ -2,7 +2,8 @@ use super::super::{
     AppService, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport, StartupEventContext,
     StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
-use super::{RuntimeStartInput, SpawnedRuntimeServer};
+use super::start_pipeline::{RuntimeStartInput, SpawnedRuntimeServer};
+use super::startup_status::RuntimeStartupProgress;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{RuntimeProvisioningMode, RuntimeRole};
 use host_infra_system::pick_free_port;
@@ -47,7 +48,7 @@ impl AppService {
         self.mark_runtime_startup_requested(
             &input.runtime_kind,
             input.repo_key.as_str(),
-            &super::RuntimeStartupProgress {
+            &RuntimeStartupProgress {
                 started_at_instant: input.startup_started_at_instant,
                 started_at: input.startup_started_at.clone(),
                 attempts: Some(0),
@@ -104,7 +105,7 @@ impl AppService {
                     runtime_id,
                     runtime_route: definition.route_for_port(port),
                     child: Some(child),
-                    runtime_process_guard: Some(runtime_process_guard),
+                    _runtime_process_guard: Some(runtime_process_guard),
                     startup_started_at_instant: input.startup_started_at_instant,
                     startup_started_at: input.startup_started_at.clone(),
                     startup_report,
@@ -119,7 +120,7 @@ impl AppService {
                     runtime_id,
                     runtime_route: external_start.runtime_route,
                     child: None,
-                    runtime_process_guard: None,
+                    _runtime_process_guard: None,
                     startup_started_at_instant: input.startup_started_at_instant,
                     startup_started_at: input.startup_started_at.clone(),
                     startup_report: external_start.startup_report,

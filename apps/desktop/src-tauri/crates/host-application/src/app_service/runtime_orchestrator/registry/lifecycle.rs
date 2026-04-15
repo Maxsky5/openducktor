@@ -1,7 +1,9 @@
 use super::super::super::{
     terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
 };
-use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
+use super::super::start_pipeline::{
+    RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer,
+};
 use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, RuntimeInstanceSummary};
 use host_infra_system::stop_shared_dolt_server_for_current_owner;
@@ -58,7 +60,7 @@ impl AppService {
             AgentRuntimeProcess {
                 summary: summary.clone(),
                 child: spawned_server.child,
-                _runtime_process_guard: spawned_server.runtime_process_guard,
+                _runtime_process_guard: spawned_server._runtime_process_guard,
                 cleanup_target,
             },
         );
