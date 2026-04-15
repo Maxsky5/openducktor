@@ -30,6 +30,7 @@ export const useHumanReviewFeedbackController = ({
 }: UseHumanReviewFeedbackControllerArgs): UseHumanReviewFeedbackControllerResult => {
   const createStateRef = useRef(createState);
   const openFeedbackRef = useRef(openFeedback);
+  const openRequestIdRef = useRef(0);
   const [humanReviewFeedbackState, setHumanReviewFeedbackState] =
     useState<HumanReviewFeedbackState | null>(null);
   const [hydrationFollowup, setHydrationFollowup] =
@@ -65,23 +66,35 @@ export const useHumanReviewFeedbackController = ({
   }, [hydrationFollowup, sessions]);
 
   const clearHumanReviewFeedback = useCallback((): void => {
+    openRequestIdRef.current += 1;
     setHydrationFollowup(null);
     setHumanReviewFeedbackState(null);
   }, []);
 
   const openHumanReviewFeedback = useCallback(
     (taskId: string): void => {
+      const requestId = ++openRequestIdRef.current;
       void (async () => {
-        const result = await openFeedbackRef.current(taskId);
-        if (result.kind === "failed") {
-          clearHumanReviewFeedback();
-          return;
-        }
+        try {
+          const result = await openFeedbackRef.current(taskId);
+          if (requestId !== openRequestIdRef.current) {
+            return;
+          }
 
-        setHumanReviewFeedbackState(result.state);
-        setHydrationFollowup(
-          result.kind === "ready_with_followup" ? result.hydrationFollowup : null,
-        );
+          if (result.kind === "failed") {
+            clearHumanReviewFeedback();
+            return;
+          }
+
+          setHumanReviewFeedbackState(result.state);
+          setHydrationFollowup(
+            result.kind === "ready_with_followup" ? result.hydrationFollowup : null,
+          );
+        } catch {
+          if (requestId === openRequestIdRef.current) {
+            clearHumanReviewFeedback();
+          }
+        }
       })();
     },
     [clearHumanReviewFeedback],

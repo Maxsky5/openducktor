@@ -12,6 +12,18 @@ import { useHumanReviewFeedbackController } from "./use-human-review-feedback-co
 
 enableReactActEnvironment();
 
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, resolve, reject };
+};
+
 type HookProps = {
   sessions: AgentSessionState[];
   openFeedback: (taskId: string) => Promise<PrepareHumanReviewFeedbackResult>;
@@ -308,6 +320,78 @@ describe("useHumanReviewFeedbackController", () => {
 
     expect(harness.getLatest().humanReviewFeedbackState).toBeNull();
     expect(createHydratedState).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("ignores slower stale open completions after a newer open request", async () => {
+    const firstOpen = createDeferred<PrepareHumanReviewFeedbackResult>();
+    const secondOpen = createDeferred<PrepareHumanReviewFeedbackResult>();
+    const openFeedback = mock((taskId: string) => {
+      if (taskId === "TASK-1") {
+        return firstOpen.promise;
+      }
+
+      return secondOpen.promise;
+    });
+    const harness = createHookHarness(
+      useHumanReviewFeedbackController,
+      createProps({ openFeedback }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.openHumanReviewFeedback("TASK-1");
+      state.openHumanReviewFeedback("TASK-2");
+    });
+
+    secondOpen.resolve({
+      kind: "ready",
+      state: createState({ taskId: "TASK-2", message: "Use the newer request." }),
+    });
+    await harness.waitFor((state) => state.humanReviewFeedbackState?.taskId === "TASK-2");
+
+    firstOpen.resolve({
+      kind: "ready",
+      state: createState({ taskId: "TASK-1", message: "Stale result." }),
+    });
+    await harness.run(async () => {
+      await Promise.resolve();
+    });
+
+    expect(harness.getLatest().humanReviewFeedbackState).toEqual(
+      createState({ taskId: "TASK-2", message: "Use the newer request." }),
+    );
+
+    await harness.unmount();
+  });
+
+  test("ignores in-flight open completions after the feedback is cleared", async () => {
+    const deferredOpen = createDeferred<PrepareHumanReviewFeedbackResult>();
+    const harness = createHookHarness(
+      useHumanReviewFeedbackController,
+      createProps({
+        openFeedback: mock(() => deferredOpen.promise),
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.openHumanReviewFeedback("TASK-1");
+    });
+    await harness.run((state) => {
+      state.clearHumanReviewFeedback();
+    });
+
+    deferredOpen.resolve({
+      kind: "ready",
+      state: createState({ message: "Should stay closed." }),
+    });
+    await harness.run(async () => {
+      await Promise.resolve();
+    });
+
+    expect(harness.getLatest().humanReviewFeedbackState).toBeNull();
 
     await harness.unmount();
   });
