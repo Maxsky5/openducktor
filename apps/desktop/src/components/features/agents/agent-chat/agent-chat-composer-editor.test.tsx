@@ -273,6 +273,7 @@ const createClipboardData = ({
   plainText = "",
   htmlText = "",
   items = [],
+  files = [],
   types = ["text/plain", "text/html"],
 }: {
   plainText?: string;
@@ -282,9 +283,11 @@ const createClipboardData = ({
     type: string;
     getAsFile: () => File | null;
   }>;
+  files?: File[];
   types?: string[];
 }) => ({
   items,
+  files,
   types,
   getData: (type: string): string => {
     if (type === "text/plain") {
@@ -482,6 +485,46 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       expect(onAddFiles).toHaveBeenCalledWith([firstImage, secondImage]);
+    });
+  });
+
+  test("falls back to clipboard files when clipboard items omit pasted images", async () => {
+    const onAddFiles = mock(() => {});
+    const image = new File(["image"], "fallback.png", { type: "image/png" });
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
+    );
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({
+        items: [],
+        files: [image],
+        types: ["Files"],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(onAddFiles).toHaveBeenCalledWith([image]);
+    });
+  });
+
+  test("deduplicates pasted images exposed through both clipboard items and files", async () => {
+    const onAddFiles = mock(() => {});
+    const image = new File(["image"], "duplicate.png", { type: "image/png" });
+    const rendered = render(
+      <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
+    );
+
+    fireEvent.paste(getEditorRoot(rendered.container), {
+      clipboardData: createClipboardData({
+        items: [createClipboardFileItem(image)],
+        files: [image],
+        types: ["Files"],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(onAddFiles).toHaveBeenCalledWith([image]);
     });
   });
 

@@ -80,6 +80,8 @@ const ATTACHMENT_KIND_DEFAULT_NAME: Record<AgentAttachmentKind, string> = {
   pdf: "pasted-pdf",
 };
 
+const GENERIC_ATTACHMENT_DEFAULT_NAME = "pasted-attachment";
+
 export const CHAT_ATTACHMENT_ACCEPT = "image/*,audio/*,video/*,.pdf,application/pdf";
 
 const readFileExtension = (name: string): string => {
@@ -124,15 +126,44 @@ const inferAttachmentMime = (name: string, mime?: string): string | undefined =>
   return ATTACHMENT_EXTENSION_MIME[readFileExtension(name)];
 };
 
-const normalizeAttachmentFileName = (file: File, kind: AgentAttachmentKind): File => {
-  if (file.name.trim().length > 0) {
+const buildGeneratedAttachmentName = (kind: AgentAttachmentKind | null, mime?: string): string => {
+  const normalizedMime = mime?.trim().toLowerCase();
+  const extension = normalizedMime ? (ATTACHMENT_MIME_EXTENSION[normalizedMime] ?? "") : "";
+  const baseName = kind ? ATTACHMENT_KIND_DEFAULT_NAME[kind] : GENERIC_ATTACHMENT_DEFAULT_NAME;
+
+  return `${baseName}${extension}`;
+};
+
+export const readAttachmentFileName = (input: {
+  name: string;
+  mime?: string;
+  kind?: AgentAttachmentKind | null;
+}): string => {
+  if (input.name.trim().length > 0) {
+    return input.name;
+  }
+
+  return buildGeneratedAttachmentName(
+    input.kind ??
+      classifyAttachment({
+        name: input.name,
+        ...(input.mime ? { mime: input.mime } : {}),
+      }),
+    input.mime,
+  );
+};
+
+const normalizeAttachmentFile = (file: File, kind: AgentAttachmentKind): File => {
+  const normalizedName = readAttachmentFileName({
+    name: file.name,
+    mime: file.type,
+    kind,
+  });
+  if (normalizedName === file.name) {
     return file;
   }
 
-  const extension = ATTACHMENT_MIME_EXTENSION[file.type.trim().toLowerCase()] ?? "";
-  const name = `${ATTACHMENT_KIND_DEFAULT_NAME[kind]}${extension}`;
-
-  return new File([file], name, {
+  return new File([file], normalizedName, {
     type: file.type,
     lastModified: file.lastModified,
   });
@@ -143,7 +174,7 @@ export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAt
   if (!kind) {
     return null;
   }
-  const normalizedFile = normalizeAttachmentFileName(file, kind);
+  const normalizedFile = normalizeAttachmentFile(file, kind);
   const mime = inferAttachmentMime(normalizedFile.name, normalizedFile.type);
 
   return createComposerAttachment({

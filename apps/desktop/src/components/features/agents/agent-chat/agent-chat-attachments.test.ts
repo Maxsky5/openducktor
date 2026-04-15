@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildComposerAttachmentFromFile,
   buildComposerAttachmentFromPath,
+  readAttachmentFileName,
   validateComposerAttachments,
 } from "./agent-chat-attachments";
 
@@ -38,6 +39,16 @@ describe("agent-chat-attachments", () => {
     });
     expect(attachment?.file).toBeInstanceOf(File);
     expect(attachment?.file?.name).toBe("pasted-image.png");
+  });
+
+  test("returns a non-empty fallback label for unnamed unsupported files", () => {
+    expect(readAttachmentFileName({ name: "", mime: "application/zip" })).toBe("pasted-attachment");
+  });
+
+  test("preserves existing non-empty filenames verbatim", () => {
+    expect(readAttachmentFileName({ name: " report .pdf ", mime: "application/pdf" })).toBe(
+      " report .pdf ",
+    );
   });
 
   test("rehydrates uncommon supported extensions from their path", () => {

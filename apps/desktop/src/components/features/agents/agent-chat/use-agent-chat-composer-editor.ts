@@ -104,21 +104,35 @@ type PendingInputState = TextSelectionTarget & {
 
 const AUTOCOMPLETE_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
 
+const isPastedImageFile = (file: File, mime?: string): boolean => {
+  return classifyAttachment({ name: file.name, mime: mime || file.type }) === "image";
+};
+
 const readPastedImageFiles = (clipboardData: DataTransfer): File[] => {
-  return Array.from(clipboardData.items ?? []).flatMap((item) => {
+  const filesBySignature = new Map<string, File>();
+
+  for (const item of Array.from(clipboardData.items ?? [])) {
     if (item.kind !== "file") {
-      return [];
+      continue;
     }
 
     const file = item.getAsFile();
-    if (!file) {
-      return [];
+    if (!file || !isPastedImageFile(file, item.type)) {
+      continue;
     }
 
-    return classifyAttachment({ name: file.name, mime: item.type || file.type }) === "image"
-      ? [file]
-      : [];
-  });
+    filesBySignature.set(`${file.name}:${file.type}:${file.size}:${file.lastModified}`, file);
+  }
+
+  for (const file of Array.from(clipboardData.files ?? [])) {
+    if (!isPastedImageFile(file)) {
+      continue;
+    }
+
+    filesBySignature.set(`${file.name}:${file.type}:${file.size}:${file.lastModified}`, file);
+  }
+
+  return Array.from(filesBySignature.values());
 };
 
 const findTextSegment = (
