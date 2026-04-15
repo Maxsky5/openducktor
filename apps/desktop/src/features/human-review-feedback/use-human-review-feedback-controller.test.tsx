@@ -118,6 +118,151 @@ describe("useHumanReviewFeedbackController", () => {
     await harness.unmount();
   });
 
+  test("preserves the typed draft message when hydration adopts builder sessions", async () => {
+    const initialSessions: AgentSessionState[] = [];
+    const hydratedBuilderSession = createBuilderSession({ sessionId: "builder-session-1" });
+    const createHydratedState = mock((taskId: string) =>
+      createState({
+        taskId,
+        message: "Reset by hydration",
+        builderSessions: [hydratedBuilderSession],
+        selectedTarget: "builder-session-1",
+      }),
+    );
+
+    const harness = createHookHarness(
+      useHumanReviewFeedbackController,
+      createProps({
+        sessions: initialSessions,
+        openFeedback: async () => ({
+          kind: "ready_with_followup",
+          state: createState(),
+          hydrationFollowup: {
+            taskId: "TASK-1",
+            baselineSessions: initialSessions,
+          },
+        }),
+        createState: createHydratedState,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.openHumanReviewFeedback("TASK-1");
+    });
+    await harness.run((state) => {
+      state.setHumanReviewFeedbackState((current) =>
+        current ? { ...current, message: "Keep this draft." } : current,
+      );
+    });
+
+    await harness.update(
+      createProps({
+        sessions: [hydratedBuilderSession],
+        openFeedback: async () => ({
+          kind: "ready_with_followup",
+          state: createState(),
+          hydrationFollowup: {
+            taskId: "TASK-1",
+            baselineSessions: initialSessions,
+          },
+        }),
+        createState: createHydratedState,
+      }),
+    );
+
+    expect(harness.getLatest().humanReviewFeedbackState?.message).toBe("Keep this draft.");
+    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe("builder-session-1");
+
+    await harness.unmount();
+  });
+
+  test("keeps the hydration follow-up active until relevant builder sessions appear", async () => {
+    const initialSessions: AgentSessionState[] = [];
+    const unrelatedQaSession = createAgentSessionFixture({
+      sessionId: "qa-session-1",
+      role: "qa",
+      taskId: "TASK-2",
+      scenario: "qa_review",
+    });
+    const hydratedBuilderSession = createBuilderSession({ sessionId: "builder-session-1" });
+    const createHydratedState = mock((taskId: string) =>
+      createState({
+        taskId,
+        builderSessions: currentSessions.some(
+          (session) => session.sessionId === "builder-session-1",
+        )
+          ? [hydratedBuilderSession]
+          : [],
+        selectedTarget: currentSessions.some((session) => session.sessionId === "builder-session-1")
+          ? "builder-session-1"
+          : NEW_BUILDER_SESSION_TARGET,
+      }),
+    );
+    let currentSessions: AgentSessionState[] = initialSessions;
+
+    const harness = createHookHarness(
+      useHumanReviewFeedbackController,
+      createProps({
+        sessions: currentSessions,
+        openFeedback: async () => ({
+          kind: "ready_with_followup",
+          state: createState(),
+          hydrationFollowup: {
+            taskId: "TASK-1",
+            baselineSessions: initialSessions,
+          },
+        }),
+        createState: createHydratedState,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.openHumanReviewFeedback("TASK-1");
+    });
+
+    currentSessions = [unrelatedQaSession];
+    await harness.update(
+      createProps({
+        sessions: currentSessions,
+        openFeedback: async () => ({
+          kind: "ready_with_followup",
+          state: createState(),
+          hydrationFollowup: {
+            taskId: "TASK-1",
+            baselineSessions: initialSessions,
+          },
+        }),
+        createState: createHydratedState,
+      }),
+    );
+
+    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe(
+      NEW_BUILDER_SESSION_TARGET,
+    );
+
+    currentSessions = [unrelatedQaSession, hydratedBuilderSession];
+    await harness.update(
+      createProps({
+        sessions: currentSessions,
+        openFeedback: async () => ({
+          kind: "ready_with_followup",
+          state: createState(),
+          hydrationFollowup: {
+            taskId: "TASK-1",
+            baselineSessions: initialSessions,
+          },
+        }),
+        createState: createHydratedState,
+      }),
+    );
+
+    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe("builder-session-1");
+
+    await harness.unmount();
+  });
+
   test("clears feedback state and pending follow-up together", async () => {
     const initialSessions: AgentSessionState[] = [];
     const createHydratedState = mock((taskId: string) => createState({ taskId }));

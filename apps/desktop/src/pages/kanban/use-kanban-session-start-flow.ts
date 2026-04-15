@@ -492,6 +492,10 @@ export function useKanbanSessionStartFlow({
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,
+          }).catch((error: unknown) => {
+            toast.error("Failed to prepare the Builder session.", {
+              description: error instanceof Error ? error.message : "Unknown error",
+            });
           });
         },
         openExistingSession: (session) => {

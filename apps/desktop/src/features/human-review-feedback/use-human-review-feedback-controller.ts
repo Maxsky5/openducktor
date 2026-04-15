@@ -6,6 +6,10 @@ import type {
 } from "./human-review-feedback-flow";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
+const hasBuilderSessionOptions = (state: HumanReviewFeedbackState): boolean => {
+  return state.builderSessions.length > 0;
+};
+
 type UseHumanReviewFeedbackControllerArgs = {
   sessions: readonly unknown[];
   createState: (taskId: string) => HumanReviewFeedbackState;
@@ -42,7 +46,21 @@ export const useHumanReviewFeedbackController = ({
       return;
     }
 
-    setHumanReviewFeedbackState(createStateRef.current(hydrationFollowup.taskId));
+    const nextState = createStateRef.current(hydrationFollowup.taskId);
+    if (!hasBuilderSessionOptions(nextState)) {
+      return;
+    }
+
+    setHumanReviewFeedbackState((current) => {
+      if (!current || current.taskId !== hydrationFollowup.taskId) {
+        return nextState;
+      }
+
+      return {
+        ...nextState,
+        message: current.message,
+      };
+    });
     setHydrationFollowup(null);
   }, [hydrationFollowup, sessions]);
 
