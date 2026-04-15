@@ -12,12 +12,14 @@ type CommandResult = {
 };
 
 const bunExecutable = process.execPath;
+const commandTimeoutMs = 60_000;
 const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 
 function runCommand(cwd: string, command: string, args: string[]): CommandResult {
   const result: SpawnSyncReturns<string> = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
+    timeout: commandTimeoutMs,
     env: {
       ...process.env,
       CI: "true",
@@ -39,7 +41,9 @@ function runCommand(cwd: string, command: string, args: string[]): CommandResult
   });
 
   return {
-    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+    output: `${result.stdout ?? ""}${result.stderr ?? ""}${
+      result.error ? `\nerror: ${result.error.message}` : ""
+    }${result.signal ? `\nsignal: ${result.signal}` : ""}`,
     status: result.status ?? -1,
   };
 }
@@ -111,6 +115,8 @@ describe("git hook enforcement", () => {
         }
       ).scripts;
 
+      // These assertions intentionally exercise commit-msg behavior through `git commit`,
+      // so they rely on the real pre-commit checks succeeding first in the disposable clone.
       const invalidMessage = runCommand(clonePath, "git", [
         "commit",
         "--allow-empty",
