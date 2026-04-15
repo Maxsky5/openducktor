@@ -9,16 +9,12 @@ import {
   useCallback,
 } from "react";
 import { classifyAttachment } from "./agent-chat-attachments";
-import {
-  type AgentChatComposerDraft,
-  applyComposerDraftEdit,
-  draftHasMeaningfulContent,
-} from "./agent-chat-composer-draft";
+import { type AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
 import {
   getComposerContentRoot,
-  readEditableTextContent,
   replaceComposerSelectionWithText,
 } from "./agent-chat-composer-selection";
+import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
 import {
   AUTOCOMPLETE_NAVIGATION_KEYS,
   type FileMenuState,
@@ -392,133 +388,31 @@ export const useAgentChatComposerEditorEvents = ({
 
   const handleEditorKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const sourceDraft = latestDraftRef.current;
-      const root = event.currentTarget;
-      const activeSelection = readActiveTextSelection(root, event.target);
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
-        if (selectComposerContents(root)) {
-          event.preventDefault();
-        }
-        return;
-      }
-
-      if (
-        (event.key === "Backspace" || event.key === "Delete") &&
-        isComposerContentFullySelected(root)
-      ) {
-        event.preventDefault();
-        void clearComposerContents();
-        return;
-      }
-
-      if (fileMenuState) {
-        if (event.key === "ArrowDown" && moveActiveFileIndex(1)) {
-          event.preventDefault();
-          return;
-        }
-        if (event.key === "ArrowUp" && moveActiveFileIndex(-1)) {
-          event.preventDefault();
-          return;
-        }
-        if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
-          event.preventDefault();
-          const result = fileMenuState.results[activeFileIndex] ?? fileMenuState.results[0];
-          if (result) {
-            selectFileSearchResult(result);
-          }
-          return;
-        }
-      }
-
-      if (slashMenuState) {
-        if (event.key === "ArrowDown" && moveActiveSlashIndex(1)) {
-          event.preventDefault();
-          return;
-        }
-        if (event.key === "ArrowUp" && moveActiveSlashIndex(-1)) {
-          event.preventDefault();
-          return;
-        }
-        if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
-          event.preventDefault();
-          const command = filteredSlashCommands[activeSlashIndex] ?? filteredSlashCommands[0];
-          if (command) {
-            selectSlashCommand(command);
-          }
-          return;
-        }
-      }
-
-      if (event.key === "Escape" && fileMenuState) {
-        event.preventDefault();
-        closeFileMenu();
-        return;
-      }
-
-      if (event.key === "Escape" && slashMenuState) {
-        event.preventDefault();
-        closeSlashMenu();
-        return;
-      }
-
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        if (!disabled && draftHasMeaningfulContent(sourceDraft)) {
-          onSend();
-        }
-        return;
-      }
-
-      if (event.key === "Enter" && event.shiftKey) {
-        event.preventDefault();
-        void insertNewlineAtSelectionTarget(
-          selection.resolveSelectionTargetForLineBreak(root, sourceDraft, activeSelection),
-        );
-        return;
-      }
-
-      const repairedSelection =
-        activeSelection ?? selection.resolveActiveTextSelection(root, sourceDraft);
-      if (!repairedSelection) {
-        return;
-      }
-
-      if (
-        event.key === "Backspace" &&
-        repairedSelection.text.length === 0 &&
-        !draftHasMeaningfulContent(sourceDraft)
-      ) {
-        event.preventDefault();
-        selection.focusTextSegmentWithMemory(repairedSelection.segmentId, 0, sourceDraft);
-        return;
-      }
-
-      if (event.key === "Backspace" && repairedSelection.caretOffset === 0) {
-        const currentIndex = sourceDraft.segments.findIndex(
-          (segment) => segment.id === repairedSelection.segmentId,
-        );
-        const previousSegment = currentIndex > 0 ? sourceDraft.segments[currentIndex - 1] : null;
-        if (
-          previousSegment?.kind === "slash_command" ||
-          previousSegment?.kind === "file_reference"
-        ) {
-          event.preventDefault();
-          const didApply = applyEditResult(
-            applyComposerDraftEdit(sourceDraft, {
-              type:
-                previousSegment.kind === "slash_command"
-                  ? "remove_slash_command"
-                  : "remove_file_reference",
-              segmentId: previousSegment.id,
-            }),
-          );
-          if (didApply) {
-            closeSlashMenu();
-            closeFileMenu();
-          }
-        }
-      }
+      handleComposerEditorKeyDown({
+        event,
+        root: event.currentTarget,
+        sourceDraft: latestDraftRef.current,
+        activeSelection: readActiveTextSelection(event.currentTarget, event.target),
+        disabled,
+        selection,
+        selectComposerContents,
+        isComposerContentFullySelected,
+        fileMenuState,
+        slashMenuState,
+        filteredSlashCommands,
+        activeSlashIndex,
+        activeFileIndex,
+        moveActiveFileIndex,
+        moveActiveSlashIndex,
+        closeSlashMenu,
+        closeFileMenu,
+        onSend,
+        clearComposerContents,
+        insertNewlineAtSelectionTarget,
+        selectSlashCommand,
+        selectFileSearchResult,
+        applyEditResult,
+      });
     },
     [
       activeFileIndex,
