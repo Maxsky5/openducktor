@@ -263,134 +263,73 @@ Current workflow implications:
 
 This makes `supportsSessionFork` a hard requirement for full Builder compatibility. A runtime that cannot fork an existing Builder session cannot implement the complete OpenDucktor Builder workflow.
 
-## Files to Change When Adding a Runtime
+## Integration Surfaces
 
-This is the minimum checklist for a new runtime integration.
+Treat the layers below as the canonical runtime-integration surfaces. The exact helper files and UI consumers can move over time; preserve the ownership boundaries and runtime contracts even when filenames change.
 
 ### 1. Shared contracts
 
-Update all runtime-visible schemas first:
+Start with the runtime-visible schemas in `packages/contracts/src/agent-runtime-schemas.ts`, `packages/contracts/src/runtime-descriptors.ts`, `packages/contracts/src/run-schemas.ts`, `packages/contracts/src/session-schemas.ts`, and related config schemas.
 
-- `packages/contracts/src/agent-runtime-schemas.ts`
-- `packages/contracts/src/runtime-descriptors.ts`
-- `packages/contracts/src/run-schemas.ts`
-- `packages/contracts/src/session-schemas.ts`
-- `packages/contracts/src/config-schemas.ts`
+At this layer, update:
 
-What to add:
+- the new `runtimeKind` in curated lists and descriptors,
+- runtime capability metadata, including `readOnlyRoleBlockedTools` and `workflowToolAliasesByCanonical`,
+- any new route or transport schema support,
+- runtime-aware config and persisted session fields.
 
-- the new `runtimeKind` in any curated constant lists,
-- a descriptor constant whose capabilities describe implemented behavior,
-- a descriptor-level `readOnlyRoleBlockedTools` list for that runtime's native mutating tool IDs,
-- a descriptor-level `workflowToolAliasesByCanonical` map for native workflow tool IDs that are not already canonical `odt_*` names,
-- any new route or transport schema support if the runtime is not `local_http`,
-- config/session schema support for runtime-aware model defaults.
+These contracts are mirrored across TypeScript and Rust, so the host-visible shapes must stay aligned in the same change set.
 
-These schemas are mirrored across TypeScript and Rust, so contributors typically update them together.
+### 2. Core boundary and runtime adapter
 
-### 2. Core runtime boundary
+The core runtime boundary is anchored by `packages/core/src/ports/agent-engine.ts` and `packages/core/src/services/runtime-connections.ts`. The runtime adapter is where `RuntimeConnection` becomes runtime-specific client input.
 
-Review these files:
+This layer must cover:
 
-- `packages/core/src/ports/agent-engine.ts`
-- `packages/core/src/services/runtime-connections.ts`
-- `packages/core/src/types/agent-orchestrator.ts`
-- `packages/contracts/src/runtime-descriptors.ts`
+- session start, resume, stop, and any supported fork flows,
+- streaming events, history, todos, model catalog, slash-command catalog, diff, and file status,
+- explicit failure for unsupported operations instead of descriptor/adapter mismatches.
 
-The runtime adapter implements the `AgentEnginePort` surface used by session orchestration and workspace inspection, especially:
-
-- session start/resume/stop,
-- streaming events,
-- history,
-- todos,
-- model catalog,
-- slash-command catalog,
-- diff,
-- file status.
-
-It must also implement the scenario-compatible session lifecycle:
-
-- `startSession(...)` for fresh sessions
-- reuse via existing session registration/resume flows
-- `forkSession(...)` for scenarios that support forking, including `build_pull_request_generation`
-
-If a runtime does not implement one of these surfaces, the descriptor and adapter surface should reflect that so unsupported operations fail explicitly.
-
-### 3. Runtime adapter implementation
-
-Reference implementation:
-
-- `packages/adapters-opencode-sdk/src/opencode-sdk-adapter.ts`
-- `packages/adapters-opencode-sdk/src/workflow-tool-permissions.ts`
-
-Related mapping files:
-
-- `packages/adapters-opencode-sdk/src/payload-mappers.ts`
-- `packages/adapters-opencode-sdk/src/session-runtime-utils.ts`
-
-This is the layer where `RuntimeConnection` becomes runtime-specific client input. Generic orchestrator code passes connection data in, and the adapter builds the runtime-specific client from it.
+Reference implementation anchors today are `packages/adapters-opencode-sdk/src/opencode-sdk-adapter.ts` and its supporting mapping and workflow-tool permission modules.
 
 For Builder PR generation, the runtime integration is responsible for making provider-native git or PR tools available to the agent. OpenDucktor persists the authoritative PR metadata only after the agent calls `odt_set_pull_request(taskId, providerId, number)`, then resolves the canonical provider record itself.
 
-### 4. Desktop runtime registration and orchestration
+### 3. Desktop runtime orchestration
 
-Update the runtime registry and orchestration entrypoints:
+The main desktop anchors are `apps/desktop/src/state/agent-runtime-registry.ts`, `apps/desktop/src/lib/agent-runtime.ts`, and `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`.
 
-- `apps/desktop/src/state/agent-runtime-registry.ts`
-- `apps/desktop/src/lib/agent-runtime.ts`
-- `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`
-- `apps/desktop/src/state/operations/shared/runtime-catalog.ts`
-- `apps/desktop/src/state/operations/tasks/use-delegation-operations.ts`
-
-This layer is where runtime selection is applied to real frontend operations:
+Desktop orchestration must keep these rules true:
 
 - session-scoped reads carry explicit `runtimeKind`,
 - build startup carries explicit runtime kind,
+- capability-driven UI behavior comes from runtime descriptors rather than per-session heuristics,
 - persisted session hydration fails on runtime-kind mismatches.
 
-These behaviors are what keep runtime routing deterministic across fresh sessions and restored sessions.
+Catalog/query helpers, session-start UI, settings, and diagnostics consumers may move, but they must continue to derive runtime behavior from the same descriptor-owned capability model.
 
-The current capability policy helpers live in `apps/desktop/src/lib/agent-runtime.ts`. That file is where OpenDucktor classifies mandatory capabilities, required workflow scope coverage, and optional enhancement capabilities, and where the desktop runtime registry validates descriptors during registration.
+### 4. Session persistence and hydration
 
-### 5. Session hydration and persistence
+Persistence and hydration live across the session lifecycle/persistence modules under `apps/desktop/src/state/operations/agent-orchestrator/` and the host session document/store types in `apps/desktop/src-tauri/crates/host-domain/src/document.rs` and `apps/desktop/src-tauri/crates/host-infra-beads/src/store/session_ops.rs`.
 
-Update and verify:
-
-- `apps/desktop/src/state/operations/agent-orchestrator/lifecycle/load-sessions.ts`
-- `apps/desktop/src/state/operations/agent-orchestrator/lifecycle/ensure-ready.ts`
-- `apps/desktop/src/state/operations/agent-orchestrator/lifecycle/session-loaders.ts`
-- `apps/desktop/src/state/operations/agent-orchestrator/events/session-helpers.ts`
-- `apps/desktop/src/state/operations/agent-orchestrator/support/persistence.ts`
-- `apps/desktop/src-tauri/crates/host-domain/src/document.rs`
-- `apps/desktop/src-tauri/crates/host-infra-beads/src/store/session_ops.rs`
-
-These files own session persistence and hydration. This part of the integration reconnects stored sessions to a live runtime route.
-
-This layer is usually verified by checking that:
+This layer must ensure that:
 
 - persisted session records keep `runtimeKind`, `externalSessionId`, `workingDirectory`, and `selectedModel.runtimeKind`,
 - hydration re-resolves a live route from `runtimeKind` and `workingDirectory`,
 - mismatched runtime kind and resolved live instance are rejected,
 - session-scoped reads continue to resolve from the stored session runtime instead of the repo default runtime.
 
-### 6. Settings and UI capability consumers
+### 5. Rust host integration
 
-Update capability-driven UI surfaces:
+Host-visible runtime support is anchored by `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`, `apps/desktop/src-tauri/src/commands/runtime.rs`, `apps/desktop/src-tauri/src/commands/build.rs`, and the runtime/build orchestrators under `apps/desktop/src-tauri/crates/host-application/src/app_service/`.
 
-- `apps/desktop/src/features/session-start/use-session-start-modal-state.ts`
-- `apps/desktop/src/components/features/settings/settings-repository-agents-section.tsx`
-- `apps/desktop/src/components/features/diagnostics/diagnostics-panel-model.ts`
-- `apps/desktop/src/state/operations/workspace/use-checks.ts`
+Host integration work includes:
 
-Concrete consumers to keep in mind:
+- adding the runtime kind to Rust domain enums and descriptors,
+- making `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
+- implementing host-managed or external provisioning correctly,
+- preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
-- `supportsProfiles` and `supportsVariants` drive session-start and repo-settings controls,
-- `supportsSlashCommands` drives slash autocomplete/chip behavior in the Agent Studio composer,
-- `supportsMcpStatus` drives diagnostics sections and MCP health checks.
-
-`apps/desktop/src/state/operations/shared/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.
-
-When contributors add new capability-driven UI behavior, the capability information comes from runtime descriptors rather than per-session state.
+When you need the surrounding host implementation, follow the owning module boundary (`runtime_orchestrator`, `build_orchestrator`, registry, or startup helpers) instead of treating any one file list as exhaustive.
 
 ## Queued User Messages
 
@@ -518,6 +457,8 @@ Some screens inspect only a subset of capability flags, but the descriptor still
 
 ## Related Files and Docs
 
+Start with these anchor references:
+
 - `docs/architecture-overview.md`
 - `docs/agent-runtime-implementation-plan.md`
 - `packages/contracts/src/agent-runtime-schemas.ts`
@@ -526,5 +467,7 @@ Some screens inspect only a subset of capability flags, but the descriptor still
 - `packages/core/src/ports/agent-engine.ts`
 - `apps/desktop/src/state/agent-runtime-registry.ts`
 - `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`
-- `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator.rs`
+- `apps/desktop/src-tauri/src/commands/runtime.rs`
+- `apps/desktop/src-tauri/src/commands/build.rs`
+
+From there, follow the owning layer (`runtime_orchestrator`, `build_orchestrator`, runtime adapters, or session persistence`) instead of treating this list as an exhaustive file inventory.

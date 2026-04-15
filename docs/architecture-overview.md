@@ -59,9 +59,9 @@ Key boundary:
 3. The session-start modal resolves the final start mode from the scenario definition in `packages/contracts/src/agent-workflow-schemas.ts`.
 4. For new or forked sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
 5. Runtime acquisition:
- - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
- - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
- - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
+  - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
+  - `qa` role: runtime orchestration resolves the build continuation working directory, reuses a matching running build run when available, and otherwise ensures the selected runtime for that continuation target through the shared runtime acquisition path.
+  - `spec`/`planner`: `host.runtimeEnsure(repo, runtimeKind)` ensures a shared workspace runtime for the selected kind.
 6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_REPO_PATH` and `ODT_HOST_URL`.
 7. The MCP process uses only that host-bridge contract. Direct Beads/Dolt startup inputs are rejected so storage ownership stays in the Rust host.
 8. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
@@ -81,7 +81,7 @@ Human-triggered path:
 1. User clicks a workflow action surfaced from `availableActions`.
 2. Frontend operation calls host method (`taskTransition`, `humanApprove`, `buildCompleted`, etc.).
 3. Adapter invokes a Tauri command (for example `task_transition`, `human_approve`, `build_completed`).
-4. Rust command delegates to `AppService`, which validates transition via `workflow_rules.rs`.
+4. Rust command delegates to `AppService`, which validates transition through the `workflow_rules` module.
 5. `TaskStore` updates Beads status/metadata.
 6. Frontend refreshes tasks and re-renders with backend-derived action set.
 
@@ -115,7 +115,7 @@ Key boundary:
 | Role, scenario, start mode, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
 | ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/contracts/src/odt-mcp-schemas.ts` and re-exported by `packages/openducktor-mcp/src/lib.ts` | `@openducktor/contracts`, consumed by MCP/host |
-| Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs` and `apps/desktop/src-tauri/crates/host-application/src/app_service/odt_mcp.rs` | Rust host application |
+| Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules/mod.rs`, `apps/desktop/src-tauri/crates/host-application/src/app_service/task_workflow/mod.rs`, and `apps/desktop/src-tauri/crates/host-application/src/app_service/odt_mcp.rs` | Rust host application |
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
 | Repo attachment identity and shared Dolt runtime | Managed attachment root under the config dir plus shared Dolt server state under `beads/shared-server/` | `host-infra-system` + `host-infra-beads/src/lifecycle/*` |
 | Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` via host application |
