@@ -211,7 +211,7 @@ pub(crate) fn opencode_process_registry_path(config_store: &AppConfigStore) -> P
     base.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH)
 }
 
-pub(super) fn reconcile_opencode_process_registry_on_startup(
+pub(crate) fn reconcile_opencode_process_registry_on_startup(
     registry_path: &Path,
     instance_pid: u32,
 ) -> Result<()> {
@@ -265,7 +265,7 @@ pub(super) fn reconcile_opencode_process_registry_on_startup(
     })
 }
 
-pub(super) fn track_pending_opencode_process(
+pub(crate) fn track_pending_opencode_process(
     tracked_processes: &Arc<Mutex<HashMap<u32, usize>>>,
     registry_path: &Path,
     instance_pid: u32,
@@ -307,7 +307,7 @@ pub(super) fn track_pending_opencode_process(
     }))
 }
 
-pub(super) fn terminate_pending_opencode_processes(
+pub(crate) fn terminate_pending_opencode_processes(
     tracked_processes: &Arc<Mutex<HashMap<u32, usize>>>,
     registry_path: &Path,
     instance_pid: u32,

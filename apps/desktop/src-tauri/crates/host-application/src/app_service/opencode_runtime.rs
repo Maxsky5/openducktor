@@ -1,5 +1,6 @@
 mod mcp_config;
 mod process_lifecycle;
+mod process_registry;
 mod startup_readiness;
 
 use crate::app_service::AppService;
@@ -11,6 +12,19 @@ pub(crate) use process_lifecycle::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
     wait_for_process_exit_by_pid,
+};
+#[cfg(test)]
+pub(crate) use process_registry::{
+    opencode_process_registry_path, read_opencode_process_registry,
+    reconcile_opencode_process_registry_on_startup, terminate_pending_opencode_processes,
+    track_pending_opencode_process, with_locked_opencode_process_registry,
+    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
+#[cfg(not(test))]
+pub(crate) use process_registry::{
+    opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
+    terminate_pending_opencode_processes, track_pending_opencode_process,
 };
 pub(crate) use startup_readiness::{wait_for_local_server_with_process, StartupCancelEpoch};
 

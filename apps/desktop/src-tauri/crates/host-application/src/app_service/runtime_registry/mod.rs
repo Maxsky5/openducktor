@@ -1,7 +1,5 @@
 mod health_http;
 mod open_code;
-mod open_code_process_registry;
-
 use super::{
     AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusProbeTarget,
     RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
@@ -13,7 +11,7 @@ use host_domain::{
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::process::Child;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 #[cfg(test)]
 pub(crate) use health_http::RuntimeHealthHttpClient;
@@ -21,12 +19,6 @@ pub(crate) use health_http::{
     ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure, RuntimeMcpServerStatus,
 };
 pub(crate) use open_code::OpenCodeRuntime;
-#[cfg(test)]
-pub(crate) use open_code_process_registry::{
-    opencode_process_registry_path, read_opencode_process_registry,
-    with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
-    TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
-};
 
 pub(crate) trait AppRuntime: Send + Sync {
     fn definition(&self) -> RuntimeDefinition;
@@ -192,14 +184,11 @@ impl AppRuntimeRegistry {
     }
 
     pub(crate) fn builtin() -> Self {
-        static BUILTIN: LazyLock<AppRuntimeRegistry> = LazyLock::new(|| {
-            AppRuntimeRegistry::new(
-                vec![Arc::new(OpenCodeRuntime::default())],
-                AgentRuntimeKind::opencode(),
-            )
-            .expect("builtin app runtime registry should be valid")
-        });
-        BUILTIN.clone()
+        AppRuntimeRegistry::new(
+            vec![Arc::new(OpenCodeRuntime::default())],
+            AgentRuntimeKind::opencode(),
+        )
+        .expect("builtin app runtime registry should be valid")
     }
 
     pub(crate) fn definitions(&self) -> Vec<RuntimeDefinition> {

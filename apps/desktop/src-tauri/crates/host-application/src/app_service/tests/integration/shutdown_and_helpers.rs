@@ -22,19 +22,19 @@ use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_descriptor,
     builtin_opencode_runtime_route, create_failing_opencode, create_fake_bd, create_fake_opencode,
     create_orphanable_opencode, empty_patch, init_git_repo, install_fake_dolt, lock_env,
-    make_emitter, make_session, make_task, prepend_path, process_is_alive, remove_env_var,
-    set_env_var, spawn_sleep_process, spawn_sleep_process_group, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    make_emitter, make_session, make_task, prepend_path, process_is_alive,
+    read_opencode_process_registry, remove_env_var, set_env_var, spawn_sleep_process,
+    spawn_sleep_process_group, unique_temp_path, wait_for_orphaned_opencode_process,
+    wait_for_path_exists, wait_for_process_exit, with_locked_opencode_process_registry,
+    write_executable_script, FakeTaskStore, GitCall, OpencodeProcessRegistryInstance,
+    TaskStoreState, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
-    find_openducktor_workspace_root, parse_mcp_command_json, read_opencode_process_registry,
-    read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
-    terminate_child_process, terminate_process_by_pid, validate_parent_relationships_for_update,
-    with_locked_opencode_process_registry, AgentRuntimeProcess, DevServerGroupRuntime,
-    OpencodeProcessRegistryInstance, RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
-    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    find_openducktor_workspace_root, parse_mcp_command_json, read_opencode_version,
+    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
+    terminate_process_by_pid, validate_parent_relationships_for_update, AgentRuntimeProcess,
+    DevServerGroupRuntime, RunProcess, RuntimeCleanupTarget,
 };
 
 fn runtime_summary_fixture(
@@ -203,6 +203,76 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let _ = pending_child
         .wait()
         .context("failed waiting pending OpenCode process")?;
+
+    let _ = fs::remove_dir_all(root);
+    let _ = fs::remove_dir_all(config_root);
+    Ok(())
+}
+
+#[test]
+fn shutdown_keeps_other_service_pending_opencode_processes_running() -> Result<()> {
+    let _env_lock = lock_env();
+    let config_root = unique_temp_path("shutdown-pending-opencode-isolated-config");
+    let _config_guard = set_env_var(
+        "OPENDUCKTOR_CONFIG_DIR",
+        config_root.to_string_lossy().as_ref(),
+    );
+    let (service_one, _task_state_one, _git_state_one) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let (service_two, _task_state_two, _git_state_two) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let root = unique_temp_path("shutdown-pending-opencode-isolated");
+    let orphanable_opencode = root.join("opencode");
+    create_orphanable_opencode(&orphanable_opencode)?;
+    let mut service_two_child = Command::new("/bin/sh")
+        .arg(orphanable_opencode.as_path())
+        .arg("serve")
+        .arg("--hostname")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg("54324")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("failed spawning pending opencode process for second service")?;
+    let service_two_pid = service_two_child.id();
+    let service_two_guard = service_two
+        .runtime_registry
+        .runtime(&AgentRuntimeKind::opencode())?
+        .track_process(&service_two, service_two_pid)?;
+
+    service_one.shutdown()?;
+
+    assert!(
+        process_is_alive(service_two_pid as i32),
+        "shutting down one service should not terminate another service's pending OpenCode process"
+    );
+
+    drop(service_two_guard);
+    terminate_process_by_pid(service_two_pid);
+    assert!(
+        wait_for_process_exit(service_two_pid as i32, Duration::from_secs(2)),
+        "second service pending OpenCode process should exit during cleanup"
+    );
+    let _ = service_two_child
+        .wait()
+        .context("failed waiting second service pending OpenCode process")?;
+    service_two.shutdown()?;
 
     let _ = fs::remove_dir_all(root);
     let _ = fs::remove_dir_all(config_root);
@@ -403,12 +473,15 @@ fn tracked_guard_drop_refcounts_prevent_pid_reuse_untracking() -> Result<()> {
     let parent_pid = 70_001;
     let child_pid = 80_001;
 
-    with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
-        instances.push(OpencodeProcessRegistryInstance::with_child(
-            parent_pid, child_pid,
-        ));
-        Ok(())
-    })?;
+    with_locked_opencode_process_registry(
+        registry_path.as_path(),
+        |instances: &mut Vec<OpencodeProcessRegistryInstance>| {
+            instances.push(OpencodeProcessRegistryInstance::with_child(
+                parent_pid, child_pid,
+            ));
+            Ok(())
+        },
+    )?;
 
     let tracked = Arc::new(Mutex::new(std::collections::HashMap::<u32, usize>::new()));
     tracked
@@ -484,12 +557,15 @@ fn startup_reconcile_terminates_orphaned_registered_opencode_processes() -> Resu
     ));
 
     let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
-    with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
-        instances.push(OpencodeProcessRegistryInstance::with_child(
-            999_999, orphan_pid,
-        ));
-        Ok(())
-    })?;
+    with_locked_opencode_process_registry(
+        registry_path.as_path(),
+        |instances: &mut Vec<OpencodeProcessRegistryInstance>| {
+            instances.push(OpencodeProcessRegistryInstance::with_child(
+                999_999, orphan_pid,
+            ));
+            Ok(())
+        },
+    )?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (_service, _task_state, _git_state) = build_service_with_store(
@@ -551,13 +627,16 @@ fn startup_reconcile_keeps_non_orphan_registered_opencode_processes() -> Result<
     assert!(process_is_alive(live_pid as i32));
 
     let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
-    with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
-        instances.push(OpencodeProcessRegistryInstance::with_child(
-            live_parent_pid,
-            live_pid,
-        ));
-        Ok(())
-    })?;
+    with_locked_opencode_process_registry(
+        registry_path.as_path(),
+        |instances: &mut Vec<OpencodeProcessRegistryInstance>| {
+            instances.push(OpencodeProcessRegistryInstance::with_child(
+                live_parent_pid,
+                live_pid,
+            ));
+            Ok(())
+        },
+    )?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (_service, _task_state, _git_state) = build_service_with_store(

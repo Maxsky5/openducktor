@@ -1,11 +1,11 @@
 use super::health_http::{
     RuntimeHealthCheckFailure, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
 };
-use super::open_code_process_registry::{
+use super::AppRuntime;
+use crate::app_service::opencode_runtime::{
     opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
     terminate_pending_opencode_processes, track_pending_opencode_process,
 };
-use super::AppRuntime;
 use crate::app_service::{
     read_opencode_version, require_local_http_endpoint, require_local_http_port,
     resolve_opencode_binary_path, wait_for_runtime_with_process, AppService, RuntimeProcessGuard,

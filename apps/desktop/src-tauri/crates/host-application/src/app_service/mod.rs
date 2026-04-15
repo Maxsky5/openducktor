@@ -74,12 +74,6 @@ pub(crate) use opencode_session_status::{
     dedupe_probe_targets as dedupe_runtime_session_probe_targets,
     has_live_opencode_session_status as has_live_runtime_session_status,
 };
-#[cfg(test)]
-pub(crate) use runtime_registry::{
-    read_opencode_process_registry, with_locked_opencode_process_registry,
-    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
-    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
-};
 pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use service_core::{
     AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess, RunProcess,

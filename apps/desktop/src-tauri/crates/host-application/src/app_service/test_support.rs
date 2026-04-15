@@ -1,20 +1,23 @@
 #![allow(unused_imports)]
 
 use super::build_orchestrator::{BuildResponseAction, CleanupMode};
+pub(crate) use super::opencode_runtime::{
+    read_opencode_process_registry, with_locked_opencode_process_registry,
+    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
 use super::runtime_registry::AppRuntimeRegistry;
 use super::{
     allows_transition, build_opencode_config_content, build_opencode_startup_event_payload,
     can_set_plan, can_set_spec_from_status, default_mcp_workspace_root, derive_available_actions,
     is_orphaned_opencode_server_process, normalize_required_markdown,
-    normalize_subtask_plan_inputs, parse_mcp_command_json, read_opencode_process_registry,
-    read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
-    terminate_child_process, terminate_process_by_pid, validate_parent_relationships_for_create,
+    normalize_subtask_plan_inputs, parse_mcp_command_json, read_opencode_version,
+    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
+    terminate_process_by_pid, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
-    wait_for_local_server, wait_for_local_server_with_process,
-    with_locked_opencode_process_registry, AgentRuntimeProcess, AppService,
-    OpencodeProcessRegistryInstance, OpencodeStartupMetricsSnapshot,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunProcess,
-    TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    wait_for_local_server, wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
+    OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+    RunProcess,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
