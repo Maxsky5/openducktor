@@ -58,7 +58,7 @@ describe("human-review-feedback-flow", () => {
     });
 
     expect(bootstrapTaskSessions).toHaveBeenCalledWith("TASK-1");
-    expect(result).toEqual({ kind: "ready", state, pendingHydration: null });
+    expect(result).toEqual({ kind: "ready", state });
   });
 
   test("prepareHumanReviewFeedback returns ready state with new-session default when no builder sessions exist", async () => {
@@ -78,9 +78,9 @@ describe("human-review-feedback-flow", () => {
     });
 
     expect(result).toEqual({
-      kind: "ready",
+      kind: "ready_with_followup",
       state,
-      pendingHydration: {
+      hydrationFollowup: {
         taskId: "TASK-1",
         baselineSessions,
       },

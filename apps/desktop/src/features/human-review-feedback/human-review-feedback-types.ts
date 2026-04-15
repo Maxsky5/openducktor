@@ -27,8 +27,3 @@ export type HumanReviewFeedbackState = {
   builderSessions: AgentSessionSummary[];
   selectedTarget: string;
 };
-
-export type PendingHumanReviewHydration = {
-  taskId: string;
-  baselineSessions: AgentSessionSummary[];
-};

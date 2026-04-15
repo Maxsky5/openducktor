@@ -2,10 +2,7 @@ import { toast } from "sonner";
 import { buildReusableSessionOptions } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { NEW_BUILDER_SESSION_TARGET } from "./human-review-feedback-state";
-import type {
-  HumanReviewFeedbackState,
-  PendingHumanReviewHydration,
-} from "./human-review-feedback-types";
+import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
 export const HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE = "Feedback message is required.";
 export const HUMAN_REVIEW_FEEDBACK_STALE_SESSION_MESSAGE =
@@ -33,6 +30,11 @@ export type HumanReviewFeedbackNewSessionRequest = {
   };
 };
 
+export type HumanReviewFeedbackHydrationFollowup = {
+  taskId: string;
+  baselineSessions: AgentSessionSummary[];
+};
+
 type PrepareHumanReviewFeedbackInput = {
   taskId: string;
   baselineSessions: AgentSessionSummary[];
@@ -41,11 +43,15 @@ type PrepareHumanReviewFeedbackInput = {
   createState: (builderSessions: AgentSessionSummary[]) => HumanReviewFeedbackState;
 };
 
-type PrepareHumanReviewFeedbackResult =
+export type PrepareHumanReviewFeedbackResult =
   | {
       kind: "ready";
       state: HumanReviewFeedbackState;
-      pendingHydration: PendingHumanReviewHydration | null;
+    }
+  | {
+      kind: "ready_with_followup";
+      state: HumanReviewFeedbackState;
+      hydrationFollowup: HumanReviewFeedbackHydrationFollowup;
     }
   | { kind: "failed" };
 
@@ -107,14 +113,13 @@ export const prepareHumanReviewFeedback = async ({
     return {
       kind: "ready",
       state: createState(builderSessions),
-      pendingHydration: null,
     };
   }
 
   return {
-    kind: "ready",
+    kind: "ready_with_followup",
     state: createState(builderSessions),
-    pendingHydration: { taskId, baselineSessions },
+    hydrationFollowup: { taskId, baselineSessions },
   };
 };
 
