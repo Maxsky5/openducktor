@@ -345,27 +345,6 @@ Rules:
 - History hydration must apply the same pending-assistant rule so live state and reloaded history stay aligned.
 - If a runtime cannot provide enough information to reproduce its own queued badge behavior through the normal message/event/history surfaces, leave `supportsQueuedUserMessages` disabled instead of simulating the feature in desktop code.
 
-### 7. Rust host integration
-
-Host-visible runtime support spans:
-
-- `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`
-- `apps/desktop/src-tauri/src/commands/runtime.rs`
-- `apps/desktop/src-tauri/src/commands/build.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/startup.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/workspace_runtime.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/registry/query.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/registry/lifecycle.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/build_orchestrator/build_lifecycle.rs`
-
-Host integration work:
-
-- add the runtime kind to Rust domain enums and descriptors,
-- make `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
-- implement host-managed startup if `provisioningMode` is `host_managed`,
-- implement build startup support while preserving full workflow scope coverage (`workspace`, `task`, and `build`).
-
 ## Build Runtime Rules
 
 Build runtime support is separate from workspace runtime acquisition.
@@ -470,4 +449,4 @@ Start with these anchor references:
 - `apps/desktop/src-tauri/src/commands/runtime.rs`
 - `apps/desktop/src-tauri/src/commands/build.rs`
 
-From there, follow the owning layer (`runtime_orchestrator`, `build_orchestrator`, runtime adapters, or session persistence`) instead of treating this list as an exhaustive file inventory.
+From there, follow the owning layer (`runtime_orchestrator`, `build_orchestrator`, runtime adapters, or session persistence) instead of treating this list as an exhaustive file inventory.
