@@ -170,6 +170,8 @@ bun run check:rust
 bun run test:rust
 ```
 
+`bun run test` also includes the disposable-clone Git hook verification coverage, so it is slower than the workspace-only test pass.
+
 Useful focused commands:
 
 ```sh
@@ -195,6 +197,7 @@ Shared local Git hooks run on every commit once you have run `bun install`.
 
 - `pre-commit` runs `bun run lint`, `bun run typecheck`, and `bun run check:rust` in that order.
 - `commit-msg` enforces Conventional Commits.
+- `bun run test` includes the disposable-clone hook integration test for this workflow, but it still does not run during `pre-commit`.
 - `bun run test`, `bun run test:rust`, and `bun run build` are intentionally not part of the per-commit hook.
 - `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SpawnSyncReturns } from "node:child_process";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +62,10 @@ function updateRootScript(repoPath: string, scriptName: string, command: string)
   writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 }
 
+function moveFile(repoPath: string, sourcePath: string, targetPath: string): void {
+  renameSync(join(repoPath, sourcePath), join(repoPath, targetPath));
+}
+
 function getRequiredScript(scripts: Record<string, string>, scriptName: string): string {
   const command = scripts[scriptName];
   if (typeof command !== "string") {
@@ -116,6 +120,19 @@ describe("git hook enforcement", () => {
       expectFailure(invalidMessage, "reject invalid Conventional Commit message");
       expect(invalidMessage.output).toContain("subject may not be empty");
       expect(invalidMessage.output).toContain("type may not be empty");
+
+      moveFile(clonePath, "node_modules/.bin/commitlint", "node_modules/.bin/commitlint.disabled");
+      const missingCommitlint = runCommand(clonePath, "git", [
+        "commit",
+        "--allow-empty",
+        "-m",
+        "chore: test missing commitlint",
+      ]);
+      expectFailure(missingCommitlint, "show remediation when commitlint is unavailable");
+      expect(missingCommitlint.output).toContain(
+        "commitlint is not installed. Run 'bun install' or 'bun run hooks:install' to restore local Git hooks.",
+      );
+      moveFile(clonePath, "node_modules/.bin/commitlint.disabled", "node_modules/.bin/commitlint");
 
       updateRootScript(clonePath, "lint", "false");
       expectSuccess(
