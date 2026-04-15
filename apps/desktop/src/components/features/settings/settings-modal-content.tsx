@@ -45,7 +45,6 @@ export function SettingsModalContent({
     isLoadingRuntimeDefinitions,
     isLoadingCatalog,
     isSaving,
-    isPickingWorktreeBasePath,
     settingsError,
     runtimeDefinitionsError,
     snapshotDraft,
@@ -78,7 +77,6 @@ export function SettingsModalContent({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
-    pickWorktreeBasePath,
   } = controller;
 
   if (settingsError) {
@@ -194,10 +192,8 @@ export function SettingsModalContent({
             selectedRepoBranchesError={selectedRepoBranchesError}
             isLoadingSettings={isLoadingSettings}
             isSaving={isSaving}
-            isPickingWorktreeBasePath={isPickingWorktreeBasePath}
             isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
             onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
-            onPickWorktreeBasePath={pickWorktreeBasePath}
             showDevServerValidationErrors={showRepoScriptValidationErrors}
             selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}

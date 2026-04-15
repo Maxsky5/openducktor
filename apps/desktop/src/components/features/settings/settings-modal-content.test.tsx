@@ -20,7 +20,6 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   isLoadingRuntimeDefinitions: false,
   isLoadingCatalog: false,
   isSaving: false,
-  isPickingWorktreeBasePath: false,
   settingsError: null,
   runtimeDefinitionsError: null,
   saveError: null,
@@ -78,7 +77,6 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateRepoPromptOverrides: () => {},
   updateSelectedRepoAgentDefault: () => {},
   clearSelectedRepoAgentDefault: () => {},
-  pickWorktreeBasePath: async () => {},
   submit: async () => true,
 });
 

@@ -19,7 +19,6 @@ import {
   getNeededCatalogRuntimeKinds,
 } from "@/components/features/settings";
 import { errorMessage } from "@/lib/errors";
-import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import {
   ChecksStateContext,
   useRequiredContext,
@@ -61,7 +60,6 @@ export type SettingsModalController = {
   isLoadingRuntimeDefinitions: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
-  isPickingWorktreeBasePath: boolean;
   settingsError: string | null;
   runtimeDefinitionsError: string | null;
   saveError: string | null;
@@ -120,7 +118,6 @@ export type SettingsModalController = {
     value: string,
   ) => void;
   clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
-  pickWorktreeBasePath: () => Promise<void>;
   submit: () => Promise<boolean>;
 };
 
@@ -148,7 +145,6 @@ export const useSettingsModalController = ({
     useRuntimeDefinitionsContext();
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isPickingWorktreeBasePath, setIsPickingWorktreeBasePath] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
   const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
@@ -396,28 +392,6 @@ export const useSettingsModalController = ({
     }
   }, [hasRepoScriptValidationErrors]);
 
-  const pickWorktreeBasePath = useCallback(async (): Promise<void> => {
-    setIsPickingWorktreeBasePath(true);
-
-    try {
-      const selectedDirectory = await pickRepositoryDirectory();
-      if (!selectedDirectory) {
-        return;
-      }
-
-      updateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        worktreeBasePath: selectedDirectory,
-      }));
-    } catch (error: unknown) {
-      toast.error("Failed to pick worktree base path", {
-        description: errorMessage(error),
-      });
-    } finally {
-      setIsPickingWorktreeBasePath(false);
-    }
-  }, [updateSelectedRepoConfig]);
-
   const detectSelectedRepoGithubRepository = useCallback(async () => {
     if (!selectedRepoPath) {
       return null;
@@ -558,7 +532,6 @@ export const useSettingsModalController = ({
     isLoadingRuntimeDefinitions,
     isLoadingCatalog,
     isSaving,
-    isPickingWorktreeBasePath,
     settingsError,
     runtimeDefinitionsError,
     saveError,
@@ -601,7 +574,6 @@ export const useSettingsModalController = ({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
-    pickWorktreeBasePath,
     submit,
   };
 };

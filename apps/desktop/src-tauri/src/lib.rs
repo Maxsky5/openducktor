@@ -33,6 +33,7 @@ type TauriRuntime = tauri::Wry;
 use commands::agent_sessions::*;
 use commands::build::*;
 use commands::documents::*;
+use commands::filesystem::*;
 use commands::git::*;
 use commands::runtime::*;
 use commands::system::*;
@@ -347,6 +348,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         open_external_url,
         runtime_check,
         beads_check,
+        filesystem_list_directory,
         workspace_list,
         workspace_add,
         workspace_select,

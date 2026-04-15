@@ -23,6 +23,8 @@ import type {
   BuildContinuationTargetSource,
   ChatSettings,
   CommitsAheadBehind,
+  DirectoryEntry,
+  DirectoryListing,
   ExternalTaskSyncEvent,
   ExternalTaskSyncEventKind,
   FailureKind,
@@ -188,6 +190,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "commitsAheadBehindSchema",
   "createDefaultAutopilotSettings",
   "createTaskResultSchema",
+  "directoryEntrySchema",
+  "directoryListingSchema",
   "directMergeRecordSchema",
   "gitDiffScopeSchema",
   "gitFetchRemoteRequestSchema",
@@ -377,6 +381,8 @@ type ExportedTypeContract = {
   BeadsCheck: BeadsCheck;
   ChatSettings: ChatSettings;
   CommitsAheadBehind: CommitsAheadBehind;
+  DirectoryEntry: DirectoryEntry;
+  DirectoryListing: DirectoryListing;
   ExternalTaskSyncEvent: ExternalTaskSyncEvent;
   ExternalTaskSyncEventKind: ExternalTaskSyncEventKind;
   GitCommitAllRequest: GitCommitAllRequest;

@@ -38,10 +38,8 @@ const renderSection = (
       selectedRepoBranchesError: null,
       isLoadingSettings: false,
       isSaving: false,
-      isPickingWorktreeBasePath: false,
       isLoadingSelectedRepoBranches: false,
       onRetrySelectedRepoBranchesLoad: () => {},
-      onPickWorktreeBasePath: async () => {},
       onUpdateSelectedRepoConfig,
       ...(options?.showDevServerValidationErrors !== undefined
         ? { showDevServerValidationErrors: options.showDevServerValidationErrors }
@@ -63,10 +61,8 @@ const renderStatefulSection = (initialRepoConfig: RepoConfig) => {
       selectedRepoBranchesError: null,
       isLoadingSettings: false,
       isSaving: false,
-      isPickingWorktreeBasePath: false,
       isLoadingSelectedRepoBranches: false,
       onRetrySelectedRepoBranchesLoad: () => {},
-      onPickWorktreeBasePath: async () => {},
       onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => {
         setSelectedRepoConfig((current) => updater(current));
       },

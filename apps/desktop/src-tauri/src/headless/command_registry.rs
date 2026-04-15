@@ -1,7 +1,7 @@
 use super::command_support::{CommandResult, HeadlessCommandError, HeadlessState};
 use super::{
-    git_commands, odt_mcp_commands, runtime_commands, system_commands, task_commands,
-    workspace_commands,
+    filesystem_commands, git_commands, odt_mcp_commands, runtime_commands, system_commands,
+    task_commands, workspace_commands,
 };
 use anyhow::anyhow;
 use serde_json::Value;
@@ -48,6 +48,7 @@ impl CommandRegistry {
 pub(super) fn build_registry() -> anyhow::Result<CommandRegistry> {
     let mut registry = CommandRegistry::default();
     workspace_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
+    filesystem_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     system_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     git_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
     task_commands::register_commands(&mut registry).map_err(|error| anyhow!(error))?;
@@ -81,12 +82,12 @@ mod tests {
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::AppConfigStore;
     use serde::Deserialize;
-    use serde_json::json;
     use serde_json::Value;
+    use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::Notify;
 
@@ -152,6 +153,7 @@ mod tests {
         let registry = build_registry().expect("registry should build");
 
         assert!(registry.contains("workspace_list"));
+        assert!(registry.contains("filesystem_list_directory"));
         assert!(registry.contains("system_list_open_in_tools"));
         assert!(registry.contains("system_open_directory_in_tool"));
         assert!(registry.contains("git_get_status"));

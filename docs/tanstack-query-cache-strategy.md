@@ -67,6 +67,16 @@ File:
 
 - [apps/desktop/src/state/queries/checks.ts](../apps/desktop/src/state/queries/checks.ts)
 
+### Short-lived filesystem browsing
+
+Used for interactive directory exploration where repeated navigation should reuse the most recent response for a brief moment, but the UI must still refresh quickly as the user moves around the real filesystem.
+
+- filesystem directory listing: `1 sec`
+
+File:
+
+- [apps/desktop/src/state/queries/filesystem.ts](../apps/desktop/src/state/queries/filesystem.ts)
+
 ### Git state
 
 Used for repository state where some values are stable and some are intentionally treated as immediately stale.

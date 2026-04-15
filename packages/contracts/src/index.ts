@@ -4,6 +4,7 @@ export * from "./config-schemas";
 export * from "./dev-server-schemas";
 export * from "./external-task-sync-schemas";
 export * from "./failure-schemas";
+export * from "./filesystem-schemas";
 export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./metadata-schemas";

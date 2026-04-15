@@ -1,7 +1,10 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
+import { createElement, type ReactNode, useEffect } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
@@ -18,9 +21,24 @@ const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unkn
   return domProps;
 };
 
-const pickRepositoryDirectoryMock = mock(async (): Promise<string | null> => "/repo");
 const addWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
 const selectWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
+
+function SeedFilesystemDirectory(): ReactNode {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    queryClient.setQueryData(filesystemQueryKeys.directory(), {
+      currentPath: "/repo",
+      currentPathIsGitRepo: true,
+      parentPath: "/",
+      homePath: "/repo",
+      entries: [],
+    });
+  }, [queryClient]);
+
+  return null;
+}
 
 describe("OpenRepositoryModal", () => {
   let OpenRepositoryModal: (props: {
@@ -30,10 +48,6 @@ describe("OpenRepositoryModal", () => {
   }) => ReactNode;
 
   beforeEach(async () => {
-    mock.module("@/lib/repo-directory", () => ({
-      pickRepositoryDirectory: pickRepositoryDirectoryMock,
-    }));
-
     const stateModule = {
       AppStateProvider: ({ children }: { children: ReactNode }) => children,
       useAgentState: () => {
@@ -101,9 +115,8 @@ describe("OpenRepositoryModal", () => {
     ({ OpenRepositoryModal } = await import("./open-repository-modal"));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
-      ["@/lib/repo-directory", () => import("@/lib/repo-directory")],
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
       ["@/components/ui/button", () => import("@/components/ui/button")],
       ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
@@ -111,17 +124,20 @@ describe("OpenRepositoryModal", () => {
   });
 
   test("renders string host errors from repository add failures", async () => {
-    pickRepositoryDirectoryMock.mockImplementation(async () => "/repo");
-    addWorkspaceMock.mockImplementation(async () => {
+    addWorkspaceMock.mockClear();
+    addWorkspaceMock.mockImplementation(() => {
       throw "bd not found in PATH";
     });
 
     const { container, unmount } = render(
-      createElement(OpenRepositoryModal, {
-        open: true,
-        canClose: false,
-        onOpenChange: () => {},
-      }),
+      <QueryProvider useIsolatedClient>
+        <SeedFilesystemDirectory />
+        {createElement(OpenRepositoryModal, {
+          open: true,
+          canClose: false,
+          onOpenChange: () => {},
+        })}
+      </QueryProvider>,
     );
 
     const primaryButton = container.querySelector("button");
@@ -130,8 +146,10 @@ describe("OpenRepositoryModal", () => {
     }
 
     fireEvent.click(primaryButton);
+    fireEvent.click(screen.getByRole("button", { name: /open repository/i }));
 
     await waitFor(() => {
+      expect(addWorkspaceMock).toHaveBeenCalledWith("/repo");
       expect(screen.getByText(/bd not found in path/i)).toBeTruthy();
     });
 

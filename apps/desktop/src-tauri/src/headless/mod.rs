@@ -1,6 +1,7 @@
 mod command_registry;
 mod command_support;
 mod events;
+mod filesystem_commands;
 mod git_commands;
 mod odt_mcp_commands;
 mod runtime_commands;
