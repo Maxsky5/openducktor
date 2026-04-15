@@ -12,9 +12,7 @@ import {
   runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
 
-const localRuntimeConnection = createLocalHttpRuntimeConnection({
-  endpoint: " http://127.0.0.1:4444 ",
-});
+const localRuntimeConnection = createLocalHttpRuntimeConnection();
 
 const stdioRuntimeConnection = createStdioRuntimeConnection("/tmp/runtime-root/");
 
@@ -23,7 +21,11 @@ const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot =>
 
 describe("live-agent-session-cache", () => {
   test("builds cache keys from transport identity and normalized working directories", () => {
-    expect(getLiveAgentSessionCacheKey("opencode", localRuntimeConnection)).toBe(
+    const paddedLocalRuntimeConnection = createLocalHttpRuntimeConnection({
+      endpoint: " http://127.0.0.1:4444 ",
+    });
+
+    expect(getLiveAgentSessionCacheKey("opencode", paddedLocalRuntimeConnection)).toBe(
       "opencode::local_http:http://127.0.0.1:4444",
     );
     expect(getLiveAgentSessionCacheKey("opencode", stdioRuntimeConnection)).toBe(

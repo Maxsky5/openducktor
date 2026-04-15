@@ -248,9 +248,11 @@ describe("repo-session-hydration-service", () => {
   });
 
   test("reconcile preloads live snapshots for later reattach without rescanning", async () => {
+    const expectedExternalSessionId = "external-1";
     const liveSnapshot = createLiveAgentSessionSnapshotFixture({
       title: "Builder Session",
       workingDirectory: worktreePath,
+      externalSessionId: expectedExternalSessionId,
     });
     const runtimeConnection = createLocalHttpRuntimeConnection({
       endpoint: "http://127.0.0.1:4555",
@@ -258,6 +260,8 @@ describe("repo-session-hydration-service", () => {
     });
     let preloadScanCalls = 0;
     let reattachScanCalls = 0;
+    let storedSnapshotBeforeClear: string | null = null;
+    let storedSnapshotAfterClear: string | null = null;
     let reusedStoredSnapshot: string | null = null;
     let reusedPreloadedSnapshot: string | null = null;
     const liveAgentSessionStore = new LiveAgentSessionStore();
@@ -341,7 +345,25 @@ describe("repo-session-hydration-service", () => {
             (await storedPlanner.loadLiveAgentSessionSnapshot(record, storedResolution))
               ?.externalSessionId ?? null;
 
+          storedSnapshotBeforeClear =
+            liveAgentSessionStore.readSnapshot({
+              repoPath,
+              runtimeKind: "opencode",
+              runtimeConnection,
+              workingDirectory: worktreePath,
+              externalSessionId: expectedExternalSessionId,
+            })?.externalSessionId ?? null;
+
           liveAgentSessionStore.clearRepo(repoPath);
+
+          storedSnapshotAfterClear =
+            liveAgentSessionStore.readSnapshot({
+              repoPath,
+              runtimeKind: "opencode",
+              runtimeConnection,
+              workingDirectory: worktreePath,
+              externalSessionId: expectedExternalSessionId,
+            })?.externalSessionId ?? null;
 
           const preloadedPlanner = await createPlanner();
           const preloadedResolution = await preloadedPlanner.resolveHydrationRuntime(record);
@@ -359,7 +381,7 @@ describe("repo-session-hydration-service", () => {
 
     await service.reconcilePendingTasks({
       repoPath,
-      tasks: [taskWithSession("task-1", liveSnapshot.externalSessionId)],
+      tasks: [taskWithSession("task-1", expectedExternalSessionId)],
       runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
@@ -367,20 +389,20 @@ describe("repo-session-hydration-service", () => {
 
     expect(preloadScanCalls).toBe(1);
     expect(reattachScanCalls).toBe(0);
-    if (reusedStoredSnapshot === null || reusedPreloadedSnapshot === null) {
+    const storedSnapshotId = storedSnapshotBeforeClear;
+    const reusedStoredSnapshotId = reusedStoredSnapshot;
+    const reusedPreloadedSnapshotId = reusedPreloadedSnapshot;
+    if (
+      storedSnapshotId == null ||
+      reusedStoredSnapshotId == null ||
+      reusedPreloadedSnapshotId == null
+    ) {
       throw new Error("Expected stored and preloaded live snapshot reuse to succeed");
     }
-    expect(reusedStoredSnapshot === liveSnapshot.externalSessionId).toBe(true);
-    expect(reusedPreloadedSnapshot === liveSnapshot.externalSessionId).toBe(true);
-    expect(
-      liveAgentSessionStore.readSnapshot({
-        repoPath,
-        runtimeKind: "opencode",
-        runtimeConnection,
-        workingDirectory: worktreePath,
-        externalSessionId: liveSnapshot.externalSessionId,
-      }),
-    ).toBeNull();
+    expect(storedSnapshotId as string).toBe(expectedExternalSessionId);
+    expect(storedSnapshotAfterClear).toBeNull();
+    expect(reusedStoredSnapshotId as string).toBe(expectedExternalSessionId);
+    expect(reusedPreloadedSnapshotId as string).toBe(expectedExternalSessionId);
     service.dispose();
   });
 

@@ -153,7 +153,7 @@ describe("session-event-batching", () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
-    batcher.prepareQueuedSessionEvents([
+    const firstPrepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_message",
         sessionId: "session-1",
@@ -171,6 +171,8 @@ describe("session-event-batching", () => {
         },
       },
     ] satisfies SessionEvent[]);
+
+    expect(firstPrepared.readyEvents).toHaveLength(2);
 
     now += 150;
     const prepared = batcher.prepareQueuedSessionEvents([
