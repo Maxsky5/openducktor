@@ -136,29 +136,144 @@ impl AppService {
         flight_guard.complete(&startup_result)?;
         startup_result
     }
+}
 
-    pub(in crate::app_service::runtime_orchestrator) fn spawn_and_register_runtime(
-        &self,
-        input: RuntimeStartInput<'_>,
-    ) -> Result<RuntimeInstanceSummary> {
-        let spawned_server = self.spawn_runtime_server(&input)?;
-        let startup_started_at_instant = spawned_server.startup_started_at_instant;
-        let startup_started_at = spawned_server.startup_started_at.clone();
-        let startup_report = spawned_server.startup_report;
-        let runtime_kind = input.runtime_kind.clone();
-        let repo_key = input.repo_key.clone();
-        let summary = self.attach_runtime_session(input, spawned_server)?;
-        self.mark_runtime_startup_ready(
-            &runtime_kind,
-            repo_key.as_str(),
-            &summary,
-            &RuntimeStartupProgress {
-                started_at_instant: startup_started_at_instant,
-                started_at: startup_started_at,
-                attempts: Some(startup_report.attempts()),
-                elapsed_ms: Some(startup_report.startup_ms()),
+#[cfg(test)]
+mod tests {
+    use crate::app_service::test_support::{
+        build_service_with_store, create_failing_opencode, create_fake_opencode, init_git_repo,
+        install_fake_dolt, lock_env, set_env_var, set_fake_opencode_and_bridge_binaries,
+        unique_temp_path,
+    };
+    use anyhow::Result;
+    use host_domain::{
+        AgentRuntimeKind, GitCurrentBranch, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
+        RuntimeInstanceSummary,
+    };
+    use host_infra_system::AppConfigStore;
+    use std::fs;
+    use std::thread;
+
+    #[test]
+    fn ensure_workspace_runtime_deduplicates_parallel_startup_at_module_seam() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("workspace-runtime-dedup");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _dolt_guard = install_fake_dolt(&root)?;
+        let starts_file = root.join("started-pids.log");
+        let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+        let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "400");
+        let _starts_guard = set_env_var(
+            "OPENDUCKTOR_TEST_STARTS_FILE",
+            starts_file.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+
+        let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        let (first, second) = thread::scope(
+            |scope| -> Result<(RuntimeInstanceSummary, RuntimeInstanceSummary)> {
+                let first_handle = scope.spawn(|| {
+                    service
+                        .ensure_workspace_runtime(AgentRuntimeKind::opencode(), repo_path.as_str())
+                });
+                let second_handle = scope.spawn(|| {
+                    service
+                        .ensure_workspace_runtime(AgentRuntimeKind::opencode(), repo_path.as_str())
+                });
+
+                let first = first_handle
+                    .join()
+                    .expect("first ensure thread should join")?;
+                let second = second_handle
+                    .join()
+                    .expect("second ensure thread should join")?;
+                Ok((first, second))
             },
         )?;
-        Ok(summary)
+
+        assert_eq!(first.runtime_id, second.runtime_id);
+        assert!(service
+            .find_existing_workspace_runtime(&AgentRuntimeKind::opencode(), repo_path.as_str())?
+            .is_some());
+
+        let started_pids_file = fs::read_to_string(starts_file.as_path())?;
+        let started_pids = started_pids_file
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>();
+        assert_eq!(started_pids.len(), 1);
+
+        assert!(service.runtime_stop(first.runtime_id.as_str())?);
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn ensure_workspace_runtime_records_timeout_failure_status_at_module_seam() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("workspace-runtime-startup-failure-status");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let failing_opencode = root.join("opencode");
+        let fake_bridge = root.join("browser-backend");
+        create_failing_opencode(&failing_opencode)?;
+        create_fake_opencode(&fake_bridge)?;
+        let _dolt_guard = install_fake_dolt(&root)?;
+        let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_bridge.as_path());
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            failing_opencode.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+
+        let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        let error = service
+            .ensure_workspace_runtime(AgentRuntimeKind::opencode(), repo_path.as_str())
+            .expect_err("workspace runtime should fail when the startup process exits early");
+        assert!(error
+            .to_string()
+            .contains("workspace runtime failed to start"));
+
+        let status = service.runtime_startup_status("opencode", repo_path.as_str())?;
+        assert_eq!(status.stage, RepoRuntimeStartupStage::StartupFailed);
+        assert_eq!(
+            status.failure_kind,
+            Some(RepoRuntimeStartupFailureKind::Error)
+        );
+        assert_eq!(status.failure_reason.as_deref(), Some("child_exited"));
+        assert!(status.attempts.is_some());
+        assert!(status.elapsed_ms.is_some());
+        assert!(service
+            .find_existing_workspace_runtime(&AgentRuntimeKind::opencode(), repo_path.as_str())?
+            .is_none());
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
     }
 }
