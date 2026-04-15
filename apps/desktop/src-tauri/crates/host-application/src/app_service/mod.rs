@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,6 +30,7 @@ mod opencode_runtime;
 mod opencode_session_status;
 mod process_registry;
 mod repo_init;
+mod runtime_startup;
 mod runtime_orchestrator;
 mod runtime_registry;
 mod service_core;
@@ -49,15 +50,17 @@ pub use odt_mcp::{
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
     OdtTaskResult, OdtTaskSummary,
 };
-pub(crate) type RuntimeStartupReadinessPolicy = opencode_runtime::OpencodeStartupReadinessPolicy;
-pub(crate) type RuntimeStartupWaitReport = opencode_runtime::OpencodeStartupWaitReport;
+pub use runtime_startup::RuntimeStartupWaitFailure;
+pub(crate) use runtime_startup::{
+    startup_wait_failure, startup_wait_report, RuntimeStartupReadinessPolicy,
+    RuntimeStartupWaitReport,
+};
 #[cfg(test)]
 pub(crate) type OpencodeStartupReadinessPolicy = RuntimeStartupReadinessPolicy;
 #[cfg(test)]
 pub(crate) type OpencodeStartupWaitReport = RuntimeStartupWaitReport;
 #[cfg(test)]
 pub(crate) use opencode_runtime::wait_for_local_server_with_process;
-pub use opencode_runtime::OpencodeStartupWaitFailure;
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
@@ -72,15 +75,12 @@ pub(crate) use opencode_session_status::{
     has_live_opencode_session_status as has_live_runtime_session_status,
 };
 #[cfg(test)]
-pub(crate) use process_registry::read_opencode_process_registry;
-pub(crate) type RuntimeProcessGuard = process_registry::TrackedOpencodeProcessGuard;
-#[cfg(test)]
-pub(crate) use process_registry::TrackedOpencodeProcessGuard;
-#[cfg(test)]
-pub(crate) use process_registry::{
-    with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
+pub(crate) use runtime_registry::{
+    read_opencode_process_registry, with_locked_opencode_process_registry,
+    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
+pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use service_core::{
     AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess, RunProcess,
     RuntimeCleanupTarget,

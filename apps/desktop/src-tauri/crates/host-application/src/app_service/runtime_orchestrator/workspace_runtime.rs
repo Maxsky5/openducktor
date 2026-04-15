@@ -1,4 +1,4 @@
-use super::super::{AppService, OpencodeStartupWaitFailure};
+use super::super::{AppService, RuntimeStartupWaitFailure};
 use super::ensure_flight::RuntimeEnsureFlightGuard;
 use super::start_pipeline::{RuntimeExistingLookup, RuntimePostStartPolicy, RuntimeStartInput};
 use super::startup_status::{RuntimeStartupFailure, RuntimeStartupProgress};
@@ -86,7 +86,7 @@ impl AppService {
                 startup_policy,
                 working_directory: repo_key.clone(),
                 cleanup_target: None,
-                tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
+                tracking_error_context: "Failed tracking spawned workspace runtime process",
                 startup_error_context,
                 post_start_policy: Some(RuntimePostStartPolicy {
                     existing_lookup: RuntimeExistingLookup {
@@ -105,7 +105,7 @@ impl AppService {
             Err(error) => {
                 let startup_failure = error
                     .chain()
-                    .find_map(|cause| cause.downcast_ref::<OpencodeStartupWaitFailure>());
+                    .find_map(|cause| cause.downcast_ref::<RuntimeStartupWaitFailure>());
                 let (failure_kind, failure_reason, attempts, elapsed_ms) = match startup_failure {
                     Some(failure) => (
                         if failure.reason == "timeout" {

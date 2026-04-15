@@ -1,6 +1,10 @@
 use super::health_http::{
     RuntimeHealthCheckFailure, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
 };
+use super::open_code_process_registry::{
+    opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
+    terminate_pending_opencode_processes, track_pending_opencode_process,
+};
 use super::AppRuntime;
 use crate::app_service::{
     read_opencode_version, require_local_http_endpoint, require_local_http_port,
@@ -17,10 +21,14 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Child;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::form_urlencoded;
 
-pub(crate) struct OpenCodeRuntime;
+#[derive(Default)]
+pub(crate) struct OpenCodeRuntime {
+    tracked_processes: Arc<Mutex<HashMap<u32, usize>>>,
+}
 
 impl OpenCodeRuntime {
     fn read_http_response_body(
@@ -162,7 +170,12 @@ impl AppRuntime for OpenCodeRuntime {
     }
 
     fn track_process(&self, service: &AppService, child_id: u32) -> Result<RuntimeProcessGuard> {
-        service.track_pending_opencode_process(child_id)
+        track_pending_opencode_process(
+            &self.tracked_processes,
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+            child_id,
+        )
     }
 
     fn wait_until_ready(
@@ -259,6 +272,21 @@ impl AppRuntime for OpenCodeRuntime {
                     .to_string()
             }),
         }
+    }
+
+    fn reconcile_on_startup(&self, service: &AppService) -> Result<()> {
+        reconcile_opencode_process_registry_on_startup(
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+        )
+    }
+
+    fn terminate_tracked_processes(&self, service: &AppService) -> Result<()> {
+        terminate_pending_opencode_processes(
+            &self.tracked_processes,
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+        )
     }
 
     fn should_restart_for_mcp_status_error(&self, message: &str) -> bool {

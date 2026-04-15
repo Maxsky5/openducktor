@@ -182,10 +182,13 @@ impl AppService {
         self.startup_cancel_epoch
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut cleanup_errors = Vec::new();
-        if let Err(error) = self.terminate_pending_opencode_processes() {
-            cleanup_errors.push(format!(
-                "Failed terminating pending OpenCode processes: {error:#}"
-            ));
+        for runtime in self.runtime_registry.runtimes() {
+            if let Err(error) = runtime.terminate_tracked_processes(self) {
+                cleanup_errors.push(format!(
+                    "Failed terminating pending {} runtime processes: {error:#}",
+                    runtime.definition().kind().as_str()
+                ));
+            }
         }
         if let Err(error) = self.stop_all_dev_servers() {
             cleanup_errors.push(format!("Failed stopping dev servers: {error:#}"));

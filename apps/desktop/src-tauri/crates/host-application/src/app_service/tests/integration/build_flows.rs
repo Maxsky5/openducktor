@@ -1434,7 +1434,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
         )
         .expect_err("startup failure should bubble up");
     let message = error.to_string();
-    assert!(message.contains("OpenCode build runtime failed to start"));
+    assert!(message.contains("opencode build runtime failed to start"));
 
     let _ = fs::remove_dir_all(root);
     Ok(())

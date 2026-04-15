@@ -1,8 +1,9 @@
-use super::policy::{
-    startup_wait_failure, startup_wait_report, OpencodeStartupReadinessPolicy,
-    OpencodeStartupWaitFailure, OpencodeStartupWaitReport, StartupCancelEpoch,
-};
+use super::policy::StartupCancelEpoch;
 use super::probe_runtime::{LocalServerProbe, LocalServerProbeEvent, LocalServerProbeState};
+use crate::app_service::{
+    startup_wait_failure, startup_wait_report, RuntimeStartupReadinessPolicy,
+    RuntimeStartupWaitFailure, RuntimeStartupWaitReport,
+};
 #[cfg(test)]
 use anyhow::{anyhow, Context, Result};
 use std::io::Read;
@@ -25,14 +26,14 @@ fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct StartupWaitProgress {
-    pub(crate) report: OpencodeStartupWaitReport,
+    pub(crate) report: RuntimeStartupWaitReport,
 }
 
 #[cfg(test)]
 pub(crate) fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
-    let policy = OpencodeStartupReadinessPolicy {
+    let policy = RuntimeStartupReadinessPolicy {
         timeout,
-        ..OpencodeStartupReadinessPolicy::default()
+        ..RuntimeStartupReadinessPolicy::default()
     };
     let address: SocketAddr = format!("127.0.0.1:{port}")
         .parse()
@@ -77,11 +78,11 @@ pub(crate) fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> 
 pub(crate) fn wait_for_local_server_with_process(
     child: &mut Child,
     port: u16,
-    policy: OpencodeStartupReadinessPolicy,
+    policy: RuntimeStartupReadinessPolicy,
     cancel_epoch: &StartupCancelEpoch,
     cancel_snapshot: u64,
     mut on_progress: impl FnMut(StartupWaitProgress),
-) -> std::result::Result<OpencodeStartupWaitReport, OpencodeStartupWaitFailure> {
+) -> std::result::Result<RuntimeStartupWaitReport, RuntimeStartupWaitFailure> {
     let started_at = Instant::now();
     let address: SocketAddr = format!("127.0.0.1:{port}").parse().map_err(|error| {
         startup_wait_failure(

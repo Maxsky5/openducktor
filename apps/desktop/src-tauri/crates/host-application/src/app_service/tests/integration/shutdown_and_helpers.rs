@@ -189,11 +189,10 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
         .spawn()
         .context("failed spawning pending opencode process")?;
     let pending_pid = pending_child.id();
-    service
-        .tracked_opencode_processes
-        .lock()
-        .expect("pending OpenCode process lock poisoned")
-        .insert(pending_pid, 1);
+    let _pending_process_guard = service
+        .runtime_registry
+        .runtime(&AgentRuntimeKind::opencode())?
+        .track_process(&service, pending_pid)?;
 
     service.shutdown()?;
 
@@ -204,11 +203,6 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let _ = pending_child
         .wait()
         .context("failed waiting pending OpenCode process")?;
-    assert!(service
-        .tracked_opencode_processes
-        .lock()
-        .expect("pending OpenCode process lock poisoned")
-        .is_empty());
 
     let _ = fs::remove_dir_all(root);
     let _ = fs::remove_dir_all(config_root);
@@ -306,7 +300,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
         .shutdown()
         .expect_err("shutdown should surface pending opencode cleanup failure");
     let message = error.to_string();
-    assert!(message.contains("Failed terminating pending OpenCode processes"));
+    assert!(message.contains("Failed terminating pending opencode runtime processes"));
     assert!(service.runs.lock().expect("run lock poisoned").is_empty());
     assert!(service
         .agent_runtimes

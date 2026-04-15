@@ -1,6 +1,6 @@
-use super::policy::{
-    startup_wait_report, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    StartupCancelEpoch,
+use super::policy::StartupCancelEpoch;
+use crate::app_service::{
+    startup_wait_report, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
 };
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -17,7 +17,7 @@ pub(super) enum LocalServerProbeState {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct LocalServerProbeEvent {
     pub(super) state: LocalServerProbeState,
-    pub(super) report: OpencodeStartupWaitReport,
+    pub(super) report: RuntimeStartupWaitReport,
 }
 
 pub(super) struct LocalServerProbe {
@@ -30,7 +30,7 @@ pub(super) struct LocalServerProbe {
 impl LocalServerProbe {
     pub(super) fn spawn(
         address: SocketAddr,
-        policy: OpencodeStartupReadinessPolicy,
+        policy: RuntimeStartupReadinessPolicy,
         cancel_epoch: StartupCancelEpoch,
         cancel_snapshot: u64,
     ) -> Self {
@@ -98,7 +98,7 @@ fn current_attempts(attempts: &Arc<AtomicU32>) -> u32 {
 
 async fn probe_local_server_async(
     address: SocketAddr,
-    policy: OpencodeStartupReadinessPolicy,
+    policy: RuntimeStartupReadinessPolicy,
     cancel_epoch: StartupCancelEpoch,
     cancel_snapshot: u64,
     attempts: Arc<AtomicU32>,
@@ -175,8 +175,9 @@ async fn probe_local_server_async(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{OpencodeStartupReadinessPolicy, StartupCancelEpoch};
     use super::{LocalServerProbe, LocalServerProbeState};
+    use crate::app_service::OpencodeStartupReadinessPolicy;
+    use crate::app_service::StartupCancelEpoch;
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;

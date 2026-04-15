@@ -1,5 +1,6 @@
 mod health_http;
 mod open_code;
+mod open_code_process_registry;
 
 use super::{
     AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusProbeTarget,
@@ -20,6 +21,12 @@ pub(crate) use health_http::{
     ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure, RuntimeMcpServerStatus,
 };
 pub(crate) use open_code::OpenCodeRuntime;
+#[cfg(test)]
+pub(crate) use open_code_process_registry::{
+    opencode_process_registry_path, read_opencode_process_registry,
+    with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
+    TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
 
 pub(crate) trait AppRuntime: Send + Sync {
     fn definition(&self) -> RuntimeDefinition;
@@ -58,6 +65,14 @@ pub(crate) trait AppRuntime: Send + Sync {
     ) -> Result<Child>;
 
     fn runtime_health(&self) -> RuntimeHealth;
+
+    fn reconcile_on_startup(&self, _service: &AppService) -> Result<()> {
+        Ok(())
+    }
+
+    fn terminate_tracked_processes(&self, _service: &AppService) -> Result<()> {
+        Ok(())
+    }
 
     fn should_restart_for_mcp_status_error(&self, _message: &str) -> bool {
         false
@@ -179,7 +194,7 @@ impl AppRuntimeRegistry {
     pub(crate) fn builtin() -> Self {
         static BUILTIN: LazyLock<AppRuntimeRegistry> = LazyLock::new(|| {
             AppRuntimeRegistry::new(
-                vec![Arc::new(OpenCodeRuntime)],
+                vec![Arc::new(OpenCodeRuntime::default())],
                 AgentRuntimeKind::opencode(),
             )
             .expect("builtin app runtime registry should be valid")
@@ -204,6 +219,10 @@ impl AppRuntimeRegistry {
             .get(kind.as_str())
             .cloned()
             .ok_or_else(|| anyhow!("Unsupported agent runtime kind: {}", kind.as_str()))
+    }
+
+    pub(crate) fn runtimes(&self) -> Vec<Arc<dyn AppRuntime>> {
+        self.runtimes_by_kind.values().cloned().collect()
     }
 
     pub(crate) fn runtime_definitions(&self) -> &RuntimeRegistry {

@@ -182,7 +182,7 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
         )
         .expect_err("invalid config should fail build startup policy resolution");
     let message = format!("{error:#}");
-    assert!(message.contains("OpenCode build runtime failed before worktree preparation"));
+    assert!(message.contains("opencode build runtime failed before worktree preparation"));
     assert!(message.contains("Failed loading OpenCode startup readiness config"));
 
     let metrics = service.startup_metrics_snapshot()?;

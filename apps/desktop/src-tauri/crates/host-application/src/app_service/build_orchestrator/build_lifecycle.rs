@@ -62,7 +62,10 @@ impl AppService {
         let runtime_summary = self
             .runtime_ensure(runtime_kind.as_str(), prerequisites.repo_path.as_str())
             .with_context(|| {
-                format!("OpenCode build runtime failed to start for task {task_id}")
+                format!(
+                    "{} build runtime failed to start for task {task_id}",
+                    runtime_kind.as_str()
+                )
             })?;
 
         self.initiate_build_mode(BuildModeStartInput {
@@ -205,7 +208,8 @@ impl AppService {
             })
             .with_context(|| {
                 format!(
-                    "OpenCode build runtime failed before worktree preparation for task {task_id}"
+                    "{} build runtime failed before worktree preparation for task {task_id}",
+                    runtime_kind.as_str()
                 )
             })
     }
@@ -230,7 +234,7 @@ impl AppService {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| anyhow!("Build session is missing an external OpenCode session id"))?;
+            .ok_or_else(|| anyhow!("Build session is missing an external runtime session id"))?;
 
         self.runtime_registry
             .runtime(&context.runtime_kind)?
