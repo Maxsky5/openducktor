@@ -35,6 +35,8 @@ brew install cmake ninja
 bun install
 ```
 
+That install also activates the repository's shared local Git hooks through the root `prepare` script.
+
 4. Use a dedicated development config directory so your local contributor data stays separate from your regular app data:
 
 ```sh
@@ -187,6 +189,27 @@ cd apps/desktop/src-tauri && cargo fmt --all --check
 cd apps/desktop/src-tauri && cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+## Local Git Hooks
+
+Shared local Git hooks run on every commit once you have run `bun install`.
+
+- `pre-commit` runs `bun run lint`, `bun run typecheck`, and `bun run check:rust` in that order.
+- `commit-msg` enforces Conventional Commits.
+- `bun run test`, `bun run test:rust`, and `bun run build` are intentionally not part of the per-commit hook.
+- `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.
+
+If you used `bun install --ignore-scripts`, cloned with dependencies already present but hooks inactive, or local Git hook wiring stopped working, reinstall the tracked hooks from the repository root:
+
+```sh
+bun run hooks:install
+```
+
+Example commit messages:
+
+- `feat: add runtime capability validation for session hydration`
+- `fix: keep task workflow transitions fail-fast`
+- `docs: rewrite public README and contribution guide`
+
 ## Local Data And Config
 
 OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
@@ -240,6 +263,8 @@ When opening a pull request:
 ## Commit Messages
 
 Use Conventional Commits.
+
+The shared `commit-msg` hook validates this locally before the commit is created.
 
 Examples:
 

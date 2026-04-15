@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+bun run lint
+bun run typecheck
+bun run check:rust
