@@ -431,6 +431,11 @@ fn compose_process_path_entries(
     login_shell_before_inherited: bool,
 ) -> Vec<PathBuf> {
     if bundled_dir_first {
+        debug_assert!(
+            !login_shell_before_inherited,
+            "login_shell_before_inherited is ignored when bundled_dir_first is enabled"
+        );
+        // `bundled_dir_first` intentionally takes precedence over login-shell ordering.
         unique_path_entries(
             bundled_dir
                 .into_iter()
@@ -655,8 +660,9 @@ mod tests {
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
         command_path, command_path_from_directories, compose_process_path_entries,
-        explicit_command_override, resolve_command_path, run_command, run_command_allow_failure,
-        run_command_allow_failure_with_env, run_command_with_env, version_command,
+        explicit_command_override, path_entries_from_value, resolve_command_path, run_command,
+        run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
+        subprocess_path_env, version_command,
     };
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
@@ -1006,7 +1012,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn subprocess_path_env_combines_override_login_shell_inherited_and_bundled_dirs() {
+    fn compose_process_path_entries_combines_override_login_shell_inherited_and_bundled_dirs() {
         let root = unique_temp_path("odt-subprocess-path");
         let override_dir = root.join("override-bin");
         let login_dir = root.join("login-bin");
@@ -1089,7 +1095,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn subprocess_path_env_prefers_login_shell_runtime_over_inherited_stub() {
+    fn compose_process_path_entries_prefers_login_shell_runtime_over_inherited_stub() {
         let root = unique_temp_path("odt-subprocess-login-precedence");
         let login_dir = root.join("login-bin");
         let inherited_dir = root.join("inherited-bin");
@@ -1121,6 +1127,36 @@ mod tests {
         assert_eq!(
             resolved_java,
             login_dir.join("java").to_string_lossy().to_string()
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_path_env_includes_explicit_override_directories() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-subprocess-path-override");
+        let override_dir = root.join("override-bin");
+        let override_path = override_dir.join("custom-bun");
+        fs::create_dir_all(&override_dir).expect("override dir should exist");
+        fs::write(&override_path, "").expect("override file should exist");
+
+        let _shell_guard = EnvVarGuard::set("SHELL", "/tmp/odt-missing-shell");
+        let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BUN_PATH",
+            override_path.to_string_lossy().as_ref(),
+        );
+
+        let entries = path_entries_from_value(subprocess_path_env());
+
+        assert!(
+            entries.iter().any(|entry| entry == &override_dir),
+            "explicit override directory should be included in subprocess PATH"
         );
 
         let _ = fs::remove_dir_all(root);
