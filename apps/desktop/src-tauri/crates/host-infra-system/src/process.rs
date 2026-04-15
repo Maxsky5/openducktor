@@ -421,29 +421,16 @@ fn login_shell_path() -> Option<OsString> {
     None
 }
 
-fn process_path_with_order(
-    path_override: Option<&str>,
+fn compose_process_path_entries(
+    explicit_override_directories: Vec<PathBuf>,
+    login_shell_entries: Vec<PathBuf>,
+    inherited_entries: Vec<PathBuf>,
+    standard_entries: Vec<PathBuf>,
+    bundled_dir: Option<PathBuf>,
     bundled_dir_first: bool,
     login_shell_before_inherited: bool,
-) -> Option<OsString> {
-    let explicit_override_directories = explicit_command_override_directories();
-    let bundled_dir = current_executable_directory();
-    let (login_shell_entries, inherited_entries, standard_entries) =
-        if let Some(path_override) = path_override {
-            (
-                Vec::new(),
-                path_entries_from_value(Some(OsString::from(path_override))),
-                standard_search_directories(),
-            )
-        } else {
-            (
-                path_entries_from_value(login_shell_path()),
-                path_entries_from_value(env::var_os("PATH")),
-                standard_search_directories(),
-            )
-        };
-
-    let entries = if bundled_dir_first {
+) -> Vec<PathBuf> {
+    if bundled_dir_first {
         unique_path_entries(
             bundled_dir
                 .into_iter()
@@ -470,7 +457,40 @@ fn process_path_with_order(
                 .chain(standard_entries)
                 .chain(bundled_dir),
         )
-    };
+    }
+}
+
+fn process_path_with_order(
+    path_override: Option<&str>,
+    bundled_dir_first: bool,
+    login_shell_before_inherited: bool,
+) -> Option<OsString> {
+    let explicit_override_directories = explicit_command_override_directories();
+    let bundled_dir = current_executable_directory();
+    let (login_shell_entries, inherited_entries, standard_entries) =
+        if let Some(path_override) = path_override {
+            (
+                Vec::new(),
+                path_entries_from_value(Some(OsString::from(path_override))),
+                standard_search_directories(),
+            )
+        } else {
+            (
+                path_entries_from_value(login_shell_path()),
+                path_entries_from_value(env::var_os("PATH")),
+                standard_search_directories(),
+            )
+        };
+
+    let entries = compose_process_path_entries(
+        explicit_override_directories,
+        login_shell_entries,
+        inherited_entries,
+        standard_entries,
+        bundled_dir,
+        bundled_dir_first,
+        login_shell_before_inherited,
+    );
     path_value_from_entries(&entries)
 }
 
@@ -634,10 +654,9 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 mod tests {
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
-        command_path, command_path_from_directories, explicit_command_override,
-        resolve_command_path, run_command, run_command_allow_failure,
-        run_command_allow_failure_with_env, run_command_with_env, subprocess_path_env,
-        version_command,
+        command_path, command_path_from_directories, compose_process_path_entries,
+        explicit_command_override, resolve_command_path, run_command, run_command_allow_failure,
+        run_command_allow_failure_with_env, run_command_with_env, version_command,
     };
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
@@ -988,7 +1007,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn subprocess_path_env_combines_override_login_shell_inherited_and_bundled_dirs() {
-        let _env_lock = lock_env();
         let root = unique_temp_path("odt-subprocess-path");
         let override_dir = root.join("override-bin");
         let login_dir = root.join("login-bin");
@@ -1006,27 +1024,28 @@ mod tests {
         let override_file = override_dir.join("custom-bun");
         fs::write(&override_file, "").expect("override file should exist");
 
-        let shell = root.join("fake-shell");
-        write_fake_login_shell(&shell, &login_dir);
-
-        let _override_guard = EnvVarGuard::set(
-            "OPENDUCKTOR_BUN_PATH",
-            override_file.to_string_lossy().as_ref(),
-        );
-        let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
-        let inherited_path = format!("{}:/usr/bin:/bin", inherited_dir.display());
-        let _path_guard = EnvVarGuard::set("PATH", inherited_path.as_str());
-        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
-        let _user_guard = EnvVarGuard::set("USER", "odt-test");
-        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
-
-        let path = subprocess_path_env().expect("subprocess PATH should be assembled");
-        let entries = std::env::split_paths(&path).collect::<Vec<_>>();
         let bundled_dir = std::env::current_exe()
             .expect("current executable should resolve")
             .parent()
             .expect("current executable should have parent")
             .to_path_buf();
+        let entries = compose_process_path_entries(
+            vec![override_dir.clone()],
+            vec![login_dir.clone()],
+            vec![
+                inherited_dir.clone(),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+            ],
+            vec![
+                standard_local_dir.clone(),
+                standard_cargo_dir.clone(),
+                standard_bun_dir.clone(),
+            ],
+            Some(bundled_dir.clone()),
+            false,
+            true,
+        );
 
         let override_index = entries
             .iter()
@@ -1071,7 +1090,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn subprocess_path_env_prefers_login_shell_runtime_over_inherited_stub() {
-        let _env_lock = lock_env();
         let root = unique_temp_path("odt-subprocess-login-precedence");
         let login_dir = root.join("login-bin");
         let inherited_dir = root.join("inherited-bin");
@@ -1084,18 +1102,19 @@ mod tests {
             "#!/bin/sh\nprintf 'apple-stub-java'\n",
         );
 
-        let shell = root.join("fake-shell");
-        write_fake_login_shell(&shell, &login_dir);
-
-        let _shell_guard = EnvVarGuard::set("SHELL", shell.to_string_lossy().as_ref());
-        let inherited_path = format!("{}:/usr/bin:/bin", inherited_dir.display());
-        let _path_guard = EnvVarGuard::set("PATH", inherited_path.as_str());
-        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
-        let _user_guard = EnvVarGuard::set("USER", "odt-test");
-        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
-
-        let path = subprocess_path_env().expect("subprocess PATH should be assembled");
-        let entries = std::env::split_paths(&path).collect::<Vec<_>>();
+        let entries = compose_process_path_entries(
+            Vec::new(),
+            vec![login_dir.clone()],
+            vec![
+                inherited_dir.clone(),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+            ],
+            Vec::new(),
+            None,
+            false,
+            true,
+        );
         let resolved_java = command_path_from_directories("java", &entries)
             .expect("java should resolve from subprocess PATH");
 
