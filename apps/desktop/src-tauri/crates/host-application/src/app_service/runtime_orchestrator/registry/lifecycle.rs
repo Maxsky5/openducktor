@@ -6,7 +6,6 @@ use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, RuntimeInstanceSummary};
 use host_infra_system::stop_shared_dolt_server_for_current_owner;
 use std::collections::HashMap;
-use std::process::Child;
 use std::sync::MutexGuard;
 
 impl AppService {
@@ -35,18 +34,20 @@ impl AppService {
             task_id: (role != host_domain::RuntimeRole::Workspace).then(|| task_id.to_string()),
             role,
             working_directory,
-            runtime_route: definition.route_for_port(spawned_server.port),
+            runtime_route: spawned_server.runtime_route.clone(),
             started_at: now_rfc3339(),
             descriptor: definition.descriptor().clone(),
         };
 
-        let mut runtimes = self
-            .lock_runtime_registry_for_attach(&mut spawned_server.child, cleanup_target.as_ref())?;
+        let mut runtimes = self.lock_runtime_registry_for_attach(
+            spawned_server.child.as_mut(),
+            cleanup_target.as_ref(),
+        )?;
         if let Some(existing) = self.apply_post_start_policy(
             &mut runtimes,
             post_start_policy,
             startup_scope,
-            &mut spawned_server.child,
+            spawned_server.child.as_mut(),
             cleanup_target.as_ref(),
         )? {
             return Ok(existing);
@@ -57,7 +58,7 @@ impl AppService {
             AgentRuntimeProcess {
                 summary: summary.clone(),
                 child: spawned_server.child,
-                _runtime_process_guard: Some(spawned_server.runtime_process_guard),
+                _runtime_process_guard: spawned_server.runtime_process_guard,
                 cleanup_target,
             },
         );
@@ -67,7 +68,7 @@ impl AppService {
 
     fn lock_runtime_registry_for_attach<'a>(
         &'a self,
-        child: &mut Child,
+        child: Option<&mut std::process::Child>,
         cleanup_target: Option<&RuntimeCleanupTarget>,
     ) -> Result<MutexGuard<'a, HashMap<String, AgentRuntimeProcess>>> {
         match self.agent_runtimes.lock() {
@@ -87,7 +88,7 @@ impl AppService {
         runtimes: &mut HashMap<String, AgentRuntimeProcess>,
         post_start_policy: Option<RuntimePostStartPolicy<'_>>,
         startup_scope: &str,
-        child: &mut Child,
+        child: Option<&mut std::process::Child>,
         cleanup_target: Option<&RuntimeCleanupTarget>,
     ) -> Result<Option<RuntimeInstanceSummary>> {
         let Some(post_start_policy) = post_start_policy else {
@@ -231,9 +232,8 @@ impl AppService {
             .filter_map(|(runtime_id, runtime)| {
                 runtime
                     .child
-                    .try_wait()
-                    .ok()
-                    .flatten()
+                    .as_mut()
+                    .and_then(|child| child.try_wait().ok().flatten())
                     .map(|_| runtime_id.clone())
             })
             .collect::<Vec<_>>();

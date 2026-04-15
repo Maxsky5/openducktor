@@ -5,7 +5,7 @@ use super::types::{
     RepoConfig, RepoDevServerScript, RuntimeConfig, AUTOPILOT_EVENT_ORDER,
 };
 use anyhow::{anyhow, Result};
-use host_domain::builtin_runtime_registry;
+use host_domain::RuntimeRegistry;
 use std::collections::HashSet;
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -229,8 +229,10 @@ pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn normalize_runtime_config(config: &mut RuntimeConfig) -> Result<()> {
-    let runtime_registry = builtin_runtime_registry();
+pub(super) fn normalize_runtime_config(
+    config: &mut RuntimeConfig,
+    runtime_registry: &RuntimeRegistry,
+) -> Result<()> {
     let configured_runtime_kinds = config.runtimes.keys().cloned().collect::<Vec<_>>();
     for runtime_kind in configured_runtime_kinds {
         runtime_registry.definition_by_str(runtime_kind.as_str())?;

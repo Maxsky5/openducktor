@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
     RepoRuntimeStartupStatus, RunState, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
-    RuntimeRole,
+    RuntimeRole, RuntimeRoute,
 };
 use std::collections::{HashMap, HashSet};
 use std::process::Child;
@@ -60,9 +60,9 @@ struct RuntimeStartupFailure {
 
 pub(super) struct SpawnedRuntimeServer {
     runtime_id: String,
-    port: u16,
-    child: Child,
-    runtime_process_guard: super::RuntimeProcessGuard,
+    runtime_route: RuntimeRoute,
+    child: Option<Child>,
+    runtime_process_guard: Option<super::RuntimeProcessGuard>,
     startup_started_at_instant: Instant,
     startup_started_at: String,
     startup_report: super::RuntimeStartupWaitReport,
@@ -991,7 +991,7 @@ mod tests {
                 runtime.runtime_id.clone(),
                 AgentRuntimeProcess {
                     summary: runtime,
-                    child,
+                    child: Some(child),
                     _runtime_process_guard: None,
                     cleanup_target: None,
                 },

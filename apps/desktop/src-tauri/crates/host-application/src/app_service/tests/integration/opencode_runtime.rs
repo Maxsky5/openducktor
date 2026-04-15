@@ -306,7 +306,7 @@ fn runtime_list_prunes_stale_entries() -> Result<()> {
             summary.runtime_id.clone(),
             AgentRuntimeProcess {
                 summary,
-                child: stale_child,
+                child: Some(stale_child),
                 _runtime_process_guard: None,
                 cleanup_target: None,
             },

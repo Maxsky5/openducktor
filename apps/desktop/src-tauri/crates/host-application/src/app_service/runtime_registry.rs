@@ -270,6 +270,15 @@ pub(crate) trait AppRuntime: Send + Sync {
 
     fn startup_policy(&self, service: &AppService) -> Result<RuntimeStartupReadinessPolicy>;
 
+    fn start_external(
+        &self,
+        _service: &AppService,
+        _input: &super::runtime_orchestrator::RuntimeStartInput<'_>,
+        _runtime_id: &str,
+    ) -> Result<ExternalRuntimeStart> {
+        Err(anyhow!("Runtime does not support external provisioning"))
+    }
+
     fn track_process(
         &self,
         _service: &AppService,
@@ -380,6 +389,11 @@ pub(crate) trait AppRuntime: Send + Sync {
     }
 }
 
+pub(crate) struct ExternalRuntimeStart {
+    pub(crate) runtime_route: RuntimeRoute,
+    pub(crate) startup_report: RuntimeStartupWaitReport,
+}
+
 #[derive(Clone)]
 pub(crate) struct AppRuntimeRegistry {
     definitions: RuntimeRegistry,
@@ -436,6 +450,10 @@ impl AppRuntimeRegistry {
             .get(kind.as_str())
             .cloned()
             .ok_or_else(|| anyhow!("Unsupported agent runtime kind: {}", kind.as_str()))
+    }
+
+    pub(crate) fn runtime_definitions(&self) -> &RuntimeRegistry {
+        &self.definitions
     }
 }
 

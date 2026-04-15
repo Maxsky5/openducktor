@@ -1,6 +1,6 @@
 use host_domain::{
-    default_runtime_kind as registry_default_runtime_kind, RuntimeStartupReadinessConfig,
-    DEFAULT_BRANCH_PREFIX,
+    default_runtime_kind as registry_default_runtime_kind, RuntimeRegistry,
+    RuntimeStartupReadinessConfig, DEFAULT_BRANCH_PREFIX,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
@@ -525,7 +525,13 @@ impl From<RuntimeConfig> for RuntimeConfigSerde {
 
 impl Default for RuntimeConfig {
     fn default() -> Self {
-        let runtimes = host_domain::builtin_runtime_registry()
+        Self::from_runtime_registry(host_domain::builtin_runtime_registry())
+    }
+}
+
+impl RuntimeConfig {
+    pub fn from_runtime_registry(runtime_registry: &RuntimeRegistry) -> Self {
+        let runtimes = runtime_registry
             .definitions()
             .into_iter()
             .map(|definition| {

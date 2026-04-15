@@ -7,7 +7,8 @@ use super::persistence::{
 use super::types::{repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
 use crate::{parse_user_path, resolve_default_worktree_base_dir};
 use anyhow::{anyhow, Context, Result};
-use host_domain::WorkspaceRecord;
+use host_domain::{RuntimeRegistry, WorkspaceRecord};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
@@ -48,6 +49,7 @@ pub struct AppConfigStore {
 pub struct RuntimeConfigStore {
     pub(super) path: PathBuf,
     pub(super) enforce_private_parent_permissions: bool,
+    pub(super) runtime_registry: RuntimeRegistry,
 }
 
 const USER_SETTINGS_FILENAME: &str = "config.json";
@@ -272,22 +274,45 @@ impl Default for RuntimeConfigStore {
 
 impl RuntimeConfigStore {
     pub fn new() -> Result<Self> {
+        Self::new_with_runtime_registry(host_domain::builtin_runtime_registry().clone())
+    }
+
+    pub fn new_with_runtime_registry(runtime_registry: RuntimeRegistry) -> Result<Self> {
         Ok(Self {
             path: resolve_default_path(RUNTIME_SETTINGS_FILENAME)?,
             enforce_private_parent_permissions: true,
+            runtime_registry,
         })
     }
 
     pub fn from_path(path: PathBuf) -> Self {
+        Self::from_path_with_runtime_registry(path, host_domain::builtin_runtime_registry().clone())
+    }
+
+    pub fn from_path_with_runtime_registry(
+        path: PathBuf,
+        runtime_registry: RuntimeRegistry,
+    ) -> Self {
         let enforce_private_parent_permissions =
             should_enforce_private_parent_permissions(&path, RUNTIME_SETTINGS_FILENAME);
         Self {
             path,
             enforce_private_parent_permissions,
+            runtime_registry,
         }
     }
 
     pub fn from_user_settings_store(config_store: &AppConfigStore) -> Self {
+        Self::from_user_settings_store_with_runtime_registry(
+            config_store,
+            host_domain::builtin_runtime_registry().clone(),
+        )
+    }
+
+    pub fn from_user_settings_store_with_runtime_registry(
+        config_store: &AppConfigStore,
+        runtime_registry: RuntimeRegistry,
+    ) -> Self {
         let runtime_path = config_store
             .path
             .parent()
@@ -296,6 +321,7 @@ impl RuntimeConfigStore {
         Self {
             path: runtime_path,
             enforce_private_parent_permissions: config_store.enforce_private_parent_permissions,
+            runtime_registry,
         }
     }
 
@@ -304,12 +330,22 @@ impl RuntimeConfigStore {
     }
 
     pub fn load(&self) -> Result<RuntimeConfig> {
-        load_config_or_default(
+        if !self.path.exists() {
+            return Ok(RuntimeConfig::from_runtime_registry(&self.runtime_registry));
+        }
+
+        super::security::validate_config_access(
             &self.path,
             self.enforce_private_parent_permissions,
-            normalize_runtime_config,
-            |_| {},
-        )
+        )?;
+
+        let data = fs::read_to_string(&self.path)
+            .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
+        let mut parsed: RuntimeConfig = serde_json::from_str(&data)
+            .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
+        normalize_runtime_config(&mut parsed, &self.runtime_registry)
+            .with_context(|| format!("Failed normalizing config file {}", self.path.display()))?;
+        Ok(parsed)
     }
 
     pub fn save(&self, config: &RuntimeConfig) -> Result<()> {
@@ -317,7 +353,7 @@ impl RuntimeConfigStore {
             &self.path,
             self.enforce_private_parent_permissions,
             config,
-            normalize_runtime_config,
+            |value| normalize_runtime_config(value, &self.runtime_registry),
         )
     }
 }

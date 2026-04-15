@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry};
+use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry, ExternalRuntimeStart};
 use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_runtime_registry,
     builtin_opencode_runtime_definition, builtin_opencode_runtime_descriptor,
@@ -77,7 +77,7 @@ fn insert_workspace_runtime(service: &AppService, repo_path: &str, port: u16) ->
             "runtime-workspace".to_string(),
             AgentRuntimeProcess {
                 summary,
-                child: spawn_sleep_process(30),
+                child: Some(spawn_sleep_process(30)),
                 _runtime_process_guard: None,
                 cleanup_target: None,
             },
@@ -115,7 +115,7 @@ fn insert_workspace_runtime_for_kind(
             "runtime-workspace-custom".to_string(),
             AgentRuntimeProcess {
                 summary,
-                child: spawn_sleep_process(30),
+                child: Some(spawn_sleep_process(30)),
                 _runtime_process_guard: None,
                 cleanup_target: None,
             },
@@ -143,9 +143,19 @@ impl AppRuntime for TestRuntimeAdapter {
     }
 
     fn startup_policy(&self, _service: &AppService) -> Result<OpencodeStartupReadinessPolicy> {
-        Err(anyhow::anyhow!(
-            "startup policy should not be used in this test"
-        ))
+        Ok(OpencodeStartupReadinessPolicy::default())
+    }
+
+    fn start_external(
+        &self,
+        _service: &AppService,
+        _input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
+        _runtime_id: &str,
+    ) -> Result<ExternalRuntimeStart> {
+        Ok(ExternalRuntimeStart {
+            runtime_route: self.definition.route_for_port(43_123),
+            startup_report: crate::app_service::RuntimeStartupWaitReport::zero(),
+        })
     }
 
     fn spawn_server(
@@ -205,6 +215,14 @@ impl AppRuntime for TestRuntimeAdapter {
 }
 
 fn test_runtime_definition(kind: &str, label: &str) -> RuntimeDefinition {
+    test_runtime_definition_with_provisioning(kind, label, RuntimeProvisioningMode::HostManaged)
+}
+
+fn test_runtime_definition_with_provisioning(
+    kind: &str,
+    label: &str,
+    provisioning_mode: RuntimeProvisioningMode,
+) -> RuntimeDefinition {
     RuntimeDefinition::new(
         RuntimeDescriptor {
             kind: AgentRuntimeKind::from(kind),
@@ -231,7 +249,7 @@ fn test_runtime_definition(kind: &str, label: &str) -> RuntimeDefinition {
                     RuntimeSupportedScope::Task,
                     RuntimeSupportedScope::Build,
                 ],
-                provisioning_mode: RuntimeProvisioningMode::HostManaged,
+                provisioning_mode,
             },
         },
         RuntimeStartupReadinessConfig::default(),
@@ -239,6 +257,67 @@ fn test_runtime_definition(kind: &str, label: &str) -> RuntimeDefinition {
             endpoint: format!("http://127.0.0.1:{port}"),
         },
     )
+}
+
+#[test]
+fn runtime_ensure_registers_external_runtimes_without_local_child_processes() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition_with_provisioning(
+                    "test-runtime",
+                    "Test Runtime",
+                    RuntimeProvisioningMode::External,
+                ),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, _task_state, _git_state) =
+        build_service_with_runtime_registry(vec![], runtime_registry);
+
+    let runtime = service.runtime_ensure("test-runtime", "/tmp/external-runtime")?;
+
+    assert_eq!(runtime.kind, AgentRuntimeKind::from("test-runtime"));
+    assert_eq!(
+        runtime.runtime_route,
+        host_domain::RuntimeRoute::LocalHttp {
+            endpoint: "http://127.0.0.1:43123".to_string(),
+        }
+    );
+    assert_eq!(
+        service
+            .runtime_list("test-runtime", Some("/tmp/external-runtime"))?
+            .len(),
+        1
+    );
+    let runtimes = service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned");
+    let registered = runtimes
+        .get(runtime.runtime_id.as_str())
+        .expect("external runtime should be registered");
+    assert!(registered.child.is_none());
+
+    Ok(())
 }
 
 #[test]
@@ -321,6 +400,43 @@ fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> 
         .collect::<Vec<_>>();
 
     assert_eq!(runtime_kinds, vec!["opencode", "test-runtime"]);
+    Ok(())
+}
+
+#[test]
+fn injected_runtime_registry_drives_runtime_config_defaults() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, _task_state, _git_state) =
+        build_service_with_runtime_registry(vec![], runtime_registry);
+
+    let runtime_config = service.runtime_config_store.load()?;
+
+    assert!(runtime_config.runtimes.contains_key("opencode"));
+    assert!(runtime_config.runtimes.contains_key("test-runtime"));
     Ok(())
 }
 

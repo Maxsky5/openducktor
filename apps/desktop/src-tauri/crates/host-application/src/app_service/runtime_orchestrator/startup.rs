@@ -4,7 +4,7 @@ use super::super::{
 };
 use super::{RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Context, Result};
-use host_domain::RuntimeRole;
+use host_domain::{RuntimeProvisioningMode, RuntimeRole};
 use host_infra_system::pick_free_port;
 use std::path::Path;
 use uuid::Uuid;
@@ -57,61 +57,80 @@ impl AppService {
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let startup_policy = input.startup_policy;
+        let definition = self.runtime_registry.definition(&input.runtime_kind)?;
         let runtime = self.runtime_registry.runtime(&input.runtime_kind)?;
-        let mut child = self
-            .runtime_registry
-            .runtime(&input.runtime_kind)?
-            .spawn_server(
-                self,
-                Path::new(input.working_directory.as_str()),
-                Path::new(input.repo_path),
-                port,
-            )?;
-        let runtime_process_guard = match runtime.track_process(self, child.id()) {
-            Ok(Some(guard)) => guard,
-            Ok(None) => {
-                return Err(anyhow!(
-                    "Runtime '{}' did not return a process guard for a host-managed server",
-                    input.runtime_kind.as_str()
-                ));
-            }
-            Err(error) => {
-                let tracking_error = anyhow!(error).context(input.tracking_error_context);
-                if let Err(cleanup_error) =
-                    Self::cleanup_started_runtime(&mut child, input.cleanup_target.as_ref())
-                {
-                    return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
-                }
-                return Err(tracking_error);
-            }
-        };
-        let startup_report = match runtime.wait_until_ready(
-            self,
-            input,
-            &mut child,
-            port,
-            runtime_id.as_str(),
-            startup_policy,
-        ) {
-            Ok(report) => report,
-            Err(startup_error) => {
-                if let Err(cleanup_error) =
-                    Self::cleanup_started_runtime(&mut child, input.cleanup_target.as_ref())
-                {
-                    return Err(Self::append_cleanup_error(startup_error, cleanup_error));
-                }
-                return Err(startup_error);
-            }
-        };
+        match definition.descriptor().capabilities.provisioning_mode {
+            RuntimeProvisioningMode::HostManaged => {
+                let mut child = runtime.spawn_server(
+                    self,
+                    Path::new(input.working_directory.as_str()),
+                    Path::new(input.repo_path),
+                    port,
+                )?;
+                let runtime_process_guard = match runtime.track_process(self, child.id()) {
+                    Ok(Some(guard)) => guard,
+                    Ok(None) => {
+                        return Err(anyhow!(
+                            "Runtime '{}' did not return a process guard for a host-managed server",
+                            input.runtime_kind.as_str()
+                        ));
+                    }
+                    Err(error) => {
+                        let tracking_error = anyhow!(error).context(input.tracking_error_context);
+                        if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                            Some(&mut child),
+                            input.cleanup_target.as_ref(),
+                        ) {
+                            return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
+                        }
+                        return Err(tracking_error);
+                    }
+                };
+                let startup_report = match runtime.wait_until_ready(
+                    self,
+                    input,
+                    &mut child,
+                    port,
+                    runtime_id.as_str(),
+                    startup_policy,
+                ) {
+                    Ok(report) => report,
+                    Err(startup_error) => {
+                        if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                            Some(&mut child),
+                            input.cleanup_target.as_ref(),
+                        ) {
+                            return Err(Self::append_cleanup_error(startup_error, cleanup_error));
+                        }
+                        return Err(startup_error);
+                    }
+                };
 
-        Ok(SpawnedRuntimeServer {
-            runtime_id,
-            port,
-            child,
-            runtime_process_guard,
-            startup_started_at_instant: input.startup_started_at_instant,
-            startup_started_at: input.startup_started_at.clone(),
-            startup_report,
-        })
+                Ok(SpawnedRuntimeServer {
+                    runtime_id,
+                    runtime_route: definition.route_for_port(port),
+                    child: Some(child),
+                    runtime_process_guard: Some(runtime_process_guard),
+                    startup_started_at_instant: input.startup_started_at_instant,
+                    startup_started_at: input.startup_started_at.clone(),
+                    startup_report,
+                })
+            }
+            RuntimeProvisioningMode::External => {
+                let external_start = runtime
+                    .start_external(self, input, runtime_id.as_str())
+                    .with_context(|| input.startup_error_context.clone())?;
+
+                Ok(SpawnedRuntimeServer {
+                    runtime_id,
+                    runtime_route: external_start.runtime_route,
+                    child: None,
+                    runtime_process_guard: None,
+                    startup_started_at_instant: input.startup_started_at_instant,
+                    startup_started_at: input.startup_started_at.clone(),
+                    startup_report: external_start.startup_report,
+                })
+            }
+        }
     }
 }

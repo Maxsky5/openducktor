@@ -190,7 +190,7 @@ pub(crate) struct RunProcess {
 
 pub(crate) struct AgentRuntimeProcess {
     pub(super) summary: RuntimeInstanceSummary,
-    pub(super) child: Child,
+    pub(super) child: Option<Child>,
     pub(super) _runtime_process_guard: Option<TrackedOpencodeProcessGuard>,
     pub(super) cleanup_target: Option<RuntimeCleanupTarget>,
 }
@@ -283,7 +283,11 @@ impl AppService {
         runtime_registry: AppRuntimeRegistry,
         enforce_repo_allowlist: bool,
     ) -> Self {
-        let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
+        let runtime_config_store =
+            RuntimeConfigStore::from_user_settings_store_with_runtime_registry(
+                &config_store,
+                runtime_registry.runtime_definitions().clone(),
+            );
         let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
         let mcp_bridge_registry_path = Self::mcp_bridge_registry_path(&config_store);
         let instance_pid = std::process::id();

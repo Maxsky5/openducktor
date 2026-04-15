@@ -134,7 +134,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
                     "/tmp/worktree",
                     1,
                 ),
-                child: spawn_sleep_process(20),
+                child: Some(spawn_sleep_process(20)),
                 _runtime_process_guard: None,
                 cleanup_target: Some(RuntimeCleanupTarget {
                     repo_path: "/tmp/non-existent-repo-for-shutdown".to_string(),
@@ -290,7 +290,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
                     "/tmp/repo",
                     1,
                 ),
-                child: runtime_child,
+                child: Some(runtime_child),
                 _runtime_process_guard: None,
                 cleanup_target: None,
             },
