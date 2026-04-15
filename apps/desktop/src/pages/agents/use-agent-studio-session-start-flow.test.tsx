@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { toast } from "sonner";
+import { HUMAN_REVIEW_FEEDBACK_REQUEST_FAILURE_MESSAGE } from "@/features/human-review-feedback/human-review-feedback-flow";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -831,5 +833,64 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.unmount();
+  });
+
+  test("human changes feedback shows the canonical request failure toast for existing builder sessions", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    toast.error = toastError;
+    const humanRequestChangesTask = mock(async () => {
+      throw new Error("request failed");
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      humanRequestChangesTask,
+      bootstrapTaskSessions: mock(async () => {}),
+      selectedTask: createTask({ status: "human_review" }),
+      sessionsForTask: [
+        createSession({
+          sessionId: "session-build-latest",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T12:00:00.000Z",
+        }),
+      ],
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleCreateSession({
+          id: "build:build_after_human_request_changes:fresh",
+          role: "build",
+          scenario: "build_after_human_request_changes",
+          label: "Builder · Apply Human Changes",
+          description: "Create a new builder session after human review",
+          disabled: false,
+        });
+      });
+      await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
+
+      await harness.run((state) => {
+        state.humanReviewFeedbackModal?.onTargetChange("session-build-latest");
+        state.humanReviewFeedbackModal?.onMessageChange("Apply the requested human changes.");
+      });
+      await harness.run(async (state) => {
+        await state.humanReviewFeedbackModal?.onConfirm();
+      });
+
+      expect(humanRequestChangesTask).toHaveBeenCalledWith(
+        "task-1",
+        "Apply the requested human changes.",
+      );
+      expect(toastError).toHaveBeenCalledWith(HUMAN_REVIEW_FEEDBACK_REQUEST_FAILURE_MESSAGE);
+      expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
+    } finally {
+      toast.error = originalToastError;
+      await harness.unmount();
+    }
   });
 });

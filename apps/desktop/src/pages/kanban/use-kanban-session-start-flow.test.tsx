@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
+import { HUMAN_REVIEW_FEEDBACK_BOOTSTRAP_FAILURE_MESSAGE } from "@/features/human-review-feedback/human-review-feedback-flow";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
@@ -664,6 +665,32 @@ describe("useKanbanSessionStartFlow", () => {
     expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
 
     await harness.unmount();
+  });
+
+  test("human review bootstrap failures surface the canonical builder-session toast", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "toast-id");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      bootstrapTaskSessions: mock(async () => {
+        throw new Error("bootstrap failed");
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.onHumanRequestChanges("TASK-1");
+      });
+
+      expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
+      expect(toastError).toHaveBeenCalledWith(HUMAN_REVIEW_FEEDBACK_BOOTSTRAP_FAILURE_MESSAGE);
+    } finally {
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      await harness.unmount();
+    }
   });
 
   test("onOpenSession uses explicit session id when provided", async () => {

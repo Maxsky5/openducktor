@@ -4,9 +4,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  HUMAN_REVIEW_FEEDBACK_HYDRATION_FAILURE_MESSAGE,
+  HUMAN_REVIEW_FEEDBACK_SEND_FAILURE_MESSAGE,
+  prepareHumanReviewFeedback,
+  submitHumanReviewFeedback,
+} from "@/features/human-review-feedback/human-review-feedback-flow";
+import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
-  NEW_BUILDER_SESSION_TARGET,
 } from "@/features/human-review-feedback/human-review-feedback-state";
 import type {
   HumanReviewFeedbackModalModel,
@@ -14,7 +19,6 @@ import type {
   PendingHumanReviewHydration,
 } from "@/features/human-review-feedback/human-review-feedback-types";
 import {
-  buildReusableSessionOptions,
   type NewSessionStartDecision,
   type NewSessionStartRequest,
   startSessionWorkflow,
@@ -150,27 +154,30 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     }
 
     void (async () => {
-      try {
-        const baselineSessions = sessionsForTaskRef.current;
-        await bootstrapTaskSessions(taskId);
+      const result = await prepareHumanReviewFeedback({
+        taskId,
+        baselineSessions: sessionsForTaskRef.current,
+        bootstrapTaskSessions,
+        getBuilderSessions: () => findBuilderSessions(sessionsForTaskRef.current),
+        createState: (builderSessions) =>
+          createHumanReviewFeedbackState(
+            selectedTaskRef.current ? [selectedTaskRef.current] : [],
+            taskId,
+            builderSessions,
+          ),
+      });
 
-        const currentBuilderSessions = findBuilderSessions(sessionsForTaskRef.current);
-        if (currentBuilderSessions.length > 0) {
-          setHumanReviewFeedbackState(
-            createHumanReviewFeedbackState(
-              selectedTaskRef.current ? [selectedTaskRef.current] : [],
-              taskId,
-              currentBuilderSessions,
-            ),
-          );
-          return;
-        }
-
-        setPendingHumanReviewHydration({ taskId, baselineSessions });
-      } catch {
-        setPendingHumanReviewHydration(null);
-        toast.error("Failed to load Builder sessions for this task.");
+      if (result.kind === "ready") {
+        setHumanReviewFeedbackState(result.state);
+        return;
       }
+
+      if (result.kind === "pending_hydration") {
+        setPendingHumanReviewHydration(result.pendingHydration);
+        return;
+      }
+
+      setPendingHumanReviewHydration(null);
     })();
   }, [bootstrapTaskSessions, taskId]);
 
@@ -181,110 +188,80 @@ export function useAgentStudioHumanReviewFeedbackFlow({
 
     setIsSubmittingHumanReviewFeedback(true);
     try {
-      const trimmedMessage = humanReviewFeedbackState.message.trim();
-      if (trimmedMessage.length === 0) {
-        toast.error("Feedback message is required.");
-        return;
-      }
-
-      if (humanReviewFeedbackState.selectedTarget === NEW_BUILDER_SESSION_TARGET) {
-        const workflow = await executeRequestedSessionStart(
-          {
-            taskId: humanReviewFeedbackState.taskId,
-            role: "build",
-            scenario: humanReviewFeedbackState.scenario,
-            reason: "create_session",
-            existingSessionOptions: buildReusableSessionOptions({
-              sessions: humanReviewFeedbackState.builderSessions,
-              role: "build",
-            }),
-            initialSourceSessionId: humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
-          },
-          async (decision) =>
-            startSessionWorkflow({
-              activeRepo,
-              queryClient,
-              intent: {
-                taskId: humanReviewFeedbackState.taskId,
-                role: "build",
-                scenario: humanReviewFeedbackState.scenario,
-                startMode: decision.startMode,
-                ...(decision.startMode === "reuse" || decision.startMode === "fork"
-                  ? { sourceSessionId: decision.sourceSessionId }
-                  : {}),
-                postStartAction: "send_message",
-                message: trimmedMessage,
-                beforeStartAction: {
-                  action: "human_request_changes",
-                  note: trimmedMessage,
+      await submitHumanReviewFeedback({
+        state: humanReviewFeedbackState,
+        humanRequestChangesTask,
+        dismissFeedbackModal: () => {
+          setHumanReviewFeedbackState(null);
+        },
+        startNewSession: async (request) => {
+          const workflow = await executeRequestedSessionStart(
+            {
+              taskId: request.taskId,
+              role: request.role,
+              scenario: request.scenario,
+              reason: "create_session",
+              existingSessionOptions: request.existingSessionOptions,
+              initialSourceSessionId: request.sourceSessionId ?? null,
+            },
+            async (decision) =>
+              startSessionWorkflow({
+                activeRepo,
+                queryClient,
+                intent: {
+                  taskId: request.taskId,
+                  role: request.role,
+                  scenario: request.scenario,
+                  startMode: decision.startMode,
+                  ...(decision.startMode === "reuse" || decision.startMode === "fork"
+                    ? { sourceSessionId: decision.sourceSessionId }
+                    : {}),
+                  postStartAction: request.postStartAction,
+                  message: request.message,
+                  beforeStartAction: request.beforeStartAction,
                 },
-              },
-              selection: decision.startMode === "reuse" ? null : decision.selectedModel,
-              task: selectedTaskRef.current,
-              startAgentSession,
-              sendAgentMessage,
-              humanRequestChangesTask,
-              postStartExecution: "detached",
-              onDetachedPostStartError: (error) => {
-                toast.error("Changes requested, but feedback message failed.", {
-                  description: error.message,
-                });
-              },
-            }),
-        );
-        if (!workflow) {
-          return;
-        }
+                selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+                task: selectedTaskRef.current,
+                startAgentSession,
+                sendAgentMessage,
+                humanRequestChangesTask,
+                postStartExecution: "detached",
+                onDetachedPostStartError: (error) => {
+                  toast.error(HUMAN_REVIEW_FEEDBACK_SEND_FAILURE_MESSAGE, {
+                    description: error.message,
+                  });
+                },
+              }),
+          );
+          if (!workflow) {
+            return;
+          }
 
-        setHumanReviewFeedbackState(null);
-        selectSessionInAgentStudio(workflow.sessionId, "build");
+          setHumanReviewFeedbackState(null);
+          selectSessionInAgentStudio(workflow.sessionId, "build");
 
-        try {
+          try {
+            await hydrateRequestedTaskSessionHistory({
+              taskId: request.taskId,
+              sessionId: workflow.sessionId,
+            });
+          } catch {
+            toast.error(HUMAN_REVIEW_FEEDBACK_HYDRATION_FAILURE_MESSAGE);
+          }
+        },
+        openExistingSession: (session) => {
+          selectSessionInAgentStudio(session.sessionId, "build");
+        },
+        hydrateExistingSession: async (session) => {
           await hydrateRequestedTaskSessionHistory({
-            taskId: humanReviewFeedbackState.taskId,
-            sessionId: workflow.sessionId,
+            taskId: session.taskId,
+            sessionId: session.sessionId,
           });
-        } catch {
-          toast.error("Changes requested, but refreshing Builder sessions failed.");
-        }
-
-        return;
-      }
-
-      const existingBuilderSession = humanReviewFeedbackState.builderSessions.find(
-        (session) => session.sessionId === humanReviewFeedbackState.selectedTarget,
-      );
-      if (!existingBuilderSession) {
-        toast.error("The selected builder session is no longer available for this task.");
-        return;
-      }
-
-      try {
-        await humanRequestChangesTask(humanReviewFeedbackState.taskId, trimmedMessage);
-      } catch {
-        toast.error("Requesting changes failed.");
-        return;
-      }
-
-      setHumanReviewFeedbackState(null);
-      selectSessionInAgentStudio(existingBuilderSession.sessionId, "build");
-
-      try {
-        await hydrateRequestedTaskSessionHistory({
-          taskId: humanReviewFeedbackState.taskId,
-          sessionId: existingBuilderSession.sessionId,
-        });
-      } catch {
-        toast.error("Changes requested, but refreshing Builder sessions failed.");
-      }
-
-      try {
-        await sendAgentMessage(existingBuilderSession.sessionId, [
-          { kind: "text", text: trimmedMessage },
-        ]);
-      } catch {
-        toast.error("Changes requested, but feedback message failed.");
-      }
+        },
+        sendExistingSessionMessage: async (session, message) => {
+          await sendAgentMessage(session.sessionId, [{ kind: "text", text: message }]);
+        },
+      });
     } catch (error) {
       toast.error("Failed to prepare the Builder session.", {
         description: error instanceof Error ? error.message : "Unknown error",

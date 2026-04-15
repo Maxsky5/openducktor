@@ -8,6 +8,10 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
 import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
 import {
+  prepareHumanReviewFeedback,
+  submitHumanReviewFeedback,
+} from "@/features/human-review-feedback/human-review-feedback-flow";
+import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
 } from "@/features/human-review-feedback/human-review-feedback-state";
@@ -25,7 +29,6 @@ import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { confirmHumanReviewFeedbackFlow } from "./kanban-human-review-feedback";
 import type {
   KanbanResolvedSessionStartIntent,
   KanbanSessionStartIntent,
@@ -457,28 +460,26 @@ export function useKanbanSessionStartFlow({
   const onHumanRequestChanges = useCallback(
     (taskId: string): void => {
       void (async () => {
-        try {
-          const baselineSessions = sessionsRef.current;
-          await bootstrapTaskSessions(taskId);
+        const result = await prepareHumanReviewFeedback({
+          taskId,
+          baselineSessions: sessionsRef.current,
+          bootstrapTaskSessions,
+          getBuilderSessions: () => findSessionsByRoleForTask(sessionsRef.current, taskId, "build"),
+          createState: (builderSessions) =>
+            createHumanReviewFeedbackState(tasksRef.current, taskId, builderSessions),
+        });
 
-          const currentTasks = tasksRef.current;
-          const currentBuilderSessions = findSessionsByRoleForTask(
-            sessionsRef.current,
-            taskId,
-            "build",
-          );
-
-          if (currentBuilderSessions.length > 0) {
-            setHumanReviewFeedbackState(
-              createHumanReviewFeedbackState(currentTasks, taskId, currentBuilderSessions),
-            );
-            return;
-          }
-
-          setPendingHumanReviewHydration({ taskId, baselineSessions });
-        } catch {
-          setPendingHumanReviewHydration(null);
+        if (result.kind === "ready") {
+          setHumanReviewFeedbackState(result.state);
+          return;
         }
+
+        if (result.kind === "pending_hydration") {
+          setPendingHumanReviewHydration(result.pendingHydration);
+          return;
+        }
+
+        setPendingHumanReviewHydration(null);
       })();
     },
     [bootstrapTaskSessions],
@@ -491,17 +492,37 @@ export function useKanbanSessionStartFlow({
 
     setIsSubmittingHumanReviewFeedback(true);
     try {
-      await confirmHumanReviewFeedbackFlow({
+      await submitHumanReviewFeedback({
         state: humanReviewFeedbackState,
         humanRequestChangesTask,
-        hydrateRequestedTaskSessionHistory,
-        openSessionStartModal: (intent) => {
-          void startSessionIntent(intent);
-        },
-        openAgentStudioSession,
-        sendAgentMessage,
-        onDismiss: () => {
+        dismissFeedbackModal: () => {
           setHumanReviewFeedbackState(null);
+        },
+        startNewSession: async (request) => {
+          setHumanReviewFeedbackState(null);
+          void startSessionIntent({
+            taskId: request.taskId,
+            role: request.role,
+            scenario: request.scenario,
+            initialStartMode: request.initialStartMode,
+            existingSessionOptions: request.existingSessionOptions,
+            ...(request.sourceSessionId ? { sourceSessionId: request.sourceSessionId } : {}),
+            postStartAction: request.postStartAction,
+            message: request.message,
+            beforeStartAction: request.beforeStartAction,
+          });
+        },
+        openExistingSession: (session) => {
+          openAgentStudioSession(session.taskId, session);
+        },
+        hydrateExistingSession: async (session) => {
+          await hydrateRequestedTaskSessionHistory({
+            taskId: session.taskId,
+            sessionId: session.sessionId,
+          });
+        },
+        sendExistingSessionMessage: async (session, message) => {
+          await sendAgentMessage(session.sessionId, [{ kind: "text", text: message }]);
         },
       });
     } catch (error) {
