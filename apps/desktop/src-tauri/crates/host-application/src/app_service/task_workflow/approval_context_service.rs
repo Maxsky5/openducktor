@@ -31,7 +31,7 @@ impl<'a> ApprovalContextService<'a> {
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self
             .service
-            .workspace_get_repo_config(context.repo.repo_path.as_str())?;
+            .workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
         let metadata = self
             .service
             .task_metadata_get(context.repo.repo_path.as_str(), task_id)?;
@@ -121,7 +121,7 @@ impl<'a> ApprovalContextService<'a> {
         ensure_human_approval_status(&context.task.status)?;
         let repo_config = self
             .service
-            .workspace_get_repo_config(context.repo.repo_path.as_str())?;
+            .workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
         let metadata = self
             .service
             .task_metadata_get(context.repo.repo_path.as_str(), task_id)?;

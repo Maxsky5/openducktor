@@ -29,7 +29,7 @@ describe("OdtTaskStore", () => {
     const client = {
       ready: async () => ({
         bridgeVersion: 1,
-        repoPath: "/repo",
+        workspaceId: "repo",
         toolNames: [],
       }),
       call: async (toolName, input) => {
@@ -39,7 +39,7 @@ describe("OdtTaskStore", () => {
     } as OdtHostBridgeClientPort;
 
     const store = new OdtTaskStore(
-      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327" },
+      { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
       { client },
     );
 
@@ -51,14 +51,14 @@ describe("OdtTaskStore", () => {
     const client = {
       ready: async () => ({
         bridgeVersion: 1,
-        repoPath: "/repo",
+        workspaceId: "repo",
         toolNames: [],
       }),
       call: async () => summaryPayload,
     } as OdtHostBridgeClientPort;
 
     const store = new OdtTaskStore(
-      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327" },
+      { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
       { client },
     );
 
@@ -69,7 +69,7 @@ describe("OdtTaskStore", () => {
     const client = {
       ready: async () => ({
         bridgeVersion: 1,
-        repoPath: "/repo",
+        workspaceId: "repo",
         toolNames: [],
       }),
       call: async () => ({
@@ -84,7 +84,7 @@ describe("OdtTaskStore", () => {
     } as OdtHostBridgeClientPort;
 
     const store = new OdtTaskStore(
-      { repoPath: "/repo", hostUrl: "http://127.0.0.1:14327" },
+      { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
       { client },
     );
 

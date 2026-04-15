@@ -111,10 +111,18 @@ describe("use-workspace-selection-operations", () => {
     try {
       await harness.mount();
       await harness.run(async (value) => {
-        await value.addWorkspace("  /repo-new  ");
+        await value.addWorkspace({
+          workspaceId: "repo-new",
+          workspaceName: "Repo New",
+          repoPath: "  /repo-new  ",
+        });
       });
 
-      expect(workspaceAdd).toHaveBeenCalledWith("/repo-new");
+      expect(workspaceAdd).toHaveBeenCalledWith({
+        workspaceId: "repo-new",
+        workspaceName: "Repo New",
+        repoPath: "/repo-new",
+      });
       expect(workspaceList).toHaveBeenCalled();
     } finally {
       await harness.unmount();

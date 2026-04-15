@@ -26,7 +26,7 @@ export const workspace = (repoPath: string, isActive = false): WorkspaceRecord =
 
 export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   workspaceList: async () => [],
-  workspaceAdd: async (repoPath: string) => workspace(repoPath),
+  workspaceAdd: async (input) => workspace(input.repoPath),
   workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
   workspaceGetRepoConfig: async () => {
     throw new Error("workspaceGetRepoConfig not configured");

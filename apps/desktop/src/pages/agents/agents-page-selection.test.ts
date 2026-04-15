@@ -62,8 +62,10 @@ const catalogFixture: AgentModelCatalog = {
 
 describe("agents-page-selection", () => {
   test("builds storage keys and empty role selections", () => {
-    expect(toContextStorageKey("/repo")).toBe("openducktor:agent-studio:context:/repo");
-    expect(toTabsStorageKey("/repo")).toBe("openducktor:agent-studio:tabs:/repo");
+    expect(toContextStorageKey("workspace-repo")).toBe(
+      "openducktor:agent-studio:context:workspace-repo",
+    );
+    expect(toTabsStorageKey("workspace-repo")).toBe("openducktor:agent-studio:tabs:workspace-repo");
     expect(toRightPanelStorageKey()).toBe("openducktor:agent-studio:right-panel");
     expect(emptyDraftSelections()).toEqual({ spec: null, planner: null, build: null, qa: null });
   });

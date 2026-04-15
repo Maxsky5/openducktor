@@ -21,7 +21,13 @@ const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unkn
   return domProps;
 };
 
-const addWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
+const addWorkspaceMock = mock(
+  async (_input: {
+    workspaceId: string;
+    workspaceName: string;
+    repoPath: string;
+  }): Promise<void> => {},
+);
 const selectWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
 
 function SeedFilesystemDirectory(): ReactNode {
@@ -146,10 +152,15 @@ describe("OpenRepositoryModal", () => {
     }
 
     fireEvent.click(primaryButton);
-    fireEvent.click(screen.getByRole("button", { name: /open repository/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
 
     await waitFor(() => {
-      expect(addWorkspaceMock).toHaveBeenCalledWith("/repo");
+      expect(addWorkspaceMock).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        workspaceId: "repo",
+        workspaceName: "repo",
+      });
       expect(screen.getByText(/bd not found in path/i)).toBeTruthy();
     });
 

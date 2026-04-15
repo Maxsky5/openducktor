@@ -1,6 +1,6 @@
 # `@openducktor/mcp`
 
-OpenDucktor MCP server for local repository task workflows.
+OpenDucktor MCP server for local workspace task workflows.
 
 The MCP package is a thin client of the running Rust host.
 
@@ -21,10 +21,10 @@ For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-
   "mcpServers": {
     "openducktor": {
       "command": "bunx",
-      "args": [
-        "@openducktor/mcp",
-        "--repo", "/absolute/path/to/repo"
-      ]
+        "args": [
+          "@openducktor/mcp",
+          "--workspace-id", "my-workspace"
+        ]
     }
   }
 }
@@ -36,7 +36,7 @@ Optional arguments:
 
 Equivalent environment variables:
 
-- `ODT_REPO_PATH`
+- `ODT_WORKSPACE_ID`
 - `ODT_HOST_URL` optional override
 
 Automatic discovery:

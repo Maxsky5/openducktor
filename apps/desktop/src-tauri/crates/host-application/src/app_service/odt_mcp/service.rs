@@ -32,11 +32,16 @@ pub(super) const ODT_MCP_TOOL_NAMES: [&str; 12] = [
 ];
 
 impl AppService {
-    pub fn odt_mcp_ready(&self, repo_path: &str) -> Result<OdtHostBridgeReady> {
-        let repo_path = self.resolve_task_repo_path(repo_path)?;
+    fn odt_repo_path(&self, workspace_id: &str) -> Result<String> {
+        let repo_path = self.workspace_repo_path(workspace_id)?;
+        self.resolve_task_repo_path(repo_path.as_str())
+    }
+
+    pub fn odt_mcp_ready(&self, workspace_id: &str) -> Result<OdtHostBridgeReady> {
+        self.odt_repo_path(workspace_id)?;
         Ok(OdtHostBridgeReady {
             bridge_version: 1,
-            repo_path,
+            workspace_id: workspace_id.to_string(),
             tool_names: ODT_MCP_TOOL_NAMES
                 .iter()
                 .map(|name| name.to_string())
@@ -44,23 +49,25 @@ impl AppService {
         })
     }
 
-    pub fn odt_read_task(&self, repo_path: &str, task_id: &str) -> Result<OdtTaskSummary> {
-        let tasks = self.tasks_list(repo_path)?;
+    pub fn odt_read_task(&self, workspace_id: &str, task_id: &str) -> Result<OdtTaskSummary> {
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let tasks = self.tasks_list(repo_path.as_str())?;
         let task = resolve_task_reference(&tasks, task_id)?;
         Ok(map_task_summary(&task))
     }
 
     pub fn odt_read_task_documents(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         include_spec: bool,
         include_plan: bool,
         include_qa_report: bool,
     ) -> Result<OdtTaskDocumentsRead> {
-        let tasks = self.tasks_list(repo_path)?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let tasks = self.tasks_list(repo_path.as_str())?;
         let task = resolve_task_reference(&tasks, task_id)?;
-        let metadata = self.task_metadata_get(repo_path, &task.id)?;
+        let metadata = self.task_metadata_get(repo_path.as_str(), &task.id)?;
         Ok(map_task_documents(
             metadata,
             include_spec,
@@ -71,9 +78,10 @@ impl AppService {
 
     pub fn odt_create_task(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         input: OdtCreateTaskInput,
     ) -> Result<OdtTaskSummary> {
+        let repo_path = self.odt_repo_path(workspace_id)?;
         if input.issue_type == IssueType::Epic {
             return Err(anyhow!(
                 "Epic creation is not supported by odt_create_task."
@@ -81,7 +89,7 @@ impl AppService {
         }
 
         let task = self.task_create(
-            repo_path,
+            repo_path.as_str(),
             CreateTaskInput {
                 title: input.title,
                 issue_type: input.issue_type,
@@ -97,9 +105,10 @@ impl AppService {
 
     pub fn odt_search_tasks(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         input: OdtSearchTasksInput,
     ) -> Result<OdtSearchTasksResult> {
+        let repo_path = self.odt_repo_path(workspace_id)?;
         let normalized_title = input.title.as_ref().map(|value| normalize_title_key(value));
         let normalized_tags = input.tags.as_ref().map(|tags| {
             tags.iter()
@@ -108,7 +117,7 @@ impl AppService {
         });
 
         let matching = self
-            .tasks_list(repo_path)?
+            .tasks_list(repo_path.as_str())?
             .into_iter()
             .filter(|task| is_active_status(&task.status))
             .filter(|task| match input.priority {
@@ -157,14 +166,15 @@ impl AppService {
 
     pub fn odt_set_spec(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         markdown: &str,
     ) -> Result<OdtSetSpecResult> {
-        let tasks = self.tasks_list(repo_path)?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let tasks = self.tasks_list(repo_path.as_str())?;
         let task = resolve_task_reference(&tasks, task_id)?;
-        let document = self.set_spec(repo_path, &task.id, markdown)?;
-        let updated = self.odt_read_task(repo_path, &task.id)?;
+        let document = self.set_spec(repo_path.as_str(), &task.id, markdown)?;
+        let updated = self.odt_read_task(workspace_id, &task.id)?;
 
         Ok(OdtSetSpecResult {
             task: updated.task.task,
@@ -174,16 +184,17 @@ impl AppService {
 
     pub fn odt_set_plan(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         markdown: &str,
         subtasks: Option<Vec<PlanSubtaskInput>>,
     ) -> Result<OdtSetPlanResult> {
-        let before_tasks = self.tasks_list(repo_path)?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let before_tasks = self.tasks_list(repo_path.as_str())?;
         let task = resolve_task_reference(&before_tasks, task_id)?;
         let previous_subtask_ids = direct_subtask_ids(&before_tasks, &task.id);
-        let document = self.set_plan(repo_path, &task.id, markdown, subtasks)?;
-        let after_tasks = self.tasks_list(repo_path)?;
+        let document = self.set_plan(repo_path.as_str(), &task.id, markdown, subtasks)?;
+        let after_tasks = self.tasks_list(repo_path.as_str())?;
         let updated_task = resolve_task_reference(&after_tasks, &task.id)?;
         let created_subtask_ids = after_tasks
             .iter()
@@ -201,21 +212,23 @@ impl AppService {
 
     pub fn odt_build_blocked(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         reason: &str,
     ) -> Result<OdtBuildBlockedResult> {
-        let task = resolve_task_reference(&self.tasks_list(repo_path)?, task_id)?;
-        let updated = self.build_blocked(repo_path, &task.id, Some(reason))?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let task = resolve_task_reference(&self.tasks_list(repo_path.as_str())?, task_id)?;
+        let updated = self.build_blocked(repo_path.as_str(), &task.id, Some(reason))?;
         Ok(OdtBuildBlockedResult {
             task: map_public_task(&updated),
             reason: reason.trim().to_string(),
         })
     }
 
-    pub fn odt_build_resumed(&self, repo_path: &str, task_id: &str) -> Result<OdtTaskResult> {
-        let task = resolve_task_reference(&self.tasks_list(repo_path)?, task_id)?;
-        let updated = self.build_resumed(repo_path, &task.id)?;
+    pub fn odt_build_resumed(&self, workspace_id: &str, task_id: &str) -> Result<OdtTaskResult> {
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let task = resolve_task_reference(&self.tasks_list(repo_path.as_str())?, task_id)?;
+        let updated = self.build_resumed(repo_path.as_str(), &task.id)?;
         Ok(OdtTaskResult {
             task: map_public_task(&updated),
         })
@@ -223,12 +236,13 @@ impl AppService {
 
     pub fn odt_build_completed(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         summary: Option<String>,
     ) -> Result<OdtBuildCompletedResult> {
-        let task = resolve_task_reference(&self.tasks_list(repo_path)?, task_id)?;
-        let updated = self.build_completed(repo_path, &task.id, summary.as_deref())?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let task = resolve_task_reference(&self.tasks_list(repo_path.as_str())?, task_id)?;
+        let updated = self.build_completed(repo_path.as_str(), &task.id, summary.as_deref())?;
         Ok(OdtBuildCompletedResult {
             task: map_public_task(&updated),
             summary,
@@ -237,14 +251,16 @@ impl AppService {
 
     pub fn odt_set_pull_request(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         provider_id: &str,
         number: u32,
     ) -> Result<OdtSetPullRequestResult> {
-        let task = resolve_task_reference(&self.tasks_list(repo_path)?, task_id)?;
-        let pull_request = self.task_pull_request_link(repo_path, &task.id, provider_id, number)?;
-        let updated = self.odt_read_task(repo_path, &task.id)?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let task = resolve_task_reference(&self.tasks_list(repo_path.as_str())?, task_id)?;
+        let pull_request =
+            self.task_pull_request_link(repo_path.as_str(), &task.id, provider_id, number)?;
+        let updated = self.odt_read_task(workspace_id, &task.id)?;
 
         Ok(OdtSetPullRequestResult {
             task: updated.task.task,
@@ -254,12 +270,13 @@ impl AppService {
 
     pub fn odt_qa_approved(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         markdown: &str,
     ) -> Result<OdtTaskResult> {
-        let task = resolve_task_reference(&self.tasks_list(repo_path)?, task_id)?;
-        let updated = self.qa_approved(repo_path, &task.id, markdown)?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let task = resolve_task_reference(&self.tasks_list(repo_path.as_str())?, task_id)?;
+        let updated = self.qa_approved(repo_path.as_str(), &task.id, markdown)?;
         Ok(OdtTaskResult {
             task: map_public_task(&updated),
         })
@@ -267,12 +284,13 @@ impl AppService {
 
     pub fn odt_qa_rejected(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         task_id: &str,
         markdown: &str,
     ) -> Result<OdtTaskResult> {
-        let task = resolve_task_reference(&self.tasks_list(repo_path)?, task_id)?;
-        let updated = self.qa_rejected(repo_path, &task.id, markdown)?;
+        let repo_path = self.odt_repo_path(workspace_id)?;
+        let task = resolve_task_reference(&self.tasks_list(repo_path.as_str())?, task_id)?;
+        let updated = self.qa_rejected(repo_path.as_str(), &task.id, markdown)?;
         Ok(OdtTaskResult {
             task: map_public_task(&updated),
         })

@@ -6,6 +6,7 @@ import { useRepoNavigationPersistence } from "./use-repo-navigation-persistence"
 
 type UseAgentStudioQuerySyncArgs = {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
@@ -13,6 +14,7 @@ type UseAgentStudioQuerySyncArgs = {
 
 export function useAgentStudioQuerySync({
   activeRepo,
+  persistenceWorkspaceId,
   navigationType,
   searchParams,
   setSearchParams,
@@ -36,6 +38,7 @@ export function useAgentStudioQuerySync({
   const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
     useRepoNavigationPersistence({
       activeRepo,
+      persistenceWorkspaceId,
       navigation,
       setNavigation,
     });

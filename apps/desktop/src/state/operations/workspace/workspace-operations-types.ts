@@ -1,5 +1,6 @@
 import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
+import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import type { host } from "../shared/host";
 
 export type WorkspaceBranchOperationsHostClient = Pick<
@@ -34,7 +35,7 @@ export type UseWorkspaceOperationsResult = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   refreshWorkspaces: () => Promise<void>;
-  addWorkspace: (repoPath: string) => Promise<void>;
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (repoPath: string) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;

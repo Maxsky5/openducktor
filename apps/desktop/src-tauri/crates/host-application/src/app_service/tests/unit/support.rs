@@ -27,7 +27,7 @@ pub(super) use crate::app_service::test_support::{
     builtin_opencode_runtime_definition, builtin_opencode_runtime_descriptor,
     builtin_opencode_runtime_route, make_task, spawn_opencode_session_status_server,
     spawn_sleep_process, spawn_sleep_process_group, unique_temp_path, wait_for_process_exit,
-    write_private_file, FakeTaskStore, TaskStoreState,
+    workspace_update_repo_config_by_repo_path, write_private_file, FakeTaskStore, TaskStoreState,
 };
 pub(super) use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -171,7 +171,7 @@ impl AppRuntime for TestRuntimeAdapter {
         &self,
         _service: &AppService,
         _working_directory: &std::path::Path,
-        _repo_path_for_mcp: &std::path::Path,
+        _workspace_id_for_mcp: &str,
         _port: u16,
     ) -> Result<std::process::Child> {
         Err(anyhow::anyhow!("spawn should not be used in this test"))

@@ -68,12 +68,18 @@ impl BeadsTaskStore {
     }
 
     pub(super) fn ensure_repo_initialized_impl(&self, repo_path: &Path) -> Result<()> {
-        self.lifecycle.ensure_repo_initialized(repo_path)
+        let repo_key = self.identity_key(repo_path);
+        let workspace_id = self.workspace_id(repo_path);
+        self.lifecycle.ensure_repo_initialized_for_identity(
+            repo_path,
+            &repo_key,
+            workspace_id.as_deref(),
+        )
     }
 
     pub(super) fn list_tasks_impl(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
         let metadata_namespace = self.current_metadata_namespace();
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let (cached_tasks, _) =
             self.cached_task_list_and_generation(&repo_key, &metadata_namespace)?;
         if let Some(tasks) = cached_tasks {
@@ -89,7 +95,7 @@ impl BeadsTaskStore {
         repo_path: &Path,
     ) -> Result<Vec<TaskCard>> {
         let metadata_namespace = self.current_metadata_namespace();
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let (cached_tasks, cache_generation) = self
             .cached_pull_request_sync_candidates_and_generation(&repo_key, &metadata_namespace)?;
         if let Some(tasks) = cached_tasks {
@@ -126,7 +132,7 @@ impl BeadsTaskStore {
         }
 
         let metadata_namespace = self.current_metadata_namespace();
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let (cached_tasks, cache_generation) = self.cached_kanban_task_list_and_generation(
             &repo_key,
             &metadata_namespace,

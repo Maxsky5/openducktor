@@ -73,8 +73,7 @@ impl<'a> TaskDeletionService<'a> {
         )?;
         let branch_prefix = self
             .service
-            .config_store
-            .repo_config(&context.repo.repo_path)?
+            .workspace_get_repo_config_by_repo_path(&context.repo.repo_path)?
             .branch_prefix;
         let worktree_plan = WorktreeCleanupPlan::for_delete_targets(
             self.service,

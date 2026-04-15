@@ -10,9 +10,61 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { FolderPickerDialog } from "./folder-picker-dialog";
+
+const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const deriveWorkspaceNameFromRepoPath = (repoPath: string): string => {
+  const trimmedPath = repoPath.trim().replace(/[\\/]+$/, "");
+  if (!trimmedPath) {
+    return repoPath.trim();
+  }
+
+  const segments = trimmedPath.split(/[\\/]+/).filter((segment) => segment.length > 0);
+  return segments.at(-1)?.trim() || repoPath.trim();
+};
+
+const proposeWorkspaceId = (input: string): string => {
+  let normalized = "";
+  let lastWasDash = false;
+
+  for (const character of input.trim().toLowerCase()) {
+    const isAlphaNumeric =
+      (character >= "a" && character <= "z") || (character >= "0" && character <= "9");
+    if (isAlphaNumeric) {
+      normalized += character;
+      lastWasDash = false;
+      continue;
+    }
+
+    if (!lastWasDash && normalized.length > 0) {
+      normalized += "-";
+      lastWasDash = true;
+    }
+  }
+
+  while (normalized.endsWith("-")) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  return normalized || "workspace";
+};
+
+const uniquifyWorkspaceId = (candidate: string, existingIds: Set<string>): string => {
+  if (!existingIds.has(candidate)) {
+    return candidate;
+  }
+
+  let suffix = 2;
+  while (existingIds.has(`${candidate}-${suffix}`)) {
+    suffix += 1;
+  }
+  return `${candidate}-${suffix}`;
+};
 
 type OpenRepositoryModalProps = {
   open: boolean;
@@ -28,19 +80,69 @@ export function OpenRepositoryModal({
   const { activeRepo, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
     useWorkspaceState();
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
+  const [selectedRepoPath, setSelectedRepoPath] = useState<string | null>(null);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [hasEditedWorkspaceId, setHasEditedWorkspaceId] = useState(false);
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setIsFolderPickerOpen(false);
+      setSelectedRepoPath(null);
+      setWorkspaceName("");
+      setWorkspaceId("");
+      setHasEditedWorkspaceId(false);
+      setIsCreatingWorkspace(false);
+      setError(null);
     }
   }, [open]);
 
-  const isModalBusy = isSwitchingWorkspace;
+  const isModalBusy = isSwitchingWorkspace || isCreatingWorkspace;
   const sortedRecent = useMemo(
     () => [...workspaces].sort((a, b) => Number(b.isActive) - Number(a.isActive)),
     [workspaces],
   );
+  const existingWorkspaceIds = useMemo(
+    () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
+    [workspaces],
+  );
+  const selectedExistingWorkspace = useMemo(
+    () =>
+      selectedRepoPath
+        ? (workspaces.find((workspace) => workspace.repoPath === selectedRepoPath) ?? null)
+        : null,
+    [selectedRepoPath, workspaces],
+  );
+
+  const workspaceValidationError = useMemo(() => {
+    if (!selectedRepoPath) {
+      return null;
+    }
+    if (selectedExistingWorkspace) {
+      return `Repository is already configured as ${selectedExistingWorkspace.workspaceName}.`;
+    }
+    if (workspaceName.trim().length === 0) {
+      return "Workspace name cannot be blank.";
+    }
+    if (workspaceId.trim().length === 0) {
+      return "Workspace ID cannot be blank.";
+    }
+    if (!WORKSPACE_ID_PATTERN.test(workspaceId.trim())) {
+      return "Workspace ID must contain only lowercase letters, digits, and single dashes.";
+    }
+    if (existingWorkspaceIds.has(workspaceId.trim())) {
+      return `Workspace ID already exists: ${workspaceId.trim()}`;
+    }
+    return null;
+  }, [
+    existingWorkspaceIds,
+    selectedExistingWorkspace,
+    selectedRepoPath,
+    workspaceId,
+    workspaceName,
+  ]);
 
   const openSelectedRepo = (): void => {
     setError(null);
@@ -49,13 +151,35 @@ export function OpenRepositoryModal({
 
   const confirmSelectedRepo = async (path: string): Promise<void> => {
     setError(null);
+    const nextWorkspaceName = deriveWorkspaceNameFromRepoPath(path);
+    const nextWorkspaceId = uniquifyWorkspaceId(
+      proposeWorkspaceId(nextWorkspaceName),
+      existingWorkspaceIds,
+    );
+    setSelectedRepoPath(path);
+    setWorkspaceName(nextWorkspaceName);
+    setWorkspaceId(nextWorkspaceId);
+    setHasEditedWorkspaceId(false);
+  };
+
+  const submitWorkspaceCreation = async (): Promise<void> => {
+    if (!selectedRepoPath || workspaceValidationError) {
+      return;
+    }
+
+    setError(null);
+    setIsCreatingWorkspace(true);
     try {
-      await addWorkspace(path);
+      await addWorkspace({
+        workspaceId: workspaceId.trim(),
+        workspaceName: workspaceName.trim(),
+        repoPath: selectedRepoPath,
+      });
       onOpenChange(false);
     } catch (reason) {
-      const message = errorMessage(reason);
-      setError(message);
-      throw reason;
+      setError(errorMessage(reason));
+    } finally {
+      setIsCreatingWorkspace(false);
     }
   };
 
@@ -122,12 +246,78 @@ export function OpenRepositoryModal({
             disabled={isModalBusy}
           >
             <FolderOpen className="size-4" />
-            Choose Repository Folder
+            {selectedRepoPath ? "Choose Different Repository Folder" : "Choose Repository Folder"}
           </Button>
 
-          {error ? (
+          {selectedRepoPath ? (
+            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Review workspace identity</p>
+                <p className="text-sm text-muted-foreground">
+                  OpenDucktor will use this ID as the durable workspace identity. You can edit the
+                  name and ID before initialization.
+                </p>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="open-repo-path">Repository path</Label>
+                <Input
+                  id="open-repo-path"
+                  value={selectedRepoPath}
+                  readOnly
+                  disabled={isModalBusy}
+                  className="font-mono"
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="open-workspace-name">Workspace name</Label>
+                <Input
+                  id="open-workspace-name"
+                  value={workspaceName}
+                  disabled={isModalBusy}
+                  onChange={(event) => {
+                    const nextWorkspaceName = event.currentTarget.value;
+                    setWorkspaceName(nextWorkspaceName);
+                    if (!hasEditedWorkspaceId) {
+                      setWorkspaceId(
+                        uniquifyWorkspaceId(
+                          proposeWorkspaceId(nextWorkspaceName),
+                          existingWorkspaceIds,
+                        ),
+                      );
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="open-workspace-id">Workspace ID</Label>
+                <Input
+                  id="open-workspace-id"
+                  value={workspaceId}
+                  disabled={isModalBusy}
+                  className="font-mono"
+                  onChange={(event) => {
+                    setHasEditedWorkspaceId(true);
+                    setWorkspaceId(event.currentTarget.value.trim());
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use lowercase letters, digits, and dashes only.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Choose a repository folder to review the proposed workspace ID and name before
+              initialization.
+            </p>
+          )}
+
+          {error || workspaceValidationError ? (
             <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted">
-              {error}
+              {error ?? workspaceValidationError}
             </div>
           ) : null}
 
@@ -166,11 +356,22 @@ export function OpenRepositoryModal({
           </div>
         </DialogBody>
 
-        {canClose ? (
+        {canClose || selectedRepoPath ? (
           <DialogFooter className="mt-0 border-t border-border pt-5">
-            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
+            {canClose ? (
+              <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            ) : null}
+            {selectedRepoPath ? (
+              <Button
+                type="button"
+                onClick={() => void submitWorkspaceCreation()}
+                disabled={isModalBusy || workspaceValidationError !== null}
+              >
+                Open Repository
+              </Button>
+            ) : null}
           </DialogFooter>
         ) : null}
       </DialogContent>
@@ -180,8 +381,8 @@ export function OpenRepositoryModal({
           open={isFolderPickerOpen}
           onOpenChange={setIsFolderPickerOpen}
           title="Open Repository"
-          description="Browse to an existing Git repository on disk. OpenDucktor will register the selected path in place."
-          confirmLabel="Open Repository"
+          description="Browse to an existing Git repository on disk, then review the proposed workspace ID and name before initialization."
+          confirmLabel="Choose This Folder"
           requireGitRepo
           onConfirm={confirmSelectedRepo}
         />

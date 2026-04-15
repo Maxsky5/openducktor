@@ -135,7 +135,7 @@ const noopOpenSession = (
 ): void => {};
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
-  const { activeRepo, activeBranch, branches } = useWorkspaceState();
+  const { activeRepo, activeBranch, branches, activeWorkspace } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
@@ -179,6 +179,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
 
+  const persistenceWorkspaceId = activeWorkspace?.workspaceId ?? null;
+
   const {
     taskIdParam,
     sessionParam,
@@ -191,6 +193,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     updateQuery,
   } = useAgentStudioQuerySync({
     activeRepo,
+    persistenceWorkspaceId,
     navigationType,
     searchParams,
     setSearchParams,
@@ -221,6 +224,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const selection = useAgentStudioSelectionController({
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,

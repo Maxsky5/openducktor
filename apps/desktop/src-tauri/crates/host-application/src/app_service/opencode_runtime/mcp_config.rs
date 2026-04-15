@@ -134,10 +134,7 @@ pub(crate) fn resolve_mcp_command() -> Result<Vec<String>> {
     ))
 }
 
-pub(crate) fn build_opencode_config_content(
-    repo_path_for_mcp: &Path,
-    host_url: &str,
-) -> Result<String> {
+pub(crate) fn build_opencode_config_content(workspace_id: &str, host_url: &str) -> Result<String> {
     let mcp_command = resolve_mcp_command()?;
     let config = json!({
         "logLevel": "INFO",
@@ -147,7 +144,7 @@ pub(crate) fn build_opencode_config_content(
                 "enabled": true,
                 "command": mcp_command,
                 "environment": {
-                    "ODT_REPO_PATH": repo_path_for_mcp.to_string_lossy().to_string(),
+                    "ODT_WORKSPACE_ID": workspace_id,
                     "ODT_HOST_URL": host_url,
                 }
             }

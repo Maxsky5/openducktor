@@ -10,14 +10,14 @@ export type OdtTaskStoreDeps = {
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
 
 export class OdtTaskStore {
-  readonly repoPath: string;
+  readonly workspaceId: string;
   private readonly client: OdtHostBridgeClientPort;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
-    this.repoPath = options.repoPath;
+    this.workspaceId = options.workspaceId;
     this.client =
       deps.client ??
-      new OdtHostBridgeClient({ baseUrl: options.hostUrl, repoPath: options.repoPath });
+      new OdtHostBridgeClient({ baseUrl: options.hostUrl, workspaceId: options.workspaceId });
   }
 
   private async execute<Name extends OdtToolName>(toolName: Name, rawInput: unknown) {

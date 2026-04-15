@@ -10,10 +10,12 @@ import {
   restoreNavigationFromPersistedContext,
   serializePersistedContext,
   toContextStorageKey,
+  toLegacyRepoPathContextStorageKey,
 } from "./agent-studio-navigation";
 
 type UseRepoNavigationPersistenceArgs = {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
 };
@@ -72,8 +74,20 @@ const writePersistedContextPayload = (storageKey: string, payload: string): void
   }
 };
 
+const removePersistedContextPayload = (storageKey: string): void => {
+  try {
+    globalThis.localStorage.removeItem(storageKey);
+  } catch (cause) {
+    throw new Error(
+      `Failed to clear legacy agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+};
+
 export function useRepoNavigationPersistence({
   activeRepo,
+  persistenceWorkspaceId,
   navigation,
   setNavigation,
 }: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
@@ -171,7 +185,7 @@ export function useRepoNavigationPersistence({
   }, [activeRepo, navigation, repoNavigationBoundaryPhase, setNavigation]);
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!activeRepo || !persistenceWorkspaceId) {
       return;
     }
     if (persistenceError) {
@@ -187,7 +201,17 @@ export function useRepoNavigationPersistence({
     let raw: string | null;
     let persisted: PersistedAgentStudioContext | null = null;
     try {
-      raw = readPersistedContextPayload(toContextStorageKey(activeRepo));
+      const storageKey = toContextStorageKey(persistenceWorkspaceId);
+      raw = readPersistedContextPayload(storageKey);
+      if (!raw) {
+        const legacyStorageKey = toLegacyRepoPathContextStorageKey(activeRepo);
+        const legacyRaw = readPersistedContextPayload(legacyStorageKey);
+        if (legacyRaw) {
+          writePersistedContextPayload(storageKey, legacyRaw);
+          removePersistedContextPayload(legacyStorageKey);
+          raw = legacyRaw;
+        }
+      }
       if (raw) {
         persisted = parsePersistedContext(raw);
       }
@@ -210,11 +234,18 @@ export function useRepoNavigationPersistence({
 
       return restoreNavigationFromPersistedContext(current, persisted);
     });
-  }, [activeRepo, isRepoNavigationBoundaryPending, persistenceError, setNavigation]);
+  }, [
+    activeRepo,
+    persistenceWorkspaceId,
+    isRepoNavigationBoundaryPending,
+    persistenceError,
+    setNavigation,
+  ]);
 
   useEffect(() => {
     if (
       !activeRepo ||
+      !persistenceWorkspaceId ||
       isRepoNavigationBoundaryPending ||
       persistenceError ||
       restoredContextRepoRef.current !== activeRepo
@@ -228,7 +259,7 @@ export function useRepoNavigationPersistence({
     }
 
     persistedContextPayloadRef.current = serializedPayload;
-    const storageKey = toContextStorageKey(activeRepo);
+    const storageKey = toContextStorageKey(persistenceWorkspaceId);
     pendingContextPersistRef.current = { key: storageKey, payload: serializedPayload };
 
     if (pendingPersistTimeoutIdRef.current !== null) {
@@ -259,6 +290,7 @@ export function useRepoNavigationPersistence({
     };
   }, [
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending,
     navigation,
     persistenceError,

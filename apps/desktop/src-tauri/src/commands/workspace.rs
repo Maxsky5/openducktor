@@ -206,9 +206,15 @@ pub async fn workspace_list(
 #[tauri::command]
 pub async fn workspace_add(
     state: State<'_, AppState>,
+    workspace_id: String,
+    workspace_name: String,
     repo_path: String,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    as_error(state.service.workspace_add(&repo_path))
+    as_error(
+        state
+            .service
+            .workspace_create(&workspace_id, &workspace_name, &repo_path),
+    )
 }
 
 #[tauri::command]
@@ -790,9 +796,12 @@ mod tests {
             .update_repo_hooks(&workspace_id, hooks)
             .expect("hooks should be persisted");
 
-        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
-            TASK_METADATA_NAMESPACE,
-        ));
+        let task_store: Arc<dyn TaskStore> = Arc::new(
+            BeadsTaskStore::with_metadata_namespace_and_config(
+                TASK_METADATA_NAMESPACE,
+                config_store.clone(),
+            ),
+        );
         let service = Arc::new(AppService::with_git_port(
             task_store,
             config_store,

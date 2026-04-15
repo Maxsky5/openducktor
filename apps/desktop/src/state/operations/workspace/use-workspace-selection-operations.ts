@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
+import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   loadRepoConfigFromQuery,
   loadWorkspaceListFromQuery,
@@ -29,7 +30,7 @@ type UseWorkspaceSelectionOperationsResult = {
   workspaces: WorkspaceRecord[];
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
-  addWorkspace: (repoPath: string) => Promise<void>;
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
@@ -125,13 +126,17 @@ export function useWorkspaceSelectionOperations({
   }, [queryClient]);
 
   const addWorkspace = useCallback(
-    async (repoPath: string): Promise<void> => {
-      const normalizedRepoPath = normalizeRepoPath(repoPath);
+    async (input: WorkspaceSelectionOperationsInput): Promise<void> => {
+      const normalizedRepoPath = normalizeRepoPath(input.repoPath);
       if (!normalizedRepoPath) {
         return;
       }
 
-      const workspace = await hostClient.workspaceAdd(normalizedRepoPath);
+      const workspace = await hostClient.workspaceAdd({
+        workspaceId: input.workspaceId,
+        workspaceName: input.workspaceName,
+        repoPath: normalizedRepoPath,
+      });
       await refreshWorkspaceCachesAfterMutation();
       await refreshWorkspaces();
       toast.success("Repository added", {

@@ -162,10 +162,10 @@ impl AppRuntime for OpenCodeRuntime {
         &self,
         service: &AppService,
         working_directory: &Path,
-        repo_path_for_mcp: &Path,
+        workspace_id_for_mcp: &str,
         port: u16,
     ) -> Result<Child> {
-        service.spawn_opencode_server(working_directory, repo_path_for_mcp, port)
+        service.spawn_opencode_server(working_directory, workspace_id_for_mcp, port)
     }
 
     fn track_process(&self, service: &AppService, child_id: u32) -> Result<RuntimeProcessGuard> {

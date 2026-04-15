@@ -22,6 +22,7 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   isRepoNavigationBoundaryPending: boolean;
   agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
@@ -153,6 +154,7 @@ export const buildSessionsByTaskIdWithCache = (
 
 export function useAgentStudioSelectionController({
   activeRepo,
+  persistenceWorkspaceId,
   isRepoNavigationBoundaryPending,
   agentStudioReadinessState,
   tasks,
@@ -280,6 +282,7 @@ export function useAgentStudioSelectionController({
     handleCloseTab,
   } = useAgentStudioTaskTabs({
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId,
     selectedTask,

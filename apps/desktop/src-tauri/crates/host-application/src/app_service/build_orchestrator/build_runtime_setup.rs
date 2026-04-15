@@ -81,7 +81,7 @@ impl AppService {
     ) -> Result<BuildPrerequisites> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_path.as_str().to_string();
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        let repo_config = self.workspace_get_repo_config_by_repo_path(repo_path.as_str())?;
 
         let worktree_base = resolve_effective_worktree_base_dir(
             Path::new(repo_path.as_str()),

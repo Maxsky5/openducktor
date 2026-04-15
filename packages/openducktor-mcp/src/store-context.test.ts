@@ -29,7 +29,7 @@ const createDiscoveryRegistry = async (ports: number[]): Promise<string> => {
 
 afterEach(async () => {
   globalThis.fetch = originalFetch;
-  delete process.env.ODT_REPO_PATH;
+  delete process.env.ODT_WORKSPACE_ID;
   delete process.env.ODT_HOST_URL;
   delete process.env.ODT_METADATA_NAMESPACE;
   delete process.env.OPENDUCKTOR_CONFIG_DIR;
@@ -57,17 +57,17 @@ describe("resolveStoreContext", () => {
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
 
     await expect(resolveStoreContext({})).resolves.toEqual({
-      repoPath: "/repo",
+      workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
     });
   });
 
   test("rejects legacy direct Beads/Dolt startup contract", async () => {
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
     process.env.ODT_DOLT_HOST = "127.0.0.1";
 
@@ -88,7 +88,7 @@ describe("resolveStoreContext", () => {
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
 
     await expect(resolveStoreContext({})).rejects.toThrow("host down");
@@ -97,7 +97,7 @@ describe("resolveStoreContext", () => {
   test("discovers a running host from the registry when no explicit host is provided", async () => {
     const configDir = await createDiscoveryRegistry([14327]);
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
 
     globalThis.fetch = (async (input) => {
       const url = String(input);
@@ -115,7 +115,7 @@ describe("resolveStoreContext", () => {
     }) as typeof fetch;
 
     await expect(resolveStoreContext({})).resolves.toEqual({
-      repoPath: "/repo",
+      workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
     });
   });
@@ -123,7 +123,7 @@ describe("resolveStoreContext", () => {
   test("tries discovered ports until one host becomes ready", async () => {
     const configDir = await createDiscoveryRegistry([14327, 14328]);
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
 
     globalThis.fetch = (async (input) => {
       const url = String(input);
@@ -147,13 +147,13 @@ describe("resolveStoreContext", () => {
     }) as typeof fetch;
 
     await expect(resolveStoreContext({})).resolves.toEqual({
-      repoPath: "/repo",
+      workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14328",
     });
   });
 
   test("rejects legacy metadata namespace configuration", async () => {
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
     process.env.ODT_METADATA_NAMESPACE = "legacy-namespace";
 
@@ -165,7 +165,7 @@ describe("resolveStoreContext", () => {
   test("fails clearly when discovery cannot find any running host", async () => {
     const configDir = await createDiscoveryRegistry([]);
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-    process.env.ODT_REPO_PATH = "/repo";
+    process.env.ODT_WORKSPACE_ID = "repo";
 
     await expect(resolveStoreContext({})).rejects.toThrow(
       "No running OpenDucktor host was discovered",

@@ -1,18 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
-import {
-  normalizeOptionalInput,
-  resolveCanonicalPath,
-  resolveMcpBridgeRegistryPath,
-} from "./path-utils";
+import { normalizeOptionalInput, resolveMcpBridgeRegistryPath } from "./path-utils";
 
 export type OdtStoreOptions = {
-  repoPath: string;
+  workspaceId: string;
   hostUrl: string;
 };
 
 export type OdtStoreContext = {
-  repoPath?: string;
+  workspaceId?: string;
   hostUrl?: string;
   beadsAttachmentDir?: string;
   doltHost?: string;
@@ -56,14 +52,14 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
   );
 };
 
-const validateExplicitHostUrl = async (hostUrl: string, repoPath: string): Promise<string> => {
+const validateExplicitHostUrl = async (hostUrl: string, workspaceId: string): Promise<string> => {
   try {
     new URL(hostUrl);
   } catch {
     throw new Error(`Invalid ODT_HOST_URL for OpenDucktor MCP: ${hostUrl}`);
   }
 
-  await new OdtHostBridgeClient({ baseUrl: hostUrl, repoPath }).ready();
+  await new OdtHostBridgeClient({ baseUrl: hostUrl, workspaceId }).ready();
   return hostUrl;
 };
 
@@ -117,7 +113,7 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
   return discoveredPorts;
 };
 
-const discoverHostUrl = async (repoPath: string): Promise<string> => {
+const discoverHostUrl = async (workspaceId: string): Promise<string> => {
   const registryPath = resolveMcpBridgeRegistryPath();
 
   let registryPayload: string;
@@ -147,7 +143,7 @@ const discoverHostUrl = async (repoPath: string): Promise<string> => {
   for (const port of discoveredPorts) {
     const hostUrl = `http://127.0.0.1:${port}`;
     try {
-      await new OdtHostBridgeClient({ baseUrl: hostUrl, repoPath }).ready();
+      await new OdtHostBridgeClient({ baseUrl: hostUrl, workspaceId }).ready();
       return hostUrl;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -156,30 +152,28 @@ const discoverHostUrl = async (repoPath: string): Promise<string> => {
   }
 
   throw new Error(
-    `No healthy OpenDucktor host was discovered for ${repoPath}. Checked ${registryPath}. ${failures.join(" | ")} Provide ODT_HOST_URL to override discovery.`,
+    `No healthy OpenDucktor host was discovered for workspace ${workspaceId}. Checked ${registryPath}. ${failures.join(" | ")} Provide ODT_HOST_URL to override discovery.`,
   );
 };
 
 export const resolveStoreContext = async (context: OdtStoreContext): Promise<OdtStoreOptions> => {
   rejectLegacyContract(context);
 
-  const repoPath =
-    normalizeOptionalInput(context.repoPath) ??
-    normalizeOptionalInput(process.env.ODT_REPO_PATH) ??
-    process.cwd();
-  if (!repoPath) {
-    throw new Error("Missing repository path for OpenDucktor MCP.");
+  const workspaceId =
+    normalizeOptionalInput(context.workspaceId) ??
+    normalizeOptionalInput(process.env.ODT_WORKSPACE_ID);
+  if (!workspaceId) {
+    throw new Error("Missing workspace ID for OpenDucktor MCP.");
   }
 
-  const normalizedRepoPath = await resolveCanonicalPath(repoPath);
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
   const hostUrl = explicitHostUrl
-    ? await validateExplicitHostUrl(explicitHostUrl, normalizedRepoPath)
-    : await discoverHostUrl(normalizedRepoPath);
+    ? await validateExplicitHostUrl(explicitHostUrl, workspaceId)
+    : await discoverHostUrl(workspaceId);
 
   const resolved = {
-    repoPath: normalizedRepoPath,
+    workspaceId,
     hostUrl,
   };
 

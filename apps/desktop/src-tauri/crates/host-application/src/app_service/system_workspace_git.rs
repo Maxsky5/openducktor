@@ -65,6 +65,7 @@ type SettingsSnapshotTuple = (
     PromptOverrides,
 );
 
+#[cfg(test)]
 fn build_initial_workspace_identity(
     existing_workspaces: &HashMap<String, RepoConfig>,
     repo_path: &str,
@@ -127,6 +128,18 @@ fn missing_bd_repo_store_health() -> RepoStoreHealth {
 }
 
 impl AppService {
+    pub fn workspace_repo_path(&self, workspace_id: &str) -> Result<String> {
+        Ok(self.workspace_get_repo_config(workspace_id)?.repo_path)
+    }
+
+    pub(crate) fn workspace_id_for_repo_path(&self, repo_path: &str) -> Result<String> {
+        Ok(self
+            .config_store
+            .find_workspace_by_repo_path(repo_path)?
+            .ok_or_else(|| anyhow!("Workspace is not configured in {repo_path}"))?
+            .workspace_id)
+    }
+
     fn is_allowed_force_worktree_cleanup_path(
         &self,
         repo_path: &str,
@@ -379,15 +392,25 @@ impl AppService {
         self.config_store.list_workspaces()
     }
 
+    pub fn workspace_create(
+        &self,
+        workspace_id: &str,
+        workspace_name: &str,
+        repo_path: &str,
+    ) -> Result<WorkspaceRecord> {
+        let workspace = self
+            .config_store
+            .add_workspace(workspace_id, workspace_name, repo_path)?;
+        self.auto_detect_git_provider_for_repo(repo_path)?;
+        Ok(workspace)
+    }
+
+    #[cfg(test)]
     pub fn workspace_add(&self, repo_path: &str) -> Result<WorkspaceRecord> {
         let config = self.config_store.load()?;
         let (workspace_id, workspace_name) =
             build_initial_workspace_identity(&config.workspaces, repo_path);
-        let workspace =
-            self.config_store
-                .add_workspace(&workspace_id, &workspace_name, repo_path)?;
-        self.auto_detect_git_provider_for_repo(repo_path)?;
-        Ok(workspace)
+        self.workspace_create(&workspace_id, &workspace_name, repo_path)
     }
 
     pub fn workspace_select(&self, workspace_id: &str) -> Result<WorkspaceRecord> {
@@ -416,11 +439,35 @@ impl AppService {
         self.config_store.repo_config(workspace_id)
     }
 
+    pub(crate) fn workspace_get_repo_config_by_repo_path(
+        &self,
+        repo_path: &str,
+    ) -> Result<RepoConfig> {
+        self.config_store.repo_config_by_repo_path(repo_path)
+    }
+
     pub fn workspace_get_repo_config_optional(
         &self,
         workspace_id: &str,
     ) -> Result<Option<RepoConfig>> {
         self.config_store.repo_config_optional(workspace_id)
+    }
+
+    pub(crate) fn workspace_get_repo_config_optional_by_repo_path(
+        &self,
+        repo_path: &str,
+    ) -> Result<Option<RepoConfig>> {
+        self.config_store
+            .repo_config_optional_by_repo_path(repo_path)
+    }
+
+    pub(crate) fn workspace_update_repo_config_by_repo_path(
+        &self,
+        repo_path: &str,
+        config: RepoConfig,
+    ) -> Result<WorkspaceRecord> {
+        let workspace_id = self.workspace_id_for_repo_path(repo_path)?;
+        self.workspace_update_repo_config(workspace_id.as_str(), config)
     }
 
     pub fn workspace_get_settings_snapshot(&self) -> Result<SettingsSnapshotTuple> {
@@ -1252,7 +1299,7 @@ mod tests {
 
         assert!(workspace.is_active);
         assert_eq!(
-            workspace.path,
+            workspace.repo_path,
             repo_path
                 .canonicalize()
                 .expect("canonical repo path")

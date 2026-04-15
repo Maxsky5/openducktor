@@ -220,7 +220,7 @@ impl BeadsTaskStore {
         task: TaskCard,
     ) -> Result<()> {
         let metadata_namespace = self.current_metadata_namespace();
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let mut cache = self
             .pull_request_sync_candidate_cache
             .lock()
@@ -246,7 +246,7 @@ impl BeadsTaskStore {
         task_id: &str,
     ) -> Result<()> {
         let metadata_namespace = self.current_metadata_namespace();
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let has_cached_entry = {
             let mut cache = self
                 .pull_request_sync_candidate_cache
@@ -276,7 +276,7 @@ impl BeadsTaskStore {
         repo_path: &Path,
         task_id: &str,
     ) -> Result<()> {
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let mut cache = self
             .pull_request_sync_candidate_cache
             .lock()
@@ -291,7 +291,7 @@ impl BeadsTaskStore {
     }
 
     pub(super) fn clear_cached_pull_request_sync_candidates(&self, repo_path: &Path) -> Result<()> {
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         let mut cache = self
             .pull_request_sync_candidate_cache
             .lock()
@@ -303,7 +303,7 @@ impl BeadsTaskStore {
     }
 
     pub(crate) fn invalidate_task_list_cache(&self, repo_path: &Path) -> Result<()> {
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.identity_key(repo_path);
         {
             let mut cache = self
                 .task_list_cache

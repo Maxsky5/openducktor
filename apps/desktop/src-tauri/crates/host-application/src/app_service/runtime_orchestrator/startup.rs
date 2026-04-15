@@ -65,7 +65,7 @@ impl AppService {
                 let mut child = runtime.spawn_server(
                     self,
                     Path::new(input.working_directory.as_str()),
-                    Path::new(input.repo_path),
+                    input.workspace_id_for_mcp,
                     port,
                 )?;
                 let runtime_process_guard = match runtime.track_process(self, child.id()) {

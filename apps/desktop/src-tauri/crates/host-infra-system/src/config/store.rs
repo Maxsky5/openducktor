@@ -7,7 +7,7 @@ use super::persistence::{
     should_enforce_private_parent_permissions,
 };
 use super::types::{repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
-use crate::{parse_user_path, resolve_default_worktree_base_dir};
+use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{RuntimeRegistry, WorkspaceRecord};
 use std::fs;
@@ -35,7 +35,7 @@ fn validate_git_repo_path(repo_path: &str) -> Result<String> {
 
 fn default_worktree_base_path(repo_path: &str, workspace_id: &str) -> Result<String> {
     path_buf_to_utf8(
-        resolve_default_worktree_base_dir(Path::new(repo_path))?,
+        resolve_default_worktree_base_dir_for_workspace(workspace_id)?,
         &format!(
             "Failed converting default worktree base path to UTF-8 for {repo_path}. Ensure HOME is set or configure workspaces.{workspace_id}.worktreeBasePath"
         ),

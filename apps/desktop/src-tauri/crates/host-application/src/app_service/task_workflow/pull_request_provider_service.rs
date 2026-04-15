@@ -352,7 +352,9 @@ impl<'a> PullRequestProviderService<'a> {
     }
 
     pub(super) fn sync_policy(&self, repo_path: &str) -> Result<PullRequestSyncPolicy> {
-        let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+        let repo_config = self
+            .service
+            .workspace_get_repo_config_by_repo_path(repo_path)?;
         Ok(GithubPullRequestProviderPort.sync_policy(&repo_config))
     }
 
@@ -363,7 +365,9 @@ impl<'a> PullRequestProviderService<'a> {
         title: &str,
         body: &str,
     ) -> Result<ResolvedPullRequest> {
-        let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+        let repo_config = self
+            .service
+            .workspace_get_repo_config_by_repo_path(repo_path)?;
         let context =
             GithubPullRequestProviderPort.mutation_context(Path::new(repo_path), &repo_config)?;
         match self.service.git_push_branch(
@@ -396,7 +400,9 @@ impl<'a> PullRequestProviderService<'a> {
         repo_path: &str,
         source_branch: &str,
     ) -> Result<Option<ResolvedPullRequest>> {
-        let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+        let repo_config = self
+            .service
+            .workspace_get_repo_config_by_repo_path(repo_path)?;
         let context =
             GithubPullRequestProviderPort.mutation_context(Path::new(repo_path), &repo_config)?;
         GithubPullRequestProviderPort.find_open_pull_request_for_branch(
@@ -411,7 +417,9 @@ impl<'a> PullRequestProviderService<'a> {
         repo_path: &str,
         source_branch: &str,
     ) -> Result<Option<ResolvedPullRequest>> {
-        let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+        let repo_config = self
+            .service
+            .workspace_get_repo_config_by_repo_path(repo_path)?;
         let context =
             GithubPullRequestProviderPort.mutation_context(Path::new(repo_path), &repo_config)?;
         GithubPullRequestProviderPort.find_pull_request_for_branch(
@@ -482,7 +490,7 @@ impl<'a> PullRequestProviderService<'a> {
         let repo_path = self.service.resolve_authorized_repo_path(repo_path)?;
         let mut repo_config = self
             .service
-            .workspace_get_repo_config_optional(repo_path.as_str())?
+            .workspace_get_repo_config_optional_by_repo_path(repo_path.as_str())?
             .unwrap_or_default();
         let existing = repo_config
             .git
@@ -508,7 +516,7 @@ impl<'a> PullRequestProviderService<'a> {
             );
             let _ = self
                 .service
-                .workspace_update_repo_config(repo_path.as_str(), repo_config)?;
+                .workspace_update_repo_config_by_repo_path(repo_path.as_str(), repo_config)?;
         }
 
         Ok(())

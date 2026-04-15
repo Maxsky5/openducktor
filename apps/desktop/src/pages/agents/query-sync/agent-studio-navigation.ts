@@ -274,6 +274,12 @@ export const toContextStorageKey = (repoPath: string): string =>
 export const toTabsStorageKey = (repoPath: string): string =>
   `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
 
+export const toLegacyRepoPathContextStorageKey = (repoPath: string): string =>
+  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${repoPath}`;
+
+export const toLegacyRepoPathTabsStorageKey = (repoPath: string): string =>
+  `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
+
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
 
 const parsePersistedContextString = (

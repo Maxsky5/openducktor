@@ -67,7 +67,7 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
         },
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
-    let canonical_repo_path = workspace.path.clone();
+    let canonical_repo_path = workspace.repo_path.clone();
     let repo_config = host_infra_system::RepoConfig {
         branch_prefix: "odt".to_string(),
         worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -291,7 +291,7 @@ fn task_reset_implementation_uses_document_presence_for_rollback_target() -> Res
         branch_prefix: "odt".to_string(),
         ..Default::default()
     };
-    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, &repo_path.to_string_lossy(), repo_config)?;
 
     let ready_for_dev_result =
         service.task_reset_implementation(&repo_path.to_string_lossy(), "task-ready")?;
@@ -328,7 +328,7 @@ fn task_reset_implementation_ignores_stale_persisted_build_session_without_live_
         branch_prefix: "odt".to_string(),
         ..Default::default()
     };
-    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, &repo_path.to_string_lossy(), repo_config)?;
     task_state
         .lock()
         .expect("task store lock poisoned")
@@ -369,7 +369,7 @@ fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_i
         branch_prefix: "odt".to_string(),
         ..Default::default()
     };
-    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, &repo_path.to_string_lossy(), repo_config)?;
     task_state
         .lock()
         .expect("task store lock poisoned")
@@ -411,7 +411,8 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -619,7 +620,8 @@ fn assert_task_reset_rejects_live_session_status(
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -684,7 +686,8 @@ fn task_reset_only_mutates_the_selected_task() -> Result<()> {
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -753,7 +756,7 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.path.as_str(),
+        workspace.repo_path.as_str(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -823,7 +826,7 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
         },
     ];
 
-    let _ = service.task_reset(workspace.path.as_str(), "task-1")?;
+    let _ = service.task_reset(workspace.repo_path.as_str(), "task-1")?;
 
     let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
     assert!(git_calls.iter().any(|call| matches!(
@@ -868,7 +871,7 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.path.as_str(),
+        workspace.repo_path.as_str(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -912,7 +915,7 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
         },
     ];
 
-    let _ = service.task_reset(workspace.path.as_str(), "task-1")?;
+    let _ = service.task_reset(workspace.repo_path.as_str(), "task-1")?;
 
     let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
     assert!(git_calls.iter().any(|call| matches!(
@@ -950,7 +953,7 @@ fn task_reset_propagates_non_worktree_branch_errors_for_task_managed_worktrees()
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.path.as_str(),
+        workspace.repo_path.as_str(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -980,7 +983,7 @@ fn task_reset_propagates_non_worktree_branch_errors_for_task_managed_worktrees()
     }];
 
     let error = service
-        .task_reset(workspace.path.as_str(), "task-1")
+        .task_reset(workspace.repo_path.as_str(), "task-1")
         .expect_err("non-worktree branch errors should propagate");
     assert!(format!("{error:#}").contains("Failed to inspect implementation worktree branch"));
 
@@ -1011,7 +1014,8 @@ fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whites
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1066,7 +1070,8 @@ fn task_reset_reports_completed_cleanup_steps_when_later_cleanup_fails() -> Resu
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1113,7 +1118,8 @@ fn task_reset_implementation_rejects_live_qa_session_status_with_repo_runtime_wi
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1170,7 +1176,7 @@ fn task_delete_ignores_stale_persisted_build_session_without_live_runtime() -> R
         branch_prefix: "odt".to_string(),
         ..Default::default()
     };
-    service.workspace_update_repo_config(&repo_path.to_string_lossy(), repo_config)?;
+    workspace_update_repo_config_by_repo_path(&service, &repo_path.to_string_lossy(), repo_config)?;
     task_state
         .lock()
         .expect("task store lock poisoned")
@@ -1206,7 +1212,8 @@ fn task_delete_rejects_live_build_session_status() -> Result<()> {
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1292,7 +1299,8 @@ fn task_delete_rejects_live_build_session_status_with_repo_runtime_without_run()
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1345,7 +1353,8 @@ fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Resu
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1399,7 +1408,8 @@ fn task_delete_rejects_live_build_session_status_with_stale_run_route_and_repo_r
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1492,7 +1502,8 @@ fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1589,7 +1600,8 @@ fn assert_task_reset_implementation_rejects_live_build_session_status(
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1676,7 +1688,8 @@ fn task_reset_implementation_rejects_live_build_session_status_with_stale_run_ro
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -1781,7 +1794,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.path.as_str(),
+        workspace.repo_path.as_str(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -1830,7 +1843,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
                         "type": "local_http",
                         "endpoint": format!("http://127.0.0.1:{port}"),
                     },
-                    "repoPath": workspace.path.clone(),
+                    "repoPath": workspace.repo_path.clone(),
                     "taskId": "task-1",
                     "branch": "odt/task-1",
                     "worktreePath": build_worktree.to_string_lossy().to_string(),
@@ -1841,7 +1854,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
                 }))?,
                 child: None,
                 _runtime_process_guard: None,
-                repo_path: workspace.path.clone(),
+                repo_path: workspace.repo_path.clone(),
                 task_id: "task-1".to_string(),
                 worktree_path: build_worktree.to_string_lossy().to_string(),
                 repo_config: host_infra_system::RepoConfig {
@@ -1852,7 +1865,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
             },
         );
 
-    let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
+    let updated = service.task_reset_implementation(workspace.repo_path.as_str(), "task-1")?;
     server_handle
         .join()
         .expect("status server thread should finish");
@@ -1896,7 +1909,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.path.as_str(),
+        workspace.repo_path.as_str(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -1947,7 +1960,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
                         "type": "local_http",
                         "endpoint": format!("http://127.0.0.1:{port}"),
                     },
-                    "repoPath": workspace.path.clone(),
+                    "repoPath": workspace.repo_path.clone(),
                     "taskId": "task-1",
                     "branch": "odt/task-1",
                     "worktreePath": build_worktree.to_string_lossy().to_string(),
@@ -1958,7 +1971,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
                 }))?,
                 child: None,
                 _runtime_process_guard: None,
-                repo_path: workspace.path.clone(),
+                repo_path: workspace.repo_path.clone(),
                 task_id: "task-1".to_string(),
                 worktree_path: build_worktree.to_string_lossy().to_string(),
                 repo_config: host_infra_system::RepoConfig {
@@ -1969,7 +1982,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
             },
         );
 
-    let updated = service.task_reset_implementation(workspace.path.as_str(), "task-1")?;
+    let updated = service.task_reset_implementation(workspace.repo_path.as_str(), "task-1")?;
 
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
     assert!(service
@@ -2013,7 +2026,8 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2108,7 +2122,8 @@ fn task_reset_implementation_removes_stranded_managed_worktree_when_branch_inspe
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2175,7 +2190,8 @@ fn task_reset_implementation_propagates_non_worktree_branch_errors_for_managed_w
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2244,7 +2260,8 @@ fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_workt
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2333,7 +2350,8 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_branch_delete
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2405,7 +2423,8 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
@@ -2477,7 +2496,8 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
         },
     );
     let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),

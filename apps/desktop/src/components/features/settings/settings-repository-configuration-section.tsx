@@ -57,6 +57,7 @@ export function RepositoryConfigurationSection({
   onUpdateSelectedRepoConfig,
 }: RepositoryConfigurationSectionProps): ReactElement {
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
+  const [isRepoPathPickerOpen, setIsRepoPathPickerOpen] = useState(false);
 
   if (!selectedRepoConfig) {
     return (
@@ -132,6 +133,13 @@ export function RepositoryConfigurationSection({
   return (
     <>
       <div className="grid gap-4 p-4">
+        <RepositoryWorkspaceIdentitySection
+          isDisabled={isLoadingSettings || isSaving}
+          selectedRepoConfig={selectedRepoConfig}
+          onPickRepoPath={() => setIsRepoPathPickerOpen(true)}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        />
+
         <RepositoryWorktreeBasePathSection
           isDisabled={isLoadingSettings || isSaving}
           selectedRepoConfig={selectedRepoConfig}
@@ -197,7 +205,91 @@ export function RepositoryConfigurationSection({
           }}
         />
       ) : null}
+
+      {isRepoPathPickerOpen ? (
+        <FolderPickerDialog
+          open={isRepoPathPickerOpen}
+          onOpenChange={setIsRepoPathPickerOpen}
+          title="Rebind Repository Path"
+          description="Choose the current repository folder for this workspace. The workspace ID stays the same while the live repository path changes."
+          confirmLabel="Use This Repository"
+          initialPath={selectedRepoConfig.repoPath}
+          requireGitRepo
+          onConfirm={async (path) => {
+            onUpdateSelectedRepoConfig((repoConfig) => ({
+              ...repoConfig,
+              repoPath: path,
+            }));
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+function RepositoryWorkspaceIdentitySection({
+  isDisabled,
+  selectedRepoConfig,
+  onPickRepoPath,
+  onUpdateSelectedRepoConfig,
+}: {
+  isDisabled: boolean;
+  selectedRepoConfig: RepoConfig;
+  onPickRepoPath: () => void;
+  onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
+}): ReactElement {
+  return (
+    <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-4">
+      <div className="grid gap-1">
+        <p className="text-sm font-medium text-foreground">Workspace identity</p>
+        <p className="text-xs text-muted-foreground">
+          The workspace ID is durable and immutable. You can rename the workspace and rebind its
+          live repository path here.
+        </p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="repo-workspace-id">Workspace ID</Label>
+          <Input id="repo-workspace-id" value={selectedRepoConfig.workspaceId} readOnly />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="repo-workspace-name">Workspace name</Label>
+          <Input
+            id="repo-workspace-name"
+            value={selectedRepoConfig.workspaceName}
+            disabled={isDisabled}
+            onChange={(event) => {
+              const workspaceName = event.currentTarget.value;
+              onUpdateSelectedRepoConfig((repoConfig) => ({
+                ...repoConfig,
+                workspaceName,
+              }));
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="repo-path">Repository path</Label>
+        <div className="flex items-center gap-2">
+          <Input id="repo-path" className="flex-1" value={selectedRepoConfig.repoPath} readOnly />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isDisabled}
+            onClick={() => void onPickRepoPath()}
+          >
+            <FolderOpen className="size-4" />
+            Rebind
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Use a different Git repository folder if this workspace has moved on disk.
+        </p>
+      </div>
+    </div>
   );
 }
 

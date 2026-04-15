@@ -37,6 +37,7 @@ impl AppService {
     ) -> Result<RuntimeInstanceSummary> {
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
+        let workspace_id_for_mcp = self.workspace_id_for_repo_path(repo_path)?;
 
         if let Some(existing) =
             self.find_existing_workspace_runtime(&runtime_kind, repo_key.as_str())?
@@ -78,6 +79,7 @@ impl AppService {
                 runtime_kind: runtime_kind.clone(),
                 startup_scope: "workspace_runtime",
                 repo_path,
+                workspace_id_for_mcp: workspace_id_for_mcp.as_str(),
                 repo_key: repo_key.clone(),
                 startup_started_at_instant,
                 startup_started_at: startup_started_at.clone(),

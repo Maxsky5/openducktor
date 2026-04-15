@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::{
-    compute_beads_database_name, compute_repo_slug, ensure_shared_dolt_server_running,
-    resolve_shared_dolt_root, restore_shared_dolt_database_from_backup,
+    compute_beads_database_name, compute_beads_database_name_for_workspace, compute_repo_slug,
+    ensure_shared_dolt_server_running, resolve_shared_dolt_root,
+    restore_shared_dolt_database_from_backup,
 };
 use std::path::Path;
 
@@ -11,12 +12,20 @@ use super::{BeadsLifecycle, LifecycleError, RepoReadiness};
 
 impl BeadsLifecycle {
     pub(crate) fn repair_repo_store(&self, repo_path: &Path) -> Result<()> {
-        let env = self.build_bd_env(repo_path)?;
+        self.repair_repo_store_for_identity(repo_path, None)
+    }
+
+    pub(crate) fn repair_repo_store_for_identity(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
+        let env = self.build_bd_env_for_identity(repo_path, workspace_id)?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect::<Vec<_>>();
-        let working_dir = self.ensure_beads_working_dir(repo_path)?;
+        let working_dir = self.ensure_beads_working_dir_for_identity(repo_path, workspace_id)?;
         self.command_runner()
             .run_with_env(
                 "bd",
@@ -34,12 +43,20 @@ impl BeadsLifecycle {
     }
 
     pub(crate) fn ensure_custom_statuses(&self, repo_path: &Path) -> Result<()> {
-        let env = self.build_bd_env(repo_path)?;
+        self.ensure_custom_statuses_for_identity(repo_path, None)
+    }
+
+    pub(crate) fn ensure_custom_statuses_for_identity(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
+        let env = self.build_bd_env_for_identity(repo_path, workspace_id)?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect::<Vec<_>>();
-        let working_dir = self.ensure_beads_working_dir(repo_path)?;
+        let working_dir = self.ensure_beads_working_dir_for_identity(repo_path, workspace_id)?;
         self.command_runner()
             .run_with_env(
                 "bd",
@@ -75,6 +92,15 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
     ) -> Result<()> {
+        self.materialize_shared_database_from_attachment_for_identity(repo_path, beads_dir, None)
+    }
+
+    pub(crate) fn materialize_shared_database_from_attachment_for_identity(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
         let backup_dir = beads_dir.join("backup");
         if !backup_dir.is_dir() {
             return Err(LifecycleError::MissingAttachmentBackup {
@@ -84,7 +110,10 @@ impl BeadsLifecycle {
             .into());
         }
 
-        let database_name = compute_beads_database_name(repo_path)?;
+        let database_name = match workspace_id {
+            Some(workspace_id) => compute_beads_database_name_for_workspace(workspace_id)?,
+            None => compute_beads_database_name(repo_path)?,
+        };
         if self.command_runner().uses_real_processes() {
             restore_shared_dolt_database_from_backup(
                 std::process::id(),
@@ -115,9 +144,21 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
     ) -> Result<()> {
+        self.ensure_new_store_is_ready_for_identity(repo_path, beads_dir, None)
+    }
+
+    pub(crate) fn ensure_new_store_is_ready_for_identity(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
         let slug = compute_repo_slug(repo_path);
-        let database_name = compute_beads_database_name(repo_path)?;
-        let env = self.build_bd_env(repo_path)?;
+        let database_name = match workspace_id {
+            Some(workspace_id) => compute_beads_database_name_for_workspace(workspace_id)?,
+            None => compute_beads_database_name(repo_path)?,
+        };
+        let env = self.build_bd_env_for_identity(repo_path, workspace_id)?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -126,7 +167,7 @@ impl BeadsLifecycle {
             .iter()
             .find_map(|(key, value)| (key == "BEADS_DOLT_SERVER_PORT").then_some(value.as_str()))
             .ok_or_else(|| anyhow!("Missing BEADS_DOLT_SERVER_PORT while initializing repo"))?;
-        let working_dir = self.ensure_beads_working_dir(repo_path)?;
+        let working_dir = self.ensure_beads_working_dir_for_identity(repo_path, workspace_id)?;
         let (ok, stdout, stderr) = self.command_runner().run_allow_failure_with_env(
             "bd",
             &[
@@ -161,7 +202,7 @@ impl BeadsLifecycle {
             .into());
         }
 
-        self.ensure_repo_ready_after_recovery(repo_path, beads_dir, "init")
+        self.ensure_repo_ready_after_recovery(repo_path, beads_dir, "init", workspace_id)
     }
 
     pub(crate) fn ensure_repo_ready_after_recovery(
@@ -169,8 +210,9 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
         recovery_step: &'static str,
+        workspace_id: Option<&str>,
     ) -> Result<()> {
-        match self.verify_repo_initialized(repo_path, beads_dir) {
+        match self.verify_repo_initialized_for_identity(repo_path, beads_dir, workspace_id) {
             Ok(RepoReadiness::Ready) => Ok(()),
             Ok(readiness) => Err(LifecycleError::StoreStillNotReady {
                 beads_dir: beads_dir.to_path_buf(),

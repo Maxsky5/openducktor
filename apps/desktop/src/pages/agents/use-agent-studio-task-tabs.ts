@@ -33,6 +33,7 @@ const toClearTaskQueryUpdate = (): QueryUpdate => ({
 
 export function useAgentStudioTaskTabs(args: {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   isRepoNavigationBoundaryPending?: boolean;
   taskId: string;
   selectedTask: TaskCard | null;
@@ -54,6 +55,7 @@ export function useAgentStudioTaskTabs(args: {
 } {
   const {
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending = false,
     taskId,
     selectedTask,
@@ -69,7 +71,9 @@ export function useAgentStudioTaskTabs(args: {
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
   const [intentActiveTaskId, setIntentActiveTaskId] = useState<string | null>(null);
-  const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
+  const [tabsStorageHydratedWorkspaceId, setTabsStorageHydratedWorkspaceId] = useState<
+    string | null
+  >(null);
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
 
   const selectableTaskIds = useMemo(
@@ -94,12 +98,13 @@ export function useAgentStudioTaskTabs(args: {
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId: taskIdForTabs,
     openTaskTabs: selectableOpenTaskTabs,
     persistedActiveTaskId,
     intentActiveTaskId,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
     clearComposerInput,
     onContextSwitchIntent,
     navigateToTaskIntent,
@@ -110,17 +115,18 @@ export function useAgentStudioTaskTabs(args: {
 
   useTaskTabPersistence({
     activeRepo,
+    persistenceWorkspaceId,
     taskId: taskIdForTabs,
     selectedTask,
     tasks,
     isLoadingTasks,
     openTaskTabs,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
     activeTaskTabId,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
-    setTabsStorageHydratedRepo,
+    setTabsStorageHydratedWorkspaceId,
   });
 
   const availableTabTasks = useMemo(

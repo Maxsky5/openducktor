@@ -151,7 +151,9 @@ impl<'a> BuilderBranchService<'a> {
     }
 
     pub(crate) fn target_branch_for_repo(&self, repo_path: &str) -> Result<GitTargetBranch> {
-        let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+        let repo_config = self
+            .service
+            .workspace_get_repo_config_by_repo_path(repo_path)?;
         normalize_approval_target_branch(&repo_config.default_target_branch)
     }
 
@@ -211,7 +213,9 @@ impl<'a> BuilderBranchService<'a> {
         match task.target_branch.as_ref() {
             Some(target_branch) => publish_recorded_target_branch(target_branch),
             None => {
-                let repo_config = self.service.workspace_get_repo_config(repo_path)?;
+                let repo_config = self
+                    .service
+                    .workspace_get_repo_config_by_repo_path(repo_path)?;
                 publish_target_branch(&repo_config.default_target_branch)
             }
         }

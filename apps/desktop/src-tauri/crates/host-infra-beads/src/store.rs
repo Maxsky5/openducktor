@@ -5,6 +5,7 @@ use host_domain::{
     TaskStatus, TaskStore, UpdateTaskPatch, ODT_QA_APPROVED_SOURCE_TOOL,
     ODT_QA_REJECTED_SOURCE_TOOL, ODT_SET_PLAN_SOURCE_TOOL, ODT_SET_SPEC_SOURCE_TOOL,
 };
+use host_infra_system::AppConfigStore;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
@@ -32,6 +33,7 @@ use cache::{KanbanTaskListCacheState, PullRequestSyncCandidateCacheState, TaskLi
 pub struct BeadsTaskStore {
     pub(crate) metadata_namespace: Mutex<String>,
     pub(crate) lifecycle: BeadsLifecycle,
+    pub(crate) config_store: Option<AppConfigStore>,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
     kanban_task_list_cache: Mutex<HashMap<String, KanbanTaskListCacheState>>,
     pull_request_sync_candidate_cache: Mutex<HashMap<String, PullRequestSyncCandidateCacheState>>,
@@ -55,21 +57,35 @@ impl BeadsTaskStore {
     pub fn new() -> Self {
         Self::with_metadata_namespace_and_runner(
             DEFAULT_METADATA_NAMESPACE,
+            None,
             Arc::new(ProcessCommandRunner),
         )
     }
 
     pub fn with_metadata_namespace(namespace: &str) -> Self {
-        Self::with_metadata_namespace_and_runner(namespace, Arc::new(ProcessCommandRunner))
+        Self::with_metadata_namespace_and_runner(namespace, None, Arc::new(ProcessCommandRunner))
+    }
+
+    pub fn with_metadata_namespace_and_config(
+        namespace: &str,
+        config_store: AppConfigStore,
+    ) -> Self {
+        Self::with_metadata_namespace_and_runner(
+            namespace,
+            Some(config_store),
+            Arc::new(ProcessCommandRunner),
+        )
     }
 
     fn with_metadata_namespace_and_runner(
         namespace: &str,
+        config_store: Option<AppConfigStore>,
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
         Self {
             metadata_namespace: Mutex::new(Self::normalize_metadata_namespace(namespace)),
             lifecycle: BeadsLifecycle::new(command_runner),
+            config_store,
             task_list_cache: Mutex::new(HashMap::new()),
             kanban_task_list_cache: Mutex::new(HashMap::new()),
             pull_request_sync_candidate_cache: Mutex::new(HashMap::new()),
@@ -81,17 +97,48 @@ impl BeadsTaskStore {
         namespace: &str,
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
-        Self::with_metadata_namespace_and_runner(namespace, command_runner)
+        Self::with_metadata_namespace_and_runner(namespace, None, command_runner)
     }
 
     pub(crate) fn repo_key(repo_path: &Path) -> String {
+        Self::durable_identity_key(None, repo_path)
+    }
+
+    pub(crate) fn identity_key(&self, repo_path: &Path) -> String {
+        Self::durable_identity_key(self.config_store.as_ref(), repo_path)
+    }
+
+    pub(crate) fn workspace_id(&self, repo_path: &Path) -> Option<String> {
+        let config_store = self.config_store.as_ref()?;
+        config_store
+            .find_workspace_by_repo_path(repo_path.to_string_lossy().as_ref())
+            .ok()
+            .flatten()
+            .map(|workspace| workspace.workspace_id)
+    }
+
+    fn durable_identity_key(config_store: Option<&AppConfigStore>, repo_path: &Path) -> String {
+        if let Some(config_store) = config_store {
+            if let Ok(Some(workspace)) =
+                config_store.find_workspace_by_repo_path(repo_path.to_string_lossy().as_ref())
+            {
+                return workspace.workspace_id;
+            }
+        }
+
         BeadsLifecycle::repo_key(repo_path)
     }
 }
 
 impl TaskStore for BeadsTaskStore {
     fn diagnose_repo_store(&self, repo_path: &Path) -> Result<host_domain::RepoStoreHealth> {
-        self.lifecycle.diagnose_repo_store(repo_path)
+        let repo_key = self.identity_key(repo_path);
+        let workspace_id = self.workspace_id(repo_path);
+        self.lifecycle.diagnose_repo_store_for_identity(
+            repo_path,
+            Some(&repo_key),
+            workspace_id.as_deref(),
+        )
     }
 
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {

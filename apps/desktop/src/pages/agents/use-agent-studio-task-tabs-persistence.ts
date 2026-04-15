@@ -7,6 +7,7 @@ import {
   parsePersistedTaskTabs,
   toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
+import { toLegacyRepoPathTabsStorageKey } from "./query-sync/agent-studio-navigation";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -32,58 +33,82 @@ const writeTaskTabsStorage = (storageKey: string, payload: string): void => {
   }
 };
 
+const removeTaskTabsStorage = (storageKey: string): void => {
+  try {
+    globalThis.localStorage.removeItem(storageKey);
+  } catch (cause) {
+    throw new Error(
+      `Failed to clear legacy agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+};
+
 type UseTaskTabPersistenceArgs = {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   taskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   openTaskTabs: string[];
-  tabsStorageHydratedRepo: string | null;
+  tabsStorageHydratedWorkspaceId: string | null;
   activeTaskTabId: string;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
   setIntentActiveTaskId: SetState<string | null>;
-  setTabsStorageHydratedRepo: SetState<string | null>;
+  setTabsStorageHydratedWorkspaceId: SetState<string | null>;
 };
 
 export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
   const {
     activeRepo,
+    persistenceWorkspaceId,
     taskId,
     selectedTask,
     tasks,
     isLoadingTasks,
     openTaskTabs,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
     activeTaskTabId,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
-    setTabsStorageHydratedRepo,
+    setTabsStorageHydratedWorkspaceId,
   } = args;
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!activeRepo || !persistenceWorkspaceId) {
       setOpenTaskTabs([]);
       setPersistedActiveTaskId(null);
       setIntentActiveTaskId(null);
-      setTabsStorageHydratedRepo(null);
+      setTabsStorageHydratedWorkspaceId(null);
       return;
     }
 
-    const tabsStorageKey = toTabsStorageKey(activeRepo);
-    const raw = readTaskTabsStorage(tabsStorageKey);
+    const tabsStorageKey = toTabsStorageKey(persistenceWorkspaceId);
+    let raw = readTaskTabsStorage(tabsStorageKey);
+    if (!raw) {
+      const legacyTabsStorageKey = toLegacyRepoPathTabsStorageKey(activeRepo);
+      const legacyRaw = readTaskTabsStorage(legacyTabsStorageKey);
+      if (legacyRaw) {
+        writeTaskTabsStorage(tabsStorageKey, legacyRaw);
+        removeTaskTabsStorage(legacyTabsStorageKey);
+        raw = legacyRaw;
+      }
+    }
+
     const persistedTabs = parsePersistedTaskTabs(raw);
     setOpenTaskTabs(persistedTabs.tabs);
     setPersistedActiveTaskId(persistedTabs.activeTaskId);
-    setTabsStorageHydratedRepo(activeRepo);
+    setTabsStorageHydratedWorkspaceId(persistenceWorkspaceId);
   }, [
     activeRepo,
+    persistenceWorkspaceId,
     setIntentActiveTaskId,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
-    setTabsStorageHydratedRepo,
+    setTabsStorageHydratedWorkspaceId,
   ]);
 
   useEffect(() => {
@@ -121,13 +146,14 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
   }, [selectedTask, setOpenTaskTabs, taskId]);
 
   useEffect(() => {
-    if (!canPersistTaskTabs(activeRepo, tabsStorageHydratedRepo)) {
+    if (!canPersistTaskTabs(persistenceWorkspaceId, tabsStorageHydratedWorkspaceId)) {
       return;
     }
-    if (!activeRepo) {
+    if (!persistenceWorkspaceId) {
       return;
     }
-    const tabsStorageKey = toTabsStorageKey(activeRepo);
+
+    const tabsStorageKey = toTabsStorageKey(persistenceWorkspaceId);
     writeTaskTabsStorage(
       tabsStorageKey,
       toPersistedTaskTabs({
@@ -135,5 +161,5 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
         activeTaskId: activeTaskTabId || null,
       }),
     );
-  }, [activeRepo, activeTaskTabId, openTaskTabs, tabsStorageHydratedRepo]);
+  }, [persistenceWorkspaceId, activeTaskTabId, openTaskTabs, tabsStorageHydratedWorkspaceId]);
 }

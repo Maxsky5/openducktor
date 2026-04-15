@@ -9,12 +9,17 @@ use crate::store::BeadsTaskStore;
 impl BeadsTaskStore {
     pub(crate) fn run_bd(&self, repo_path: &Path, args: &[&str]) -> Result<String> {
         let final_args = args.to_vec();
-        let env = self.lifecycle.build_bd_env(repo_path)?;
+        let workspace_id = self.workspace_id(repo_path);
+        let env = self
+            .lifecycle
+            .build_bd_env_for_identity(repo_path, workspace_id.as_deref())?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect::<Vec<_>>();
-        let working_dir = self.lifecycle.ensure_beads_working_dir(repo_path)?;
+        let working_dir = self
+            .lifecycle
+            .ensure_beads_working_dir_for_identity(repo_path, workspace_id.as_deref())?;
 
         self.lifecycle.command_runner().run_with_env(
             "bd",
@@ -35,12 +40,17 @@ impl BeadsTaskStore {
             final_args.extend(args);
             final_args.push("--json");
         }
-        let env = self.lifecycle.build_bd_env(repo_path)?;
+        let workspace_id = self.workspace_id(repo_path);
+        let env = self
+            .lifecycle
+            .build_bd_env_for_identity(repo_path, workspace_id.as_deref())?;
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect::<Vec<_>>();
-        let working_dir = self.lifecycle.ensure_beads_working_dir(repo_path)?;
+        let working_dir = self
+            .lifecycle
+            .ensure_beads_working_dir_for_identity(repo_path, workspace_id.as_deref())?;
 
         let output = self.lifecycle.command_runner().run_with_env(
             "bd",

@@ -53,6 +53,14 @@ struct WorkspaceIdArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct WorkspaceAddArgs {
+    workspace_id: String,
+    workspace_name: String,
+    repo_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct WorkspaceSaveSettingsSnapshotArgs {
     snapshot: SettingsSnapshotPayload,
 }
@@ -114,9 +122,7 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
         Box::pin(async move { handle_workspace_list(state) })
     })?;
     registry.register("workspace_add", |state, args| {
-        Box::pin(async move {
-            handle_repo_path_operation(args, |repo_path| state.service.workspace_add(&repo_path))
-        })
+        Box::pin(async move { handle_workspace_add(state, args) })
     })?;
     registry.register("workspace_select", |state, args| {
         Box::pin(handle_workspace_select(state, args))
@@ -184,6 +190,20 @@ async fn handle_runtime_check(state: &HeadlessState, args: Value) -> CommandResu
 
 fn handle_workspace_list(state: &HeadlessState) -> CommandResult {
     serialize_value(state.service.workspace_list().map_err(service_error)?)
+}
+
+fn handle_workspace_add(state: &HeadlessState, args: Value) -> CommandResult {
+    let WorkspaceAddArgs {
+        workspace_id,
+        workspace_name,
+        repo_path,
+    } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .workspace_create(&workspace_id, &workspace_name, &repo_path)
+            .map_err(service_error)?,
+    )
 }
 
 async fn handle_workspace_select(state: &HeadlessState, args: Value) -> CommandResult {

@@ -22,7 +22,7 @@ type WorkspaceIntegrationHostClient = WorkspaceHostClient & SettingsSnapshotHost
 const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
   ({
     workspaceList: async () => [],
-    workspaceAdd: async (repoPath: string) => workspace(repoPath),
+    workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
     workspaceGetRepoConfig: async () => {
       throw new Error("workspaceGetRepoConfig not configured");
@@ -452,10 +452,18 @@ describe("use-workspace-operations", () => {
     try {
       await harness.mount();
       await harness.run(async (value) => {
-        await value.addWorkspace("  /repo-new  ");
+        await value.addWorkspace({
+          workspaceId: "repo-new",
+          workspaceName: "Repo New",
+          repoPath: "  /repo-new  ",
+        });
       });
 
-      expect(workspaceAdd).toHaveBeenCalledWith("/repo-new");
+      expect(workspaceAdd).toHaveBeenCalledWith({
+        workspaceId: "repo-new",
+        workspaceName: "Repo New",
+        repoPath: "/repo-new",
+      });
       expect(workspaceList).toHaveBeenCalled();
     } finally {
       await harness.unmount();
@@ -511,7 +519,11 @@ describe("use-workspace-operations", () => {
       }
 
       await act(async () => {
-        await latest?.addWorkspace("/repo-new");
+        await latest?.addWorkspace({
+          workspaceId: "repo-new",
+          workspaceName: "Repo New",
+          repoPath: "/repo-new",
+        });
       });
 
       await waitFor(() => {

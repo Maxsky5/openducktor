@@ -133,8 +133,17 @@ const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => 
   return parseArray(workspaceRecordSchema, payload, "workspace_list");
 };
 
-const workspaceAdd = async (invokeFn: InvokeFn, repoPath: string): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_add", { repoPath });
+export type WorkspaceCreateInput = {
+  workspaceId: string;
+  workspaceName: string;
+  repoPath: string;
+};
+
+const workspaceAdd = async (
+  invokeFn: InvokeFn,
+  input: WorkspaceCreateInput,
+): Promise<WorkspaceRecord> => {
+  const payload = await invokeFn("workspace_add", input);
   return workspaceRecordSchema.parse(payload);
 };
 
@@ -280,8 +289,8 @@ export class TauriWorkspaceClient {
     return workspaceList(this.invokeFn);
   }
 
-  async workspaceAdd(repoPath: string): Promise<WorkspaceRecord> {
-    return workspaceAdd(this.invokeFn, repoPath);
+  async workspaceAdd(input: WorkspaceCreateInput): Promise<WorkspaceRecord> {
+    return workspaceAdd(this.invokeFn, input);
   }
 
   async workspaceSelect(workspaceId: string): Promise<WorkspaceRecord> {

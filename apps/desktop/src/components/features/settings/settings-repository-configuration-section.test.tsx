@@ -81,6 +81,46 @@ const renderStatefulSection = (initialRepoConfig: RepoConfig) => {
 };
 
 describe("RepositoryConfigurationSection", () => {
+  test("renders workspace identity fields and updates workspace name", () => {
+    const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
+    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
+      updaters.push(updater);
+    });
+    const rendered = renderSection(baseRepoConfig, onUpdateSelectedRepoConfig);
+
+    try {
+      const workspaceIdInput = screen.getByLabelText("Workspace ID");
+      const workspaceNameInput = screen.getByLabelText("Workspace name");
+      const repoPathInput = screen.getByLabelText("Repository path");
+
+      if (!(workspaceIdInput instanceof HTMLInputElement)) {
+        throw new Error("Expected workspace ID input");
+      }
+      if (!(workspaceNameInput instanceof HTMLInputElement)) {
+        throw new Error("Expected workspace name input");
+      }
+      if (!(repoPathInput instanceof HTMLInputElement)) {
+        throw new Error("Expected repository path input");
+      }
+
+      expect(workspaceIdInput.readOnly).toBe(true);
+      expect(workspaceIdInput.value).toBe("repo");
+      expect(repoPathInput.readOnly).toBe(true);
+      expect(repoPathInput.value).toBe("/repo");
+
+      fireEvent.change(workspaceNameInput, { target: { value: "Renamed Repo" } });
+
+      const updater = updaters[0];
+      if (!updater) {
+        throw new Error("Expected repo config updater");
+      }
+
+      expect(updater(baseRepoConfig).workspaceName).toBe("Renamed Repo");
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("preserves hook draft blank rows while marking scripts as trusted", () => {
     const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
 

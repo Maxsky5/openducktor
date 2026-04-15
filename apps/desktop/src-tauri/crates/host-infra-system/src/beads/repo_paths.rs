@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::env;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,10 @@ pub fn compute_repo_slug(repo_path: &Path) -> String {
     sanitize_slug(candidate)
 }
 
+pub fn compute_workspace_repo_id(workspace_id: &str) -> String {
+    workspace_id.trim().to_string()
+}
+
 pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
     let resolved = canonical_or_absolute(repo_path)?;
     let canonical_string = resolved.to_string_lossy().to_string();
@@ -40,13 +45,23 @@ pub fn compute_beads_database_name(repo_path: &Path) -> Result<String> {
     let resolved_repo_path = canonical_or_absolute(repo_path)?;
     let slug = sanitize_database_identifier(&compute_repo_slug(&resolved_repo_path));
     let digest = Sha256::digest(resolved_repo_path.to_string_lossy().as_bytes());
+    build_database_name(slug.as_str(), &digest)
+}
+
+pub fn compute_beads_database_name_for_workspace(workspace_id: &str) -> Result<String> {
+    let slug = sanitize_database_identifier(workspace_id.trim());
+    let digest = Sha256::digest(workspace_id.trim().as_bytes());
+    build_database_name(slug.as_str(), &digest)
+}
+
+fn build_database_name(slug: &str, digest: &impl fmt::LowerHex) -> Result<String> {
     let hash_suffix = format!("{digest:x}");
     let hash_suffix = &hash_suffix[..12];
     let max_slug_len = 64usize.saturating_sub("odt__".len() + hash_suffix.len());
     let truncated_slug = if slug.len() > max_slug_len {
         &slug[..max_slug_len]
     } else {
-        slug.as_str()
+        slug
     };
 
     Ok(format!("odt_{truncated_slug}_{hash_suffix}"))
@@ -84,12 +99,24 @@ pub fn resolve_repo_beads_attachment_root(repo_path: &Path) -> Result<PathBuf> {
     Ok(resolve_beads_root()?.join(compute_repo_id(repo_path)?))
 }
 
+pub fn resolve_workspace_beads_attachment_root(workspace_id: &str) -> Result<PathBuf> {
+    Ok(resolve_beads_root()?.join(compute_workspace_repo_id(workspace_id)))
+}
+
 pub fn resolve_repo_beads_attachment_dir(repo_path: &Path) -> Result<PathBuf> {
     Ok(resolve_repo_beads_attachment_root(repo_path)?.join(".beads"))
 }
 
+pub fn resolve_workspace_beads_attachment_dir(workspace_id: &str) -> Result<PathBuf> {
+    Ok(resolve_workspace_beads_attachment_root(workspace_id)?.join(".beads"))
+}
+
 pub fn resolve_repo_live_database_dir(repo_path: &Path) -> Result<PathBuf> {
     Ok(resolve_shared_dolt_root()?.join(compute_beads_database_name(repo_path)?))
+}
+
+pub fn resolve_workspace_live_database_dir(workspace_id: &str) -> Result<PathBuf> {
+    Ok(resolve_shared_dolt_root()?.join(compute_beads_database_name_for_workspace(workspace_id)?))
 }
 
 pub fn resolve_repo_beads_paths(repo_path: &Path) -> Result<RepoBeadsPaths> {
@@ -108,8 +135,31 @@ pub fn resolve_repo_beads_paths(repo_path: &Path) -> Result<RepoBeadsPaths> {
     })
 }
 
+pub fn resolve_workspace_beads_paths(workspace_id: &str) -> Result<RepoBeadsPaths> {
+    let repo_id = compute_workspace_repo_id(workspace_id);
+    let attachment_root = resolve_beads_root()?.join(&repo_id);
+    let attachment_dir = attachment_root.join(".beads");
+    let database_name = compute_beads_database_name_for_workspace(workspace_id)?;
+    let live_database_dir = resolve_shared_dolt_root()?.join(&database_name);
+
+    Ok(RepoBeadsPaths {
+        repo_id,
+        attachment_root,
+        attachment_dir,
+        database_name,
+        live_database_dir,
+    })
+}
+
 pub fn resolve_default_worktree_base_dir(repo_path: &Path) -> Result<PathBuf> {
     resolve_repo_scoped_openducktor_dir(repo_path, "worktrees")
+}
+
+pub fn resolve_default_worktree_base_dir_for_workspace(workspace_id: &str) -> Result<PathBuf> {
+    let base_dir = resolve_openducktor_base_dir()?;
+    Ok(base_dir
+        .join("worktrees")
+        .join(compute_workspace_repo_id(workspace_id)))
 }
 
 pub fn resolve_effective_worktree_base_dir(
