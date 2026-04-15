@@ -1,7 +1,11 @@
 import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import type {
+  AgentChatComposerDraft,
+  AgentChatFileTriggerMatch,
+} from "./agent-chat-composer-draft";
 import {
+  findTextSegment,
   readFileTriggerMatchForDraft,
   readSlashTriggerMatchForDraft,
 } from "./agent-chat-composer-draft";
@@ -35,17 +39,23 @@ export const AUTOCOMPLETE_NAVIGATION_KEYS = new Set([
   "Escape",
 ]);
 
-const findTextSegment = (
-  draft: AgentChatComposerDraft,
+const FILE_SEARCH_FAILED_MESSAGE = "Failed to search files.";
+
+const isSameFileMenuRequest = (
+  fileMenuState: FileMenuState | null,
   segmentId: string,
-): Extract<AgentChatComposerDraft["segments"][number], { kind: "text" }> | null => {
-  for (const segment of draft.segments) {
-    if (segment.kind === "text" && segment.id === segmentId) {
-      return segment;
-    }
+  match: AgentChatFileTriggerMatch,
+): boolean => {
+  if (!fileMenuState) {
+    return false;
   }
 
-  return null;
+  return (
+    fileMenuState.textSegmentId === segmentId &&
+    fileMenuState.query === match.query &&
+    fileMenuState.rangeStart === match.rangeStart &&
+    fileMenuState.rangeEnd === match.rangeEnd
+  );
 };
 
 export const filterSlashCommands = (
@@ -168,6 +178,10 @@ export const useAgentChatComposerEditorAutocomplete = ({
         return;
       }
 
+      if (isSameFileMenuRequest(fileMenuState, segmentId, match)) {
+        return;
+      }
+
       const requestId = fileSearchRequestIdRef.current + 1;
       fileSearchRequestIdRef.current = requestId;
       setActiveFileIndex(0);
@@ -208,11 +222,11 @@ export const useAgentChatComposerEditorAutocomplete = ({
             rangeEnd: match.rangeEnd,
             results: previousState?.results ?? [],
             isLoading: false,
-            error: error instanceof Error ? error.message : "Failed to search files.",
+            error: error instanceof Error ? error.message : FILE_SEARCH_FAILED_MESSAGE,
           }));
         });
     },
-    [closeFileMenu, disabled, searchFiles, supportsFileSearch],
+    [closeFileMenu, disabled, fileMenuState, searchFiles, supportsFileSearch],
   );
 
   const syncMenusForSelectionTarget = useCallback(

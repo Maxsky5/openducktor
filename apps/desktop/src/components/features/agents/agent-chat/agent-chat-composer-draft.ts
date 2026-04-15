@@ -169,6 +169,19 @@ export const isTextSegment = (
   segment: AgentChatComposerSegment,
 ): segment is AgentChatComposerTextSegment => segment.kind === "text";
 
+export const findTextSegment = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): AgentChatComposerTextSegment | null => {
+  for (const segment of draft.segments) {
+    if (segment.kind === "text" && segment.id === segmentId) {
+      return segment;
+    }
+  }
+
+  return null;
+};
+
 export const normalizeComposerDraft = (draft: AgentChatComposerDraft): AgentChatComposerDraft => {
   const normalized: AgentChatComposerSegment[] = [];
 

@@ -4,6 +4,7 @@ import {
   type AgentChatComposerDraft,
   type AgentChatComposerDraftEditResult,
   createTextSegment,
+  findTextSegment,
   normalizeComposerDraft,
 } from "./agent-chat-composer-draft";
 import {
@@ -28,19 +29,6 @@ export type TextSelectionTarget = {
 export type PendingInputState = TextSelectionTarget & {
   inputType: string | null;
   data: string | null;
-};
-
-const findTextSegment = (
-  draft: AgentChatComposerDraft,
-  segmentId: string,
-): Extract<AgentChatComposerDraft["segments"][number], { kind: "text" }> | null => {
-  for (const segment of draft.segments) {
-    if (segment.kind === "text" && segment.id === segmentId) {
-      return segment;
-    }
-  }
-
-  return null;
 };
 
 const clampTextSelectionOffset = (text: string, offset: number): number => {

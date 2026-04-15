@@ -165,4 +165,47 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
 
     await harness.unmount();
   });
+
+  test("does not repeat the same file search request for an unchanged trigger", async () => {
+    const firstSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
+    const searchFiles = mock(() => firstSearch.promise);
+
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@ab"), {
+        segmentId: "segment-1",
+        offset: 3,
+      });
+    });
+
+    expect(searchFiles).toHaveBeenCalledTimes(1);
+    expect(harness.getLatest().isFileSearchLoading).toBe(true);
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@ab"), {
+        segmentId: "segment-1",
+        offset: 3,
+      });
+    });
+
+    expect(searchFiles).toHaveBeenCalledTimes(1);
+
+    firstSearch.resolve([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
+    await harness.waitFor((state) => {
+      return state.fileSearchResults.some((result) => result.path === "src/ab.ts");
+    });
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@ab"), {
+        segmentId: "segment-1",
+        offset: 3,
+      });
+    });
+
+    expect(searchFiles).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+  });
 });

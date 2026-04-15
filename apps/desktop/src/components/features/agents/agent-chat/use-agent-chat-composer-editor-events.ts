@@ -30,6 +30,8 @@ import {
   type UseAgentChatComposerEditorSelectionResult,
 } from "./use-agent-chat-composer-editor-selection";
 
+type ApplyEditResult = (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+
 const isPastedImageFile = (file: File, mime?: string): boolean => {
   return classifyAttachment({ name: file.name, mime: mime || file.type }) === "image";
 };
@@ -138,9 +140,7 @@ type UseAgentChatComposerEditorEventsArgs = {
   ) => void;
   moveActiveFileIndex: (direction: 1 | -1) => boolean;
   moveActiveSlashIndex: (direction: 1 | -1) => boolean;
-  applyEditResult: ReturnType<
-    typeof useCallback<(result: ReturnType<typeof applyComposerDraftEdit>) => boolean>
-  >;
+  applyEditResult: ApplyEditResult;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
