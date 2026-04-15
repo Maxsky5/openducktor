@@ -1755,6 +1755,9 @@ describe("TauriHostClient", () => {
     await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow(
       "Task metadata for task-1 contains invalid persisted agent sessions",
     );
+    await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow(
+      "agentSessions[0].scenario",
+    );
   });
 
   test("agentSessionsList rejects invalid persisted agent session entries", async () => {

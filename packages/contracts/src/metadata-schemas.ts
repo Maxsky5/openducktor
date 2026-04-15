@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
+import { agentSessionRecordSchema } from "./session-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
 export const taskMetadataDocumentSchema = z.object({
@@ -21,21 +22,21 @@ export const taskMetadataQaReportSchema = z.object({
 });
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const normalizeLegacyTaskMetadataPayload = (value: unknown): unknown => {
-  if (!value || typeof value !== "object") {
+  if (!isPlainObject(value)) {
     return value;
   }
 
-  const payload = value as Record<string, unknown>;
+  const payload = value;
   if ("pullRequest" in payload || "directMerge" in payload) {
     return value;
   }
 
-  const delivery =
-    payload.delivery && typeof payload.delivery === "object"
-      ? (payload.delivery as Record<string, unknown>)
-      : null;
-  if (!delivery) {
+  const delivery = payload.delivery;
+  if (!isPlainObject(delivery)) {
     return value;
   }
 
@@ -67,7 +68,7 @@ export const taskMetadataPayloadSchema = z.preprocess(
       (value) => (value === null ? undefined : value),
       directMergeRecordSchema.optional(),
     ),
-    agentSessions: z.array(z.unknown()).default([]),
+    agentSessions: z.array(agentSessionRecordSchema).default([]),
   }),
 );
 export type TaskMetadataPayload = z.infer<typeof taskMetadataPayloadSchema>;

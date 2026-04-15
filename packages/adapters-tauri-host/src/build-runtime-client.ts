@@ -66,7 +66,7 @@ class RuntimeEnsureError extends Error {
 }
 
 const readUnknownProp = (value: unknown, key: string): unknown => {
-  if (!value || typeof value !== "object") {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return undefined;
   }
 
@@ -84,6 +84,28 @@ const readFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined =
   return result.success ? result.data : undefined;
 };
 
+type RuntimeEnsureFailureEnvelope = {
+  message?: string;
+  error?: string;
+  failureKind: RuntimeEnsureFailureKind;
+};
+
+const readRuntimeEnsureFailureEnvelope = (value: unknown): RuntimeEnsureFailureEnvelope | null => {
+  const failureKind = readFailureKind(value);
+  if (!failureKind) {
+    return null;
+  }
+
+  const message = readStringProp(value, "message");
+  const error = readStringProp(value, "error");
+
+  return {
+    failureKind,
+    ...(message !== undefined ? { message } : {}),
+    ...(error !== undefined ? { error } : {}),
+  };
+};
+
 const buildRuntimeEnsureFailureSources = (error: unknown): unknown[] => {
   return [error, readUnknownProp(error, "cause")];
 };
@@ -98,21 +120,22 @@ const extractRuntimeEnsureFailure = (error: unknown): NormalizedRuntimeEnsureFai
   }
 
   const sources = buildRuntimeEnsureFailureSources(error);
-  const failureSource = sources.find((source) => readFailureKind(source) !== undefined);
-  const failureKind = failureSource ? readFailureKind(failureSource) : undefined;
-  if (!failureKind) {
+  const failureEnvelope = sources
+    .map((source) => readRuntimeEnsureFailureEnvelope(source))
+    .find((source): source is RuntimeEnsureFailureEnvelope => source !== null);
+  if (!failureEnvelope?.failureKind) {
     return null;
   }
 
   const message =
-    readStringProp(failureSource, "message") ??
-    readStringProp(failureSource, "error") ??
+    failureEnvelope.message ??
+    failureEnvelope.error ??
     (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
     "Failed to ensure runtime.";
 
   return {
     message,
-    failureKind,
+    failureKind: failureEnvelope.failureKind,
     ...(error !== undefined ? { cause: error } : {}),
   };
 };

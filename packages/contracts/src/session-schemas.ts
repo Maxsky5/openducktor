@@ -14,6 +14,20 @@ export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
+const agentSessionMetadataValueSchema: z.ZodType<
+  string | number | boolean | null | undefined | Array<unknown> | Record<string, unknown>
+> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.undefined(),
+    z.array(agentSessionMetadataValueSchema),
+    z.record(z.string(), agentSessionMetadataValueSchema),
+  ]),
+);
+
 export const agentSessionModelSelectionSchema = z.object({
   runtimeKind: runtimeKindSchema,
   providerId: z.string(),
@@ -27,7 +41,7 @@ export const agentSessionPermissionRequestSchema = z.object({
   requestId: z.string(),
   permission: z.string(),
   patterns: z.array(z.string()).default([]),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), agentSessionMetadataValueSchema).optional(),
 });
 export type AgentSessionPermissionRequest = z.infer<typeof agentSessionPermissionRequestSchema>;
 

@@ -6,6 +6,11 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
+type MetadataIssue = {
+  path: PropertyKey[];
+  message: string;
+};
+
 export type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
   agentSessions: AgentSessionRecord[];
 };
@@ -37,6 +42,33 @@ const parseAgentSessions = (entries: unknown[], taskId: string): AgentSessionRec
   }
 
   return sessions;
+};
+
+const isAgentSessionIssue = (issue: MetadataIssue): boolean => issue.path[0] === "agentSessions";
+
+const formatAgentSessionIssue = (issue: MetadataIssue): string => {
+  const path = issue.path.length > 1 ? issue.path.slice(1) : ["unknown"];
+  const [index, ...rest] = path;
+  const suffix = rest.length > 0 ? `.${rest.join(".")}` : "";
+  return `agentSessions[${String(index)}]${suffix}: ${issue.message}`;
+};
+
+const parseTaskMetadataPayload = (payload: unknown, taskId: string): TaskMetadataPayload => {
+  const parsed = taskMetadataPayloadSchema.safeParse(payload);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  const agentSessionIssues = parsed.error.issues.filter(isAgentSessionIssue);
+  if (agentSessionIssues.length === 0) {
+    throw parsed.error;
+  }
+
+  throw new Error(
+    `Task metadata for ${taskId} contains invalid persisted agent sessions: ${agentSessionIssues
+      .map(formatAgentSessionIssue)
+      .join(" | ")}`,
+  );
 };
 
 export class TaskMetadataCache {
@@ -113,7 +145,7 @@ export class TaskMetadataCache {
 
     const next = invokeFn("task_metadata_get", { repoPath, taskId })
       .then((payload) => {
-        const parsed = taskMetadataPayloadSchema.parse(payload);
+        const parsed = parseTaskMetadataPayload(payload, taskId);
         const metadata = {
           ...parsed,
           agentSessions: parseAgentSessions(parsed.agentSessions, taskId),

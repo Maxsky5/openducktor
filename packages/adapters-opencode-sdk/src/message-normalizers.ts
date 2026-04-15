@@ -6,7 +6,7 @@ import type {
   AgentUserMessageSourceText,
 } from "@openducktor/core";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
-import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
+import { asUnknownRecord, readNumberProp, readRecordProp, readUnknownProp } from "./guards";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
 
 const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
@@ -51,14 +51,14 @@ const readFilePathFromUrl = (url: string): string | null => {
 };
 
 const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
-  if (!value || typeof value !== "object") {
+  const record = asUnknownRecord(value);
+  if (!record) {
     return undefined;
   }
 
-  const record = value as Record<string, unknown>;
-  const textValue = record.value;
-  const start = record.start;
-  const end = record.end;
+  const textValue = readUnknownProp(record, "value");
+  const start = readNumberProp(record, ["start"]);
+  const end = readNumberProp(record, ["end"]);
   if (typeof textValue !== "string" || typeof start !== "number" || typeof end !== "number") {
     return undefined;
   }
@@ -343,6 +343,34 @@ const toFiniteNumber = (value: unknown): number | null => {
   return value;
 };
 
+const readTokenBreakdown = (value: unknown): TokenBreakdown | undefined => {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const input = readNumberProp(record, ["input"]);
+  const output = readNumberProp(record, ["output"]);
+  const reasoning = readNumberProp(record, ["reasoning"]);
+  const cacheRecord = readRecordProp(record, "cache");
+  const cacheRead = cacheRecord ? readNumberProp(cacheRecord, ["read"]) : undefined;
+  const cacheWrite = cacheRecord ? readNumberProp(cacheRecord, ["write"]) : undefined;
+  const cache =
+    cacheRead !== undefined || cacheWrite !== undefined
+      ? {
+          ...(cacheRead !== undefined ? { read: cacheRead } : {}),
+          ...(cacheWrite !== undefined ? { write: cacheWrite } : {}),
+        }
+      : undefined;
+
+  return {
+    ...(input !== undefined ? { input } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(cache ? { cache } : {}),
+  };
+};
+
 const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number => {
   if (!breakdown || typeof breakdown !== "object") {
     return 0;
@@ -360,18 +388,21 @@ export const toTokenTotal = (value: unknown): number | undefined => {
   if (direct !== null) {
     return Math.max(0, direct);
   }
-  if (value && typeof value === "object") {
-    const summed = sumTokenBreakdown(value as TokenBreakdown);
-    if (summed > 0) {
-      return summed;
-    }
+  const breakdown = readTokenBreakdown(value);
+  if (!breakdown) {
+    return undefined;
+  }
+
+  const summed = sumTokenBreakdown(breakdown);
+  if (summed > 0) {
+    return summed;
   }
   return undefined;
 };
 
 export const extractMessageTotalTokens = (
   info: unknown,
-  parts: Array<Part | Record<string, unknown>>,
+  parts: Part[] | unknown[],
 ): number | undefined => {
   const infoTokens = toTokenTotal(readUnknownProp(info, "tokens"));
   if (typeof infoTokens === "number" && infoTokens > 0) {
