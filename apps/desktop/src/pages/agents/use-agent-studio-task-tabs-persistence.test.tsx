@@ -72,6 +72,36 @@ const createThrowingStorage = (args: {
   };
 };
 
+const createTrackedStorage = (): {
+  storage: TestStorageLike;
+  setItem: ReturnType<typeof mock>;
+  store: Map<string, string>;
+} => {
+  const store = new Map<string, string>();
+  const setItem = mock((key: string, value: string) => {
+    store.set(key, value);
+  });
+
+  return {
+    storage: {
+      getItem: (key) => store.get(key) ?? null,
+      setItem,
+      removeItem: (key) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index) => Array.from(store.keys())[index] ?? null,
+      get length() {
+        return store.size;
+      },
+    },
+    setItem,
+    store,
+  };
+};
+
 const useTaskTabPersistenceHarness = (props: HookArgs) => {
   const [openTaskTabs, setOpenTaskTabs] = useState(props.initialOpenTaskTabs ?? []);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState(
@@ -169,24 +199,7 @@ describe("useTaskTabPersistence", () => {
   });
 
   test("persists task tabs only after hydration matches the active repo", async () => {
-    const store = new Map<string, string>();
-    const setItem = mock((key: string, value: string) => {
-      store.set(key, value);
-    });
-    const storage: TestStorageLike = {
-      getItem: (key) => store.get(key) ?? null,
-      setItem,
-      removeItem: (key) => {
-        store.delete(key);
-      },
-      clear: () => {
-        store.clear();
-      },
-      key: (index) => Array.from(store.keys())[index] ?? null,
-      get length() {
-        return store.size;
-      },
-    };
+    const { storage, setItem } = createTrackedStorage();
 
     await withMockedLocalStorage(storage, async () => {
       const harness = createHookHarness({
@@ -214,6 +227,56 @@ describe("useTaskTabPersistence", () => {
         intentActiveTaskId: null,
         tabsStorageHydratedRepo: "/repo",
       });
+
+      await harness.unmount();
+    });
+  });
+
+  test("does not persist stale tabs into the next repo during a repo switch", async () => {
+    const { storage, setItem, store } = createTrackedStorage();
+
+    await withMockedLocalStorage(storage, async () => {
+      seedRepoTaskTabs(storage, {
+        "/repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
+        "/repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
+      });
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask({ id: "task-a" }), createTask({ id: "task-b" })],
+        isLoadingTasks: false,
+        activeTaskTabId: "task-a",
+      });
+
+      await harness.mount();
+      setItem.mockClear();
+
+      await harness.update({
+        activeRepo: "/repo-b",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask({ id: "task-a" }), createTask({ id: "task-b" })],
+        isLoadingTasks: false,
+        activeTaskTabId: "task-b",
+      });
+
+      expect(harness.getLatest()).toEqual({
+        openTaskTabs: ["task-b"],
+        persistedActiveTaskId: "task-b",
+        intentActiveTaskId: null,
+        tabsStorageHydratedRepo: "/repo-b",
+      });
+      expect(setItem.mock.calls).toEqual([
+        [
+          toTabsStorageKey("/repo-b"),
+          toPersistedTaskTabs({ tabs: ["task-b"], activeTaskId: "task-b" }),
+        ],
+      ]);
+      expect(store.get(toTabsStorageKey("/repo-b"))).toBe(
+        toPersistedTaskTabs({ tabs: ["task-b"], activeTaskId: "task-b" }),
+      );
 
       await harness.unmount();
     });
