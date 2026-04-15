@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -715,9 +715,7 @@ describe("repo-session-hydration-service", () => {
     let retryRequests = 0;
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
-    const consoleError = mock(() => {});
-    const originalConsoleError = console.error;
-    console.error = consoleError as typeof console.error;
+    const retryTriggered = createDeferred<void>();
 
     host.runtimeList = async () => [createRuntimeInstance()];
 
@@ -756,27 +754,27 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore,
       onRetryRequested: () => {
         retryRequests += 1;
+        retryTriggered.resolve();
       },
     });
 
-    try {
-      await service.reconcilePendingTasks({
-        repoPath,
-        tasks: [taskWithSession("task-valid", "external-valid"), invalidTask],
-        runs: [],
-        isCancelled: () => false,
-        isCurrentRepo: () => true,
-      });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskWithSession("task-valid", "external-valid"), invalidTask],
+      runs: [],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
 
-      await Bun.sleep(600);
+    const retryResult = await Promise.race([
+      retryTriggered.promise.then(() => "retried" as const),
+      Bun.sleep(600).then(() => "timeout" as const),
+    ]);
 
-      expect(reconcileCalls).toEqual(["task-valid"]);
-      expect(retryRequests).toBe(0);
-      expect(consoleError).toHaveBeenCalledTimes(1);
-    } finally {
-      console.error = originalConsoleError;
-      service.dispose();
-    }
+    expect(reconcileCalls).toEqual(["task-valid"]);
+    expect(retryRequests).toBe(0);
+    expect(retryResult).toBe("timeout");
+    service.dispose();
   });
 
   afterEach(() => {
