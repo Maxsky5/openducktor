@@ -75,7 +75,9 @@ It is live runtime-instance metadata only:
 - `startedAt`
 - `descriptor`
 
-The host returns this payload after listing, ensuring, or starting a runtime. It tells the frontend which runtime instance is running, which repo/task scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`.
+`runtimeInstanceSummaryRoleSchema` is currently `workspace` only, so this payload describes shared workspace runtime instances rather than every startup path in the system.
+
+The host returns this payload after listing or ensuring a workspace runtime. It tells the frontend which runtime instance is running, which repo scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`. Build startup returns `RunSummary` instead.
 
 ### `RuntimeRoute`
 
@@ -236,11 +238,11 @@ Within that model, runtime behavior looks like this:
 
 Workflow roles map onto the runtime system like this:
 
-- `spec` and `planner` flow through workspace runtime provisioning,
-- `qa` flows through task runtime provisioning,
-- `build` is separate and goes through the build orchestrator, not `runtime_start`.
+- `spec` and `planner` require `workspace` scope and use workspace runtime provisioning,
+- `qa` requires `task` scope and runs against the task/build working directory through the shared runtime orchestration path,
+- `build` requires `build` and `workspace` scope and uses the dedicated Builder startup path.
 
-This is why `agentRuntimeStartRoleSchema` excludes `build` in `packages/contracts/src/run-schemas.ts`.
+Required workflow scope coverage lives in `runtimeRequiredScopesByRole` and `requiredRuntimeSupportedScopes` in `packages/contracts/src/agent-runtime-schemas.ts`. Scenario-to-role and start-mode compatibility live in `agentScenarioDefinitionByScenario` in `packages/contracts/src/agent-workflow-schemas.ts`.
 
 Even though these roles route through different startup paths, every runtime integration must support all of them. OpenDucktor does not allow registering a runtime that handles only `spec`, only `planner`, or any other partial subset.
 
@@ -421,19 +423,21 @@ Host-visible runtime support spans:
 Host integration work:
 
 - add the runtime kind to Rust domain enums and descriptors,
-- make `runtime_list`, `runtime_ensure`, and `runtime_start` understand it,
+- make `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
 - implement host-managed startup if `provisioningMode` is `host_managed`,
 - implement build startup support while preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
 ## Build Runtime Rules
 
-Build runtime support is separate from the generic runtime-start path.
+Build runtime support is separate from workspace runtime acquisition.
 
-Build runtime routing is separate from the generic runtime-start path:
+Current startup routing is split like this:
 
-- `runtime_start(runtime_kind, repo, task, role)` is for task runtimes such as `qa`,
-- `runtime_ensure(runtime_kind, repo)` is for workspace runtimes such as `spec` and `planner`,
-- `build_start(repo, task, runtimeKind)` is the build-specific path.
+- `runtime_ensure(runtime_kind, repo)` is the workspace-runtime path used by `spec` and `planner`,
+- `qa` still requires `task` scope, but current orchestration resolves it against the build continuation working directory and either reuses the running build session for that directory or ensures the selected runtime for that working directory,
+- `build_start(repo, task, runtimeKind)` is the build-specific path and returns `RunSummary`, not `RuntimeInstanceSummary`.
+
+Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while scenario start-mode compatibility comes from `agentScenarioDefinitionByScenario` in `packages/contracts/src/agent-workflow-schemas.ts`.
 
 For a new runtime, the build path works like this:
 
@@ -460,8 +464,9 @@ Before you consider a new runtime integrated, verify all of the following.
 ### Host/runtime orchestration
 
 - `runtime_list(runtime_kind, ...)` only returns that kind,
-- `runtime_ensure` and `runtime_start` reject unsupported kinds,
+- `runtime_ensure` rejects unsupported kinds,
 - build startup rejects unsupported runtime kinds,
+- QA task-context runtime acquisition resolves the requested working directory without falling back to the repo default runtime,
 - persisted session context is enough to re-resolve the live runtime route.
 
 ### Suggested checks
