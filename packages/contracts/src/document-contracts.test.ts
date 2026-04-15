@@ -33,6 +33,97 @@ describe("document contracts", () => {
     expect(parsed.qaReport?.error).toContain("invalid gzip payload");
   });
 
+  test("task metadata payload normalizes legacy delivery fields and validates canonical sessions", () => {
+    const parsed = taskMetadataPayloadSchema.parse({
+      spec: {
+        markdown: "",
+        updatedAt: null,
+      },
+      plan: {
+        markdown: "",
+        updatedAt: null,
+      },
+      delivery: {
+        linkedPullRequest: {
+          providerId: "github",
+          number: 42,
+          url: "https://github.com/openai/openducktor/pull/42",
+          state: "open",
+          createdAt: "2026-02-20T09:30:00Z",
+          updatedAt: "2026-02-20T09:45:00Z",
+        },
+        directMerge: {
+          method: "squash",
+          sourceBranch: "task/openducktor-dpp",
+          targetBranch: {
+            remote: "origin",
+            branch: "main",
+          },
+          mergedAt: "2026-02-20T10:00:00Z",
+        },
+      },
+      agentSessions: [
+        {
+          sessionId: "session-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-18T17:20:00Z",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
+      ],
+    });
+
+    expect(parsed.pullRequest?.number).toBe(42);
+    expect(parsed.directMerge?.method).toBe("squash");
+    expect(parsed.agentSessions).toHaveLength(1);
+    expect(parsed.agentSessions[0]?.scenario).toBe("build_implementation_start");
+  });
+
+  test("task metadata payload normalizes missing top-level delivery fields independently", () => {
+    const parsed = taskMetadataPayloadSchema.parse({
+      spec: {
+        markdown: "",
+        updatedAt: null,
+      },
+      plan: {
+        markdown: "",
+        updatedAt: null,
+      },
+      pullRequest: {
+        providerId: "github",
+        number: 77,
+        url: "https://github.com/openai/openducktor/pull/77",
+        state: "draft",
+        createdAt: "2026-02-21T09:30:00Z",
+        updatedAt: "2026-02-21T09:45:00Z",
+      },
+      delivery: {
+        linkedPullRequest: {
+          providerId: "github",
+          number: 42,
+          url: "https://github.com/openai/openducktor/pull/42",
+          state: "open",
+          createdAt: "2026-02-20T09:30:00Z",
+          updatedAt: "2026-02-20T09:45:00Z",
+        },
+        directMerge: {
+          method: "rebase",
+          sourceBranch: "task/openducktor-dpp",
+          targetBranch: {
+            remote: "origin",
+            branch: "main",
+          },
+          mergedAt: "2026-02-21T10:00:00Z",
+        },
+      },
+      agentSessions: [],
+    });
+
+    expect(parsed.pullRequest?.number).toBe(77);
+    expect(parsed.directMerge?.method).toBe("rebase");
+  });
+
   test("mcp document reads accept optional document-level decode errors", () => {
     const parsed = taskDocumentsReadSchema.parse({
       documents: {

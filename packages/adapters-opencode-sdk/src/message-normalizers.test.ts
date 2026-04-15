@@ -105,6 +105,41 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("ignores malformed source text payloads when normalizing file references", () => {
+    const parts: Part[] = [
+      {
+        id: "file-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "text/plain",
+        filename: "main.ts",
+        url: "file:///repo/src/main.ts",
+        source: {
+          type: "file",
+          path: "src/main.ts",
+          text: {
+            value: "@src/main.ts",
+            start: "6",
+            end: 19,
+          },
+        },
+      } as Part,
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+      {
+        kind: "file_reference",
+        file: {
+          id: "file-1",
+          path: "src/main.ts",
+          name: "main.ts",
+          kind: "code",
+        },
+      },
+    ]);
+  });
+
   test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
     const parts: Part[] = [
       {
@@ -561,5 +596,39 @@ describe("message-normalizers", () => {
 
     const total = extractMessageTotalTokens({}, parts);
     expect(total).toBe(70);
+  });
+
+  test("extractMessageTotalTokens ignores malformed nested token payloads", () => {
+    const total = extractMessageTotalTokens(
+      {
+        tokens: {
+          input: "300",
+          cache: {
+            read: "10",
+          },
+        },
+      },
+      [
+        {
+          id: "part-1",
+          tokens: {
+            input: 2,
+            output: "60",
+          },
+        },
+        {
+          id: "part-2",
+          tokens: {
+            input: 10,
+            output: 5,
+            cache: {
+              read: 2,
+            },
+          },
+        },
+      ],
+    );
+
+    expect(total).toBe(17);
   });
 });

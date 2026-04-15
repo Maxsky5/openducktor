@@ -1,6 +1,7 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
 import {
+  agentSessionPermissionRequestSchema,
   agentSessionRecordSchema,
   buildContinuationTargetSchema,
   buildContinuationTargetSourceSchema,
@@ -965,6 +966,39 @@ describe("runtime schemas", () => {
     expect(parsed.externalSessionId).toBeUndefined();
     expect(parsed.runtimeKind).toBe("claude-code");
     expect(parsed.selectedModel).toBeNull();
+  });
+
+  test("agent session permission request accepts recursive metadata values", () => {
+    const parsed = agentSessionPermissionRequestSchema.parse({
+      requestId: "perm-1",
+      permission: "exec",
+      metadata: {
+        command: "bun test",
+        retryCount: 2,
+        approved: false,
+        context: {
+          cwd: "/repo",
+          env: {
+            CI: "1",
+          },
+        },
+        targets: ["packages/core", { kind: "file", path: "src/index.ts" }, null],
+      },
+    });
+
+    expect(parsed.metadata).toEqual({
+      command: "bun test",
+      retryCount: 2,
+      approved: false,
+      context: {
+        cwd: "/repo",
+        env: {
+          CI: "1",
+        },
+      },
+      targets: ["packages/core", { kind: "file", path: "src/index.ts" }, null],
+    });
+    expect(parsed.patterns).toEqual([]);
   });
 
   test("repo config rejects missing runtime-bearing defaults", () => {

@@ -1,42 +1,50 @@
-import {
-  type AgentSessionRecord,
-  agentSessionRecordSchema,
-  type TaskMetadataPayload,
-  taskMetadataPayloadSchema,
-} from "@openducktor/contracts";
+import { type TaskMetadataPayload, taskMetadataPayloadSchema } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
-export type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
-  agentSessions: AgentSessionRecord[];
+type MetadataIssue = {
+  path: Array<string | number>;
+  message: string;
 };
+
+export type ParsedTaskMetadata = TaskMetadataPayload;
 
 export type TaskMetadataReadOptions = {
   forceFresh?: boolean;
 };
 
-const parseAgentSessions = (entries: unknown[], taskId: string): AgentSessionRecord[] => {
-  const sessions: AgentSessionRecord[] = [];
-  const invalidEntries: string[] = [];
+const isAgentSessionIssue = (issue: MetadataIssue): boolean => issue.path[0] === "agentSessions";
 
-  for (const [index, entry] of entries.entries()) {
-    const parsed = agentSessionRecordSchema.safeParse(entry);
-    if (parsed.success) {
-      sessions.push(parsed.data);
-      continue;
-    }
+const toMetadataIssue = (issue: { path: PropertyKey[]; message: string }): MetadataIssue => ({
+  path: issue.path.map((segment) =>
+    typeof segment === "string" || typeof segment === "number" ? segment : String(segment),
+  ),
+  message: issue.message,
+});
 
-    invalidEntries.push(
-      `agentSessions[${index}]: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
-    );
+const formatAgentSessionIssue = (issue: MetadataIssue): string => {
+  const path = issue.path.length > 1 ? issue.path.slice(1) : ["unknown"];
+  const [index, ...rest] = path;
+  const suffix = rest.length > 0 ? `.${rest.join(".")}` : "";
+  return `agentSessions[${String(index)}]${suffix}: ${issue.message}`;
+};
+
+const parseTaskMetadataPayload = (payload: unknown, taskId: string): TaskMetadataPayload => {
+  const parsed = taskMetadataPayloadSchema.safeParse(payload);
+  if (parsed.success) {
+    return parsed.data;
   }
 
-  if (invalidEntries.length > 0) {
-    throw new Error(
-      `Task metadata for ${taskId} contains invalid persisted agent sessions: ${invalidEntries.join(" | ")}`,
-    );
+  const metadataIssues = parsed.error.issues.map(toMetadataIssue);
+
+  if (!metadataIssues.every(isAgentSessionIssue)) {
+    throw parsed.error;
   }
 
-  return sessions;
+  throw new Error(
+    `Task metadata for ${taskId} contains invalid persisted agent sessions: ${metadataIssues
+      .map(formatAgentSessionIssue)
+      .join(" | ")}`,
+  );
 };
 
 export class TaskMetadataCache {
@@ -113,11 +121,8 @@ export class TaskMetadataCache {
 
     const next = invokeFn("task_metadata_get", { repoPath, taskId })
       .then((payload) => {
-        const parsed = taskMetadataPayloadSchema.parse(payload);
-        const metadata = {
-          ...parsed,
-          agentSessions: parseAgentSessions(parsed.agentSessions, taskId),
-        };
+        const parsed = parseTaskMetadataPayload(payload, taskId);
+        const metadata: ParsedTaskMetadata = parsed;
 
         if (this.latestFetchTokenByKey.get(cacheKey) === fetchToken) {
           this.cache.set(cacheKey, metadata);

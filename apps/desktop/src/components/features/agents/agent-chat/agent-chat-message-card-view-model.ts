@@ -125,10 +125,10 @@ const toArticleClassName = (
         : isSystemPromptMessage
           ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
           : message.role === "assistant"
-            ? "px-1 py-1 text-foreground"
+            ? "px-1 pt-1 pb-3 text-foreground"
             : isUserMessage
               ? ""
-              : "border-none bg-transparent px-0 py-0 text-foreground",
+              : "border-none bg-transparent px-0 py-2 text-foreground",
   );
 };
 
