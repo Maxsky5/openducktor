@@ -953,6 +953,7 @@ export const useAgentChatComposerEditor = ({
       const clipboardTypes = Array.from(event.clipboardData.types ?? []);
       const hasPlainText = clipboardTypes.includes("text/plain");
       if (!hasPlainText) {
+        event.preventDefault();
         pendingInputStateRef.current = null;
         return;
       }

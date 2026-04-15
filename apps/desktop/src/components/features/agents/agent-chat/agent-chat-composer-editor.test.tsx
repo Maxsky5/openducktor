@@ -574,6 +574,36 @@ describe("AgentChatComposerEditor", () => {
     expect(onAddFiles).not.toHaveBeenCalled();
   });
 
+  test("blocks html-only paste payloads without mutating the composer draft", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={createComposerDraft("keep this")}
+      />,
+    );
+
+    const editorRoot = getEditorRoot(rendered.container);
+    const pasteEvent = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: createClipboardData({
+        htmlText: "<strong>should not appear</strong>",
+        types: ["text/html"],
+      }),
+    });
+
+    fireEvent(editorRoot, pasteEvent);
+
+    expect(pasteEvent.defaultPrevented).toBe(true);
+    await expectComposerText(rendered.container, "keep this");
+    expect(screen.getByTestId("draft-state").textContent).toContain("keep this");
+    expect(screen.getByTestId("draft-state").textContent).not.toContain("should not appear");
+  });
+
   test("ignores paste while the composer is disabled", async () => {
     const onAddFiles = mock(() => {});
     const rendered = render(
