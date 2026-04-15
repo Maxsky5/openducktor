@@ -366,7 +366,8 @@ impl<'a> BuilderBranchService<'a> {
 mod tests {
     use super::BuilderBranchService;
     use crate::app_service::test_support::{
-        build_service_with_store, init_git_repo, make_session, make_task, unique_temp_path,
+        build_service_with_store, builtin_opencode_runtime_route, init_git_repo, make_session,
+        make_task, unique_temp_path,
     };
     use anyhow::Result;
     use host_domain::{AgentRuntimeKind, GitCurrentBranch, RunState, RunSummary, TaskStatus};
@@ -631,8 +632,8 @@ mod tests {
             crate::app_service::RunProcess {
                 summary: RunSummary {
                     run_id: "run-1".to_string(),
-                    runtime_kind: AgentRuntimeKind::Opencode,
-                    runtime_route: AgentRuntimeKind::Opencode.route_for_port(4444),
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    runtime_route: builtin_opencode_runtime_route(4444),
                     repo_path: active_repo_path.clone(),
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),
@@ -643,7 +644,7 @@ mod tests {
                     started_at: "2026-03-11T11:00:00Z".to_string(),
                 },
                 child: None,
-                _opencode_process_guard: None,
+                _runtime_process_guard: None,
                 repo_path: active_repo_path,
                 task_id: "task-1".to_string(),
                 worktree_path: active_worktree.to_string_lossy().to_string(),

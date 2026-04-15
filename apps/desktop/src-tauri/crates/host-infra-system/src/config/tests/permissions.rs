@@ -58,6 +58,7 @@ fn strict_runtime_store(name: &str) -> (RuntimeConfigStore, TempRootGuard) {
         RuntimeConfigStore {
             path,
             enforce_private_parent_permissions: true,
+            runtime_registry: host_domain::builtin_runtime_registry().clone(),
         },
         root,
     )

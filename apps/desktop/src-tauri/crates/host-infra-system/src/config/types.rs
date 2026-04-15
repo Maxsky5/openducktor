@@ -1,7 +1,10 @@
-use host_domain::DEFAULT_BRANCH_PREFIX;
+use host_domain::{
+    default_runtime_kind as registry_default_runtime_kind, RuntimeRegistry,
+    RuntimeStartupReadinessConfig, DEFAULT_BRANCH_PREFIX,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -363,7 +366,7 @@ pub(super) fn default_branch_prefix() -> String {
 }
 
 pub(super) fn default_runtime_kind() -> String {
-    "opencode".to_string()
+    registry_default_runtime_kind().to_string()
 }
 
 impl Default for RepoConfig {
@@ -423,48 +426,7 @@ pub struct SchedulerConfig {
     pub soft_guardrails: SoftGuardrails,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpencodeStartupReadinessConfig {
-    #[serde(default = "default_opencode_startup_timeout_ms")]
-    pub timeout_ms: u64,
-    #[serde(default = "default_opencode_startup_connect_timeout_ms")]
-    pub connect_timeout_ms: u64,
-    #[serde(default = "default_opencode_startup_initial_retry_delay_ms")]
-    pub initial_retry_delay_ms: u64,
-    #[serde(default = "default_opencode_startup_max_retry_delay_ms")]
-    pub max_retry_delay_ms: u64,
-    #[serde(default = "default_opencode_startup_child_check_interval_ms")]
-    pub child_check_interval_ms: u64,
-}
-
-const fn default_opencode_startup_timeout_ms() -> u64 {
-    15_000
-}
-const fn default_opencode_startup_connect_timeout_ms() -> u64 {
-    250
-}
-const fn default_opencode_startup_initial_retry_delay_ms() -> u64 {
-    25
-}
-const fn default_opencode_startup_max_retry_delay_ms() -> u64 {
-    250
-}
-const fn default_opencode_startup_child_check_interval_ms() -> u64 {
-    75
-}
-
-impl Default for OpencodeStartupReadinessConfig {
-    fn default() -> Self {
-        Self {
-            timeout_ms: default_opencode_startup_timeout_ms(),
-            connect_timeout_ms: default_opencode_startup_connect_timeout_ms(),
-            initial_retry_delay_ms: default_opencode_startup_initial_retry_delay_ms(),
-            max_retry_delay_ms: default_opencode_startup_max_retry_delay_ms(),
-            child_check_interval_ms: default_opencode_startup_child_check_interval_ms(),
-        }
-    }
-}
+pub type OpencodeStartupReadinessConfig = RuntimeStartupReadinessConfig;
 
 fn default_theme() -> String {
     "light".to_string()
@@ -512,19 +474,76 @@ impl Default for GlobalConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeConfig {
+struct RuntimeConfigSerde {
     pub version: u8,
     #[serde(default)]
-    pub opencode_startup: OpencodeStartupReadinessConfig,
+    pub runtimes: BTreeMap<String, RuntimeStartupReadinessConfig>,
+    #[serde(default)]
+    pub opencode_startup: Option<RuntimeStartupReadinessConfig>,
     #[serde(default)]
     pub scheduler: SchedulerConfig,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    from = "RuntimeConfigSerde",
+    into = "RuntimeConfigSerde"
+)]
+pub struct RuntimeConfig {
+    pub version: u8,
+    pub runtimes: BTreeMap<String, RuntimeStartupReadinessConfig>,
+    pub scheduler: SchedulerConfig,
+}
+
+impl From<RuntimeConfigSerde> for RuntimeConfig {
+    fn from(value: RuntimeConfigSerde) -> Self {
+        let mut runtimes = value.runtimes;
+        if let Some(opencode_startup) = value.opencode_startup {
+            runtimes
+                .entry("opencode".to_string())
+                .or_insert(opencode_startup);
+        }
+        Self {
+            version: value.version,
+            runtimes,
+            scheduler: value.scheduler,
+        }
+    }
+}
+
+impl From<RuntimeConfig> for RuntimeConfigSerde {
+    fn from(value: RuntimeConfig) -> Self {
+        Self {
+            version: value.version,
+            runtimes: value.runtimes,
+            opencode_startup: None,
+            scheduler: value.scheduler,
+        }
+    }
+}
+
 impl Default for RuntimeConfig {
     fn default() -> Self {
+        Self::from_runtime_registry(host_domain::builtin_runtime_registry())
+    }
+}
+
+impl RuntimeConfig {
+    pub fn from_runtime_registry(runtime_registry: &RuntimeRegistry) -> Self {
+        let runtimes = runtime_registry
+            .definitions()
+            .into_iter()
+            .map(|definition| {
+                (
+                    definition.kind().to_string(),
+                    definition.default_startup_config().clone(),
+                )
+            })
+            .collect();
         Self {
             version: 1,
-            opencode_startup: OpencodeStartupReadinessConfig::default(),
+            runtimes,
             scheduler: SchedulerConfig::default(),
         }
     }

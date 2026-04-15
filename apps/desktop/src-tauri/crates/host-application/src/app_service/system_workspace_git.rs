@@ -1,7 +1,4 @@
-use super::{
-    read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck,
-    WorkspaceSettingsSnapshotUpdate,
-};
+use super::{AppService, CachedRuntimeCheck, WorkspaceSettingsSnapshotUpdate};
 use crate::app_service::service_core::CachedOpenInToolList;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
@@ -11,8 +8,8 @@ use host_domain::{
     GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
     GitResetWorktreeSelectionRequest, GitResetWorktreeSelectionResult, GitWorktreeSummary,
     RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
-    RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RuntimeCheck, RuntimeHealth,
-    SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo, WorkspaceRecord,
+    RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, RuntimeCheck, SystemCheck,
+    SystemOpenInToolId, SystemOpenInToolInfo, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, discover_open_in_tools,
@@ -150,12 +147,12 @@ impl AppService {
             }
         }
 
-        let runtime = Self::probe_runtime_check();
+        let runtime = self.probe_runtime_check()?;
         self.update_runtime_check_cache(runtime.clone())?;
         Ok(runtime)
     }
 
-    fn probe_runtime_check() -> RuntimeCheck {
+    fn probe_runtime_check(&self) -> Result<RuntimeCheck> {
         let git_ok = command_exists("git");
         let gh_ok = command_exists("gh");
         let (gh_auth_ok, gh_auth_login, gh_auth_error) = if gh_ok {
@@ -170,8 +167,16 @@ impl AppService {
                 ),
             )
         };
-        let opencode_binary = resolve_opencode_binary_path();
-        let opencode_ok = opencode_binary.is_some();
+        let runtimes = self
+            .runtime_registry
+            .definitions()
+            .into_iter()
+            .map(|definition| {
+                self.runtime_registry
+                    .runtime(definition.kind())
+                    .map(|runtime| runtime.runtime_health())
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         let mut errors = Vec::new();
         if !git_ok {
@@ -186,14 +191,13 @@ impl AppService {
                     .to_string(),
             );
         }
-        if !opencode_ok {
-            errors.push(
-                "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
-                    .to_string(),
-            );
+        for runtime in &runtimes {
+            if let Some(error) = runtime.error.as_ref() {
+                errors.push(error.clone());
+            }
         }
 
-        RuntimeCheck {
+        Ok(RuntimeCheck {
             git_ok,
             git_version: version_command("git", &["--version"]),
             gh_ok,
@@ -201,23 +205,9 @@ impl AppService {
             gh_auth_ok,
             gh_auth_login,
             gh_auth_error,
-            runtimes: vec![RuntimeHealth {
-                kind: "opencode".to_string(),
-                ok: opencode_ok,
-                version: opencode_binary.as_ref().map(|binary| {
-                    if let Some(version) = read_opencode_version(binary.as_str()) {
-                        format!("{version} ({binary})")
-                    } else {
-                        format!("installed ({binary})")
-                    }
-                }),
-                error: (!opencode_ok).then(|| {
-                    "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
-                        .to_string()
-                }),
-            }],
+            runtimes,
             errors,
-        }
+        })
     }
 
     fn cached_runtime_check(&self) -> Result<Option<RuntimeCheck>> {

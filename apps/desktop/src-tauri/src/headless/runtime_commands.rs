@@ -512,28 +512,26 @@ mod tests {
     }
 
     #[test]
-    fn runtime_list_args_reject_invalid_runtime_kind() {
-        let error = deserialize_args::<RuntimeListArgs>(json!({
+    fn runtime_list_args_accept_invalid_runtime_kind_for_service_validation() {
+        let parsed = deserialize_args::<RuntimeListArgs>(json!({
             "runtimeKind": "invalid",
             "repoPath": "/repo"
         }))
-        .expect_err("invalid runtime kind should fail at transport boundary");
+        .expect("runtime kind validation should happen in AppService");
 
-        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
-        assert!(error.message.contains("Invalid arguments:"));
-        assert!(error.message.contains("invalid"));
+        assert_eq!(parsed.runtime_kind.as_str(), "invalid");
+        assert_eq!(parsed.repo_path.as_deref(), Some("/repo"));
     }
 
     #[test]
-    fn runtime_ensure_args_reject_invalid_runtime_kind() {
-        let error = deserialize_args::<RuntimeEnsureArgs>(json!({
+    fn runtime_ensure_args_accept_invalid_runtime_kind_for_service_validation() {
+        let parsed = deserialize_args::<RuntimeEnsureArgs>(json!({
             "runtimeKind": "invalid",
             "repoPath": "/repo"
         }))
-        .expect_err("invalid runtime kind should fail at transport boundary");
+        .expect("runtime kind validation should happen in AppService");
 
-        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
-        assert!(error.message.contains("Invalid arguments:"));
-        assert!(error.message.contains("invalid"));
+        assert_eq!(parsed.runtime_kind.as_str(), "invalid");
+        assert_eq!(parsed.repo_path, "/repo");
     }
 }

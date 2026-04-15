@@ -2,6 +2,7 @@ use super::{
     hook_set_fingerprint, touch_recent, AppConfigStore, GlobalConfig, HookSet,
     OpencodeStartupReadinessConfig, RepoConfig, RuntimeConfig, RuntimeConfigStore,
 };
+use host_domain::RuntimeRegistry;
 pub(super) use host_test_support::{lock_env, EnvVarGuard};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -51,10 +52,14 @@ pub(super) struct TestRuntimeStoreHarness {
 
 impl TestRuntimeStoreHarness {
     pub(super) fn new(name: &str) -> Self {
+        Self::new_with_runtime_registry(name, host_domain::builtin_runtime_registry().clone())
+    }
+
+    pub(super) fn new_with_runtime_registry(name: &str, runtime_registry: RuntimeRegistry) -> Self {
         let root = unique_temp_path(name);
         let path = root.join("runtime-config.json");
         Self {
-            store: RuntimeConfigStore::from_path(path),
+            store: RuntimeConfigStore::from_path_with_runtime_registry(path, runtime_registry),
             root,
         }
     }

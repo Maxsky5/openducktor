@@ -13,15 +13,19 @@ impl AppService {
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn cleanup_started_runtime(
-        child: &mut Child,
+        child: Option<&mut Child>,
         cleanup_target: Option<&RuntimeCleanupTarget>,
     ) -> Result<()> {
-        terminate_child_process(child);
+        if let Some(child) = child {
+            terminate_child_process(child);
+        }
         Self::cleanup_runtime_worktree_if_needed(cleanup_target)
     }
 
     pub(super) fn cleanup_runtime_process(runtime: &mut AgentRuntimeProcess) -> Result<()> {
-        terminate_child_process(&mut runtime.child);
+        if let Some(child) = runtime.child.as_mut() {
+            terminate_child_process(child);
+        }
         Self::cleanup_runtime_worktree_if_needed(runtime.cleanup_target.as_ref())
     }
 

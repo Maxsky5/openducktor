@@ -31,6 +31,7 @@ mod opencode_session_status;
 mod process_registry;
 mod repo_init;
 mod runtime_orchestrator;
+mod runtime_registry;
 mod service_core;
 mod startup_metrics;
 mod system_workspace_git;
@@ -48,19 +49,32 @@ pub use odt_mcp::{
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
     OdtTaskResult, OdtTaskSummary,
 };
+pub(crate) type RuntimeStartupReadinessPolicy = opencode_runtime::OpencodeStartupReadinessPolicy;
+pub(crate) type RuntimeStartupWaitReport = opencode_runtime::OpencodeStartupWaitReport;
+#[cfg(test)]
+pub(crate) type OpencodeStartupReadinessPolicy = RuntimeStartupReadinessPolicy;
+#[cfg(test)]
+pub(crate) type OpencodeStartupWaitReport = RuntimeStartupWaitReport;
+#[cfg(test)]
+pub(crate) use opencode_runtime::wait_for_local_server_with_process;
 pub use opencode_runtime::OpencodeStartupWaitFailure;
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    wait_for_local_server_with_process, wait_for_process_exit_by_pid,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
+    wait_for_local_server_with_process as wait_for_runtime_with_process,
+    wait_for_process_exit_by_pid, StartupCancelEpoch,
 };
+pub(crate) type RuntimeSessionStatusMap = opencode_session_status::OpencodeSessionStatusMap;
+pub(crate) type RuntimeSessionStatusProbeTarget =
+    opencode_session_status::OpencodeSessionStatusProbeTarget;
 pub(crate) use opencode_session_status::{
-    dedupe_probe_targets as dedupe_opencode_session_status_probe_targets,
-    has_live_opencode_session_status, OpencodeSessionStatusMap, OpencodeSessionStatusProbeTarget,
+    dedupe_probe_targets as dedupe_runtime_session_probe_targets,
+    has_live_opencode_session_status as has_live_runtime_session_status,
 };
 #[cfg(test)]
 pub(crate) use process_registry::read_opencode_process_registry;
+pub(crate) type RuntimeProcessGuard = process_registry::TrackedOpencodeProcessGuard;
+#[cfg(test)]
 pub(crate) use process_registry::TrackedOpencodeProcessGuard;
 #[cfg(test)]
 pub(crate) use process_registry::{
@@ -108,23 +122,20 @@ pub(crate) use workflow_rules::allows_transition;
 #[cfg(test)]
 mod tests;
 
-pub(crate) fn require_opencode_local_http_endpoint<'a>(
+pub(crate) fn require_local_http_endpoint<'a>(
     runtime_route: &'a RuntimeRoute,
     action: &str,
 ) -> Result<&'a str> {
     match runtime_route {
         RuntimeRoute::LocalHttp { endpoint } => Ok(endpoint.as_str()),
         RuntimeRoute::Stdio => Err(anyhow!(
-            "OpenCode {action} requires a local_http runtime route"
+            "Runtime {action} requires a local_http runtime route"
         )),
     }
 }
 
-pub(crate) fn require_opencode_local_http_port(
-    runtime_route: &RuntimeRoute,
-    action: &str,
-) -> Result<u16> {
+pub(crate) fn require_local_http_port(runtime_route: &RuntimeRoute, action: &str) -> Result<u16> {
     runtime_route
         .local_http_port()
-        .ok_or_else(|| anyhow!("OpenCode {action} requires a local_http runtime route with a port"))
+        .ok_or_else(|| anyhow!("Runtime {action} requires a local_http runtime route with a port"))
 }
