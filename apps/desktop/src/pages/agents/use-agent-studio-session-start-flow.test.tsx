@@ -893,4 +893,59 @@ describe("useAgentStudioSessionStartFlow", () => {
       await harness.unmount();
     }
   });
+
+  test("canceling new-session model selection preserves the human changes feedback draft", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      bootstrapTaskSessions: mock(async () => {}),
+      selectedTask: createTask({ status: "human_review" }),
+      sessionsForTask: [
+        createSession({
+          sessionId: "session-build-latest",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T12:00:00.000Z",
+        }),
+      ],
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "build:build_after_human_request_changes:fresh",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        label: "Builder · Apply Human Changes",
+        description: "Create a new builder session after human review",
+        disabled: false,
+      });
+    });
+    await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
+
+    await harness.run((state) => {
+      state.humanReviewFeedbackModal?.onTargetChange("new_session");
+      state.humanReviewFeedbackModal?.onMessageChange("Keep this draft when I cancel.");
+    });
+    await harness.run((state) => {
+      void state.humanReviewFeedbackModal?.onConfirm();
+    });
+    await waitForSessionStartModal(harness);
+
+    await harness.run((state) => {
+      state.sessionStartModal?.onOpenChange(false);
+    });
+
+    await harness.waitFor(
+      (state) =>
+        state.sessionStartModal === null &&
+        state.humanReviewFeedbackModal?.open === true &&
+        state.humanReviewFeedbackModal.message === "Keep this draft when I cancel.",
+    );
+
+    expect(harness.getLatest().humanReviewFeedbackModal?.selectedTarget).toBe("new_session");
+
+    await harness.unmount();
+  });
 });

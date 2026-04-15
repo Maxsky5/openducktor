@@ -172,7 +172,6 @@ export function useAgentStudioHumanReviewFeedbackFlow({
         humanRequestChangesTask,
         dismissFeedbackModal: clearHumanReviewFeedback,
         startNewSession: async (request) => {
-          clearHumanReviewFeedback();
           const workflow = await executeRequestedSessionStart(
             {
               taskId: request.taskId,
@@ -215,7 +214,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             return;
           }
 
-          setHumanReviewFeedbackState(null);
+          clearHumanReviewFeedback();
           selectSessionInAgentStudio(workflow.sessionId, "build");
 
           try {
@@ -255,7 +254,6 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     humanReviewFeedbackState,
     hydrateRequestedTaskSessionHistory,
     queryClient,
-    setHumanReviewFeedbackState,
     selectSessionInAgentStudio,
     sendAgentMessage,
     startAgentSession,
