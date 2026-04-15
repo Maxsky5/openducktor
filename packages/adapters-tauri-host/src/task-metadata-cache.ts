@@ -1,6 +1,5 @@
 import {
   type AgentSessionRecord,
-  agentSessionRecordSchema,
   type TaskMetadataPayload,
   taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
@@ -19,31 +18,6 @@ export type TaskMetadataReadOptions = {
   forceFresh?: boolean;
 };
 
-const parseAgentSessions = (entries: unknown[], taskId: string): AgentSessionRecord[] => {
-  const sessions: AgentSessionRecord[] = [];
-  const invalidEntries: string[] = [];
-
-  for (const [index, entry] of entries.entries()) {
-    const parsed = agentSessionRecordSchema.safeParse(entry);
-    if (parsed.success) {
-      sessions.push(parsed.data);
-      continue;
-    }
-
-    invalidEntries.push(
-      `agentSessions[${index}]: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
-    );
-  }
-
-  if (invalidEntries.length > 0) {
-    throw new Error(
-      `Task metadata for ${taskId} contains invalid persisted agent sessions: ${invalidEntries.join(" | ")}`,
-    );
-  }
-
-  return sessions;
-};
-
 const isAgentSessionIssue = (issue: MetadataIssue): boolean => issue.path[0] === "agentSessions";
 
 const formatAgentSessionIssue = (issue: MetadataIssue): string => {
@@ -59,13 +33,12 @@ const parseTaskMetadataPayload = (payload: unknown, taskId: string): TaskMetadat
     return parsed.data;
   }
 
-  const agentSessionIssues = parsed.error.issues.filter(isAgentSessionIssue);
-  if (agentSessionIssues.length === 0) {
+  if (!parsed.error.issues.every(isAgentSessionIssue)) {
     throw parsed.error;
   }
 
   throw new Error(
-    `Task metadata for ${taskId} contains invalid persisted agent sessions: ${agentSessionIssues
+    `Task metadata for ${taskId} contains invalid persisted agent sessions: ${parsed.error.issues
       .map(formatAgentSessionIssue)
       .join(" | ")}`,
   );
@@ -146,10 +119,7 @@ export class TaskMetadataCache {
     const next = invokeFn("task_metadata_get", { repoPath, taskId })
       .then((payload) => {
         const parsed = parseTaskMetadataPayload(payload, taskId);
-        const metadata = {
-          ...parsed,
-          agentSessions: parseAgentSessions(parsed.agentSessions, taskId),
-        };
+        const metadata: ParsedTaskMetadata = parsed;
 
         if (this.latestFetchTokenByKey.get(cacheKey) === fetchToken) {
           this.cache.set(cacheKey, metadata);

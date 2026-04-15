@@ -31,10 +31,6 @@ const normalizeLegacyTaskMetadataPayload = (value: unknown): unknown => {
   }
 
   const payload = value;
-  if ("pullRequest" in payload || "directMerge" in payload) {
-    return value;
-  }
-
   const delivery = payload.delivery;
   if (!isPlainObject(delivery)) {
     return value;
@@ -42,8 +38,8 @@ const normalizeLegacyTaskMetadataPayload = (value: unknown): unknown => {
 
   return {
     ...payload,
-    pullRequest: delivery.linkedPullRequest ?? payload.pullRequest,
-    directMerge: delivery.directMerge ?? payload.directMerge,
+    pullRequest: payload.pullRequest ?? delivery.linkedPullRequest,
+    directMerge: payload.directMerge ?? delivery.directMerge,
   };
 };
 

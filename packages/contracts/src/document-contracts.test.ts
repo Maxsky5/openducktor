@@ -80,6 +80,50 @@ describe("document contracts", () => {
     expect(parsed.agentSessions[0]?.scenario).toBe("build_implementation_start");
   });
 
+  test("task metadata payload normalizes missing top-level delivery fields independently", () => {
+    const parsed = taskMetadataPayloadSchema.parse({
+      spec: {
+        markdown: "",
+        updatedAt: null,
+      },
+      plan: {
+        markdown: "",
+        updatedAt: null,
+      },
+      pullRequest: {
+        providerId: "github",
+        number: 77,
+        url: "https://github.com/openai/openducktor/pull/77",
+        state: "draft",
+        createdAt: "2026-02-21T09:30:00Z",
+        updatedAt: "2026-02-21T09:45:00Z",
+      },
+      delivery: {
+        linkedPullRequest: {
+          providerId: "github",
+          number: 42,
+          url: "https://github.com/openai/openducktor/pull/42",
+          state: "open",
+          createdAt: "2026-02-20T09:30:00Z",
+          updatedAt: "2026-02-20T09:45:00Z",
+        },
+        directMerge: {
+          method: "rebase",
+          sourceBranch: "task/openducktor-dpp",
+          targetBranch: {
+            remote: "origin",
+            branch: "main",
+          },
+          mergedAt: "2026-02-21T10:00:00Z",
+        },
+      },
+      agentSessions: [],
+    });
+
+    expect(parsed.pullRequest?.number).toBe(77);
+    expect(parsed.directMerge?.method).toBe("rebase");
+  });
+
   test("mcp document reads accept optional document-level decode errors", () => {
     const parsed = taskDocumentsReadSchema.parse({
       documents: {

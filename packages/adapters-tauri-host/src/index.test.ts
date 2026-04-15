@@ -1789,6 +1789,36 @@ describe("TauriHostClient", () => {
     );
   });
 
+  test("agentSessionsList preserves non-session metadata schema errors", async () => {
+    const { client } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        return {
+          spec: null,
+          plan: { markdown: "", updatedAt: null },
+          qaReport: null,
+          agentSessions: [
+            {
+              sessionId: "legacy-spec",
+              externalSessionId: "legacy-ext-1",
+              role: "spec",
+              scenario: "spec_revision",
+              startedAt: "2026-02-18T17:20:00Z",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo",
+              selectedModel: null,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("spec");
+    await expect(client.agentSessionsList("/repo", "task-1")).rejects.not.toThrow(
+      "Task metadata for task-1 contains invalid persisted agent sessions",
+    );
+  });
+
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
