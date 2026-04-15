@@ -25,7 +25,7 @@ OpenDucktor uses several runtime-related payloads. Each one describes a differen
 
 ### `RuntimeDescriptor`
 
-Defined in `packages/contracts/src/agent-runtime-schemas.ts` and mirrored in `apps/desktop/src-tauri/crates/host-domain/src/runtime.rs`.
+Defined in `packages/contracts/src/agent-runtime-schemas.ts` and mirrored in `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`.
 
 It is the stable definition of a runtime kind:
 
@@ -339,8 +339,8 @@ Update the runtime registry and orchestration entrypoints:
 - `apps/desktop/src/state/agent-runtime-registry.ts`
 - `apps/desktop/src/lib/agent-runtime.ts`
 - `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`
-- `apps/desktop/src/state/operations/runtime-catalog.ts`
-- `apps/desktop/src/state/operations/use-delegation-operations.ts`
+- `apps/desktop/src/state/operations/shared/runtime-catalog.ts`
+- `apps/desktop/src/state/operations/tasks/use-delegation-operations.ts`
 
 This layer is where runtime selection is applied to real frontend operations:
 
@@ -377,10 +377,10 @@ This layer is usually verified by checking that:
 
 Update capability-driven UI surfaces:
 
-- `apps/desktop/src/pages/shared/use-session-start-modal-state.ts`
+- `apps/desktop/src/features/session-start/use-session-start-modal-state.ts`
 - `apps/desktop/src/components/features/settings/settings-repository-agents-section.tsx`
 - `apps/desktop/src/components/features/diagnostics/diagnostics-panel-model.ts`
-- `apps/desktop/src/state/operations/use-checks.ts`
+- `apps/desktop/src/state/operations/workspace/use-checks.ts`
 
 Concrete consumers to keep in mind:
 
@@ -388,7 +388,7 @@ Concrete consumers to keep in mind:
 - `supportsSlashCommands` drives slash autocomplete/chip behavior in the Agent Studio composer,
 - `supportsMcpStatus` drives diagnostics sections and MCP health checks.
 
-`apps/desktop/src/state/operations/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.
+`apps/desktop/src/state/operations/shared/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.
 
 When contributors add new capability-driven UI behavior, the capability information comes from runtime descriptors rather than per-session state.
 
@@ -410,12 +410,12 @@ Rules:
 
 Host-visible runtime support spans:
 
-- `apps/desktop/src-tauri/crates/host-domain/src/runtime.rs`
+- `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`
 - `apps/desktop/src-tauri/src/commands/runtime.rs`
 - `apps/desktop/src-tauri/src/commands/build.rs`
 - `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator.rs`
 - `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/startup.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/prerequisites.rs`
+- `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/workspace_runtime.rs`
 - `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/registry/query.rs`
 - `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator/registry/lifecycle.rs`
 - `apps/desktop/src-tauri/crates/host-application/src/app_service/build_orchestrator/build_lifecycle.rs`
@@ -506,7 +506,7 @@ The built-in runtime implementation is `opencode`. Its adapter, runtime registry
 
 ### Host-managed startup
 
-For `host_managed` runtimes, the Rust host contains the startup and readiness logic. Generic runtime commands call into that per-runtime implementation when a workspace runtime, task runtime, or build runtime is started.
+For `host_managed` runtimes, the Rust host contains the startup and readiness logic. `runtime_ensure` owns shared workspace-runtime startup, Builder startup goes through `build_start`, and QA task-context routing currently goes through build-continuation-aware orchestration rather than a separate generic task-runtime start command.
 
 ### Transport model
 
@@ -526,5 +526,5 @@ Some screens inspect only a subset of capability flags, but the descriptor still
 - `packages/core/src/ports/agent-engine.ts`
 - `apps/desktop/src/state/agent-runtime-registry.ts`
 - `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`
-- `apps/desktop/src-tauri/crates/host-domain/src/runtime.rs`
+- `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`
 - `apps/desktop/src-tauri/crates/host-application/src/app_service/runtime_orchestrator.rs`
