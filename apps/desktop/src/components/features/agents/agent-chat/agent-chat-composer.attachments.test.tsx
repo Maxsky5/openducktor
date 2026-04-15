@@ -96,14 +96,17 @@ const typeIntoComposer = (container: HTMLElement, value: string): void => {
   fireEvent.input(editable);
 };
 
-const createClipboardData = (file: File) => ({
-  items: [
-    {
-      kind: "file",
-      type: file.type,
-      getAsFile: () => file,
-    },
-  ],
+const createClipboardData = ({ itemFile, files }: { itemFile?: File; files?: File[] }) => ({
+  items: itemFile
+    ? [
+        {
+          kind: "file",
+          type: itemFile.type,
+          getAsFile: () => itemFile,
+        },
+      ]
+    : [],
+  files: files ?? [],
   types: ["Files"],
   getData: () => "",
 });
@@ -260,7 +263,7 @@ describe("AgentChatComposer attachments", () => {
     const unnamedImage = new File(["image"], "", { type: "image/png" });
 
     fireEvent.paste(getEditorRoot(container), {
-      clipboardData: createClipboardData(unnamedImage),
+      clipboardData: createClipboardData({ itemFile: unnamedImage }),
     });
 
     await screen.findByTitle("pasted-image.png");
@@ -295,9 +298,9 @@ describe("AgentChatComposer attachments", () => {
     );
 
     fireEvent.paste(getEditorRoot(container), {
-      clipboardData: createClipboardData(
-        new File(["image"], "clipboard-image.png", { type: "image/png" }),
-      ),
+      clipboardData: createClipboardData({
+        itemFile: new File(["image"], "clipboard-image.png", { type: "image/png" }),
+      }),
     });
 
     await screen.findByTitle("clipboard-image.png");
@@ -307,5 +310,42 @@ describe("AgentChatComposer attachments", () => {
     expect(
       screen.getByRole("button", { name: "Send message" }).getAttribute("disabled"),
     ).not.toBeNull();
+  });
+
+  test("stages one attachment when the same paste is exposed through items and files", async () => {
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          selectedModelDescriptor: {
+            id: "openai/gpt-5.3-codex",
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId: "gpt-5.3-codex",
+            modelName: "GPT-5.3 Codex",
+            variants: ["high"],
+            contextWindow: 400_000,
+            outputLimit: 128_000,
+            attachmentSupport: {
+              image: true,
+              audio: false,
+              video: false,
+              pdf: true,
+            },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.paste(getEditorRoot(container), {
+      clipboardData: createClipboardData({
+        itemFile: new File(["image"], "image.png", { type: "image/png", lastModified: 1 }),
+        files: [new File(["image"], "image.png", { type: "image/png", lastModified: 2 })],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle("image.png")).toHaveLength(1);
+    });
   });
 });

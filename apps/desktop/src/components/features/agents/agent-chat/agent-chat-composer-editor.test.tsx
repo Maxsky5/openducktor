@@ -510,21 +510,28 @@ describe("AgentChatComposerEditor", () => {
 
   test("deduplicates pasted images exposed through both clipboard items and files", async () => {
     const onAddFiles = mock(() => {});
-    const image = new File(["image"], "duplicate.png", { type: "image/png" });
+    const itemImage = new File(["image"], "duplicate.png", {
+      type: "image/png",
+      lastModified: 1,
+    });
+    const filesImage = new File(["image"], "duplicate.png", {
+      type: "image/png",
+      lastModified: 2,
+    });
     const rendered = render(
       <EditorHarness slashCommands={COMMANDS} slashCommandsError={null} onAddFiles={onAddFiles} />,
     );
 
     fireEvent.paste(getEditorRoot(rendered.container), {
       clipboardData: createClipboardData({
-        items: [createClipboardFileItem(image)],
-        files: [image],
+        items: [createClipboardFileItem(itemImage)],
+        files: [filesImage],
         types: ["Files"],
       }),
     });
 
     await waitFor(() => {
-      expect(onAddFiles).toHaveBeenCalledWith([image]);
+      expect(onAddFiles).toHaveBeenCalledWith([itemImage]);
     });
   });
 

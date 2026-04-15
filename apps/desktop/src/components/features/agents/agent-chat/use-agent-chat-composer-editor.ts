@@ -108,9 +108,8 @@ const isPastedImageFile = (file: File, mime?: string): boolean => {
   return classifyAttachment({ name: file.name, mime: mime || file.type }) === "image";
 };
 
-const readPastedImageFiles = (clipboardData: DataTransfer): File[] => {
-  const filesBySignature = new Map<string, File>();
-
+const readPastedImageFilesFromItems = (clipboardData: DataTransfer): File[] => {
+  const files: File[] = [];
   for (const item of Array.from(clipboardData.items ?? [])) {
     if (item.kind !== "file") {
       continue;
@@ -121,18 +120,32 @@ const readPastedImageFiles = (clipboardData: DataTransfer): File[] => {
       continue;
     }
 
-    filesBySignature.set(`${file.name}:${file.type}:${file.size}:${file.lastModified}`, file);
+    files.push(file);
   }
 
+  return files;
+};
+
+const readPastedImageFilesFromFiles = (clipboardData: DataTransfer): File[] => {
+  const files: File[] = [];
   for (const file of Array.from(clipboardData.files ?? [])) {
     if (!isPastedImageFile(file)) {
       continue;
     }
 
-    filesBySignature.set(`${file.name}:${file.type}:${file.size}:${file.lastModified}`, file);
+    files.push(file);
   }
 
-  return Array.from(filesBySignature.values());
+  return files;
+};
+
+const readPastedImageFiles = (clipboardData: DataTransfer): File[] => {
+  const itemFiles = readPastedImageFilesFromItems(clipboardData);
+  if (itemFiles.length > 0) {
+    return itemFiles;
+  }
+
+  return readPastedImageFilesFromFiles(clipboardData);
 };
 
 const findTextSegment = (
