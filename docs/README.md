@@ -13,6 +13,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [task-workflow-status-model.md](task-workflow-status-model.md): canonical task statuses, metadata ownership, and issue-type rules.
 - [task-workflow-actions.md](task-workflow-actions.md): canonical workflow actions and UI rendering expectations.
 - [task-workflow-transition-matrix.md](task-workflow-transition-matrix.md): allowed transitions, guards, and invalid examples.
+- [verification/README.md](verification/README.md): task-scoped local verification records that give QA a repo-visible evidence trail for required checks.
 
 ## Runtime And Architecture Docs
 
