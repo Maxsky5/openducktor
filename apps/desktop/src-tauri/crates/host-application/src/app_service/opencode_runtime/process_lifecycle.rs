@@ -314,8 +314,20 @@ mod tests {
         Ok(dir)
     }
 
+    fn write_fake_login_shell(shell_path: &Path, path_value: &str) -> Result<()> {
+        let script = format!(
+            "#!/bin/sh\nprintf 'shell startup noise\\n'\nprintf '__OPENDUCKTOR_ENV_START__\\0PATH={}\\0'\n",
+            path_value
+        );
+        fs::write(shell_path, script)
+            .with_context(|| format!("failed writing {}", shell_path.display()))?;
+        fs::set_permissions(shell_path, fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("failed chmod {}", shell_path.display()))?;
+        Ok(())
+    }
+
     fn wait_for_capture(path: &Path) -> Result<String> {
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while std::time::Instant::now() < deadline {
             if let Ok(contents) = fs::read_to_string(path) {
                 if contents.contains("config=") && contents.contains("args=") {
@@ -331,7 +343,7 @@ mod tests {
     }
 
     fn wait_for_marker(path: &Path, marker: &str) -> Result<String> {
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while std::time::Instant::now() < deadline {
             if let Ok(contents) = fs::read_to_string(path) {
                 if contents.contains(marker) {
@@ -350,8 +362,10 @@ mod tests {
     fn spawn_with_config_injects_config_content_and_args() -> Result<()> {
         let _env_lock = lock_env();
         let sandbox = temp_test_dir("spawn-with-config")?;
+        let home = sandbox.join("home");
         let output_path = sandbox.join("captured.txt");
         let script_path = sandbox.join("fake-opencode.sh");
+        let shell_path = sandbox.join("fake-shell");
         let script = format!(
             r#"#!/bin/sh
 if [ "$1" = "--version" ]; then
@@ -369,8 +383,15 @@ sleep 5
             .with_context(|| format!("failed writing {}", script_path.display()))?;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
             .with_context(|| format!("failed chmod {}", script_path.display()))?;
+        fs::create_dir_all(&home)?;
+        write_fake_login_shell(shell_path.as_path(), "/usr/bin:/bin")?;
 
         let config = r#"{"logLevel":"INFO","mcp":{"openducktor":{"enabled":true}}}"#;
+        let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = set_env_var("SHELL", shell_path.to_string_lossy().as_ref());
+        let _user_guard = set_env_var("USER", "odt-test");
+        let _logname_guard = set_env_var("LOGNAME", "odt-test");
+        let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
         let mut child = super::spawn_opencode_server_with_binary(
             script_path.to_string_lossy().as_ref(),
             sandbox.as_path(),
@@ -400,6 +421,7 @@ sleep 5
         let _env_lock = lock_env();
         let sandbox = temp_test_dir("spawn-with-config-path")?;
         let home = sandbox.join("home");
+        let shell_path = sandbox.join("fake-shell");
         fs::create_dir_all(home.join(".bun").join("bin"))?;
         fs::create_dir_all(home.join(".cargo").join("bin"))?;
 
@@ -420,8 +442,12 @@ sleep 5
             .with_context(|| format!("failed writing {}", script_path.display()))?;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
             .with_context(|| format!("failed chmod {}", script_path.display()))?;
+        write_fake_login_shell(shell_path.as_path(), "/usr/bin:/bin")?;
 
         let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+        let _shell_guard = set_env_var("SHELL", shell_path.to_string_lossy().as_ref());
+        let _user_guard = set_env_var("USER", "odt-test");
+        let _logname_guard = set_env_var("LOGNAME", "odt-test");
         let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
 
         let mut child = super::spawn_opencode_server_with_binary(

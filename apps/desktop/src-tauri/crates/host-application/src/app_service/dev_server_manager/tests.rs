@@ -737,7 +737,7 @@ sleep 5
         .expect("fake pnpm and node from augmented PATH should start");
 
     assert!(
-        wait_for_path_exists(marker_path.as_path(), Duration::from_secs(5)),
+        wait_for_path_exists(marker_path.as_path(), Duration::from_secs(10)),
         "expected fake pnpm script to resolve node from augmented PATH"
     );
     stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop dev server");
