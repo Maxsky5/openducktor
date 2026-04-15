@@ -69,7 +69,7 @@ Iterate through your findings. For **EACH** distinct gap identified:
     *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
     *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
     *   If a task exists, SKIP IT.
-2.  **Task Creation**: Call tool `create_task`.
+2.  **Task Creation**: Call tool `odt_create_task`.
     *   **title**: `<Concise Title>` (e.g., `Add JSDoc to Auth Module`)
     *   **issueType**: Use `task` by default. Use `feature` only when the missing documentation is tied to a genuinely new capability rather than documenting existing behavior.
     *   **priority**: Map the command severity to OpenDucktor numeric priority.
@@ -91,7 +91,7 @@ Iterate through your findings. For **EACH** distinct gap identified:
         ### Proposed Content
         {What needs to be written? e.g., "Add JSDoc for params and return types."}
         ```
-    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
+    *   Do **NOT** send a `status` field. `odt_create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 4: Strict Termination
 **CRITICAL**: Once the loop is finished:

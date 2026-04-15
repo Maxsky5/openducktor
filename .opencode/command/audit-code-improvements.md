@@ -64,7 +64,7 @@ Iterate through the codebase finding by finding. For **EACH** distinct improveme
     - If **NO**: Proceed to creation.
 
 2.  **Create Task**:
-    - Call `create_task` with the following fields:
+    - Call `odt_create_task` with the following fields:
         - `title`: `<Concise Actionable Title>` (e.g., `Refactor OrderService to fix SRP violation`).
         - `issueType`: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
         - `priority`: Map the severity to OpenDucktor numeric priority.
@@ -86,7 +86,7 @@ Iterate through the codebase finding by finding. For **EACH** distinct improveme
             ### Benefits
             {Why fix this? (e.g., "Enables unit testing", "Reduces bug risk").}
             ```
-    - Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
+    - Do **NOT** send a `status` field. `odt_create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 3: Reporting & TERMINATION (STRICT)
 

@@ -92,7 +92,7 @@ Iterate through the codebase. For **EACH** distinct vulnerability found:
     *   If a task for this specific vulnerability exists -> **SKIP**.
     *   If new -> **PROCEED**.
 
-2.  **Create Task**: Call `create_task`.
+2.  **Create Task**: Call `odt_create_task`.
     *   **title**: `<Concise Title>` (e.g., `Fix SQL Injection in UserSearch`).
     *   **issueType**: Use `bug` by default for vulnerabilities and exploitable misconfigurations. Use `task` only for non-defect hardening work that is clearly not a bug.
     *   **priority**: Map the severity table to OpenDucktor numeric priority.
@@ -118,7 +118,7 @@ Iterate through the codebase. For **EACH** distinct vulnerability found:
         - **Compliance**: {e.g. SOC2, PCI-DSS, GDPR}
         - **References**: {Link to OWASP/CWE definition}
         ```
-    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
+    *   Do **NOT** send a `status` field. `odt_create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 3: Reporting & TERMINATION (STRICT)
 

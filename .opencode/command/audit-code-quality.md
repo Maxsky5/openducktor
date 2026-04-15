@@ -109,7 +109,7 @@ Iterate through the codebase. For **EACH** distinct violation found:
     *   If a task for this specific file/issue exists -> **SKIP**.
     *   If new -> **PROCEED**.
 
-2.  **Create Task**: Call `create_task`.
+2.  **Create Task**: Call `odt_create_task`.
     *   **title**: `<Concise Title>` (e.g., `Split UserProfile.tsx (>400 lines)`).
     *   **issueType**: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
     *   **priority**: Map the command severity to OpenDucktor numeric priority.
@@ -131,7 +131,7 @@ Iterate through the codebase. For **EACH** distinct violation found:
         ### Recommended Action
         {Refactoring strategy, e.g., "Extract sub-components", "Create utility function for X".}
         ```
-    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
+    *   Do **NOT** send a `status` field. `odt_create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 3: Reporting & TERMINATION (STRICT)
 

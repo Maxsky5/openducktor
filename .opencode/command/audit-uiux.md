@@ -90,7 +90,7 @@ Iterate through ALL findings (Dynamic + Static). For **EACH** distinct issue:
     *   Run a targeted `search_tasks` query using a narrow `title` substring from the proposed task title. Add `tags` only when it helps narrow likely matches.
     *   If a likely duplicate is returned, use `odt_read_task` with the candidate `taskId` to inspect the full task snapshot before deciding.
     *   If task exists, SKIP IT.
-2.  **Task Creation**: Call tool `create_task`.
+2.  **Task Creation**: Call tool `odt_create_task`.
     *   **title**: `<Concise Title>`
     *   **issueType**: Use `bug` for broken interaction, accessibility, layout, or responsiveness defects. Use `task` for design-system cleanup or polish work that is not a defect.
     *   **priority**: Map command severity to OpenDucktor numeric priority.
@@ -112,7 +112,7 @@ Iterate through ALL findings (Dynamic + Static). For **EACH** distinct issue:
         ### Proposed Solution
         {Specific CSS fix, Tailwind class addition, or Semantic HTML refactor}
         ```
-    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
+    *   Do **NOT** send a `status` field. `odt_create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 5: Strict Termination
 **CRITICAL**: Once the loop is finished:

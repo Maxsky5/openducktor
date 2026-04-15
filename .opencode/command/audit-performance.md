@@ -95,7 +95,7 @@ Iterate through the codebase. For **EACH** distinct optimization found:
     *   If task exists -> **SKIP**.
     *   If new -> **PROCEED**.
 
-2.  **Create Task**: Call `create_task`.
+2.  **Create Task**: Call `odt_create_task`.
     *   **title**: `<Concise Title>` (e.g., `Replace Moment.js with Date-fns`).
     *   **issueType**: Use `task` by default. Use `bug` only when the finding is an existing broken behavior or defect. Use `feature` only when the work is genuinely additive rather than corrective.
     *   **priority**: Map the command impact to OpenDucktor numeric priority.
@@ -120,7 +120,7 @@ Iterate through the codebase. For **EACH** distinct optimization found:
         ### Expected Improvement
         {Quantify if possible: e.g., "~270KB reduction", "20% faster load".}
         ```
-    *   Do **NOT** send a `status` field. `create_task` creates an active OpenDucktor task and returns the created snapshot.
+    *   Do **NOT** send a `status` field. `odt_create_task` creates an active OpenDucktor task and returns the created snapshot.
 
 ## Phase 3: Reporting & TERMINATION (STRICT)
 
