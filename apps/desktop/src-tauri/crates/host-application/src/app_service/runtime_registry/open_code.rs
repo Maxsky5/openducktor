@@ -23,6 +23,30 @@ use url::form_urlencoded;
 pub(crate) struct OpenCodeRuntime;
 
 impl OpenCodeRuntime {
+    fn read_http_response_body(
+        reader: &mut BufReader<TcpStream>,
+        external_session_id: &str,
+    ) -> Result<String> {
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let bytes_read = reader.read_line(&mut line).with_context(|| {
+                format!(
+                    "Failed reading OpenCode abort response headers for session {external_session_id}"
+                )
+            })?;
+            if bytes_read == 0 || line == "\r\n" {
+                break;
+            }
+        }
+
+        let mut response_body = String::new();
+        reader.read_to_string(&mut response_body).with_context(|| {
+            format!("Failed reading OpenCode abort response body for session {external_session_id}")
+        })?;
+        Ok(response_body)
+    }
+
     fn startup_config(service: &AppService) -> Result<RuntimeStartupReadinessConfig> {
         let config = service.runtime_config_store.load().with_context(|| {
             format!(
@@ -86,10 +110,7 @@ impl OpenCodeRuntime {
                 format!("Malformed OpenCode abort status code for session {external_session_id}")
             })?;
 
-        let mut response_body = String::new();
-        reader.read_to_string(&mut response_body).with_context(|| {
-            format!("Failed reading OpenCode abort response body for session {external_session_id}")
-        })?;
+        let response_body = Self::read_http_response_body(&mut reader, external_session_id)?;
 
         if !(200..300).contains(&status_code) {
             let detail = response_body.trim();
@@ -140,12 +161,8 @@ impl AppRuntime for OpenCodeRuntime {
         service.spawn_opencode_server(working_directory, repo_path_for_mcp, port)
     }
 
-    fn track_process(
-        &self,
-        service: &AppService,
-        child_id: u32,
-    ) -> Result<Option<RuntimeProcessGuard>> {
-        Ok(Some(service.track_pending_opencode_process(child_id)?))
+    fn track_process(&self, service: &AppService, child_id: u32) -> Result<RuntimeProcessGuard> {
+        service.track_pending_opencode_process(child_id)
     }
 
     fn wait_until_ready(

@@ -68,13 +68,7 @@ impl AppService {
                     port,
                 )?;
                 let runtime_process_guard = match runtime.track_process(self, child.id()) {
-                    Ok(Some(guard)) => guard,
-                    Ok(None) => {
-                        return Err(anyhow!(
-                            "Runtime '{}' did not return a process guard for a host-managed server",
-                            input.runtime_kind.as_str()
-                        ));
-                    }
+                    Ok(guard) => guard,
                     Err(error) => {
                         let tracking_error = anyhow!(error).context(input.tracking_error_context);
                         if let Err(cleanup_error) = Self::cleanup_started_runtime(

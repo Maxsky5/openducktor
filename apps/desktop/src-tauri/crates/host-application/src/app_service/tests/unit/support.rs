@@ -37,8 +37,8 @@ pub(super) use crate::app_service::{
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    RuntimeSessionStatusProbeTarget, StartupEventContext, StartupEventCorrelation,
-    StartupEventPayload,
+    RuntimeProcessGuard, RuntimeSessionStatusProbeTarget, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload,
 };
 
 pub(super) fn init_git_repo(path: &std::path::Path) -> Result<()> {
@@ -159,6 +159,12 @@ impl AppRuntime for TestRuntimeAdapter {
             runtime_route: self.definition.route_for_port(43_123),
             startup_report: crate::app_service::RuntimeStartupWaitReport::zero(),
         })
+    }
+
+    fn track_process(&self, _service: &AppService, _child_id: u32) -> Result<RuntimeProcessGuard> {
+        Err(anyhow::anyhow!(
+            "track_process should not be used in this test"
+        ))
     }
 
     fn spawn_server(

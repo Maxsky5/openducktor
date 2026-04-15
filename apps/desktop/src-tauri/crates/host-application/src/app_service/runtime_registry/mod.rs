@@ -35,13 +35,9 @@ pub(crate) trait AppRuntime: Send + Sync {
         Err(anyhow!("Runtime does not support external provisioning"))
     }
 
-    fn track_process(
-        &self,
-        _service: &AppService,
-        _child_id: u32,
-    ) -> Result<Option<RuntimeProcessGuard>> {
-        Ok(None)
-    }
+    // Host-managed runtimes must return a tracked process guard so cleanup and
+    // stale-runtime pruning stay coupled to the spawned child lifecycle.
+    fn track_process(&self, _service: &AppService, _child_id: u32) -> Result<RuntimeProcessGuard>;
 
     fn wait_until_ready(
         &self,
