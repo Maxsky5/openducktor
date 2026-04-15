@@ -91,7 +91,7 @@ mod tests {
     use crate::app_service::test_support::{
         build_service_with_store, create_fake_opencode, init_git_repo, install_fake_dolt, lock_env,
         set_env_var, set_fake_opencode_and_bridge_binaries, unique_temp_path, wait_for_path_exists,
-        wait_for_process_exit,
+        wait_for_process_exit, EnvVarGuard,
     };
     use anyhow::Result;
     use host_domain::{now_rfc3339, AgentRuntimeKind, GitCurrentBranch};
@@ -100,6 +100,10 @@ mod tests {
     use std::panic::{self, AssertUnwindSafe};
     use std::thread;
     use std::time::{Duration, Instant};
+
+    fn set_test_mcp_command() -> EnvVarGuard {
+        set_env_var("OPENDUCKTOR_MCP_COMMAND_JSON", r#"["mcp-bin","--stdio"]"#)
+    }
 
     #[test]
     fn spawn_and_register_runtime_cleans_up_spawned_child_when_runtime_lock_is_poisoned(
@@ -113,6 +117,7 @@ mod tests {
         let _dolt_guard = install_fake_dolt(&root)?;
         let starts_file = root.join("spawned-runtime.starts");
         let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+        let _mcp_command_guard = set_test_mcp_command();
         let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
         let _starts_guard = set_env_var(
             "OPENDUCKTOR_TEST_STARTS_FILE",
@@ -220,6 +225,7 @@ mod tests {
         let _dolt_guard = install_fake_dolt(&root)?;
         let starts_file = root.join("spawned-runtime.starts");
         let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+        let _mcp_command_guard = set_test_mcp_command();
         let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
         let _starts_guard = set_env_var(
             "OPENDUCKTOR_TEST_STARTS_FILE",

@@ -151,7 +151,7 @@ mod tests {
     use crate::app_service::test_support::{
         build_service_with_store, create_failing_opencode, create_fake_opencode, init_git_repo,
         install_fake_dolt, lock_env, set_env_var, set_fake_opencode_and_bridge_binaries,
-        unique_temp_path, wait_for_path_exists, write_executable_script,
+        unique_temp_path, wait_for_path_exists, write_executable_script, EnvVarGuard,
     };
     use anyhow::Result;
     use host_domain::{
@@ -164,6 +164,10 @@ mod tests {
     use std::path::Path;
     use std::thread;
     use std::time::Duration;
+
+    fn set_test_mcp_command() -> EnvVarGuard {
+        set_env_var("OPENDUCKTOR_MCP_COMMAND_JSON", r#"["mcp-bin","--stdio"]"#)
+    }
 
     fn create_delayed_failing_opencode(path: &Path) -> Result<()> {
         write_executable_script(
@@ -201,6 +205,7 @@ exit 1
         let _dolt_guard = install_fake_dolt(&root)?;
         let starts_file = root.join("started-pids.log");
         let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+        let _mcp_command_guard = set_test_mcp_command();
         let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "400");
         let _starts_guard = set_env_var(
             "OPENDUCKTOR_TEST_STARTS_FILE",
@@ -271,6 +276,7 @@ exit 1
         create_fake_opencode(&fake_bridge)?;
         let _dolt_guard = install_fake_dolt(&root)?;
         let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_bridge.as_path());
+        let _mcp_command_guard = set_test_mcp_command();
         let _opencode_guard = set_env_var(
             "OPENDUCKTOR_OPENCODE_BINARY",
             failing_opencode.to_string_lossy().as_ref(),
@@ -327,6 +333,7 @@ exit 1
         create_fake_opencode(&fake_bridge)?;
         let _dolt_guard = install_fake_dolt(&root)?;
         let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_bridge.as_path());
+        let _mcp_command_guard = set_test_mcp_command();
         let _opencode_guard = set_env_var(
             "OPENDUCKTOR_OPENCODE_BINARY",
             failing_opencode.to_string_lossy().as_ref(),
