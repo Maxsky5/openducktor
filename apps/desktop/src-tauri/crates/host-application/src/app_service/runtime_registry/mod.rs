@@ -1,6 +1,5 @@
 mod health_http;
 mod open_code;
-
 use super::{
     AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusProbeTarget,
     RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
@@ -12,7 +11,7 @@ use host_domain::{
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::process::Child;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 #[cfg(test)]
 pub(crate) use health_http::RuntimeHealthHttpClient;
@@ -58,6 +57,14 @@ pub(crate) trait AppRuntime: Send + Sync {
     ) -> Result<Child>;
 
     fn runtime_health(&self) -> RuntimeHealth;
+
+    fn reconcile_on_startup(&self, _service: &AppService) -> Result<()> {
+        Ok(())
+    }
+
+    fn terminate_tracked_processes(&self, _service: &AppService) -> Result<()> {
+        Ok(())
+    }
 
     fn should_restart_for_mcp_status_error(&self, _message: &str) -> bool {
         false
@@ -176,15 +183,12 @@ impl AppRuntimeRegistry {
         })
     }
 
-    pub(crate) fn builtin() -> Self {
-        static BUILTIN: LazyLock<AppRuntimeRegistry> = LazyLock::new(|| {
-            AppRuntimeRegistry::new(
-                vec![Arc::new(OpenCodeRuntime)],
-                AgentRuntimeKind::opencode(),
-            )
-            .expect("builtin app runtime registry should be valid")
-        });
-        BUILTIN.clone()
+    pub(crate) fn builtin_for_service() -> Self {
+        AppRuntimeRegistry::new(
+            vec![Arc::new(OpenCodeRuntime::default())],
+            AgentRuntimeKind::opencode(),
+        )
+        .expect("builtin app runtime registry should be valid")
     }
 
     pub(crate) fn definitions(&self) -> Vec<RuntimeDefinition> {
@@ -206,7 +210,34 @@ impl AppRuntimeRegistry {
             .ok_or_else(|| anyhow!("Unsupported agent runtime kind: {}", kind.as_str()))
     }
 
+    pub(crate) fn runtimes(&self) -> Vec<Arc<dyn AppRuntime>> {
+        self.runtimes_by_kind.values().cloned().collect()
+    }
+
     pub(crate) fn runtime_definitions(&self) -> &RuntimeRegistry {
         &self.definitions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_for_service_creates_distinct_runtime_instances() {
+        let first = AppRuntimeRegistry::builtin_for_service();
+        let second = AppRuntimeRegistry::builtin_for_service();
+
+        let first_runtime = first
+            .runtime(&AgentRuntimeKind::opencode())
+            .expect("first runtime");
+        let second_runtime = second
+            .runtime(&AgentRuntimeKind::opencode())
+            .expect("second runtime");
+
+        assert!(
+            !Arc::ptr_eq(&first_runtime, &second_runtime),
+            "builtin runtime registries should create per-service runtime instances"
+        );
     }
 }

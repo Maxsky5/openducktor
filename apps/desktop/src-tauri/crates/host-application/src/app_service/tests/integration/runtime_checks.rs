@@ -19,6 +19,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
+use crate::app_service::opencode_runtime::test_support::{
+    read_opencode_process_registry, with_locked_opencode_process_registry,
+    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+};
 use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, create_failing_opencode,
     create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
@@ -29,11 +34,9 @@ use crate::app_service::test_support::{
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
-    parse_mcp_command_json, read_opencode_process_registry, read_opencode_version,
-    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
-    terminate_process_by_pid, validate_parent_relationships_for_update,
-    with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    parse_mcp_command_json, read_opencode_version, resolve_mcp_command,
+    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
+    validate_parent_relationships_for_update, AgentRuntimeProcess, RunProcess,
 };
 
 fn repo_store_health(

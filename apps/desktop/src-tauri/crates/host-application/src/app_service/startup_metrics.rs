@@ -8,7 +8,8 @@ const STARTUP_MS_BUCKETS: [&str; 7] = [
     "<=100", "<=250", "<=500", "<=1000", "<=2000", "<=5000", ">5000",
 ];
 const STARTUP_ATTEMPTS_BUCKETS: [&str; 6] = ["<=1", "<=3", "<=5", "<=10", "<=20", ">20"];
-pub(crate) const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
+pub(crate) const STARTUP_CONFIG_INVALID_REASON: RuntimeStartupFailureReason =
+    RuntimeStartupFailureReason::StartupConfigInvalid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -111,7 +112,7 @@ enum StartupEventKind {
     Ready(RuntimeStartupWaitReport),
     Failed {
         report: RuntimeStartupWaitReport,
-        failure_reason: &'static str,
+        failure_reason: RuntimeStartupFailureReason,
     },
 }
 
@@ -142,7 +143,7 @@ impl<'a> StartupEventPayload<'a> {
     pub(crate) fn failed(
         context: StartupEventContext<'a>,
         report: RuntimeStartupWaitReport,
-        failure_reason: &'static str,
+        failure_reason: RuntimeStartupFailureReason,
     ) -> Self {
         Self {
             context,
@@ -169,7 +170,7 @@ impl<'a> StartupEventPayload<'a> {
         }
     }
 
-    fn failure_reason(&self) -> Option<&'static str> {
+    fn failure_reason(&self) -> Option<RuntimeStartupFailureReason> {
         match self.kind {
             StartupEventKind::WaitBegin | StartupEventKind::Ready(_) => None,
             StartupEventKind::Failed { failure_reason, .. } => Some(failure_reason),
@@ -271,7 +272,7 @@ impl OpencodeStartupMetrics {
         &mut self,
         event: &str,
         report: RuntimeStartupWaitReport,
-        reason: Option<&str>,
+        reason: Option<RuntimeStartupFailureReason>,
     ) -> (OpencodeStartupMetricsSnapshot, Vec<String>) {
         self.ensure_histograms_initialized();
         self.total += 1;
@@ -279,7 +280,9 @@ impl OpencodeStartupMetrics {
             self.ready += 1;
         } else if event == "startup_failed" {
             self.failed += 1;
-            let reason_key = reason.unwrap_or("unknown").to_string();
+            let reason_key = reason
+                .map(|entry| entry.as_str().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             *self.failed_by_reason.entry(reason_key).or_insert(0) += 1;
         }
 
@@ -375,7 +378,7 @@ pub(crate) fn build_opencode_startup_event_payload(
         correlation_id: correlation_id.map(str::to_string),
         policy: policy_payload,
         report: report_payload,
-        reason: reason.map(str::to_string),
+        reason: reason.map(|entry| entry.as_str().to_string()),
         metrics,
         alerts,
     }
@@ -457,7 +460,7 @@ impl AppService {
             port,
             correlation_type = correlation_type.unwrap_or(""),
             correlation_id = correlation_id.unwrap_or(""),
-            reason = failure_reason.unwrap_or(""),
+            reason = failure_reason.map(|entry| entry.as_str()).unwrap_or(""),
             startup_ms,
             attempts,
             payload = %payload_json,
@@ -474,7 +477,7 @@ impl AppService {
                 port,
                 correlation_type = correlation_type.unwrap_or(""),
                 correlation_id = correlation_id.unwrap_or(""),
-                reason = failure_reason.unwrap_or(""),
+                reason = failure_reason.map(|entry| entry.as_str()).unwrap_or(""),
                 startup_ms,
                 attempts,
                 "OpenCode startup threshold exceeded"
@@ -537,14 +540,17 @@ mod tests {
                 Some(test_startup_policy()),
             ),
             report,
-            "timeout",
+            RuntimeStartupFailureReason::Timeout,
         );
 
         assert_eq!(event.event_name(), "startup_failed");
         let emitted_report = event.report().expect("failed event should carry report");
         assert_eq!(emitted_report.startup_ms(), report.startup_ms());
         assert_eq!(emitted_report.attempts(), report.attempts());
-        assert_eq!(event.failure_reason(), Some("timeout"));
+        assert_eq!(
+            event.failure_reason(),
+            Some(RuntimeStartupFailureReason::Timeout)
+        );
         assert_eq!(
             event.correlation_parts(),
             (Some("runtime_id"), Some("runtime-abc"))

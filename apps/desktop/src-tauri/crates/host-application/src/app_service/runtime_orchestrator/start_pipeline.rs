@@ -164,7 +164,7 @@ mod tests {
                     startup_policy,
                     working_directory: repo_path.clone(),
                     cleanup_target: None,
-                    tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
+                    tracking_error_context: "Failed tracking spawned workspace runtime process",
                     startup_error_context,
                     post_start_policy: Some(RuntimePostStartPolicy {
                         existing_lookup: RuntimeExistingLookup {
@@ -272,7 +272,7 @@ mod tests {
                     startup_policy,
                     working_directory: repo_path.clone(),
                     cleanup_target: None,
-                    tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
+                    tracking_error_context: "Failed tracking spawned workspace runtime process",
                     startup_error_context,
                     post_start_policy: Some(RuntimePostStartPolicy {
                         existing_lookup: RuntimeExistingLookup {

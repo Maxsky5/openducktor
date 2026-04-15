@@ -200,11 +200,8 @@ pub(crate) fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
 pub(crate) fn runtime_ensure_failure_kind(error: &anyhow::Error) -> Option<&'static str> {
     error.chain().find_map(|cause| {
         cause
-            .downcast_ref::<host_application::OpencodeStartupWaitFailure>()
-            .map(|failure| match failure.reason {
-                "timeout" => "timeout",
-                _ => "error",
-            })
+            .downcast_ref::<host_application::RuntimeStartupWaitFailure>()
+            .map(|failure| if failure.reason().is_timeout() { "timeout" } else { "error" })
     })
 }
 

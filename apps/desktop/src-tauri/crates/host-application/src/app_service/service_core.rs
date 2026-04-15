@@ -1,4 +1,3 @@
-use super::process_registry::TrackedOpencodeProcessGuard;
 use super::runtime_registry::AppRuntimeRegistry;
 use super::startup_metrics::OpencodeStartupMetrics;
 use super::workspace_policy::HookTrustChallenge;
@@ -153,7 +152,6 @@ pub struct AppService {
     pub(super) runtime_registry: AppRuntimeRegistry,
     pub(super) runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
-    pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
     pub(super) repo_runtime_health_flights:
         Arc<Mutex<HashMap<String, Arc<RepoRuntimeHealthFlight>>>>,
@@ -164,7 +162,6 @@ pub struct AppService {
     pub(super) opencode_session_status_flights:
         Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, Arc<OpencodeSessionStatusFlight>>>>,
     pub(super) opencode_session_status_probe_limiter: Arc<OpencodeSessionStatusProbeLimiter>,
-    pub(super) opencode_process_registry_path: PathBuf,
     pub(super) mcp_bridge_registry_path: PathBuf,
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
@@ -181,7 +178,7 @@ pub struct AppService {
 pub(crate) struct RunProcess {
     pub(super) summary: RunSummary,
     pub(super) child: Option<Child>,
-    pub(super) _runtime_process_guard: Option<TrackedOpencodeProcessGuard>,
+    pub(super) _runtime_process_guard: Option<RuntimeProcessGuard>,
     pub(super) repo_path: String,
     pub(super) task_id: String,
     pub(super) worktree_path: String,
@@ -191,7 +188,7 @@ pub(crate) struct RunProcess {
 pub(crate) struct AgentRuntimeProcess {
     pub(super) summary: RuntimeInstanceSummary,
     pub(super) child: Option<Child>,
-    pub(super) _runtime_process_guard: Option<TrackedOpencodeProcessGuard>,
+    pub(super) _runtime_process_guard: Option<RuntimeProcessGuard>,
     pub(super) cleanup_target: Option<RuntimeCleanupTarget>,
 }
 
@@ -271,7 +268,7 @@ impl AppService {
             task_store,
             config_store,
             git_port,
-            AppRuntimeRegistry::builtin(),
+            AppRuntimeRegistry::builtin_for_service(),
             enforce_repo_allowlist,
         )
     }
@@ -288,7 +285,6 @@ impl AppService {
                 &config_store,
                 runtime_registry.runtime_definitions().clone(),
             );
-        let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
         let mcp_bridge_registry_path = Self::mcp_bridge_registry_path(&config_store);
         let instance_pid = std::process::id();
         let service = Self {
@@ -299,7 +295,6 @@ impl AppService {
             runtime_registry,
             runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
-            tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
             repo_runtime_health_flights: Arc::new(Mutex::new(HashMap::new())),
             runtime_startup_status: Arc::new(Mutex::new(HashMap::new())),
@@ -309,7 +304,6 @@ impl AppService {
             opencode_session_status_probe_limiter: Arc::new(
                 OpencodeSessionStatusProbeLimiter::new(4),
             ),
-            opencode_process_registry_path,
             mcp_bridge_registry_path,
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
@@ -322,10 +316,13 @@ impl AppService {
             dev_server_groups: Arc::new(Mutex::new(HashMap::new())),
             mcp_bridge_process: Arc::new(Mutex::new(None)),
         };
-        if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
-            eprintln!(
-                "OpenDucktor warning: failed reconciling orphan OpenCode processes at startup: {error:#}"
-            );
+        for runtime in service.runtime_registry.runtimes() {
+            if let Err(error) = runtime.reconcile_on_startup(&service) {
+                eprintln!(
+                    "OpenDucktor warning: failed reconciling tracked {} runtime processes at startup: {error:#}",
+                    runtime.definition().kind().as_str()
+                );
+            }
         }
         if let Err(error) = service.reconcile_mcp_bridge_registry_on_startup() {
             eprintln!(

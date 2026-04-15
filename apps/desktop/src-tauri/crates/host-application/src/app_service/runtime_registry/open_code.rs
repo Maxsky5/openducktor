@@ -2,6 +2,10 @@ use super::health_http::{
     RuntimeHealthCheckFailure, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
 };
 use super::AppRuntime;
+use crate::app_service::opencode_runtime::{
+    opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
+    OpenCodeProcessTracker,
+};
 use crate::app_service::{
     read_opencode_version, require_local_http_endpoint, require_local_http_port,
     resolve_opencode_binary_path, wait_for_runtime_with_process, AppService, RuntimeProcessGuard,
@@ -20,7 +24,10 @@ use std::process::Child;
 use std::time::Duration;
 use url::form_urlencoded;
 
-pub(crate) struct OpenCodeRuntime;
+#[derive(Default)]
+pub(crate) struct OpenCodeRuntime {
+    process_tracker: OpenCodeProcessTracker,
+}
 
 impl OpenCodeRuntime {
     fn read_http_response_body(
@@ -162,7 +169,11 @@ impl AppRuntime for OpenCodeRuntime {
     }
 
     fn track_process(&self, service: &AppService, child_id: u32) -> Result<RuntimeProcessGuard> {
-        service.track_pending_opencode_process(child_id)
+        self.process_tracker.track_process(
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+            child_id,
+        )
     }
 
     fn wait_until_ready(
@@ -234,7 +245,7 @@ impl AppRuntime for OpenCodeRuntime {
                         Some(startup_policy),
                     ),
                     error.report(),
-                    error.reason,
+                    error.reason(),
                 ));
                 Err(anyhow!(error).context(input.startup_error_context.clone()))
             }
@@ -259,6 +270,20 @@ impl AppRuntime for OpenCodeRuntime {
                     .to_string()
             }),
         }
+    }
+
+    fn reconcile_on_startup(&self, service: &AppService) -> Result<()> {
+        reconcile_opencode_process_registry_on_startup(
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+        )
+    }
+
+    fn terminate_tracked_processes(&self, service: &AppService) -> Result<()> {
+        self.process_tracker.terminate_tracked_processes(
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+        )
     }
 
     fn should_restart_for_mcp_status_error(&self, message: &str) -> bool {

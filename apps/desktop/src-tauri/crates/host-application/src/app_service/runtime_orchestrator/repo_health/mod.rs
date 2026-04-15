@@ -6,7 +6,7 @@ use super::repo_health_snapshot::{
 use super::AppService;
 use crate::app_service::runtime_registry::{ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure};
 use crate::app_service::service_core::{RepoRuntimeHealthFlight, RepoRuntimeHealthFlightState};
-use crate::app_service::OpencodeStartupWaitFailure;
+use crate::app_service::RuntimeStartupWaitFailure;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::{

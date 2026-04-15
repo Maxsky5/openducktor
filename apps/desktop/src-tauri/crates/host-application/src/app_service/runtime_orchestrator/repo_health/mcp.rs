@@ -8,9 +8,9 @@ impl AppService {
             .chain()
             .find_map(|cause| {
                 cause
-                    .downcast_ref::<OpencodeStartupWaitFailure>()
+                    .downcast_ref::<RuntimeStartupWaitFailure>()
                     .map(|failure| {
-                        if failure.reason == "timeout" {
+                        if failure.reason().is_timeout() {
                             RepoRuntimeStartupFailureKind::Timeout
                         } else {
                             RepoRuntimeStartupFailureKind::Error
@@ -30,8 +30,8 @@ impl AppService {
     ) -> Option<String> {
         error.chain().find_map(|cause| {
             cause
-                .downcast_ref::<OpencodeStartupWaitFailure>()
-                .map(|failure| failure.reason.to_string())
+                .downcast_ref::<RuntimeStartupWaitFailure>()
+                .map(|failure| failure.reason().as_str().to_string())
         })
     }
 
