@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+if [ ! -x "./node_modules/.bin/commitlint" ]; then
+  printf '%s\n' "commitlint is not installed. Run 'bun install' or 'bun run hooks:install' to restore local Git hooks." >&2
+  exit 1
+fi
+
+./node_modules/.bin/commitlint --edit "$1"

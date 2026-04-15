@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
     "browser:dev": "bun run scripts/browser-dev.ts",
+    "hooks:install": "husky",
+    "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",
     "release:version:check": "bun run scripts/release-version.ts check",
     "release:cef:env": "bun run --cwd apps/desktop scripts/resolve-cef-release-env.ts",
@@ -24,6 +26,7 @@
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test",
+    "test:hooks": "bun run --filter @openducktor/desktop test:hooks",
     "lint": "bun run tauri:commands:panic-guard && bun run --workspaces lint",
     "tauri:commands:panic-guard": "bun run scripts/tauri-command-panic-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",
@@ -42,9 +45,12 @@
     "rollup": "^4.59.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
     "@biomejs/biome": "^2.4.11",
     "@iarna/toml": "^2.2.5",
     "@types/node": "^25.6.0",
+    "husky": "^9.1.7",
     "knip": "^6.4.1",
     "typescript": "^5.7.3"
   }

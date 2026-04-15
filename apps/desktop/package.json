@@ -15,6 +15,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test:hooks": "bun test ./scripts/git-hooks.integration.test.ts --timeout 120000",
     "test": "bun test --pass-with-no-tests --timeout 1000",
     "lint": "biome check src scripts"
   },
