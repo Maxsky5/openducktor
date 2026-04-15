@@ -232,6 +232,7 @@ const shouldRedirectShellClickToComposer = (
 type AgentChatComposerEditorProps = {
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
+  onAddFiles: (files: File[]) => void;
   placeholder: string;
   disabled: boolean;
   editorRef: React.RefObject<HTMLDivElement | null>;
@@ -248,6 +249,7 @@ type AgentChatComposerEditorProps = {
 export function AgentChatComposerEditor({
   draft,
   onDraftChange,
+  onAddFiles,
   placeholder,
   disabled,
   editorRef,
@@ -284,6 +286,7 @@ export function AgentChatComposerEditor({
   } = useAgentChatComposerEditor({
     draft,
     onDraftChange,
+    onAddFiles,
     editorRef,
     disabled,
     onEditorInput,

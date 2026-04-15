@@ -29,6 +29,7 @@ import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import {
   buildComposerAttachmentFromFile,
   CHAT_ATTACHMENT_ACCEPT,
+  readAttachmentFileName,
   validateComposerAttachments,
 } from "./agent-chat-attachments";
 import {
@@ -322,7 +323,9 @@ export const AgentChatComposer = forwardRef<
         const attachment = buildComposerAttachmentFromFile(file);
         if (!attachment) {
           toast.error("Unsupported attachment type", {
-            description: renderUnsupportedAttachmentDescription(file.name),
+            description: renderUnsupportedAttachmentDescription(
+              readAttachmentFileName({ name: file.name, mime: file.type }),
+            ),
           });
           return [];
         }
@@ -576,6 +579,7 @@ export const AgentChatComposer = forwardRef<
           <AgentChatComposerEditor
             draft={draft}
             onDraftChange={handleDraftChange}
+            onAddFiles={handleAddFiles}
             placeholder={composerPlaceholder}
             disabled={isComposerInputDisabled || isSubmitting}
             editorRef={composerEditorRef}

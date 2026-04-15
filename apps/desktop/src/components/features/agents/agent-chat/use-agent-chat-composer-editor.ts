@@ -14,6 +14,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import { classifyAttachment } from "./agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
   type AgentChatComposerDraftEditResult,
@@ -52,6 +53,7 @@ type FileMenuState = {
 type UseAgentChatComposerEditorArgs = {
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
+  onAddFiles: (files: File[]) => void;
   editorRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   onEditorInput: () => void;
@@ -101,6 +103,50 @@ type PendingInputState = TextSelectionTarget & {
 };
 
 const AUTOCOMPLETE_NAVIGATION_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
+
+const isPastedImageFile = (file: File, mime?: string): boolean => {
+  return classifyAttachment({ name: file.name, mime: mime || file.type }) === "image";
+};
+
+const readPastedImageFilesFromItems = (clipboardData: DataTransfer): File[] => {
+  const files: File[] = [];
+  for (const item of Array.from(clipboardData.items ?? [])) {
+    if (item.kind !== "file") {
+      continue;
+    }
+
+    const file = item.getAsFile();
+    if (!file || !isPastedImageFile(file, item.type)) {
+      continue;
+    }
+
+    files.push(file);
+  }
+
+  return files;
+};
+
+const readPastedImageFilesFromFiles = (clipboardData: DataTransfer): File[] => {
+  const files: File[] = [];
+  for (const file of Array.from(clipboardData.files ?? [])) {
+    if (!isPastedImageFile(file)) {
+      continue;
+    }
+
+    files.push(file);
+  }
+
+  return files;
+};
+
+const readPastedImageFiles = (clipboardData: DataTransfer): File[] => {
+  const itemFiles = readPastedImageFilesFromItems(clipboardData);
+  if (itemFiles.length > 0) {
+    return itemFiles;
+  }
+
+  return readPastedImageFilesFromFiles(clipboardData);
+};
 
 const findTextSegment = (
   draft: AgentChatComposerDraft,
@@ -425,6 +471,7 @@ const usePendingFocus = (editorRef: RefObject<HTMLDivElement | null>) => {
 export const useAgentChatComposerEditor = ({
   draft,
   onDraftChange,
+  onAddFiles,
   editorRef,
   disabled,
   onEditorInput,
@@ -893,14 +940,25 @@ export const useAgentChatComposerEditor = ({
         return;
       }
 
-      event.preventDefault();
+      const imageFiles = readPastedImageFiles(event.clipboardData);
+      if (imageFiles.length > 0) {
+        event.preventDefault();
+        pendingInputStateRef.current = null;
+        setSlashMenuState(null);
+        closeFileMenu();
+        onAddFiles(imageFiles);
+        return;
+      }
 
       const clipboardTypes = Array.from(event.clipboardData.types ?? []);
       const hasPlainText = clipboardTypes.includes("text/plain");
       if (!hasPlainText) {
+        event.preventDefault();
         pendingInputStateRef.current = null;
         return;
       }
+
+      event.preventDefault();
 
       const plainText = event.clipboardData.getData("text/plain");
 
@@ -935,6 +993,7 @@ export const useAgentChatComposerEditor = ({
       closeFileMenu,
       disabled,
       handleEditorInput,
+      onAddFiles,
       rememberSelectionTarget,
       resolveActiveTextSelection,
     ],
