@@ -7,7 +7,7 @@ const tauriConfigPath = "apps/desktop/src-tauri/tauri.conf.json";
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 const desktopDescription = "Task-first agentic development environment";
 const armArchCandidates = ["aarch64", "arm64"] as const;
-const intelArchCandidates = ["x64", "x86_64", "amd64", "intel"] as const;
+const intelArchCandidates = ["x86_64", "x64", "amd64", "intel"] as const;
 
 const macosVersionSymbols: Record<string, string> = {
   "11": "big_sur",
@@ -15,7 +15,6 @@ const macosVersionSymbols: Record<string, string> = {
   "13": "ventura",
   "14": "sonoma",
   "15": "sequoia",
-  "26": "tahoe",
 };
 
 type TauriConfig = {
@@ -73,13 +72,28 @@ function validateSha256(value: string, name: string): void {
 
 function extractArchToken(assetName: string, candidates: readonly string[]): string {
   const normalizedAssetName = assetName.toLowerCase();
-  const token = candidates.find((candidate) => normalizedAssetName.includes(candidate));
-
-  if (!token) {
-    throw new Error(`Could not resolve an architecture token from asset name \`${assetName}\`.`);
+  for (const candidate of candidates) {
+    const startIndex = normalizedAssetName.indexOf(candidate);
+    if (startIndex !== -1) {
+      return assetName.slice(startIndex, startIndex + candidate.length);
+    }
   }
 
-  return token;
+  throw new Error(`Could not resolve an architecture token from asset name \`${assetName}\`.`);
+}
+
+function validateDerivedAssetPattern(assetPattern: string, assetName: string): void {
+  if (!assetPattern.includes("#{arch}")) {
+    throw new Error(
+      `Could not derive a \`#{arch}\` placeholder from asset name \`${assetName}\`. Expected an architecture token like arm64, aarch64, x86_64, or x64 in the asset filename.`,
+    );
+  }
+
+  if (!assetPattern.includes("#{version}")) {
+    throw new Error(
+      `Could not derive a \`#{version}\` placeholder from asset name \`${assetName}\`. Expected the version string to appear in the asset filename.`,
+    );
+  }
 }
 
 export function resolveAssetPattern(
@@ -99,21 +113,18 @@ export function resolveAssetPattern(
   const intelArchToken = extractArchToken(intelAssetName, intelArchCandidates);
 
   const armPattern = armAssetName
-    .replace(armArchToken, "#{arch}")
-    .replaceAll(version, "#{version}");
+    .replaceAll(version, "#{version}")
+    .replaceAll(armArchToken, "#{arch}");
   const intelPattern = intelAssetName
-    .replace(intelArchToken, "#{arch}")
-    .replaceAll(version, "#{version}");
+    .replaceAll(version, "#{version}")
+    .replaceAll(intelArchToken, "#{arch}");
+
+  validateDerivedAssetPattern(armPattern, armAssetName);
+  validateDerivedAssetPattern(intelPattern, intelAssetName);
 
   if (armPattern !== intelPattern) {
     throw new Error(
       `Could not derive a shared asset pattern from \`${armAssetName}\` and \`${intelAssetName}\`.`,
-    );
-  }
-
-  if (armPattern === armAssetName && armAssetName.includes(version)) {
-    throw new Error(
-      `Could not replace version \`${version}\` inside asset pattern derived from \`${armAssetName}\`.`,
     );
   }
 

@@ -63,11 +63,6 @@ jobs:
             echo "Using default Homebrew tap repository: $DEFAULT_HOMEBREW_TAP_REPOSITORY"
           fi
 
-      - name: Checkout release tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ steps.release_meta.outputs.tag }}
-
       - name: Verify published stable release exists
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,6 +82,11 @@ jobs:
             echo "Release $TAG is marked as a prerelease. Homebrew tap updates are limited to published stable releases." >&2
             exit 1
           fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.release_meta.outputs.tag }}
 
       - name: Resolve DMG assets
         id: assets
