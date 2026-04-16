@@ -31,11 +31,22 @@ It uses [Beads](https://github.com/steveyegge/beads) as the task source of truth
 
 ## Install OpenDucktor
 
+### Homebrew
+
+```sh
+brew tap Maxsky5/openducktor
+brew install --cask openducktor
+```
+
+### Direct Download
+
 1. Open the [GitHub Releases page](https://github.com/Maxsky5/openducktor/releases).
 2. Download the latest macOS asset that matches your machine.
 3. Launch OpenDucktor and open the local repository you want to work on.
 
 If macOS blocks the first launch, use Finder's standard `Open` action once to confirm you want to run the app.
+
+Homebrew installs the same signed and notarized desktop app that is published on GitHub Releases.
 
 ## User Prerequisites
 

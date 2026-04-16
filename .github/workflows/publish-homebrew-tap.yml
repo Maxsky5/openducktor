@@ -1,0 +1,206 @@
+name: Publish Homebrew Tap
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published release tag to mirror into the Homebrew tap (for example v0.1.0)"
+        required: true
+        type: string
+
+env:
+  BUN_VERSION: 1.3.11
+  DEFAULT_HOMEBREW_TAP_BRANCH: main
+  DEFAULT_HOMEBREW_TAP_REPOSITORY: ${{ format('{0}/homebrew-openducktor', github.repository_owner) }}
+
+jobs:
+  publish-homebrew-tap:
+    name: Update Homebrew tap cask
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+      HOMEBREW_TAP_BRANCH: ${{ vars.HOMEBREW_TAP_BRANCH }}
+    steps:
+      - name: Resolve release tag
+        id: release_meta
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-${EVENT_TAG:-}}"
+          if [[ -z "$TAG" ]]; then
+            echo "Unable to resolve a release tag for the Homebrew publish workflow." >&2
+            exit 1
+          fi
+
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected release tag like v0.1.0 or v0.1.0-rc.1." >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Homebrew tap configuration
+        env:
+          TAP_REPOSITORY: ${{ env.HOMEBREW_TAP_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+            echo "Missing HOMEBREW_TAP_TOKEN. Create a token that can push to the Homebrew tap repository." >&2
+            exit 1
+          fi
+
+          if [[ -z "${TAP_REPOSITORY:-}" ]]; then
+            echo "Using default Homebrew tap repository: $DEFAULT_HOMEBREW_TAP_REPOSITORY"
+          fi
+
+      - name: Verify published stable release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_JSON="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,url)"
+          IS_DRAFT="$(printf '%s' "$RELEASE_JSON" | jq -r '.isDraft')"
+          IS_PRERELEASE="$(printf '%s' "$RELEASE_JSON" | jq -r '.isPrerelease')"
+
+          if [[ "$IS_DRAFT" != "false" ]]; then
+            echo "Release $TAG is still a draft. Publish the GitHub release before updating Homebrew." >&2
+            exit 1
+          fi
+
+          if [[ "$IS_PRERELEASE" != "false" ]]; then
+            echo "Release $TAG is marked as a prerelease. Homebrew tap updates are limited to published stable releases." >&2
+            exit 1
+          fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.release_meta.outputs.tag }}
+
+      - name: Resolve DMG assets
+        id: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ASSETS_JSON="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets)"
+
+          ARM_COUNT="$(printf '%s' "$ASSETS_JSON" | jq '[.assets[] | select(.name | test("\\.dmg$"; "i")) | select(.name | test("(aarch64|arm64)"; "i"))] | length')"
+          INTEL_COUNT="$(printf '%s' "$ASSETS_JSON" | jq '[.assets[] | select(.name | test("\\.dmg$"; "i")) | select(.name | test("(x64|x86_64|amd64|intel)"; "i"))] | length')"
+
+          if [[ "$ARM_COUNT" != "1" || "$INTEL_COUNT" != "1" ]]; then
+            echo "Expected exactly one arm64 DMG and one Intel DMG on release $TAG." >&2
+            printf '%s' "$ASSETS_JSON" | jq -r '.assets[].name' >&2
+            exit 1
+          fi
+
+          ARM_ASSET_NAME="$(printf '%s' "$ASSETS_JSON" | jq -r '.assets[] | select(.name | test("\\.dmg$"; "i")) | select(.name | test("(aarch64|arm64)"; "i")) | .name')"
+          INTEL_ASSET_NAME="$(printf '%s' "$ASSETS_JSON" | jq -r '.assets[] | select(.name | test("\\.dmg$"; "i")) | select(.name | test("(x64|x86_64|amd64|intel)"; "i")) | .name')"
+
+          echo "arm_asset_name=$ARM_ASSET_NAME" >> "$GITHUB_OUTPUT"
+          echo "intel_asset_name=$INTEL_ASSET_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Download DMG assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+          ARM_ASSET_NAME: ${{ steps.assets.outputs.arm_asset_name }}
+          INTEL_ASSET_NAME: ${{ steps.assets.outputs.intel_asset_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/homebrew-assets"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/homebrew-assets" --pattern "$ARM_ASSET_NAME"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/homebrew-assets" --pattern "$INTEL_ASSET_NAME"
+
+      - name: Compute asset checksums
+        id: checksums
+        env:
+          ARM_ASSET_NAME: ${{ steps.assets.outputs.arm_asset_name }}
+          INTEL_ASSET_NAME: ${{ steps.assets.outputs.intel_asset_name }}
+        run: |
+          set -euo pipefail
+          ARM_SHA256="$(sha256sum "$RUNNER_TEMP/homebrew-assets/$ARM_ASSET_NAME" | cut -d ' ' -f 1)"
+          INTEL_SHA256="$(sha256sum "$RUNNER_TEMP/homebrew-assets/$INTEL_ASSET_NAME" | cut -d ' ' -f 1)"
+
+          echo "arm_sha256=$ARM_SHA256" >> "$GITHUB_OUTPUT"
+          echo "intel_sha256=$INTEL_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Checkout Homebrew tap repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPOSITORY || env.DEFAULT_HOMEBREW_TAP_REPOSITORY }}
+          ref: ${{ env.HOMEBREW_TAP_BRANCH || env.DEFAULT_HOMEBREW_TAP_BRANCH }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Render Homebrew cask
+        env:
+          VERSION: ${{ steps.release_meta.outputs.version }}
+          ARM_ASSET_NAME: ${{ steps.assets.outputs.arm_asset_name }}
+          ARM_SHA256: ${{ steps.checksums.outputs.arm_sha256 }}
+          INTEL_ASSET_NAME: ${{ steps.assets.outputs.intel_asset_name }}
+          INTEL_SHA256: ${{ steps.checksums.outputs.intel_sha256 }}
+        run: |
+          set -euo pipefail
+          bun run release:homebrew:cask \
+            --version "$VERSION" \
+            --repository "$GITHUB_REPOSITORY" \
+            --arm-asset-name "$ARM_ASSET_NAME" \
+            --arm-sha256 "$ARM_SHA256" \
+            --intel-asset-name "$INTEL_ASSET_NAME" \
+            --intel-sha256 "$INTEL_SHA256" \
+            --output "homebrew-tap/Casks/openducktor.rb"
+
+      - name: Commit and push tap update
+        id: tap_commit
+        env:
+          TAP_BRANCH: ${{ env.HOMEBREW_TAP_BRANCH || env.DEFAULT_HOMEBREW_TAP_BRANCH }}
+          VERSION: ${{ steps.release_meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          git -C homebrew-tap config user.name "github-actions[bot]"
+          git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C homebrew-tap add Casks/openducktor.rb
+
+          if git -C homebrew-tap diff --cached --quiet; then
+            echo "created_commit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git -C homebrew-tap commit -m "openducktor ${VERSION}"
+          git -C homebrew-tap push origin HEAD:"$TAP_BRANCH"
+          echo "created_commit=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish workflow summary
+        env:
+          TAG: ${{ steps.release_meta.outputs.tag }}
+          TAP_BRANCH: ${{ env.HOMEBREW_TAP_BRANCH || env.DEFAULT_HOMEBREW_TAP_BRANCH }}
+          TAP_REPOSITORY: ${{ env.HOMEBREW_TAP_REPOSITORY || env.DEFAULT_HOMEBREW_TAP_REPOSITORY }}
+          CREATED_COMMIT: ${{ steps.tap_commit.outputs.created_commit }}
+        run: |
+          {
+            echo "## Homebrew tap updated"
+            echo
+            echo "- Release tag: $TAG"
+            echo "- Tap repository: $TAP_REPOSITORY"
+            echo "- Tap branch: $TAP_BRANCH"
+            echo "- Cask path: Casks/openducktor.rb"
+            echo "- Commit created: ${CREATED_COMMIT:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"

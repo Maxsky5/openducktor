@@ -9,6 +9,7 @@ The release flow is split into three workflows:
 - `.github/workflows/release-prep.yml`
 - `.github/workflows/release-desktop.yml`
 - `.github/workflows/publish-mcp.yml`
+- `.github/workflows/publish-homebrew-tap.yml`
 
 ### 1. Prepare Release
 
@@ -56,6 +57,21 @@ It:
 - verifies the MCP package
 - publishes `@openducktor/mcp` to npmjs
 
+### 4. Publish Homebrew Tap
+
+`Publish Homebrew Tap` runs when a GitHub release is published and can also be rerun manually with the same tag if needed.
+
+It:
+
+- verifies that the GitHub release exists and is no longer a draft
+- rejects prereleases so the tap only tracks stable published desktop releases
+- downloads the signed macOS arm64 and Intel DMG assets from that release
+- computes SHA-256 checksums for both assets
+- renders `Casks/openducktor.rb` from repo metadata plus the published asset names and checksums
+- commits and pushes the cask update to the configured Homebrew tap repository
+
+The tap workflow is intentionally separate from `Release Desktop` because the release draft remains private to maintainers until smoke testing is complete. Homebrew should only point at the final published GitHub release.
+
 ## Why this design
 
 OpenDucktor uses a CEF-specific Tauri flow:
@@ -98,6 +114,18 @@ Notes:
 
 - None. MCP publishing uses npm Trusted Publisher via GitHub Actions OIDC.
 
+### Homebrew tap secret
+
+- `HOMEBREW_TAP_TOKEN`
+
+Notes:
+
+- The token must be able to push to the Homebrew tap repository.
+- By default the workflow targets `${owner}/homebrew-openducktor` on branch `main`.
+- You can override those defaults with repository variables:
+  - `HOMEBREW_TAP_REPOSITORY`
+  - `HOMEBREW_TAP_BRANCH`
+
 ### Release automation secret
 
 - `RELEASE_AUTOMATION_TOKEN`
@@ -133,9 +161,29 @@ The helper script remains useful because this repo spans three version domains:
 6. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
 7. Open the draft GitHub release and smoke-test the desktop assets.
 8. Publish the draft release when the assets and notes look correct.
+9. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
+
+## Homebrew tap setup
+
+Before the first Homebrew release, create the tap repository and grant the workflow push access.
+
+Recommended defaults:
+
+- repository: `homebrew-openducktor`
+- path: `Casks/openducktor.rb`
+- default branch: `main`
+
+Once the tap exists and the workflow is configured, users can install OpenDucktor with:
+
+```sh
+brew tap Maxsky5/openducktor
+brew install --cask openducktor
+```
 
 ## Asset policy for the first release line
 
 OpenDucktor is currently macOS-first, so the desktop workflow publishes macOS artifacts only.
 
 The workflow does **not** generate a public updater channel yet. That should wait until the in-app updater flow is explicitly wired and tested. The current release pipeline is focused on reliable GitHub Releases distribution first, plus npm publishing for `@openducktor/mcp`.
+
+Homebrew distribution also stays GitHub Releases based. The cask generator fails if the desktop asset naming stops being architecture-derivable, so maintainers update the generator at the same time the bundle naming changes instead of silently publishing a broken cask.
