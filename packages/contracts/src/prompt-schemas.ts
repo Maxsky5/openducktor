@@ -40,6 +40,7 @@ export const agentPromptPlaceholderValues = [
   "task.status",
   "task.qaRequired",
   "task.description",
+  "humanFeedback",
   "git.operationLabel",
   "git.currentBranch",
   "git.targetBranch",
@@ -49,6 +50,12 @@ export const agentPromptPlaceholderValues = [
 export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
 const AGENT_PROMPT_PLACEHOLDER_SET = new Set<string>(agentPromptPlaceholderValues);
+
+const REQUIRED_PLACEHOLDERS_BY_TEMPLATE: Partial<
+  Record<AgentPromptTemplateId, AgentPromptPlaceholder[]>
+> = {
+  "kickoff.build_after_human_request_changes": ["humanFeedback"],
+};
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
@@ -68,15 +75,25 @@ export const extractPromptTemplatePlaceholders = (template: string): string[] =>
   return tokens;
 };
 
-export const validatePromptTemplatePlaceholders = (template: string) => {
+export const validatePromptTemplatePlaceholders = (
+  template: string,
+  templateId?: AgentPromptTemplateId,
+) => {
   const placeholders = extractPromptTemplatePlaceholders(template);
   const unsupportedPlaceholders = placeholders.filter(
     (placeholder) => !AGENT_PROMPT_PLACEHOLDER_SET.has(placeholder),
+  );
+  const requiredPlaceholders = templateId
+    ? (REQUIRED_PLACEHOLDERS_BY_TEMPLATE[templateId] ?? [])
+    : [];
+  const missingRequiredPlaceholders = requiredPlaceholders.filter(
+    (placeholder) => !placeholders.includes(placeholder),
   );
 
   return {
     placeholders,
     unsupportedPlaceholders,
+    missingRequiredPlaceholders,
   };
 };
 

@@ -299,6 +299,26 @@ describe("kickoff and permission prompts", () => {
     expect(prompt.split("\n")).toHaveLength(3);
   });
 
+  test("human-review kickoff embeds the requested feedback into the kickoff instructions", () => {
+    const prompt = buildAgentKickoffPrompt({
+      role: "build",
+      scenario: "build_after_human_request_changes",
+      task: {
+        taskId: "task-1",
+      },
+      extraPlaceholders: {
+        humanFeedback: "Update the task summary and rerun the desktop tests.",
+      },
+    });
+
+    expectPromptToContainAll(prompt, [
+      "Review the requested changes below plus the current spec, plan, and affected code before editing.",
+      "Requested changes from human review:",
+      "Update the task summary and rerun the desktop tests.",
+      "Use taskId task-1 for every odt_* tool call.",
+    ]);
+  });
+
   test("spec, planner, and qa kickoffs reinforce role-specific posture", () => {
     const specPrompt = buildAgentKickoffPrompt({
       role: "spec",
@@ -360,6 +380,45 @@ describe("kickoff and permission prompts", () => {
 
     expect(result.prompt).toBe("Planner kickoff task-2 / desc");
     expect(result.templates[0]?.source).toBe("override");
+  });
+
+  test("rejects human-review kickoff overrides that omit the feedback placeholder", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        task: {
+          taskId: "task-2",
+        },
+        extraPlaceholders: {
+          humanFeedback: "Tighten the validation copy.",
+        },
+        overrides: {
+          "kickoff.build_after_human_request_changes": {
+            template: "Review {{task.id}} before editing.",
+            baseVersion: 3,
+            enabled: true,
+          },
+        },
+      }),
+    ).toThrow(
+      'Prompt template "kickoff.build_after_human_request_changes" is missing required placeholder "humanFeedback".',
+    );
+  });
+
+  test("rejects empty human-feedback placeholder values", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        task: {
+          taskId: "task-3",
+        },
+        extraPlaceholders: {
+          humanFeedback: "   ",
+        },
+      }),
+    ).toThrow('Prompt placeholder "humanFeedback" must not be empty.');
   });
 
   test("pull request generation kickoff supports reused sessions and forks", () => {

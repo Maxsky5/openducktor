@@ -81,6 +81,8 @@ const toError = (error: unknown): Error => {
   return error instanceof Error ? error : new Error(String(error));
 };
 
+const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
+
 const buildPostStartMessage = async ({
   activeRepo,
   queryClient,
@@ -92,12 +94,19 @@ const buildPostStartMessage = async ({
   if (intent.postStartAction === "send_message") {
     const message = intent.message?.trim() ?? "";
     if (!message) {
-      throw new Error("Feedback message is required before sending.");
+      throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
     }
     return message;
   }
 
   const kickoffScenario = assertAgentKickoffScenario(intent.scenario);
+  const humanFeedback =
+    kickoffScenario === "build_after_human_request_changes"
+      ? (intent.message?.trim() ?? "")
+      : undefined;
+  if (kickoffScenario === "build_after_human_request_changes" && !humanFeedback) {
+    throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
+  }
   const promptOverrides = activeRepo
     ? await loadEffectivePromptOverrides(activeRepo, queryClient)
     : undefined;
@@ -118,6 +127,13 @@ const buildPostStartMessage = async ({
 
   return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
     overrides: promptOverrides ?? {},
+    ...(humanFeedback
+      ? {
+          extraPlaceholders: {
+            humanFeedback,
+          },
+        }
+      : {}),
     ...(git ? { git } : {}),
     task:
       task === null

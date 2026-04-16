@@ -186,7 +186,7 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
                     (modified, path)
                 })
                 .collect::<Vec<_>>();
-            ranked_matches.sort_by(|left, right| right.0.cmp(&left.0));
+            ranked_matches.sort_by_key(|entry| std::cmp::Reverse(entry.0));
             ranked_matches
                 .into_iter()
                 .map(|(_, path)| path)

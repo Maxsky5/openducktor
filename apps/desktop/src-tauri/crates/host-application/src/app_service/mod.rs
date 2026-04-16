@@ -30,9 +30,9 @@ mod opencode_runtime;
 mod opencode_session_status;
 mod process_registry;
 mod repo_init;
-mod runtime_startup;
 mod runtime_orchestrator;
 mod runtime_registry;
+mod runtime_startup;
 mod service_core;
 mod startup_metrics;
 mod system_workspace_git;
@@ -50,11 +50,11 @@ pub use odt_mcp::{
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
     OdtTaskResult, OdtTaskSummary,
 };
-pub use runtime_startup::{RuntimeStartupFailureReason, RuntimeStartupWaitFailure};
 pub(crate) use runtime_startup::{
     startup_wait_failure, startup_wait_report, RuntimeStartupReadinessPolicy,
     RuntimeStartupWaitReport,
 };
+pub use runtime_startup::{RuntimeStartupFailureReason, RuntimeStartupWaitFailure};
 #[cfg(test)]
 pub(crate) type OpencodeStartupReadinessPolicy = RuntimeStartupReadinessPolicy;
 #[cfg(test)]

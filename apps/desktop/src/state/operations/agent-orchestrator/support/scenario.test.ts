@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { resolveBuildRequestChangesScenario } from "@/lib/build-scenarios";
 import { inferScenario, kickoffPrompt } from "./scenario";
 
 const taskFixture: TaskCard = {
@@ -48,6 +49,16 @@ describe("agent-orchestrator/support/scenario", () => {
         },
       }),
     ).toBe("build_after_qa_rejected");
+  });
+
+  test("uses the human-request-changes scenario for request-changes modal flows regardless of task review status", () => {
+    expect(resolveBuildRequestChangesScenario({ ...taskFixture, status: "human_review" })).toBe(
+      "build_after_human_request_changes",
+    );
+
+    expect(resolveBuildRequestChangesScenario({ ...taskFixture, status: "ai_review" })).toBe(
+      "build_after_human_request_changes",
+    );
   });
 
   test("includes task id instruction in kickoff prompts", () => {

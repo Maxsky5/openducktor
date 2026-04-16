@@ -1,21 +1,19 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
 import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
+import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
 } from "@/features/human-review-feedback/human-review-feedback-state";
-import type {
-  HumanReviewFeedbackModalModel,
-  HumanReviewFeedbackState,
-  PendingHumanReviewHydration,
-} from "@/features/human-review-feedback/human-review-feedback-types";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import {
   buildReusableSessionOptions,
   firstScenario,
@@ -25,7 +23,6 @@ import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { confirmHumanReviewFeedbackFlow } from "./kanban-human-review-feedback";
 import type {
   KanbanResolvedSessionStartIntent,
   KanbanSessionStartIntent,
@@ -157,10 +154,6 @@ export function useKanbanSessionStartFlow({
   const queryClient = useQueryClient();
   const tasksRef = useRef(tasks);
   const sessionsRef = useRef(sessions);
-  const [pendingHumanReviewHydration, setPendingHumanReviewHydration] =
-    useState<PendingHumanReviewHydration | null>(null);
-  const [humanReviewFeedbackState, setHumanReviewFeedbackState] =
-    useState<HumanReviewFeedbackState | null>(null);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
@@ -172,20 +165,14 @@ export function useKanbanSessionStartFlow({
   tasksRef.current = tasks;
   sessionsRef.current = sessions;
 
-  useEffect(() => {
-    if (!pendingHumanReviewHydration) {
-      return;
-    }
-
-    if (sessions === pendingHumanReviewHydration.baselineSessions) {
-      return;
-    }
-
-    const { taskId } = pendingHumanReviewHydration;
-    const builderSessions = findSessionsByRoleForTask(sessions, taskId, "build");
-    setHumanReviewFeedbackState(createHumanReviewFeedbackState(tasks, taskId, builderSessions));
-    setPendingHumanReviewHydration(null);
-  }, [pendingHumanReviewHydration, sessions, tasks]);
+  const {
+    clearHumanReviewFeedback,
+    humanReviewFeedbackState,
+    openHumanReviewFeedback,
+    setHumanReviewFeedbackState,
+  } = useHumanReviewFeedbackController({
+    createState: (taskId) => createHumanReviewFeedbackState(tasksRef.current, taskId),
+  });
 
   const openAgents = useCallback(
     (taskId: string, role: AgentRole, scenario?: AgentScenario): void => {
@@ -302,20 +289,8 @@ export function useKanbanSessionStartFlow({
       return;
     }
 
-    setHumanReviewFeedbackState(null);
-  }, [isSubmittingHumanReviewFeedback]);
-
-  const openAgentStudioSession = useCallback(
-    (taskId: string, session: AgentSessionSummary): void => {
-      const params = new URLSearchParams({
-        task: taskId,
-        session: session.sessionId,
-        agent: session.role,
-      });
-      navigate(`/agents?${params.toString()}`);
-    },
-    [navigate],
-  );
+    clearHumanReviewFeedback();
+  }, [clearHumanReviewFeedback, isSubmittingHumanReviewFeedback]);
 
   const onPullRequestGenerate = useCallback(
     async (taskId: string): Promise<string | undefined> => {
@@ -456,32 +431,9 @@ export function useKanbanSessionStartFlow({
 
   const onHumanRequestChanges = useCallback(
     (taskId: string): void => {
-      void (async () => {
-        try {
-          const baselineSessions = sessionsRef.current;
-          await bootstrapTaskSessions(taskId);
-
-          const currentTasks = tasksRef.current;
-          const currentBuilderSessions = findSessionsByRoleForTask(
-            sessionsRef.current,
-            taskId,
-            "build",
-          );
-
-          if (currentBuilderSessions.length > 0) {
-            setHumanReviewFeedbackState(
-              createHumanReviewFeedbackState(currentTasks, taskId, currentBuilderSessions),
-            );
-            return;
-          }
-
-          setPendingHumanReviewHydration({ taskId, baselineSessions });
-        } catch {
-          setPendingHumanReviewHydration(null);
-        }
-      })();
+      openHumanReviewFeedback(taskId);
     },
-    [bootstrapTaskSessions],
+    [openHumanReviewFeedback],
   );
 
   const confirmHumanReviewFeedback = useCallback(async (): Promise<void> => {
@@ -491,19 +443,29 @@ export function useKanbanSessionStartFlow({
 
     setIsSubmittingHumanReviewFeedback(true);
     try {
-      await confirmHumanReviewFeedbackFlow({
+      const result = await submitHumanReviewFeedback({
         state: humanReviewFeedbackState,
-        humanRequestChangesTask,
-        hydrateRequestedTaskSessionHistory,
-        openSessionStartModal: (intent) => {
-          void startSessionIntent(intent);
-        },
-        openAgentStudioSession,
-        sendAgentMessage,
-        onDismiss: () => {
-          setHumanReviewFeedbackState(null);
-        },
+        builderSessions: findSessionsByRoleForTask(
+          sessionsRef.current,
+          humanReviewFeedbackState.taskId,
+          "build",
+        ),
+        startRequestChangesSession: (request) =>
+          startSessionIntent({
+            taskId: request.taskId,
+            role: request.role,
+            scenario: request.scenario,
+            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
+            existingSessionOptions: request.existingSessionOptions,
+            ...(request.sourceSessionId ? { sourceSessionId: request.sourceSessionId } : {}),
+            postStartAction: request.postStartAction,
+            message: request.message,
+            beforeStartAction: request.beforeStartAction,
+          }),
       });
+      if (result.outcome === "started") {
+        clearHumanReviewFeedback();
+      }
     } catch (error) {
       toast.error("Failed to prepare the Builder session.", {
         description: error instanceof Error ? error.message : "Unknown error",
@@ -511,14 +473,7 @@ export function useKanbanSessionStartFlow({
     } finally {
       setIsSubmittingHumanReviewFeedback(false);
     }
-  }, [
-    humanRequestChangesTask,
-    humanReviewFeedbackState,
-    hydrateRequestedTaskSessionHistory,
-    openAgentStudioSession,
-    startSessionIntent,
-    sendAgentMessage,
-  ]);
+  }, [clearHumanReviewFeedback, humanReviewFeedbackState, startSessionIntent]);
 
   const humanReviewFeedbackModal = useMemo<HumanReviewFeedbackModalModel | null>(() => {
     if (!humanReviewFeedbackState) {
@@ -529,15 +484,8 @@ export function useKanbanSessionStartFlow({
       state: humanReviewFeedbackState,
       isSubmitting: isSubmittingHumanReviewFeedback,
       onDismiss: closeHumanReviewFeedbackModal,
-      onTargetChange: (selectedTarget: string) => {
-        setHumanReviewFeedbackState((current: HumanReviewFeedbackState | null) =>
-          current ? { ...current, selectedTarget } : current,
-        );
-      },
       onMessageChange: (message: string) => {
-        setHumanReviewFeedbackState((current: HumanReviewFeedbackState | null) =>
-          current ? { ...current, message } : current,
-        );
+        setHumanReviewFeedbackState((current) => (current ? { ...current, message } : current));
       },
       onConfirm: confirmHumanReviewFeedback,
     });
@@ -546,6 +494,7 @@ export function useKanbanSessionStartFlow({
     confirmHumanReviewFeedback,
     humanReviewFeedbackState,
     isSubmittingHumanReviewFeedback,
+    setHumanReviewFeedbackState,
   ]);
 
   return {

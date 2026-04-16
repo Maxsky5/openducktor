@@ -270,6 +270,10 @@ export const removePromptOverride = (
 
 type PromptOverrideValidationErrors = Partial<Record<AgentPromptTemplateId, string>>;
 
+const formatPlaceholders = (placeholders: string[]): string => {
+  return placeholders.map((placeholder) => `{{${placeholder}}}`).join(", ");
+};
+
 export const buildPromptOverrideValidationErrors = (
   overrides: RepoPromptOverrides,
 ): PromptOverrideValidationErrors => {
@@ -282,16 +286,27 @@ export const buildPromptOverrideValidationErrors = (
       continue;
     }
 
-    const { unsupportedPlaceholders } = validatePromptTemplatePlaceholders(override.template);
-    if (unsupportedPlaceholders.length === 0) {
+    const { unsupportedPlaceholders, missingRequiredPlaceholders } =
+      validatePromptTemplatePlaceholders(override.template, templateId);
+    if (unsupportedPlaceholders.length === 0 && missingRequiredPlaceholders.length === 0) {
       continue;
     }
 
-    const formattedPlaceholders = unsupportedPlaceholders
-      .map((placeholder) => `{{${placeholder}}}`)
-      .join(", ");
-    const suffix = unsupportedPlaceholders.length > 1 ? "s" : "";
-    errors[templateId] = `Unsupported placeholder${suffix}: ${formattedPlaceholders}.`;
+    const messages: string[] = [];
+    if (unsupportedPlaceholders.length > 0) {
+      const suffix = unsupportedPlaceholders.length > 1 ? "s" : "";
+      messages.push(
+        `Unsupported placeholder${suffix}: ${formatPlaceholders(unsupportedPlaceholders)}.`,
+      );
+    }
+    if (missingRequiredPlaceholders.length > 0) {
+      const suffix = missingRequiredPlaceholders.length > 1 ? "s" : "";
+      messages.push(
+        `Missing required placeholder${suffix}: ${formatPlaceholders(missingRequiredPlaceholders)}.`,
+      );
+    }
+
+    errors[templateId] = messages.join(" ");
   }
 
   return errors;

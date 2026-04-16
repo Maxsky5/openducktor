@@ -993,19 +993,10 @@ describe("KanbanPage session start modal flow", () => {
       );
     });
 
-    expect(bootstrapTaskSessionsMock).toHaveBeenCalledWith("TASK-123");
+    expect(bootstrapTaskSessionsMock).not.toHaveBeenCalled();
     expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
     expect(latestHumanReviewFeedbackModalModel?.open).toBe(true);
-    expect(latestHumanReviewFeedbackModalModel?.selectedTarget).toBe("session-build-latest");
-    expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ value: "new_session" }),
-        expect.objectContaining({ value: "session-build-latest", secondaryLabel: "Latest" }),
-        expect.objectContaining({ value: "session-build-older" }),
-      ]),
-    );
-    expect(typeof latestHumanReviewFeedbackModalModel?.message).toBe("string");
-    expect(String(latestHumanReviewFeedbackModalModel?.message)).toContain("TASK-123");
+    expect(latestHumanReviewFeedbackModalModel?.message).toBe("");
     expect(latestSessionStartModalModel).toBeNull();
 
     await act(async () => {
@@ -1013,7 +1004,7 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("human request changes can target a selected existing builder session", async () => {
+  test("human request changes opens the shared start modal with reuse selected by default", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
     const renderer = await renderPage();
 
@@ -1024,49 +1015,45 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     await act(async () => {
-      (latestHumanReviewFeedbackModalModel?.onTargetChange as (value: string) => void)(
-        "session-build-older",
-      );
       (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
         "Apply the requested human review changes.",
       );
     });
 
     await act(async () => {
-      await (latestHumanReviewFeedbackModalModel?.onConfirm as () => Promise<void>)();
+      void (
+        latestHumanReviewFeedbackModalModel?.onConfirm as (() => Promise<void>) | undefined
+      )?.();
       await Promise.resolve();
     });
 
-    expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
-      "TASK-123",
-      "Apply the requested human review changes.",
-    );
-    expect(bootstrapTaskSessionsMock).toHaveBeenCalledWith("TASK-123");
-    expect(hydrateRequestedTaskSessionHistoryMock).toHaveBeenCalledWith({
-      taskId: "TASK-123",
-      sessionId: "session-build-older",
-    });
+    await waitForSessionStartModalReady();
+
+    expect(bootstrapTaskSessionsMock).not.toHaveBeenCalled();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).toHaveBeenCalledWith("session-build-older", [
-      { kind: "text", text: "Apply the requested human review changes." },
+    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(latestSessionStartModalModel?.open).toBe(true);
+    expect(latestSessionStartModalModel?.selectedStartMode).toBe("reuse");
+    expect(latestSessionStartModalModel?.selectedSourceSessionId).toBe("session-build-latest");
+    expect(latestSessionStartModalModel?.existingSessionOptions).toEqual([
+      expect.objectContaining({ value: "session-build-latest" }),
+      expect.objectContaining({ value: "session-build-older" }),
     ]);
-    expect(latestLocation).toContain("/agents?task=TASK-123");
-    expect(latestLocation).toContain("session=session-build-older");
-    expect(latestLocation).toContain("agent=build");
-    expect(latestSessionStartModalModel).toBeNull();
 
     await act(async () => {
       renderer.unmount();
     });
   });
 
-  test("human request changes falls back to new-session mode when no builder session exists", async () => {
+  test("human request changes opens the shared start modal in fresh mode when no builder session exists", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
     const [specSession] = currentSessionsFixture;
     expect(specSession).toBeDefined();
     currentSessionsFixture = specSession ? [specSession] : [];
+    const sessionsBeforeBootstrap = currentSessionsFixture;
     bootstrapTaskSessionsMock.mockImplementationOnce(async () => {
-      currentSessionsFixture = [...currentSessionsFixture];
+      currentSessionsFixture = sessionsBeforeBootstrap;
     });
     const renderer = await renderPage();
 
@@ -1076,42 +1063,34 @@ describe("KanbanPage session start modal flow", () => {
       );
     });
 
-    expect(latestHumanReviewFeedbackModalModel?.selectedTarget).toBe("new_session");
-    expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual([
-      expect.objectContaining({ value: "new_session" }),
-    ]);
+    expect(latestHumanReviewFeedbackModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
+        "Use a fresh builder session for these changes.",
+      );
+    });
+
+    await act(async () => {
+      void (
+        latestHumanReviewFeedbackModalModel?.onConfirm as (() => Promise<void>) | undefined
+      )?.();
+      await Promise.resolve();
+    });
+
+    await waitForSessionStartModalReady();
+
+    expect(latestSessionStartModalModel?.open).toBe(true);
+    expect(latestSessionStartModalModel?.selectedStartMode).toBe("fresh");
+    expect(latestSessionStartModalModel?.existingSessionOptions).toEqual([]);
 
     await act(async () => {
       renderer.unmount();
     });
   });
 
-  test("human request changes detects builder sessions loaded on demand before opening modal", async () => {
+  test("canceling request-changes session selection restores the feedback draft", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
-    const [specSession] = currentSessionsFixture;
-    expect(specSession).toBeDefined();
-    currentSessionsFixture = specSession ? [specSession] : [];
-    bootstrapTaskSessionsMock.mockImplementation(async (taskId: string) => {
-      if (taskId !== "TASK-123") {
-        return;
-      }
-
-      currentSessionsFixture = [
-        ...currentSessionsFixture,
-        {
-          runtimeKind: "opencode",
-          sessionId: "session-build-hydrated",
-          taskId: "TASK-123",
-          role: "build",
-          scenario: "build_implementation_start",
-          status: "idle",
-          startedAt: "2026-01-03T00:00:00.000Z",
-          updatedAt: "2026-01-03T00:00:00.000Z",
-          pendingPermissions: 0,
-          pendingQuestions: 0,
-        },
-      ];
-    });
     const renderer = await renderPage();
 
     await act(async () => {
@@ -1120,14 +1099,32 @@ describe("KanbanPage session start modal flow", () => {
       );
     });
 
-    expect(bootstrapTaskSessionsMock).toHaveBeenCalledWith("TASK-123");
-    expect(latestHumanReviewFeedbackModalModel?.selectedTarget).toBe("session-build-hydrated");
-    expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ value: "new_session" }),
-        expect.objectContaining({ value: "session-build-hydrated", secondaryLabel: "Latest" }),
-      ]),
-    );
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
+        "Keep this request-changes draft.",
+      );
+    });
+
+    await act(async () => {
+      void (
+        latestHumanReviewFeedbackModalModel?.onConfirm as (() => Promise<void>) | undefined
+      )?.();
+      await Promise.resolve();
+    });
+
+    await waitForSessionStartModalReady();
+
+    expect(latestSessionStartModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onOpenChange as (open: boolean) => void)(false);
+    });
+
+    await waitFor(() => {
+      expect(latestSessionStartModalModel).toBeNull();
+      expect(latestHumanReviewFeedbackModalModel?.open).toBe(true);
+      expect(latestHumanReviewFeedbackModalModel?.message).toBe("Keep this request-changes draft.");
+    });
 
     await act(async () => {
       renderer.unmount();

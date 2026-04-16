@@ -586,7 +586,7 @@ describe("useKanbanSessionStartFlow", () => {
     }
   });
 
-  test("human review new-session feedback opens the shared start modal in fresh mode", async () => {
+  test("human review feedback opens the shared start modal with reuse selected by default when builder sessions exist", async () => {
     const bootstrapTaskSessions = mock(async () => {});
     const humanRequestChangesTask = mock(async () => {});
     const startAgentSession = mock(async () => "session-new");
@@ -600,26 +600,29 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await harness.mount();
-    await harness.run(async (state) => {
-      await state.onHumanRequestChanges("TASK-1");
+    await harness.waitFor((state) => state !== null);
+    await harness.run((state) => {
+      state.onHumanRequestChanges("TASK-1");
     });
 
     const feedbackModal = harness.getLatest().humanReviewFeedbackModal;
     expect(feedbackModal).not.toBeNull();
+    expect(feedbackModal?.message).toBe("");
 
     await harness.run(async () => {
-      feedbackModal?.onTargetChange("new_session");
-      feedbackModal?.onMessageChange("Use a fresh builder session for these changes.");
+      feedbackModal?.onMessageChange("Use the latest builder session for these changes.");
     });
 
-    await harness.run(async () => {
-      await harness.getLatest().humanReviewFeedbackModal?.onConfirm();
+    await harness.run(() => {
+      void harness.getLatest().humanReviewFeedbackModal?.onConfirm();
     });
 
+    await harness.waitFor((state) => state.sessionStartModal !== null);
     const sessionStartModal = harness.getLatest().sessionStartModal;
     expect(sessionStartModal).not.toBeNull();
     expect(sessionStartModal?.open).toBe(true);
-    expect(sessionStartModal?.selectedStartMode).toBe("fresh");
+    expect(sessionStartModal?.selectedStartMode).toBe("reuse");
+    expect(sessionStartModal?.selectedSourceSessionId).toBe("builder-session-2");
     expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
     expect(sessionStartModal?.existingSessionOptions).toEqual([
       expect.objectContaining({ value: "builder-session-2" }),
@@ -632,7 +635,45 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("ai review new-session feedback opens the shared start modal in fresh mode", async () => {
+  test("human review feedback opens the shared start modal in fresh mode when no builder session exists", async () => {
+    const [task] = createBaseArgs().tasks;
+    expect(task).toBeDefined();
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      tasks: task ? [task] : [],
+      sessions: [],
+      bootstrapTaskSessions: mock(async () => {}),
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state !== null);
+    await harness.run((state) => {
+      state.onHumanRequestChanges("TASK-1");
+    });
+
+    expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
+
+    await harness.run(async (state) => {
+      state.humanReviewFeedbackModal?.onMessageChange(
+        "Use a fresh builder session for these changes.",
+      );
+    });
+
+    await harness.run((state) => {
+      void state.humanReviewFeedbackModal?.onConfirm();
+    });
+
+    await harness.waitFor((state) => state.sessionStartModal !== null);
+    const sessionStartModal = harness.getLatest().sessionStartModal;
+    expect(sessionStartModal).not.toBeNull();
+    expect(sessionStartModal?.open).toBe(true);
+    expect(sessionStartModal?.selectedStartMode).toBe("fresh");
+    expect(sessionStartModal?.existingSessionOptions).toEqual([]);
+
+    await harness.unmount();
+  });
+
+  test("ai review feedback opens the shared start modal with reuse selected by default", async () => {
     const bootstrapTaskSessions = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -641,27 +682,65 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await harness.mount();
-    await harness.run(async (state) => {
-      await state.onHumanRequestChanges("TASK-1");
+    await harness.waitFor((state) => state !== null);
+    await harness.run((state) => {
+      state.onHumanRequestChanges("TASK-1");
     });
 
     const feedbackModal = harness.getLatest().humanReviewFeedbackModal;
     expect(feedbackModal).not.toBeNull();
 
     await harness.run(async () => {
-      feedbackModal?.onTargetChange("new_session");
       feedbackModal?.onMessageChange("Please address the AI review feedback in a fresh session.");
     });
 
-    await harness.run(async () => {
-      await harness.getLatest().humanReviewFeedbackModal?.onConfirm();
+    await harness.run(() => {
+      void harness.getLatest().humanReviewFeedbackModal?.onConfirm();
     });
 
+    await harness.waitFor((state) => state.sessionStartModal !== null);
     const sessionStartModal = harness.getLatest().sessionStartModal;
     expect(sessionStartModal).not.toBeNull();
     expect(sessionStartModal?.open).toBe(true);
-    expect(sessionStartModal?.selectedStartMode).toBe("fresh");
+    expect(sessionStartModal?.selectedStartMode).toBe("reuse");
+    expect(sessionStartModal?.selectedSourceSessionId).toBe("builder-session-2");
     expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
+
+    await harness.unmount();
+  });
+
+  test("canceling the shared request-changes start modal restores the feedback draft", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      bootstrapTaskSessions: mock(async () => {}),
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state !== null);
+    await harness.run((state) => {
+      state.onHumanRequestChanges("TASK-1");
+    });
+
+    await harness.run(async (state) => {
+      state.humanReviewFeedbackModal?.onMessageChange("Keep this request-changes draft.");
+    });
+
+    await harness.run((state) => {
+      void state.humanReviewFeedbackModal?.onConfirm();
+    });
+
+    await harness.waitFor((state) => state.sessionStartModal !== null);
+
+    await harness.run((state) => {
+      state.sessionStartModal?.onOpenChange(false);
+    });
+
+    await harness.waitFor(
+      (state) =>
+        state.sessionStartModal === null &&
+        state.humanReviewFeedbackModal?.open === true &&
+        state.humanReviewFeedbackModal.message === "Keep this request-changes draft.",
+    );
 
     await harness.unmount();
   });

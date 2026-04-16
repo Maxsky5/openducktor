@@ -129,4 +129,31 @@ describe("useSettingsModalPromptValidation", () => {
 
     await harness.unmount();
   });
+
+  test("includes required-placeholder validation errors in the aggregated counts", async () => {
+    const snapshot = createSnapshot();
+    snapshot.globalPromptOverrides = {
+      "kickoff.build_after_human_request_changes": {
+        template: "Review {{task.id}} before editing.",
+        baseVersion: 3,
+        enabled: true,
+      },
+    };
+
+    const harness = createHookHarness({
+      snapshotDraft: snapshot,
+      selectedRepoPath: "/repo-a",
+    });
+
+    await harness.mount();
+    const latest = harness.getLatest();
+
+    expect(latest.hasPromptValidationErrors).toBe(true);
+    expect(
+      latest.promptValidationState.globalErrors["kickoff.build_after_human_request_changes"],
+    ).toBe("Missing required placeholder: {{humanFeedback}}.");
+    expect(latest.promptValidationState.globalErrorCount).toBe(1);
+
+    await harness.unmount();
+  });
 });

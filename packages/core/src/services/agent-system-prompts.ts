@@ -39,6 +39,7 @@ export type BuildAgentKickoffPromptInput = {
     qaRequired?: boolean;
     description?: string;
   };
+  extraPlaceholders?: Partial<Record<"humanFeedback", string>>;
   git?: AgentPromptGitContext;
   overrides?: RepoPromptOverrides;
 };
@@ -590,9 +591,9 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "kickoff.build_after_human_request_changes": {
     id: "kickoff.build_after_human_request_changes",
     purpose: "kickoff",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template:
-      "Review the requested changes plus the current spec, plan, and affected code before editing.\nImplement every requested change carefully, preserve prior must-haves, rerun relevant verification, and prepare a meaningful Conventional Commit before odt_build_completed when code changes were made.\nUse taskId {{task.id}} for every odt_* tool call.",
+      "Review the requested changes below plus the current spec, plan, and affected code before editing.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nImplement every requested change carefully, preserve prior must-haves, rerun relevant verification, and prepare a meaningful Conventional Commit before odt_build_completed when code changes were made.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
@@ -703,12 +704,20 @@ const buildToolListPlaceholder = (role: AgentRole): string => {
 const buildPlaceholderValues = ({
   role,
   task,
+  extraPlaceholders,
   git,
 }: {
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
+  extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
   git?: AgentPromptGitContext;
 }): Record<string, string> => {
+  const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
+
+  if (extraPlaceholders?.humanFeedback !== undefined && !humanFeedback) {
+    throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
+  }
+
   return {
     role,
     "role.allowedTools": buildToolListPlaceholder(role),
@@ -718,6 +727,11 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
+    ...(humanFeedback
+      ? {
+          humanFeedback,
+        }
+      : {}),
     ...(git
       ? {
           "git.operationLabel": compact(git.operationLabel),
@@ -765,10 +779,16 @@ const resolveTemplate = ({
   const source = override ? "override" : "builtin";
   const template = (override?.template ?? definition.template).trim();
 
-  const { placeholders, unsupportedPlaceholders } = validatePromptTemplatePlaceholders(template);
+  const { placeholders, unsupportedPlaceholders, missingRequiredPlaceholders } =
+    validatePromptTemplatePlaceholders(template, templateId);
   if (unsupportedPlaceholders.length > 0) {
     throw new Error(
       `Prompt template "${templateId}" uses unsupported placeholder "${unsupportedPlaceholders[0]}".`,
+    );
+  }
+  if (missingRequiredPlaceholders.length > 0) {
+    throw new Error(
+      `Prompt template "${templateId}" is missing required placeholder "${missingRequiredPlaceholders[0]}".`,
     );
   }
   for (const token of placeholders) {
@@ -800,18 +820,21 @@ const buildPromptFromTemplates = ({
   templateIds,
   role,
   task,
+  extraPlaceholders,
   git,
   overrides,
 }: {
   templateIds: AgentPromptTemplateId[];
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
+  extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
   git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {
   const placeholderValues = buildPlaceholderValues({
     role,
     task,
+    ...(extraPlaceholders ? { extraPlaceholders } : {}),
     ...(git ? { git } : {}),
   });
   const templates = templateIds.map((templateId) =>
@@ -871,6 +894,7 @@ export const buildAgentKickoffPromptBundle = (
     templateIds: [toKickoffTemplateId(input.scenario)],
     role: input.role,
     task: input.task,
+    ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : {}),
     ...(input.git ? { git: input.git } : {}),
     overrides: input.overrides,
   });

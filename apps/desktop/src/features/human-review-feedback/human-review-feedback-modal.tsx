@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogBody,
@@ -34,42 +33,31 @@ export function HumanReviewFeedbackModal({
         }
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl overflow-visible">
         <DialogHeader>
           <DialogTitle>Send Human Feedback</DialogTitle>
           <DialogDescription>
-            Choose which builder session should receive this feedback, or start a new one, then edit
-            the message that will be sent.
+            Describe the changes you want the Builder to make. The next step will use the standard
+            session-start flow to choose whether to reuse an existing Builder session or start a new
+            one.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-5 pt-2">
-          <div className="space-y-2">
-            <Label htmlFor="human-review-feedback-target">Builder Session</Label>
-            <Combobox
-              value={model.selectedTarget}
-              options={model.targetOptions}
-              disabled={model.isSubmitting}
-              placeholder="Select builder session"
-              searchPlaceholder="Search builder session..."
-              onValueChange={model.onTargetChange}
-              triggerClassName="h-11"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Your feedback (will be sent as a message to the Builder agent)</Label>
+        <DialogBody className="space-y-6 overflow-visible pt-2 pb-4">
+          <div className="space-y-3">
+            <Label htmlFor="human-review-feedback-message">Your feedback</Label>
             <Textarea
               id="human-review-feedback-message"
               value={model.message}
               disabled={model.isSubmitting}
               className="min-h-48"
+              placeholder="Describe the changes you want the Builder to make."
               onChange={(event) => model.onMessageChange(event.target.value)}
             />
           </div>
         </DialogBody>
 
-        <DialogFooter className="mt-0 justify-between border-t border-border pt-5">
+        <DialogFooter className="mt-0 justify-between border-t border-border pt-6">
           <Button
             type="button"
             variant="outline"
@@ -79,7 +67,7 @@ export function HumanReviewFeedbackModal({
             Cancel
           </Button>
           <Button type="button" disabled={confirmDisabled} onClick={() => void model.onConfirm()}>
-            {model.selectedTarget === "new_session" ? "Continue" : "Send Feedback"}
+            Continue
           </Button>
         </DialogFooter>
       </DialogContent>

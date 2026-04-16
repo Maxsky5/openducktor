@@ -1,59 +1,39 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
-  NEW_BUILDER_SESSION_TARGET,
 } from "@/features/human-review-feedback/human-review-feedback-state";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import type {
-  HumanReviewFeedbackModalModel,
-  HumanReviewFeedbackState,
-  PendingHumanReviewHydration,
-} from "@/features/human-review-feedback/human-review-feedback-types";
-import {
-  buildReusableSessionOptions,
-  type NewSessionStartDecision,
-  type NewSessionStartRequest,
-  startSessionWorkflow,
+  SessionStartExistingSessionOption,
+  SessionStartPostAction,
 } from "@/features/session-start";
-import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-import {
-  applyAgentStudioSelectionQuery,
-  type QueryUpdate,
-  shouldTriggerContextSwitchIntent,
-} from "./use-agent-studio-session-action-helpers";
-
-const findBuilderSessions = (sessions: AgentSessionSummary[]): AgentSessionSummary[] => {
-  return sessions.filter((session) => session.role === "build").sort(compareAgentSessionRecency);
-};
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
-  activeRepo: string | null;
   taskId: string;
-  role: AgentRole;
-  activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  startAgentSession: AgentStateContextValue["startAgentSession"];
-  sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
-  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  updateQuery: (updates: QueryUpdate) => void;
-  onContextSwitchIntent?: () => void;
-  executeRequestedSessionStart: <T>(
-    request: Omit<NewSessionStartRequest, "selectedModel">,
-    executeWithDecision: (
-      decision: Exclude<NewSessionStartDecision, null>,
-    ) => Promise<T | undefined>,
-  ) => Promise<T | undefined>;
+  startSessionRequest: (request: {
+    taskId: string;
+    role: "build";
+    scenario: "build_after_human_request_changes";
+    reason: "create_session";
+    existingSessionOptions: SessionStartExistingSessionOption[];
+    initialSourceSessionId?: string | null;
+    initialStartMode?: "fresh" | "reuse" | "fork";
+    postStartAction: SessionStartPostAction;
+    message?: string;
+    beforeStartAction?: {
+      action: "human_request_changes";
+      note: string;
+    };
+  }) => Promise<string | undefined>;
 };
 
 type UseAgentStudioHumanReviewFeedbackFlowResult = {
@@ -63,50 +43,28 @@ type UseAgentStudioHumanReviewFeedbackFlowResult = {
 };
 
 export function useAgentStudioHumanReviewFeedbackFlow({
-  activeRepo,
   taskId,
-  role,
-  activeSession,
   sessionsForTask,
   selectedTask,
-  startAgentSession,
-  sendAgentMessage,
-  bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory,
-  humanRequestChangesTask,
-  updateQuery,
-  onContextSwitchIntent,
-  executeRequestedSessionStart,
+  startSessionRequest,
 }: UseAgentStudioHumanReviewFeedbackFlowArgs): UseAgentStudioHumanReviewFeedbackFlowResult {
-  const queryClient = useQueryClient();
-  const sessionsForTaskRef = useRef(sessionsForTask);
   const selectedTaskRef = useRef(selectedTask);
-  const [pendingHumanReviewHydration, setPendingHumanReviewHydration] =
-    useState<PendingHumanReviewHydration | null>(null);
-  const [humanReviewFeedbackState, setHumanReviewFeedbackState] =
-    useState<HumanReviewFeedbackState | null>(null);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
-  sessionsForTaskRef.current = sessionsForTask;
   selectedTaskRef.current = selectedTask;
 
-  useEffect(() => {
-    if (!pendingHumanReviewHydration) {
-      return;
-    }
-    if (sessionsForTask === pendingHumanReviewHydration.baselineSessions) {
-      return;
-    }
-
-    setHumanReviewFeedbackState(
+  const {
+    clearHumanReviewFeedback,
+    humanReviewFeedbackState,
+    openHumanReviewFeedback,
+    setHumanReviewFeedbackState,
+  } = useHumanReviewFeedbackController({
+    createState: (feedbackTaskId) =>
       createHumanReviewFeedbackState(
-        selectedTask ? [selectedTask] : [],
-        taskId,
-        findBuilderSessions(sessionsForTask),
+        selectedTaskRef.current ? [selectedTaskRef.current] : [],
+        feedbackTaskId,
       ),
-    );
-    setPendingHumanReviewHydration(null);
-  }, [pendingHumanReviewHydration, selectedTask, sessionsForTask, taskId]);
+  });
 
   const shouldInterceptCreateSession = useCallback((option: SessionCreateOption): boolean => {
     return option.role === "build" && option.scenario === "build_after_human_request_changes";
@@ -116,63 +74,17 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     if (isSubmittingHumanReviewFeedback) {
       return;
     }
-    setHumanReviewFeedbackState(null);
-  }, [isSubmittingHumanReviewFeedback]);
 
-  const selectSessionInAgentStudio = useCallback(
-    (sessionId: string, nextRole: AgentRole): void => {
-      const currentSessionId = activeSession?.sessionId ?? null;
-      const currentRole = activeSession?.role ?? role;
+    clearHumanReviewFeedback();
+  }, [clearHumanReviewFeedback, isSubmittingHumanReviewFeedback]);
 
-      if (
-        shouldTriggerContextSwitchIntent({
-          currentSessionId,
-          currentRole,
-          nextSessionId: sessionId,
-          nextRole,
-        })
-      ) {
-        onContextSwitchIntent?.();
-      }
-
-      applyAgentStudioSelectionQuery(updateQuery, {
-        taskId,
-        sessionId,
-        role: nextRole,
-      });
-    },
-    [activeSession, onContextSwitchIntent, role, taskId, updateQuery],
-  );
-
-  const openHumanReviewFeedback = useCallback((): void => {
+  const openHumanReviewFeedbackForCurrentTask = useCallback((): void => {
     if (!taskId) {
       return;
     }
 
-    void (async () => {
-      try {
-        const baselineSessions = sessionsForTaskRef.current;
-        await bootstrapTaskSessions(taskId);
-
-        const currentBuilderSessions = findBuilderSessions(sessionsForTaskRef.current);
-        if (currentBuilderSessions.length > 0) {
-          setHumanReviewFeedbackState(
-            createHumanReviewFeedbackState(
-              selectedTaskRef.current ? [selectedTaskRef.current] : [],
-              taskId,
-              currentBuilderSessions,
-            ),
-          );
-          return;
-        }
-
-        setPendingHumanReviewHydration({ taskId, baselineSessions });
-      } catch {
-        setPendingHumanReviewHydration(null);
-        toast.error("Failed to load Builder sessions for this task.");
-      }
-    })();
-  }, [bootstrapTaskSessions, taskId]);
+    openHumanReviewFeedback(taskId);
+  }, [openHumanReviewFeedback, taskId]);
 
   const confirmHumanReviewFeedback = useCallback(async (): Promise<void> => {
     if (!humanReviewFeedbackState) {
@@ -181,109 +93,28 @@ export function useAgentStudioHumanReviewFeedbackFlow({
 
     setIsSubmittingHumanReviewFeedback(true);
     try {
-      const trimmedMessage = humanReviewFeedbackState.message.trim();
-      if (trimmedMessage.length === 0) {
-        toast.error("Feedback message is required.");
-        return;
-      }
+      const result = await submitHumanReviewFeedback({
+        state: humanReviewFeedbackState,
+        builderSessions: sessionsForTask,
+        startRequestChangesSession: async (request) => {
+          const startRequest = {
+            taskId: request.taskId,
+            role: request.role,
+            scenario: request.scenario,
+            reason: "create_session" as const,
+            existingSessionOptions: request.existingSessionOptions,
+            ...(request.sourceSessionId ? { initialSourceSessionId: request.sourceSessionId } : {}),
+            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
+            postStartAction: request.postStartAction,
+            message: request.message,
+            beforeStartAction: request.beforeStartAction,
+          };
 
-      if (humanReviewFeedbackState.selectedTarget === NEW_BUILDER_SESSION_TARGET) {
-        const workflow = await executeRequestedSessionStart(
-          {
-            taskId: humanReviewFeedbackState.taskId,
-            role: "build",
-            scenario: humanReviewFeedbackState.scenario,
-            reason: "create_session",
-            existingSessionOptions: buildReusableSessionOptions({
-              sessions: humanReviewFeedbackState.builderSessions,
-              role: "build",
-            }),
-            initialSourceSessionId: humanReviewFeedbackState.builderSessions[0]?.sessionId ?? null,
-          },
-          async (decision) =>
-            startSessionWorkflow({
-              activeRepo,
-              queryClient,
-              intent: {
-                taskId: humanReviewFeedbackState.taskId,
-                role: "build",
-                scenario: humanReviewFeedbackState.scenario,
-                startMode: decision.startMode,
-                ...(decision.startMode === "reuse" || decision.startMode === "fork"
-                  ? { sourceSessionId: decision.sourceSessionId }
-                  : {}),
-                postStartAction: "send_message",
-                message: trimmedMessage,
-                beforeStartAction: {
-                  action: "human_request_changes",
-                  note: trimmedMessage,
-                },
-              },
-              selection: decision.startMode === "reuse" ? null : decision.selectedModel,
-              task: selectedTaskRef.current,
-              startAgentSession,
-              sendAgentMessage,
-              humanRequestChangesTask,
-              postStartExecution: "detached",
-              onDetachedPostStartError: (error) => {
-                toast.error("Changes requested, but feedback message failed.", {
-                  description: error.message,
-                });
-              },
-            }),
-        );
-        if (!workflow) {
-          return;
-        }
-
-        setHumanReviewFeedbackState(null);
-        selectSessionInAgentStudio(workflow.sessionId, "build");
-
-        try {
-          await hydrateRequestedTaskSessionHistory({
-            taskId: humanReviewFeedbackState.taskId,
-            sessionId: workflow.sessionId,
-          });
-        } catch {
-          toast.error("Changes requested, but refreshing Builder sessions failed.");
-        }
-
-        return;
-      }
-
-      const existingBuilderSession = humanReviewFeedbackState.builderSessions.find(
-        (session) => session.sessionId === humanReviewFeedbackState.selectedTarget,
-      );
-      if (!existingBuilderSession) {
-        toast.error("The selected builder session is no longer available for this task.");
-        return;
-      }
-
-      try {
-        await humanRequestChangesTask(humanReviewFeedbackState.taskId, trimmedMessage);
-      } catch {
-        toast.error("Requesting changes failed.");
-        return;
-      }
-
-      setHumanReviewFeedbackState(null);
-      selectSessionInAgentStudio(existingBuilderSession.sessionId, "build");
-
-      try {
-        await hydrateRequestedTaskSessionHistory({
-          taskId: humanReviewFeedbackState.taskId,
-          sessionId: existingBuilderSession.sessionId,
-        });
-      } catch {
-        toast.error("Changes requested, but refreshing Builder sessions failed.");
-      }
-
-      try {
-        await sendAgentMessage(existingBuilderSession.sessionId, [
-          { kind: "text", text: trimmedMessage },
-        ]);
-      } catch {
-        toast.error("Changes requested, but feedback message failed.");
+          return startSessionRequest(startRequest);
+        },
+      });
+      if (result.outcome === "started") {
+        clearHumanReviewFeedback();
       }
     } catch (error) {
       toast.error("Failed to prepare the Builder session.", {
@@ -292,17 +123,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     } finally {
       setIsSubmittingHumanReviewFeedback(false);
     }
-  }, [
-    activeRepo,
-    executeRequestedSessionStart,
-    humanRequestChangesTask,
-    humanReviewFeedbackState,
-    hydrateRequestedTaskSessionHistory,
-    queryClient,
-    selectSessionInAgentStudio,
-    sendAgentMessage,
-    startAgentSession,
-  ]);
+  }, [clearHumanReviewFeedback, humanReviewFeedbackState, sessionsForTask, startSessionRequest]);
 
   const humanReviewFeedbackModal = useMemo<HumanReviewFeedbackModalModel | null>(() => {
     if (!humanReviewFeedbackState) {
@@ -313,11 +134,6 @@ export function useAgentStudioHumanReviewFeedbackFlow({
       state: humanReviewFeedbackState,
       isSubmitting: isSubmittingHumanReviewFeedback,
       onDismiss: dismissHumanReviewFeedback,
-      onTargetChange: (selectedTarget: string) => {
-        setHumanReviewFeedbackState((current) =>
-          current ? { ...current, selectedTarget } : current,
-        );
-      },
       onMessageChange: (message: string) => {
         setHumanReviewFeedbackState((current) => (current ? { ...current, message } : current));
       },
@@ -328,11 +144,12 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     dismissHumanReviewFeedback,
     humanReviewFeedbackState,
     isSubmittingHumanReviewFeedback,
+    setHumanReviewFeedbackState,
   ]);
 
   return {
     humanReviewFeedbackModal,
     shouldInterceptCreateSession,
-    openHumanReviewFeedback,
+    openHumanReviewFeedback: openHumanReviewFeedbackForCurrentTask,
   };
 }

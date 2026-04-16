@@ -125,4 +125,49 @@ describe("session-start-workflow", () => {
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
     expect(sentText).not.toContain("targetBranch: origin/main");
   });
+
+  test("uses kickoff messaging with embedded human feedback for new builder sessions after review", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-build-new");
+
+    const result = await startSessionWorkflow({
+      activeRepo: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-3",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+        message: "Update the acceptance criteria and rerun the desktop tests.",
+        beforeStartAction: {
+          action: "human_request_changes",
+          note: "Update the acceptance criteria and rerun the desktop tests.",
+        },
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-3",
+        title: "Address human review",
+        description: "desc",
+        status: "human_review",
+        priority: 1,
+      }),
+      startAgentSession,
+      sendAgentMessage,
+      humanRequestChangesTask: mock(async () => undefined),
+    });
+
+    expect(result).toEqual({
+      sessionId: "session-build-new",
+      postStartActionError: null,
+    });
+    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
+      [string, Array<{ text?: string }>]
+    >;
+    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    expect(sentText).toContain("Requested changes from human review:");
+    expect(sentText).toContain("Update the acceptance criteria and rerun the desktop tests.");
+    expect(sentText).toContain("Use taskId TASK-3 for every odt_* tool call.");
+  });
 });
