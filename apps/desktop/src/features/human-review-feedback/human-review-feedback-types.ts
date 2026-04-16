@@ -10,6 +10,6 @@ export type HumanReviewFeedbackModalModel = {
 
 export type HumanReviewFeedbackState = {
   taskId: string;
-  scenario: "build_after_qa_rejected" | "build_after_human_request_changes";
+  scenario: "build_after_human_request_changes";
   message: string;
 };

@@ -6,9 +6,7 @@ type BuildContinuationScenario =
   | "build_after_qa_rejected"
   | "build_after_human_request_changes";
 
-export type BuildRequestChangesScenario =
-  | "build_after_human_request_changes"
-  | "build_after_qa_rejected";
+export type BuildRequestChangesScenario = "build_after_human_request_changes";
 
 export const resolveBuildContinuationScenario = (
   task: TaskCard | null | undefined,
@@ -20,9 +18,7 @@ export const resolveBuildContinuationScenario = (
 };
 
 export const resolveBuildRequestChangesScenario = (
-  task: TaskCard | null | undefined,
+  _task: TaskCard | null | undefined,
 ): BuildRequestChangesScenario => {
-  return task?.status === "human_review"
-    ? "build_after_human_request_changes"
-    : "build_after_qa_rejected";
+  return "build_after_human_request_changes";
 };

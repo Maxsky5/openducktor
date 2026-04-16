@@ -133,13 +133,13 @@ describe("human-review-feedback-flow", () => {
     expect(startRequestChangesSession).toHaveBeenCalledTimes(1);
   });
 
-  test("submitHumanReviewFeedback preserves QA-rejected scenarios in the handoff request", async () => {
+  test("submitHumanReviewFeedback preserves the human-request-changes scenario in the handoff request", async () => {
     const startRequestChangesSession = mock(async () => "session-new");
 
     await submitHumanReviewFeedback({
       state: createState({
-        scenario: "build_after_qa_rejected",
-        message: "Address the QA rejection in the shared flow.",
+        scenario: "build_after_human_request_changes",
+        message: "Address the requested changes in the shared flow.",
       }),
       builderSessions: [createBuilderSession({ sessionId: "builder-session-1" })],
       startRequestChangesSession,
@@ -147,8 +147,8 @@ describe("human-review-feedback-flow", () => {
 
     expect(startRequestChangesSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        scenario: "build_after_qa_rejected",
-        message: "Address the QA rejection in the shared flow.",
+        scenario: "build_after_human_request_changes",
+        message: "Address the requested changes in the shared flow.",
       }),
     );
   });

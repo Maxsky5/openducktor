@@ -29,7 +29,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   startSessionRequest: (request: {
     taskId: string;
     role: "build";
-    scenario: "build_after_human_request_changes" | "build_after_qa_rejected";
+    scenario: "build_after_human_request_changes";
     reason: "create_session";
     existingSessionOptions: SessionStartExistingSessionOption[];
     initialSourceSessionId?: string | null;
