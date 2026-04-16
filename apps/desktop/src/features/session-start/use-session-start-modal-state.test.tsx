@@ -268,7 +268,7 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("prefills target branch selection from the task target branch when present", async () => {
+  test("does not show target branch selection for builder review flows", async () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
@@ -288,8 +288,49 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    expect(harness.getLatest().showTargetBranchSelector).toBe(true);
-    expect(harness.getLatest().selectedTargetBranch).toBe("refs/remotes/origin/release/2026.04");
+    expect(harness.getLatest().showTargetBranchSelector).toBe(false);
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-6B",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        existingSessionOptions: [
+          {
+            value: "session-build-1",
+            label: "Builder session 1",
+            description: "Latest builder session",
+            selectedModel: null,
+          },
+        ],
+        postStartAction: "kickoff",
+        title: "Apply Human Changes",
+      });
+    });
+
+    expect(harness.getLatest().showTargetBranchSelector).toBe(false);
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-6C",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        existingSessionOptions: [
+          {
+            value: "session-build-pr",
+            label: "Builder session PR",
+            description: "Builder session for PR generation",
+            selectedModel: null,
+          },
+        ],
+        postStartAction: "kickoff",
+        title: "Start PR Generation",
+      });
+    });
+
+    expect(harness.getLatest().showTargetBranchSelector).toBe(false);
 
     await harness.unmount();
   });

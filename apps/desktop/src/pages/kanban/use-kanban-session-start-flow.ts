@@ -7,18 +7,12 @@ import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
 import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
-import {
-  prepareHumanReviewFeedback,
-  submitHumanReviewFeedback,
-} from "@/features/human-review-feedback/human-review-feedback-flow";
+import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
 } from "@/features/human-review-feedback/human-review-feedback-state";
-import type {
-  HumanReviewFeedbackModalModel,
-  HumanReviewFeedbackState,
-} from "@/features/human-review-feedback/human-review-feedback-types";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import {
   buildReusableSessionOptions,
@@ -177,22 +171,7 @@ export function useKanbanSessionStartFlow({
     openHumanReviewFeedback,
     setHumanReviewFeedbackState,
   } = useHumanReviewFeedbackController({
-    sessions,
-    createState: (taskId) =>
-      createHumanReviewFeedbackState(
-        tasksRef.current,
-        taskId,
-        findSessionsByRoleForTask(sessionsRef.current, taskId, "build"),
-      ),
-    openFeedback: async (taskId) =>
-      prepareHumanReviewFeedback({
-        taskId,
-        baselineSessions: sessionsRef.current,
-        bootstrapTaskSessions,
-        getBuilderSessions: () => findSessionsByRoleForTask(sessionsRef.current, taskId, "build"),
-        createState: (builderSessions) =>
-          createHumanReviewFeedbackState(tasksRef.current, taskId, builderSessions),
-      }),
+    createState: (taskId) => createHumanReviewFeedbackState(tasksRef.current, taskId),
   });
 
   const openAgents = useCallback(
@@ -312,18 +291,6 @@ export function useKanbanSessionStartFlow({
 
     clearHumanReviewFeedback();
   }, [clearHumanReviewFeedback, isSubmittingHumanReviewFeedback]);
-
-  const openAgentStudioSession = useCallback(
-    (taskId: string, session: AgentSessionSummary): void => {
-      const params = new URLSearchParams({
-        task: taskId,
-        session: session.sessionId,
-        agent: session.role,
-      });
-      navigate(`/agents?${params.toString()}`);
-    },
-    [navigate],
-  );
 
   const onPullRequestGenerate = useCallback(
     async (taskId: string): Promise<string | undefined> => {
@@ -476,41 +443,29 @@ export function useKanbanSessionStartFlow({
 
     setIsSubmittingHumanReviewFeedback(true);
     try {
-      await submitHumanReviewFeedback({
+      const result = await submitHumanReviewFeedback({
         state: humanReviewFeedbackState,
-        humanRequestChangesTask,
-        dismissFeedbackModal: clearHumanReviewFeedback,
-        startNewSession: async (request) => {
-          clearHumanReviewFeedback();
-          void startSessionIntent({
+        builderSessions: findSessionsByRoleForTask(
+          sessionsRef.current,
+          humanReviewFeedbackState.taskId,
+          "build",
+        ),
+        startRequestChangesSession: (request) =>
+          startSessionIntent({
             taskId: request.taskId,
             role: request.role,
             scenario: request.scenario,
-            initialStartMode: request.initialStartMode,
+            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             existingSessionOptions: request.existingSessionOptions,
             ...(request.sourceSessionId ? { sourceSessionId: request.sourceSessionId } : {}),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,
-          }).catch((error: unknown) => {
-            toast.error("Failed to prepare the Builder session.", {
-              description: error instanceof Error ? error.message : "Unknown error",
-            });
-          });
-        },
-        openExistingSession: (session) => {
-          openAgentStudioSession(session.taskId, session);
-        },
-        hydrateExistingSession: async (session) => {
-          await hydrateRequestedTaskSessionHistory({
-            taskId: session.taskId,
-            sessionId: session.sessionId,
-          });
-        },
-        sendExistingSessionMessage: async (session, message) => {
-          await sendAgentMessage(session.sessionId, [{ kind: "text", text: message }]);
-        },
+          }),
       });
+      if (result.outcome === "started") {
+        clearHumanReviewFeedback();
+      }
     } catch (error) {
       toast.error("Failed to prepare the Builder session.", {
         description: error instanceof Error ? error.message : "Unknown error",
@@ -518,15 +473,7 @@ export function useKanbanSessionStartFlow({
     } finally {
       setIsSubmittingHumanReviewFeedback(false);
     }
-  }, [
-    clearHumanReviewFeedback,
-    humanRequestChangesTask,
-    humanReviewFeedbackState,
-    hydrateRequestedTaskSessionHistory,
-    openAgentStudioSession,
-    startSessionIntent,
-    sendAgentMessage,
-  ]);
+  }, [clearHumanReviewFeedback, humanReviewFeedbackState, startSessionIntent]);
 
   const humanReviewFeedbackModal = useMemo<HumanReviewFeedbackModalModel | null>(() => {
     if (!humanReviewFeedbackState) {
@@ -537,15 +484,8 @@ export function useKanbanSessionStartFlow({
       state: humanReviewFeedbackState,
       isSubmitting: isSubmittingHumanReviewFeedback,
       onDismiss: closeHumanReviewFeedbackModal,
-      onTargetChange: (selectedTarget: string) => {
-        setHumanReviewFeedbackState((current: HumanReviewFeedbackState | null) =>
-          current ? { ...current, selectedTarget } : current,
-        );
-      },
       onMessageChange: (message: string) => {
-        setHumanReviewFeedbackState((current: HumanReviewFeedbackState | null) =>
-          current ? { ...current, message } : current,
-        );
+        setHumanReviewFeedbackState((current) => (current ? { ...current, message } : current));
       },
       onConfirm: confirmHumanReviewFeedback,
     });

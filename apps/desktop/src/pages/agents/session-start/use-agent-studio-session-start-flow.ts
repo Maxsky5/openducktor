@@ -88,9 +88,9 @@ export function useAgentStudioSessionStartFlow({
   repoSettings,
   startAgentSession,
   sendAgentMessage,
-  bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory,
-  humanRequestChangesTask,
+  bootstrapTaskSessions: _bootstrapTaskSessions,
+  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
+  humanRequestChangesTask: _humanRequestChangesTask,
   setTaskTargetBranch,
   updateQuery,
   onContextSwitchIntent,
@@ -292,24 +292,21 @@ export function useAgentStudioSessionStartFlow({
 
   const { humanReviewFeedbackModal, shouldInterceptCreateSession, openHumanReviewFeedback } =
     useAgentStudioHumanReviewFeedbackFlow({
-      activeRepo,
       taskId,
       role,
       activeSession,
       sessionsForTask,
       selectedTask,
-      startAgentSession,
-      sendAgentMessage,
-      bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory,
-      humanRequestChangesTask,
       updateQuery,
       ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-      executeRequestedSessionStart,
+      startSessionRequest,
     });
 
   const startScenarioKickoff = useCallback(async (): Promise<void> => {
     if (!taskId || !agentStudioReady) {
+      return;
+    }
+    if (!isActiveTaskHydrated) {
       return;
     }
     if (!canStartSessionForRole(selectedTask, role)) {
@@ -329,6 +326,7 @@ export function useAgentStudioSessionStartFlow({
     }
   }, [
     agentStudioReady,
+    isActiveTaskHydrated,
     openHumanReviewFeedback,
     role,
     runSessionStart,
@@ -358,12 +356,26 @@ export function useAgentStudioSessionStartFlow({
   const handleCreateSessionWithHumanFeedback = useCallback(
     (option: SessionCreateOption): void => {
       if (shouldInterceptCreateSession(option)) {
+        if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
+          return;
+        }
+        if (!canStartSessionForRole(selectedTask, option.role)) {
+          return;
+        }
         openHumanReviewFeedback();
         return;
       }
       handleCreateSession(option);
     },
-    [handleCreateSession, openHumanReviewFeedback, shouldInterceptCreateSession],
+    [
+      agentStudioReady,
+      handleCreateSession,
+      isActiveTaskHydrated,
+      openHumanReviewFeedback,
+      selectedTask,
+      shouldInterceptCreateSession,
+      taskId,
+    ],
   );
 
   return {

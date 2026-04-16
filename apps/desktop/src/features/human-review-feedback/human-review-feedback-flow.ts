@@ -1,28 +1,20 @@
 import { toast } from "sonner";
+import type { SessionStartExistingSessionOption } from "@/features/session-start";
 import { buildReusableSessionOptions } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { NEW_BUILDER_SESSION_TARGET } from "./human-review-feedback-state";
+import { toHumanReviewPromptTaskContext } from "./human-review-feedback-state";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
 export const HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE = "Feedback message is required.";
-export const HUMAN_REVIEW_FEEDBACK_STALE_SESSION_MESSAGE =
-  "The selected builder session is no longer available for this task.";
-export const HUMAN_REVIEW_FEEDBACK_REQUEST_FAILURE_MESSAGE = "Requesting changes failed.";
-export const HUMAN_REVIEW_FEEDBACK_HYDRATION_FAILURE_MESSAGE =
-  "Changes requested, but refreshing Builder sessions failed.";
-export const HUMAN_REVIEW_FEEDBACK_SEND_FAILURE_MESSAGE =
-  "Changes requested, but feedback message failed.";
-export const HUMAN_REVIEW_FEEDBACK_BOOTSTRAP_FAILURE_MESSAGE =
-  "Failed to load Builder sessions for this task.";
 
-export type HumanReviewFeedbackNewSessionRequest = {
+export type HumanReviewFeedbackStartRequest = {
   taskId: string;
   role: "build";
   scenario: HumanReviewFeedbackState["scenario"];
-  initialStartMode: "fresh";
-  existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
+  initialStartMode?: "fresh" | "reuse" | "fork";
+  existingSessionOptions: SessionStartExistingSessionOption[];
   sourceSessionId?: string;
-  postStartAction: "send_message";
+  postStartAction: "kickoff";
   message: string;
   beforeStartAction: {
     action: "human_request_changes";
@@ -30,146 +22,73 @@ export type HumanReviewFeedbackNewSessionRequest = {
   };
 };
 
-export type HumanReviewFeedbackHydrationFollowup = {
-  taskId: string;
-  baselineSessions: AgentSessionSummary[];
-};
-
 type PrepareHumanReviewFeedbackInput = {
-  taskId: string;
-  baselineSessions: AgentSessionSummary[];
-  bootstrapTaskSessions: (taskId: string) => Promise<void>;
-  getBuilderSessions: () => AgentSessionSummary[];
-  createState: (builderSessions: AgentSessionSummary[]) => HumanReviewFeedbackState;
+  createState: () => HumanReviewFeedbackState;
 };
 
-export type PrepareHumanReviewFeedbackResult =
-  | {
-      kind: "ready";
-      state: HumanReviewFeedbackState;
-    }
-  | {
-      kind: "ready_with_followup";
-      state: HumanReviewFeedbackState;
-      hydrationFollowup: HumanReviewFeedbackHydrationFollowup;
-    }
-  | { kind: "failed" };
+export type SubmitHumanReviewFeedbackResult = { outcome: "started" } | { outcome: "cancelled" };
 
 type SubmitHumanReviewFeedbackInput = {
   state: HumanReviewFeedbackState;
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  dismissFeedbackModal: () => void;
-  startNewSession: (request: HumanReviewFeedbackNewSessionRequest) => Promise<void>;
-  openExistingSession: (session: AgentSessionSummary) => void;
-  hydrateExistingSession: (session: AgentSessionSummary) => Promise<void>;
-  sendExistingSessionMessage: (session: AgentSessionSummary, message: string) => Promise<void>;
+  task?: ReturnType<typeof toHumanReviewPromptTaskContext>;
+  builderSessions: AgentSessionSummary[];
+  startRequestChangesSession: (
+    request: HumanReviewFeedbackStartRequest,
+  ) => Promise<string | undefined>;
 };
 
-const buildNewSessionRequest = (
+const buildRequestChangesSessionRequest = (
   state: HumanReviewFeedbackState,
-  message: string,
-): HumanReviewFeedbackNewSessionRequest => {
-  const request: HumanReviewFeedbackNewSessionRequest = {
+  builderSessions: AgentSessionSummary[],
+  feedback: string,
+): HumanReviewFeedbackStartRequest => {
+  const existingSessionOptions = buildReusableSessionOptions({
+    sessions: builderSessions,
+    role: "build",
+  });
+  const latestBuilderSessionId = builderSessions[0]?.sessionId;
+
+  return {
     taskId: state.taskId,
     role: "build",
     scenario: state.scenario,
-    initialStartMode: "fresh",
-    existingSessionOptions: buildReusableSessionOptions({
-      sessions: state.builderSessions,
-      role: "build",
-    }),
-    postStartAction: "send_message",
-    message,
+    ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : {}),
+    existingSessionOptions,
+    ...(latestBuilderSessionId ? { sourceSessionId: latestBuilderSessionId } : {}),
+    postStartAction: "kickoff",
+    message: feedback,
     beforeStartAction: {
       action: "human_request_changes",
-      note: message,
+      note: feedback,
     },
   };
-
-  const latestBuilderSessionId = state.builderSessions[0]?.sessionId;
-  if (latestBuilderSessionId) {
-    request.sourceSessionId = latestBuilderSessionId;
-  }
-
-  return request;
 };
 
-export const prepareHumanReviewFeedback = async ({
-  taskId,
-  baselineSessions,
-  bootstrapTaskSessions,
-  getBuilderSessions,
+export const prepareHumanReviewFeedback = ({
   createState,
-}: PrepareHumanReviewFeedbackInput): Promise<PrepareHumanReviewFeedbackResult> => {
-  try {
-    await bootstrapTaskSessions(taskId);
-  } catch {
-    toast.error(HUMAN_REVIEW_FEEDBACK_BOOTSTRAP_FAILURE_MESSAGE);
-    return { kind: "failed" };
-  }
-
-  const builderSessions = getBuilderSessions();
-  if (builderSessions.length > 0) {
-    return {
-      kind: "ready",
-      state: createState(builderSessions),
-    };
-  }
-
-  return {
-    kind: "ready_with_followup",
-    state: createState(builderSessions),
-    hydrationFollowup: { taskId, baselineSessions },
-  };
+}: PrepareHumanReviewFeedbackInput): HumanReviewFeedbackState => {
+  return createState();
 };
 
 export const submitHumanReviewFeedback = async ({
   state,
-  humanRequestChangesTask,
-  dismissFeedbackModal,
-  startNewSession,
-  openExistingSession,
-  hydrateExistingSession,
-  sendExistingSessionMessage,
-}: SubmitHumanReviewFeedbackInput): Promise<void> => {
+  builderSessions,
+  startRequestChangesSession,
+}: SubmitHumanReviewFeedbackInput): Promise<SubmitHumanReviewFeedbackResult> => {
   const trimmedMessage = state.message.trim();
   if (trimmedMessage.length === 0) {
     toast.error(HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE);
-    return;
+    return { outcome: "cancelled" };
   }
 
-  if (state.selectedTarget === NEW_BUILDER_SESSION_TARGET) {
-    await startNewSession(buildNewSessionRequest(state, trimmedMessage));
-    return;
-  }
-
-  const existingBuilderSession = state.builderSessions.find(
-    (session) => session.sessionId === state.selectedTarget,
+  const sessionId = await startRequestChangesSession(
+    buildRequestChangesSessionRequest(state, builderSessions, trimmedMessage),
   );
-  if (!existingBuilderSession) {
-    toast.error(HUMAN_REVIEW_FEEDBACK_STALE_SESSION_MESSAGE);
-    return;
+  if (!sessionId) {
+    return { outcome: "cancelled" };
   }
 
-  try {
-    await humanRequestChangesTask(state.taskId, trimmedMessage);
-  } catch {
-    toast.error(HUMAN_REVIEW_FEEDBACK_REQUEST_FAILURE_MESSAGE);
-    return;
-  }
-
-  dismissFeedbackModal();
-  openExistingSession(existingBuilderSession);
-
-  try {
-    await hydrateExistingSession(existingBuilderSession);
-  } catch {
-    toast.error(HUMAN_REVIEW_FEEDBACK_HYDRATION_FAILURE_MESSAGE);
-  }
-
-  try {
-    await sendExistingSessionMessage(existingBuilderSession, trimmedMessage);
-  } catch {
-    toast.error(HUMAN_REVIEW_FEEDBACK_SEND_FAILURE_MESSAGE);
-  }
+  return { outcome: "started" };
 };
+
+export { toHumanReviewPromptTaskContext };

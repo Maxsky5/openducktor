@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { toast } from "sonner";
-import { HUMAN_REVIEW_FEEDBACK_REQUEST_FAILURE_MESSAGE } from "@/features/human-review-feedback/human-review-feedback-flow";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -705,8 +703,48 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
-    expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
+    expect(bootstrapTaskSessions).not.toHaveBeenCalled();
     expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
+    expect(startAgentSession).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("handleCreateSession for human changes waits for task hydration before opening feedback", async () => {
+    const startAgentSession = mock(async () => "session-build-human");
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      isActiveTaskHydrated: false,
+      startAgentSession,
+      selectedTask: createTask({ status: "human_review" }),
+      sessionsForTask: [
+        createSession({
+          sessionId: "session-build-existing",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T12:00:00.000Z",
+        }),
+      ],
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state !== null);
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "build:build_after_human_request_changes:fresh",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        label: "Builder · Apply Human Changes",
+        description: "Create a new builder session after human review",
+        disabled: false,
+      });
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
+    expect(harness.getLatest().sessionStartModal).toBeNull();
     expect(startAgentSession).not.toHaveBeenCalled();
 
     await harness.unmount();
@@ -742,7 +780,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
-    expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
+    expect(bootstrapTaskSessions).not.toHaveBeenCalled();
     expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -750,25 +788,53 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("human changes feedback can target an existing builder session", async () => {
+  test("startScenarioKickoff for human changes waits for task hydration", async () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      scenario: "build_after_human_request_changes",
+      isActiveTaskHydrated: false,
+      startAgentSession,
+      sendAgentMessage,
+      selectedTask: createTask({ status: "human_review" }),
+      sessionsForTask: [
+        createSession({
+          sessionId: "session-build-existing",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T12:00:00.000Z",
+        }),
+      ],
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.startScenarioKickoff();
+    });
+
+    expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
+    expect(harness.getLatest().sessionStartModal).toBeNull();
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("human changes feedback hands off to the shared session-start modal with reuse selected by default", async () => {
+    const startAgentSession = mock(async () => "session-build-human");
     const humanRequestChangesTask = mock(async () => {});
-    const bootstrapTaskSessions = mock(async () => {});
-    const hydrateRequestedTaskSessionHistory = mock(async () => {});
-    const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
       scenario: "spec_initial",
       startAgentSession,
-      sendAgentMessage,
       humanRequestChangesTask,
-      bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory,
+      bootstrapTaskSessions: mock(async () => {}),
       selectedTask: createTask({ status: "human_review" }),
-      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
       sessionsForTask: [
         createSession({
           sessionId: "session-build-latest",
@@ -783,12 +849,10 @@ describe("useAgentStudioSessionStartFlow", () => {
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
       ],
-      updateQuery: (updates) => {
-        updateCalls.push(updates);
-      },
     });
 
     await harness.mount();
+    await harness.waitFor((state) => state !== null);
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
@@ -802,99 +866,27 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
     await harness.run((state) => {
-      state.humanReviewFeedbackModal?.onTargetChange("session-build-older");
       state.humanReviewFeedbackModal?.onMessageChange("Apply the requested human changes.");
     });
-    await harness.run(async (state) => {
-      await state.humanReviewFeedbackModal?.onConfirm();
-      await Promise.resolve();
-      await Promise.resolve();
+    await harness.run((state) => {
+      void state.humanReviewFeedbackModal?.onConfirm();
     });
 
-    expect(humanRequestChangesTask).toHaveBeenCalledWith(
-      "task-1",
-      "Apply the requested human changes.",
-    );
-    expect(bootstrapTaskSessions).toHaveBeenCalledWith("task-1");
-    expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
-      taskId: "task-1",
-      sessionId: "session-build-older",
-    });
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-build-older", [
-      { kind: "text", text: "Apply the requested human changes." },
+    const modal = await waitForSessionStartModal(harness);
+    expect(modal.open).toBe(true);
+    expect(modal.selectedStartMode).toBe("reuse");
+    expect(modal.selectedSourceSessionId).toBe("session-build-latest");
+    expect(modal.existingSessionOptions).toEqual([
+      expect.objectContaining({ value: "session-build-latest" }),
+      expect.objectContaining({ value: "session-build-older" }),
     ]);
-    expect(updateCalls).toContainEqual({
-      task: "task-1",
-      session: "session-build-older",
-      agent: "build",
-      autostart: undefined,
-      start: undefined,
-    });
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(humanRequestChangesTask).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
-  test("human changes feedback shows the canonical request failure toast for existing builder sessions", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "toast-id");
-    toast.error = toastError;
-    const humanRequestChangesTask = mock(async () => {
-      throw new Error("request failed");
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      role: "spec",
-      scenario: "spec_initial",
-      humanRequestChangesTask,
-      bootstrapTaskSessions: mock(async () => {}),
-      selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
-        createSession({
-          sessionId: "session-build-latest",
-          role: "build",
-          scenario: "build_implementation_start",
-          startedAt: "2026-02-22T12:00:00.000Z",
-        }),
-      ],
-    });
-
-    try {
-      await harness.mount();
-      await harness.run((state) => {
-        state.handleCreateSession({
-          id: "build:build_after_human_request_changes:fresh",
-          role: "build",
-          scenario: "build_after_human_request_changes",
-          label: "Builder · Apply Human Changes",
-          description: "Create a new builder session after human review",
-          disabled: false,
-        });
-      });
-      await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
-
-      await harness.run((state) => {
-        state.humanReviewFeedbackModal?.onTargetChange("session-build-latest");
-        state.humanReviewFeedbackModal?.onMessageChange("Apply the requested human changes.");
-      });
-      await harness.run(async (state) => {
-        await state.humanReviewFeedbackModal?.onConfirm();
-      });
-
-      expect(humanRequestChangesTask).toHaveBeenCalledWith(
-        "task-1",
-        "Apply the requested human changes.",
-      );
-      expect(toastError).toHaveBeenCalledWith(HUMAN_REVIEW_FEEDBACK_REQUEST_FAILURE_MESSAGE);
-      expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
-    } finally {
-      toast.error = originalToastError;
-      await harness.unmount();
-    }
-  });
-
-  test("canceling new-session model selection preserves the human changes feedback draft", async () => {
+  test("canceling request-changes session selection preserves the human changes feedback draft", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
@@ -912,6 +904,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.mount();
+    await harness.waitFor((state) => state !== null);
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
@@ -925,7 +918,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
     await harness.run((state) => {
-      state.humanReviewFeedbackModal?.onTargetChange("new_session");
       state.humanReviewFeedbackModal?.onMessageChange("Keep this draft when I cancel.");
     });
     await harness.run((state) => {
@@ -943,8 +935,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         state.humanReviewFeedbackModal?.open === true &&
         state.humanReviewFeedbackModal.message === "Keep this draft when I cancel.",
     );
-
-    expect(harness.getLatest().humanReviewFeedbackModal?.selectedTarget).toBe("new_session");
 
     await harness.unmount();
   });

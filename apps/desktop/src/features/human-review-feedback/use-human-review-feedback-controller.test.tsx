@@ -1,42 +1,10 @@
-import { describe, expect, mock, test } from "bun:test";
-import {
-  createAgentSessionFixture,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { describe, expect, test } from "bun:test";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { PrepareHumanReviewFeedbackResult } from "./human-review-feedback-flow";
-import { NEW_BUILDER_SESSION_TARGET } from "./human-review-feedback-state";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 import { useHumanReviewFeedbackController } from "./use-human-review-feedback-controller";
 
 enableReactActEnvironment();
-
-const createDeferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-
-  return { promise, resolve, reject };
-};
-
-type HookProps = {
-  sessions: AgentSessionState[];
-  openFeedback: (taskId: string) => Promise<PrepareHumanReviewFeedbackResult>;
-  createState: (taskId: string) => HumanReviewFeedbackState;
-};
-
-const createBuilderSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
-  createAgentSessionFixture({
-    role: "build",
-    taskId: "TASK-1",
-    scenario: "build_implementation_start",
-    ...overrides,
-  });
 
 const createState = (
   overrides: Partial<HumanReviewFeedbackState> = {},
@@ -44,24 +12,14 @@ const createState = (
   taskId: "TASK-1",
   scenario: "build_after_human_request_changes",
   message: "Apply the requested changes.",
-  builderSessions: [],
-  selectedTarget: NEW_BUILDER_SESSION_TARGET,
-  ...overrides,
-});
-
-const createProps = (overrides: Partial<HookProps> = {}): HookProps => ({
-  sessions: [],
-  openFeedback: async () => ({
-    kind: "ready",
-    state: createState(),
-  }),
-  createState: () => createState(),
   ...overrides,
 });
 
 describe("useHumanReviewFeedbackController", () => {
-  test("opens feedback immediately when preparation is ready", async () => {
-    const harness = createHookHarness(useHumanReviewFeedbackController, createProps());
+  test("opens feedback with the created state", async () => {
+    const harness = createHookHarness(useHumanReviewFeedbackController, {
+      createState: (taskId: string) => createState({ taskId }),
+    });
 
     await harness.mount();
     await harness.run((state) => {
@@ -73,90 +31,28 @@ describe("useHumanReviewFeedbackController", () => {
     await harness.unmount();
   });
 
-  test("adopts hydrated builder sessions when follow-up sessions change later", async () => {
-    const initialSessions: AgentSessionState[] = [];
-    const hydratedBuilderSession = createBuilderSession({ sessionId: "builder-session-1" });
-    const createHydratedState = mock((taskId: string) =>
-      createState({
-        taskId,
-        builderSessions: [hydratedBuilderSession],
-        selectedTarget: "builder-session-1",
-      }),
-    );
-
-    const harness = createHookHarness(
-      useHumanReviewFeedbackController,
-      createProps({
-        sessions: initialSessions,
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
+  test("clearHumanReviewFeedback resets the modal state", async () => {
+    const harness = createHookHarness(useHumanReviewFeedbackController, {
+      createState: (taskId: string) => createState({ taskId }),
+    });
 
     await harness.mount();
     await harness.run((state) => {
       state.openHumanReviewFeedback("TASK-1");
     });
+    await harness.run((state) => {
+      state.clearHumanReviewFeedback();
+    });
 
-    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe(
-      NEW_BUILDER_SESSION_TARGET,
-    );
-
-    await harness.update(
-      createProps({
-        sessions: [hydratedBuilderSession],
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    expect(createHydratedState).toHaveBeenCalledWith("TASK-1");
-    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe("builder-session-1");
+    expect(harness.getLatest().humanReviewFeedbackState).toBeNull();
 
     await harness.unmount();
   });
 
-  test("preserves the typed draft message when hydration adopts builder sessions", async () => {
-    const initialSessions: AgentSessionState[] = [];
-    const hydratedBuilderSession = createBuilderSession({ sessionId: "builder-session-1" });
-    const createHydratedState = mock((taskId: string) =>
-      createState({
-        taskId,
-        message: "Reset by hydration",
-        builderSessions: [hydratedBuilderSession],
-        selectedTarget: "builder-session-1",
-      }),
-    );
-
-    const harness = createHookHarness(
-      useHumanReviewFeedbackController,
-      createProps({
-        sessions: initialSessions,
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
+  test("setHumanReviewFeedbackState can update the current draft message", async () => {
+    const harness = createHookHarness(useHumanReviewFeedbackController, {
+      createState: (taskId: string) => createState({ taskId, message: "Initial draft" }),
+    });
 
     await harness.mount();
     await harness.run((state) => {
@@ -164,234 +60,11 @@ describe("useHumanReviewFeedbackController", () => {
     });
     await harness.run((state) => {
       state.setHumanReviewFeedbackState((current) =>
-        current ? { ...current, message: "Keep this draft." } : current,
+        current ? { ...current, message: "Updated draft" } : current,
       );
     });
 
-    await harness.update(
-      createProps({
-        sessions: [hydratedBuilderSession],
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    expect(harness.getLatest().humanReviewFeedbackState?.message).toBe("Keep this draft.");
-    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe("builder-session-1");
-
-    await harness.unmount();
-  });
-
-  test("keeps the hydration follow-up active until relevant builder sessions appear", async () => {
-    const initialSessions: AgentSessionState[] = [];
-    const unrelatedQaSession = createAgentSessionFixture({
-      sessionId: "qa-session-1",
-      role: "qa",
-      taskId: "TASK-2",
-      scenario: "qa_review",
-    });
-    const hydratedBuilderSession = createBuilderSession({ sessionId: "builder-session-1" });
-    const createHydratedState = mock((taskId: string) =>
-      createState({
-        taskId,
-        builderSessions: currentSessions.some(
-          (session) => session.sessionId === "builder-session-1",
-        )
-          ? [hydratedBuilderSession]
-          : [],
-        selectedTarget: currentSessions.some((session) => session.sessionId === "builder-session-1")
-          ? "builder-session-1"
-          : NEW_BUILDER_SESSION_TARGET,
-      }),
-    );
-    let currentSessions: AgentSessionState[] = initialSessions;
-
-    const harness = createHookHarness(
-      useHumanReviewFeedbackController,
-      createProps({
-        sessions: currentSessions,
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback("TASK-1");
-    });
-
-    currentSessions = [unrelatedQaSession];
-    await harness.update(
-      createProps({
-        sessions: currentSessions,
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe(
-      NEW_BUILDER_SESSION_TARGET,
-    );
-
-    currentSessions = [unrelatedQaSession, hydratedBuilderSession];
-    await harness.update(
-      createProps({
-        sessions: currentSessions,
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    expect(harness.getLatest().humanReviewFeedbackState?.selectedTarget).toBe("builder-session-1");
-
-    await harness.unmount();
-  });
-
-  test("clears feedback state and pending follow-up together", async () => {
-    const initialSessions: AgentSessionState[] = [];
-    const createHydratedState = mock((taskId: string) => createState({ taskId }));
-
-    const harness = createHookHarness(
-      useHumanReviewFeedbackController,
-      createProps({
-        sessions: initialSessions,
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback("TASK-1");
-    });
-    await harness.run((state) => {
-      state.clearHumanReviewFeedback();
-    });
-
-    await harness.update(
-      createProps({
-        sessions: [createBuilderSession({ sessionId: "builder-session-1" })],
-        openFeedback: async () => ({
-          kind: "ready_with_followup",
-          state: createState(),
-          hydrationFollowup: {
-            taskId: "TASK-1",
-            baselineSessions: initialSessions,
-          },
-        }),
-        createState: createHydratedState,
-      }),
-    );
-
-    expect(harness.getLatest().humanReviewFeedbackState).toBeNull();
-    expect(createHydratedState).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
-
-  test("ignores slower stale open completions after a newer open request", async () => {
-    const firstOpen = createDeferred<PrepareHumanReviewFeedbackResult>();
-    const secondOpen = createDeferred<PrepareHumanReviewFeedbackResult>();
-    const openFeedback = mock((taskId: string) => {
-      if (taskId === "TASK-1") {
-        return firstOpen.promise;
-      }
-
-      return secondOpen.promise;
-    });
-    const harness = createHookHarness(
-      useHumanReviewFeedbackController,
-      createProps({ openFeedback }),
-    );
-
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback("TASK-1");
-      state.openHumanReviewFeedback("TASK-2");
-    });
-
-    secondOpen.resolve({
-      kind: "ready",
-      state: createState({ taskId: "TASK-2", message: "Use the newer request." }),
-    });
-    await harness.waitFor((state) => state.humanReviewFeedbackState?.taskId === "TASK-2");
-
-    firstOpen.resolve({
-      kind: "ready",
-      state: createState({ taskId: "TASK-1", message: "Stale result." }),
-    });
-    await harness.run(async () => {
-      await Promise.resolve();
-    });
-
-    expect(harness.getLatest().humanReviewFeedbackState).toEqual(
-      createState({ taskId: "TASK-2", message: "Use the newer request." }),
-    );
-
-    await harness.unmount();
-  });
-
-  test("ignores in-flight open completions after the feedback is cleared", async () => {
-    const deferredOpen = createDeferred<PrepareHumanReviewFeedbackResult>();
-    const harness = createHookHarness(
-      useHumanReviewFeedbackController,
-      createProps({
-        openFeedback: mock(() => deferredOpen.promise),
-      }),
-    );
-
-    await harness.mount();
-    await harness.run((state) => {
-      state.openHumanReviewFeedback("TASK-1");
-    });
-    await harness.run((state) => {
-      state.clearHumanReviewFeedback();
-    });
-
-    deferredOpen.resolve({
-      kind: "ready",
-      state: createState({ message: "Should stay closed." }),
-    });
-    await harness.run(async () => {
-      await Promise.resolve();
-    });
-
-    expect(harness.getLatest().humanReviewFeedbackState).toBeNull();
+    expect(harness.getLatest().humanReviewFeedbackState?.message).toBe("Updated draft");
 
     await harness.unmount();
   });

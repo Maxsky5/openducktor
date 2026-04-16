@@ -4,6 +4,7 @@ import {
   type AgentPromptGitContext,
   type AgentRole,
   type AgentScenario,
+  type BuildAgentKickoffPromptInput,
   buildAgentKickoffPrompt,
   buildAgentMessagePrompt,
   defaultAgentScenarioForRole,
@@ -23,6 +24,7 @@ type SessionStartPromptOptions = {
   overrides?: RepoPromptOverrides;
   task?: TaskPromptContext;
   git?: AgentPromptGitContext;
+  extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
 };
 
 export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
@@ -67,6 +69,7 @@ export const kickoffPromptForScenario = (
       taskId,
       ...(options?.task ?? {}),
     },
+    ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : {}),
     ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
   });

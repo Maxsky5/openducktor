@@ -304,6 +304,21 @@ describe("settings-modal-model", () => {
     });
   });
 
+  test("validates required placeholders in human-review kickoff overrides", () => {
+    const overrides: RepoPromptOverrides = {
+      "kickoff.build_after_human_request_changes": {
+        template: "Review {{task.id}} before editing.",
+        baseVersion: 3,
+        enabled: true,
+      },
+    };
+
+    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
+      "kickoff.build_after_human_request_changes":
+        "Missing required placeholder: {{humanFeedback}}.",
+    });
+  });
+
   test("enables prompt override and creates missing entries from fallback values", () => {
     const emptyOverrides: RepoPromptOverrides = {};
     const created = togglePromptOverrideEnabled(
