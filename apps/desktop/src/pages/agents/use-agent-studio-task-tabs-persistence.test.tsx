@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createMemoryStorage,
-  seedRepoTaskTabs,
+  seedWorkspaceTaskTabs,
   type TestStorageLike,
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
@@ -18,16 +18,18 @@ enableReactActEnvironment();
 type HookArgs = Omit<
   Parameters<typeof useTaskTabPersistence>[0],
   | "openTaskTabs"
-  | "tabsStorageHydratedRepo"
+  | "persistenceWorkspaceId"
+  | "tabsStorageHydratedWorkspaceId"
   | "setOpenTaskTabs"
   | "setPersistedActiveTaskId"
   | "setIntentActiveTaskId"
-  | "setTabsStorageHydratedRepo"
+  | "setTabsStorageHydratedWorkspaceId"
 > & {
+  persistenceWorkspaceId?: string | null;
   initialOpenTaskTabs?: string[];
   initialPersistedActiveTaskId?: string | null;
   initialIntentActiveTaskId?: string | null;
-  initialTabsStorageHydratedRepo?: string | null;
+  initialTabsStorageHydratedWorkspaceId?: string | null;
 };
 
 const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
@@ -103,6 +105,7 @@ const createTrackedStorage = (): {
 };
 
 const useTaskTabPersistenceHarness = (props: HookArgs) => {
+  const persistenceWorkspaceId = props.persistenceWorkspaceId ?? props.activeRepo;
   const [openTaskTabs, setOpenTaskTabs] = useState(props.initialOpenTaskTabs ?? []);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState(
     props.initialPersistedActiveTaskId ?? null,
@@ -110,30 +113,31 @@ const useTaskTabPersistenceHarness = (props: HookArgs) => {
   const [intentActiveTaskId, setIntentActiveTaskId] = useState(
     props.initialIntentActiveTaskId ?? null,
   );
-  const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState(
-    props.initialTabsStorageHydratedRepo ?? null,
+  const [tabsStorageHydratedWorkspaceId, setTabsStorageHydratedWorkspaceId] = useState(
+    props.initialTabsStorageHydratedWorkspaceId ?? null,
   );
 
   useTaskTabPersistence({
     activeRepo: props.activeRepo,
+    persistenceWorkspaceId,
     taskId: props.taskId,
     selectedTask: props.selectedTask,
     tasks: props.tasks,
     isLoadingTasks: props.isLoadingTasks,
     activeTaskTabId: props.activeTaskTabId,
     openTaskTabs,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
-    setTabsStorageHydratedRepo,
+    setTabsStorageHydratedWorkspaceId,
   });
 
   return {
     openTaskTabs,
     persistedActiveTaskId,
     intentActiveTaskId,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
   };
 };
 
@@ -152,7 +156,7 @@ describe("useTaskTabPersistence", () => {
       initialOpenTaskTabs: ["task-1", "task-2"],
       initialPersistedActiveTaskId: "task-2",
       initialIntentActiveTaskId: "task-2",
-      initialTabsStorageHydratedRepo: "/repo",
+      initialTabsStorageHydratedWorkspaceId: "/repo",
     });
 
     await harness.mount();
@@ -161,7 +165,7 @@ describe("useTaskTabPersistence", () => {
       openTaskTabs: [],
       persistedActiveTaskId: null,
       intentActiveTaskId: null,
-      tabsStorageHydratedRepo: null,
+      tabsStorageHydratedWorkspaceId: null,
     });
 
     await harness.unmount();
@@ -171,7 +175,7 @@ describe("useTaskTabPersistence", () => {
     const storage = createMemoryStorage();
 
     await withMockedLocalStorage(storage, async () => {
-      seedRepoTaskTabs(storage, {
+      seedWorkspaceTaskTabs(storage, {
         "/repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
         "/repo-b": { tabs: ["task-b", "task-c"], activeTaskId: "task-c" },
       });
@@ -191,7 +195,7 @@ describe("useTaskTabPersistence", () => {
         openTaskTabs: ["task-b", "task-c"],
         persistedActiveTaskId: "task-c",
         intentActiveTaskId: null,
-        tabsStorageHydratedRepo: "/repo-b",
+        tabsStorageHydratedWorkspaceId: "/repo-b",
       });
 
       await harness.unmount();
@@ -211,7 +215,7 @@ describe("useTaskTabPersistence", () => {
         activeTaskTabId: "task-1",
         initialOpenTaskTabs: ["stale-task"],
         initialPersistedActiveTaskId: "stale-task",
-        initialTabsStorageHydratedRepo: null,
+        initialTabsStorageHydratedWorkspaceId: null,
       });
 
       await harness.mount();
@@ -225,7 +229,7 @@ describe("useTaskTabPersistence", () => {
         openTaskTabs: ["task-1"],
         persistedActiveTaskId: null,
         intentActiveTaskId: null,
-        tabsStorageHydratedRepo: "/repo",
+        tabsStorageHydratedWorkspaceId: "/repo",
       });
 
       await harness.unmount();
@@ -236,7 +240,7 @@ describe("useTaskTabPersistence", () => {
     const { storage, setItem, store } = createTrackedStorage();
 
     await withMockedLocalStorage(storage, async () => {
-      seedRepoTaskTabs(storage, {
+      seedWorkspaceTaskTabs(storage, {
         "/repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
         "/repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
       });
@@ -266,7 +270,7 @@ describe("useTaskTabPersistence", () => {
         openTaskTabs: ["task-b"],
         persistedActiveTaskId: "task-b",
         intentActiveTaskId: null,
-        tabsStorageHydratedRepo: "/repo-b",
+        tabsStorageHydratedWorkspaceId: "/repo-b",
       });
       expect(setItem.mock.calls).toEqual([
         [
@@ -286,7 +290,7 @@ describe("useTaskTabPersistence", () => {
     const storage = createMemoryStorage();
 
     await withMockedLocalStorage(storage, async () => {
-      seedRepoTaskTabs(storage, {
+      seedWorkspaceTaskTabs(storage, {
         "/repo": { tabs: ["task-1", "task-closed"], activeTaskId: "task-1" },
       });
 
@@ -327,7 +331,7 @@ describe("useTaskTabPersistence", () => {
     const storage = createMemoryStorage();
 
     await withMockedLocalStorage(storage, async () => {
-      seedRepoTaskTabs(storage, {
+      seedWorkspaceTaskTabs(storage, {
         "/repo": { tabs: ["task-1"], activeTaskId: "task-1" },
       });
 

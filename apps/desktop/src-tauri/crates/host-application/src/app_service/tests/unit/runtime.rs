@@ -333,14 +333,17 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
         runtime_registry,
     );
     let repo_path_string = repo_path.to_string_lossy().to_string();
-    let _ = service.workspace_add(repo_path_string.as_str())?;
+    let workspace = service.workspace_add(repo_path_string.as_str())?;
     service.workspace_update_repo_config(
-        repo_path_string.as_str(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            default_runtime_kind: "test-runtime".to_string(),
-            ..Default::default()
-        },
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                default_runtime_kind: "test-runtime".to_string(),
+                ..Default::default()
+            },
+        ),
     )?;
     task_state
         .lock()

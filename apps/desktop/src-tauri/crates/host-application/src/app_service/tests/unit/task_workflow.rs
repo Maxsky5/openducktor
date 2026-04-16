@@ -73,7 +73,10 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
         worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
         ..Default::default()
     };
-    service.workspace_update_repo_config(canonical_repo_path.as_str(), repo_config)?;
+    service.workspace_update_repo_config(
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(&workspace, repo_config),
+    )?;
     {
         let mut state = git_state.lock().expect("git state lock poisoned");
         state.current_branches_by_path.insert(
@@ -756,12 +759,15 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.repo_path.as_str(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            ..Default::default()
-        },
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        ),
     )?;
     {
         let mut state = git_state.lock().expect("git state lock poisoned");
@@ -871,12 +877,15 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.repo_path.as_str(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            ..Default::default()
-        },
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        ),
     )?;
     {
         let mut state = git_state.lock().expect("git state lock poisoned");
@@ -953,12 +962,15 @@ fn task_reset_propagates_non_worktree_branch_errors_for_task_managed_worktrees()
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.repo_path.as_str(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            ..Default::default()
-        },
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        ),
     )?;
     git_state
         .lock()
@@ -1794,12 +1806,15 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.repo_path.as_str(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            ..Default::default()
-        },
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        ),
     )?;
     git_state
         .lock()
@@ -1909,12 +1924,15 @@ fn task_reset_implementation_ignores_stale_build_run_when_status_endpoint_is_unr
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
     service.workspace_update_repo_config(
-        workspace.repo_path.as_str(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            ..Default::default()
-        },
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        ),
     )?;
     git_state
         .lock()

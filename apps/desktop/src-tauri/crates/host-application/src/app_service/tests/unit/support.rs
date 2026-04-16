@@ -25,9 +25,10 @@ pub(super) use crate::app_service::runtime_registry::{
 pub(super) use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_runtime_registry,
     builtin_opencode_runtime_definition, builtin_opencode_runtime_descriptor,
-    builtin_opencode_runtime_route, make_task, spawn_opencode_session_status_server,
-    spawn_sleep_process, spawn_sleep_process_group, unique_temp_path, wait_for_process_exit,
-    workspace_update_repo_config_by_repo_path, write_private_file, FakeTaskStore, TaskStoreState,
+    builtin_opencode_runtime_route, make_task, repo_config_for_workspace,
+    spawn_opencode_session_status_server, spawn_sleep_process, spawn_sleep_process_group,
+    unique_temp_path, wait_for_process_exit, workspace_update_repo_config_by_repo_path,
+    write_private_file, FakeTaskStore, TaskStoreState,
 };
 pub(super) use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,

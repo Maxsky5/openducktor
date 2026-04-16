@@ -227,6 +227,7 @@ exit 1
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let (first, second) = thread::scope(
             |scope| -> Result<(RuntimeInstanceSummary, RuntimeInstanceSummary)> {
                 let first_handle = scope.spawn(|| {
@@ -297,6 +298,7 @@ exit 1
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let error = service
             .ensure_workspace_runtime(AgentRuntimeKind::opencode(), repo_path.as_str())
             .expect_err("workspace runtime should fail when the startup process exits early");
@@ -358,6 +360,7 @@ exit 1
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let (leader_error, follower_error) =
             thread::scope(|scope| -> Result<(anyhow::Error, anyhow::Error)> {
                 let leader_handle = scope.spawn(|| {

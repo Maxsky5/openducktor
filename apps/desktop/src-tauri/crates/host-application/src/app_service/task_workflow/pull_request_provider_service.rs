@@ -540,7 +540,8 @@ mod tests {
     };
     use crate::app_service::git_provider::ResolvedPullRequest;
     use crate::app_service::test_support::{
-        build_service_with_store, init_git_repo, make_task, unique_temp_path,
+        add_workspace_with_repo_config, build_service_with_store, init_git_repo, make_task,
+        unique_temp_path,
     };
     use crate::app_service::AppService;
     use anyhow::Result;
@@ -600,8 +601,8 @@ mod tests {
 
         let (service, _task_state) = build_service(&root)?;
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),

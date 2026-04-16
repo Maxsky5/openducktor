@@ -138,6 +138,7 @@ mod tests {
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let pipeline_error = thread::scope(|scope| -> Result<anyhow::Error> {
             let pipeline_handle = scope.spawn(|| {
                 let workspace_id_for_mcp = service.workspace_id_for_repo_path(repo_path.as_str())?;
@@ -248,6 +249,7 @@ mod tests {
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let pipeline_error = thread::scope(|scope| -> Result<anyhow::Error> {
             let pipeline_handle = scope.spawn(|| {
                 let workspace_id_for_mcp = service.workspace_id_for_repo_path(repo_path.as_str())?;

@@ -370,8 +370,8 @@ impl<'a> BuilderBranchService<'a> {
 mod tests {
     use super::BuilderBranchService;
     use crate::app_service::test_support::{
-        build_service_with_store, builtin_opencode_runtime_route, init_git_repo, make_session,
-        make_task, unique_temp_path,
+        add_workspace_with_repo_config, build_service_with_store, builtin_opencode_runtime_route,
+        init_git_repo, make_session, make_task, unique_temp_path,
     };
     use anyhow::Result;
     use host_domain::{AgentRuntimeKind, GitCurrentBranch, RunState, RunSummary, TaskStatus};
@@ -706,8 +706,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -769,8 +769,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -830,8 +830,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -889,8 +889,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
@@ -941,8 +941,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 default_target_branch: host_infra_system::GitTargetBranch {
@@ -985,8 +985,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 default_target_branch: host_infra_system::GitTargetBranch {
@@ -1023,8 +1023,8 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        service.workspace_update_repo_config(
+        let _workspace = add_workspace_with_repo_config(
+            &service,
             repo_path.as_str(),
             host_infra_system::RepoConfig {
                 default_target_branch: host_infra_system::GitTargetBranch {

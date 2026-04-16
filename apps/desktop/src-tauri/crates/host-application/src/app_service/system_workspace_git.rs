@@ -12,12 +12,15 @@ use host_domain::{
     SystemOpenInToolId, SystemOpenInToolInfo, WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, copy_configured_worktree_files, derive_workspace_name_from_repo_path,
-    discover_open_in_tools, open_directory_in_tool as open_directory_in_tool_with_system,
-    propose_workspace_id, remove_worktree, remove_worktree_path_if_present,
-    repo_script_fingerprint, resolve_effective_worktree_base_dir, run_command,
-    run_command_allow_failure_with_env, uniquify_workspace_id, version_command, AutopilotSettings,
+    command_exists, copy_configured_worktree_files, discover_open_in_tools,
+    open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
+    remove_worktree_path_if_present, repo_script_fingerprint, resolve_effective_worktree_base_dir,
+    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
     ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+};
+#[cfg(test)]
+use host_infra_system::{
+    derive_workspace_name_from_repo_path, propose_workspace_id, uniquify_workspace_id,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -949,7 +952,8 @@ mod tests {
     use super::super::CachedRuntimeCheck;
     use super::RUNTIME_CHECK_CACHE_TTL;
     use crate::app_service::test_support::{
-        build_service_with_state, init_git_repo, unique_temp_path,
+        add_workspace_with_repo_config, build_service_with_state, init_git_repo, unique_temp_path,
+        workspace_select_by_repo_path,
     };
     use host_domain::{
         GitConflictAbortRequest, GitConflictOperation, GitPushResult, RuntimeCheck, RuntimeHealth,
@@ -998,18 +1002,15 @@ mod tests {
         fs::create_dir_all(worktree.join("nested")).expect("worktree directory should exist");
 
         let (service, _task_state, git_state) = build_service_with_state(vec![]);
-        service
-            .workspace_add(repo.to_string_lossy().as_ref())
-            .expect("repo should be registered");
-        service
-            .workspace_update_repo_config(
-                repo.to_string_lossy().as_ref(),
-                host_infra_system::RepoConfig {
-                    worktree_base_path: Some(root.to_string_lossy().to_string()),
-                    ..Default::default()
-                },
-            )
-            .expect("worktree base should be configured");
+        add_workspace_with_repo_config(
+            &service,
+            repo.to_string_lossy().as_ref(),
+            host_infra_system::RepoConfig {
+                worktree_base_path: Some(root.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("worktree base should be configured");
         git_state
             .lock()
             .expect("git state lock poisoned")
@@ -1329,9 +1330,9 @@ mod tests {
             state.ensure_calls.clear();
         }
 
-        let workspace = service
-            .workspace_select(repo_path.to_string_lossy().as_ref())
-            .expect("workspace select should not fail on beads init");
+        let workspace =
+            workspace_select_by_repo_path(&service, repo_path.to_string_lossy().as_ref())
+                .expect("workspace select should not fail on beads init");
 
         assert!(workspace.is_active);
 
