@@ -38,11 +38,8 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   taskId: "task-1",
-  role: "spec",
-  activeSession: null,
   sessionsForTask: [],
   selectedTask: createTask(),
-  updateQuery: () => {},
   startSessionRequest: async () => undefined,
   ...overrides,
 });

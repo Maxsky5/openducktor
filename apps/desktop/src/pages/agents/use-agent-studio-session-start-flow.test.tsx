@@ -151,9 +151,6 @@ const createBaseArgs = (): HookArgs => ({
   repoSettings: null,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
-  bootstrapTaskSessions: async () => {},
-  hydrateRequestedTaskSessionHistory: async () => {},
-  humanRequestChangesTask: async () => {},
   updateQuery: () => {},
 });
 
@@ -668,14 +665,11 @@ describe("useAgentStudioSessionStartFlow", () => {
           ? (input.sourceSessionId ?? "session-build-latest")
           : "session-build-human",
     );
-    const bootstrapTaskSessions = mock(async () => {});
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
       scenario: "spec_initial",
       startAgentSession,
-      bootstrapTaskSessions,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
@@ -703,7 +697,6 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
-    expect(bootstrapTaskSessions).not.toHaveBeenCalled();
     expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
     expect(startAgentSession).not.toHaveBeenCalled();
 
@@ -753,15 +746,12 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("startScenarioKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
-    const bootstrapTaskSessions = mock(async () => {});
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
       scenario: "build_after_human_request_changes",
       startAgentSession,
       sendAgentMessage,
-      bootstrapTaskSessions,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
@@ -780,7 +770,6 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
 
-    expect(bootstrapTaskSessions).not.toHaveBeenCalled();
     expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
@@ -825,15 +814,11 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("human changes feedback hands off to the shared session-start modal with reuse selected by default", async () => {
     const startAgentSession = mock(async () => "session-build-human");
-    const humanRequestChangesTask = mock(async () => {});
-
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
       scenario: "spec_initial",
       startAgentSession,
-      humanRequestChangesTask,
-      bootstrapTaskSessions: mock(async () => {}),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
@@ -881,7 +866,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       expect.objectContaining({ value: "session-build-older" }),
     ]);
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(humanRequestChangesTask).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
@@ -891,7 +875,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "spec",
       scenario: "spec_initial",
-      bootstrapTaskSessions: mock(async () => {}),
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({

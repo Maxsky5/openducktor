@@ -712,6 +712,12 @@ const buildPlaceholderValues = ({
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
   git?: AgentPromptGitContext;
 }): Record<string, string> => {
+  const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
+
+  if (extraPlaceholders?.humanFeedback !== undefined && !humanFeedback) {
+    throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
+  }
+
   return {
     role,
     "role.allowedTools": buildToolListPlaceholder(role),
@@ -721,9 +727,9 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    ...(extraPlaceholders?.humanFeedback !== undefined
+    ...(humanFeedback
       ? {
-          humanFeedback: compact(extraPlaceholders.humanFeedback),
+          humanFeedback,
         }
       : {}),
     ...(git

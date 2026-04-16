@@ -1,5 +1,4 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
@@ -14,18 +13,12 @@ import type {
   SessionStartPostAction,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-import type { QueryUpdate } from "./use-agent-studio-session-action-helpers";
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   taskId: string;
-  role: AgentRole;
-  activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  updateQuery: (updates: QueryUpdate) => void;
-  onContextSwitchIntent?: () => void;
   startSessionRequest: (request: {
     taskId: string;
     role: "build";
@@ -51,12 +44,8 @@ type UseAgentStudioHumanReviewFeedbackFlowResult = {
 
 export function useAgentStudioHumanReviewFeedbackFlow({
   taskId,
-  role: _role,
-  activeSession: _activeSession,
   sessionsForTask,
   selectedTask,
-  updateQuery: _updateQuery,
-  onContextSwitchIntent: _onContextSwitchIntent,
   startSessionRequest,
 }: UseAgentStudioHumanReviewFeedbackFlowArgs): UseAgentStudioHumanReviewFeedbackFlowResult {
   const selectedTaskRef = useRef(selectedTask);

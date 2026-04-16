@@ -2,7 +2,6 @@ import { toast } from "sonner";
 import type { SessionStartExistingSessionOption } from "@/features/session-start";
 import { buildReusableSessionOptions } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { toHumanReviewPromptTaskContext } from "./human-review-feedback-state";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
 export const HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE = "Feedback message is required.";
@@ -30,7 +29,6 @@ export type SubmitHumanReviewFeedbackResult = { outcome: "started" } | { outcome
 
 type SubmitHumanReviewFeedbackInput = {
   state: HumanReviewFeedbackState;
-  task?: ReturnType<typeof toHumanReviewPromptTaskContext>;
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
     request: HumanReviewFeedbackStartRequest,
@@ -90,5 +88,3 @@ export const submitHumanReviewFeedback = async ({
 
   return { outcome: "started" };
 };
-
-export { toHumanReviewPromptTaskContext };

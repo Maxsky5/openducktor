@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -8,8 +8,6 @@ import {
   submitHumanReviewFeedback,
 } from "./human-review-feedback-flow";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
-
-const originalToastError = toast.error;
 
 const createBuilderSession = (overrides: Partial<AgentSessionState> = {}) =>
   createAgentSessionFixture({
@@ -28,8 +26,12 @@ const createState = (
   ...overrides,
 });
 
+let toastErrorSpy: ReturnType<typeof spyOn<typeof toast, "error">> | null = null;
+
 afterEach(() => {
-  toast.error = originalToastError;
+  toastErrorSpy?.mockRestore();
+  toastErrorSpy = null;
+  mock.clearAllMocks();
 });
 
 describe("human-review-feedback-flow", () => {
@@ -44,8 +46,7 @@ describe("human-review-feedback-flow", () => {
   });
 
   test("submitHumanReviewFeedback rejects blank messages before starting the shared workflow", async () => {
-    const toastError = mock(() => "toast-id");
-    toast.error = toastError;
+    toastErrorSpy = spyOn(toast, "error").mockImplementation(() => "toast-id");
     const startRequestChangesSession = mock(async () => "session-new");
 
     const result = await submitHumanReviewFeedback({
@@ -55,7 +56,7 @@ describe("human-review-feedback-flow", () => {
     });
 
     expect(result).toEqual({ outcome: "cancelled" });
-    expect(toastError).toHaveBeenCalledWith(HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE);
+    expect(toastErrorSpy).toHaveBeenCalledWith(HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE);
     expect(startRequestChangesSession).not.toHaveBeenCalled();
   });
 

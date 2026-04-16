@@ -54,9 +54,6 @@ type UseAgentStudioSessionStartFlowArgs = {
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
-  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -88,9 +85,6 @@ export function useAgentStudioSessionStartFlow({
   repoSettings,
   startAgentSession,
   sendAgentMessage,
-  bootstrapTaskSessions: _bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
-  humanRequestChangesTask: _humanRequestChangesTask,
   setTaskTargetBranch,
   updateQuery,
   onContextSwitchIntent,
@@ -293,12 +287,8 @@ export function useAgentStudioSessionStartFlow({
   const { humanReviewFeedbackModal, shouldInterceptCreateSession, openHumanReviewFeedback } =
     useAgentStudioHumanReviewFeedbackFlow({
       taskId,
-      role,
-      activeSession,
       sessionsForTask,
       selectedTask,
-      updateQuery,
-      ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
       startSessionRequest,
     });
 

@@ -8,20 +8,6 @@ import type {
   HumanReviewFeedbackState,
 } from "./human-review-feedback-types";
 
-export const toHumanReviewPromptTaskContext = (task: TaskCard | undefined) => {
-  if (!task) {
-    return {};
-  }
-
-  return {
-    title: task.title,
-    issueType: task.issueType,
-    status: task.status,
-    qaRequired: task.aiReviewEnabled,
-    description: task.description,
-  };
-};
-
 const resolveRequestChangesScenario = (task: TaskCard | undefined): BuildRequestChangesScenario => {
   return resolveBuildRequestChangesScenario(task);
 };

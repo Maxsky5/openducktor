@@ -115,9 +115,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   repoSettings: null,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
-  bootstrapTaskSessions: async () => {},
-  hydrateRequestedTaskSessionHistory: async () => {},
-  humanRequestChangesTask: async () => {},
   updateQuery: () => {},
   ...overrides,
 });

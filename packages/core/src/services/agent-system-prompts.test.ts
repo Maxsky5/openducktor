@@ -406,6 +406,21 @@ describe("kickoff and permission prompts", () => {
     );
   });
 
+  test("rejects empty human-feedback placeholder values", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        task: {
+          taskId: "task-3",
+        },
+        extraPlaceholders: {
+          humanFeedback: "   ",
+        },
+      }),
+    ).toThrow('Prompt placeholder "humanFeedback" must not be empty.');
+  });
+
   test("pull request generation kickoff supports reused sessions and forks", () => {
     const prompt = buildAgentKickoffPrompt({
       role: "build",
