@@ -3,10 +3,12 @@ use super::normalize::{
     normalize_global_config, normalize_hook_set, normalize_repo_config, normalize_runtime_config,
 };
 use super::persistence::{
-    load_config_or_default, resolve_default_path, save_config,
-    should_enforce_private_parent_permissions,
+    resolve_default_path, save_config, should_enforce_private_parent_permissions,
 };
-use super::types::{repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
+use super::types::{
+    deserialize_global_config, repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig,
+    RuntimeConfig,
+};
 use crate::beads::adopt_legacy_workspace_namespace;
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
@@ -118,12 +120,30 @@ impl AppConfigStore {
     }
 
     pub fn load(&self) -> Result<GlobalConfig> {
-        load_config_or_default(
+        if !self.path.exists() {
+            return Ok(GlobalConfig::default());
+        }
+
+        super::security::validate_config_access(
             &self.path,
             self.enforce_private_parent_permissions,
-            normalize_global_config,
-            migrate_loaded_global_config,
-        )
+        )?;
+
+        let data = fs::read_to_string(&self.path)
+            .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
+        let (mut parsed, migrated_from_legacy) = deserialize_global_config(&data)
+            .map_err(anyhow::Error::msg)
+            .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
+        normalize_global_config(&mut parsed)
+            .with_context(|| format!("Failed normalizing config file {}", self.path.display()))?;
+        canonicalize_loaded_global_config(&mut parsed)?;
+
+        if migrated_from_legacy {
+            adopt_loaded_global_config_namespaces(&parsed)?;
+            self.save(&parsed)?;
+        }
+
+        Ok(parsed)
     }
 
     pub fn save(&self, config: &GlobalConfig) -> Result<()> {
@@ -427,12 +447,18 @@ pub(crate) fn touch_recent(recent: &mut Vec<String>, workspace_id: &str) {
     recent.truncate(20);
 }
 
-fn migrate_loaded_global_config(config: &mut GlobalConfig) -> Result<()> {
+fn canonicalize_loaded_global_config(config: &mut GlobalConfig) -> Result<()> {
     for repo in config.workspaces.values_mut() {
         if let Ok(canonical_repo_path) = canonicalize_repo_path(&repo.repo_path) {
             repo.repo_path = canonical_repo_path;
         }
+    }
 
+    Ok(())
+}
+
+fn adopt_loaded_global_config_namespaces(config: &GlobalConfig) -> Result<()> {
+    for repo in config.workspaces.values() {
         adopt_legacy_workspace_namespace(Path::new(&repo.repo_path), &repo.workspace_id)
             .with_context(|| {
                 format!(

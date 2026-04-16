@@ -323,6 +323,20 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     assert!(!config.chat.show_thinking_messages);
     assert_eq!(config.kanban.done_visible_days, 1);
 
+    let persisted: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(store.path()).expect("persisted migrated config"))
+            .expect("parse migrated config");
+    assert_eq!(
+        persisted.get("version").and_then(|value| value.as_u64()),
+        Some(2)
+    );
+    assert!(persisted.get("workspaces").is_some());
+    assert!(persisted.get("activeWorkspace").is_some());
+    assert!(persisted.get("recentWorkspaces").is_some());
+    assert!(persisted.get("repos").is_none());
+    assert!(persisted.get("activeRepo").is_none());
+    assert!(persisted.get("recentRepos").is_none());
+
     let repo_config = store
         .repo_config(workspaces[0].workspace_id.as_str())
         .expect("repo config");

@@ -180,13 +180,18 @@ export function useRepoSettingsOperations({
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshot): Promise<void> => {
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
-      queryClient.setQueryData(settingsSnapshotQueryKey, snapshot);
-      for (const [workspaceId, repoConfig] of Object.entries(snapshot.workspaces)) {
+      queryClient.removeQueries({
+        queryKey: settingsSnapshotQueryKey,
+        exact: true,
+      });
+      const normalizedSnapshot = await loadSettingsSnapshotFromQuery(queryClient);
+      for (const [workspaceId, repoConfig] of Object.entries(normalizedSnapshot.workspaces)) {
         queryClient.setQueryData(workspaceQueryKeys.repoConfig(workspaceId), repoConfig);
       }
       await queryClient.invalidateQueries({
         queryKey: repoConfigQueryKeyPrefix,
       });
+      queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
     },

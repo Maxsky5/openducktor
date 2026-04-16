@@ -11,6 +11,8 @@ use std::ffi::OsString;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 #[test]
 fn workspace_add_select_and_update_persist_state() {
@@ -294,10 +296,36 @@ fn load_adopts_legacy_beads_namespace_into_workspace_identity() {
     fake_git_workspace(&repo);
 
     let repo_str = repo.to_string_lossy().to_string();
-    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
-    store
-        .add_workspace(&workspace_id, &workspace_name, &repo_str)
-        .expect("add workspace");
+    let (workspace_id, _workspace_name, repo_path) = workspace_identity(&repo);
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    fs::write(
+        store.path(),
+        json!({
+            "version": 1,
+            "activeRepo": repo_str,
+            "repos": {
+                repo_str.clone(): {
+                    "defaultRuntimeKind": "opencode",
+                    "trustedHooks": false,
+                    "hooks": {
+                        "preStart": [],
+                        "postComplete": []
+                    }
+                }
+            },
+            "recentRepos": []
+        })
+        .to_string(),
+    )
+    .expect("write legacy config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), fs::Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
 
     let legacy_attachment_dir =
         resolve_repo_beads_attachment_dir(repo.as_path()).expect("legacy attachment dir");
@@ -374,10 +402,36 @@ fn load_rejects_conflicting_legacy_and_workspace_beads_namespaces() {
     fake_git_workspace(&repo);
 
     let repo_str = repo.to_string_lossy().to_string();
-    let (workspace_id, workspace_name, _) = workspace_identity(&repo);
-    store
-        .add_workspace(&workspace_id, &workspace_name, &repo_str)
-        .expect("add workspace");
+    let (workspace_id, _workspace_name, _) = workspace_identity(&repo);
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    fs::write(
+        store.path(),
+        json!({
+            "version": 1,
+            "activeRepo": repo_str,
+            "repos": {
+                repo_str.clone(): {
+                    "defaultRuntimeKind": "opencode",
+                    "trustedHooks": false,
+                    "hooks": {
+                        "preStart": [],
+                        "postComplete": []
+                    }
+                }
+            },
+            "recentRepos": []
+        })
+        .to_string(),
+    )
+    .expect("write legacy config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), fs::Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
 
     let legacy_attachment_dir =
         resolve_repo_beads_attachment_dir(repo.as_path()).expect("legacy attachment dir");
@@ -391,4 +445,33 @@ fn load_rejects_conflicting_legacy_and_workspace_beads_namespaces() {
         .expect_err("conflicting namespaces should fail");
     let error_message = format!("{error:#}");
     assert!(error_message.contains("Cannot adopt legacy Beads attachment root"));
+}
+
+#[test]
+fn load_ignores_legacy_namespace_conflicts_after_v2_migration_persists() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("workspace-v2-load-ignores-legacy-conflict");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    fake_git_workspace(&repo);
+
+    let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, _) = workspace_identity(&repo);
+    store
+        .add_workspace(&workspace_id, &workspace_name, &repo_str)
+        .expect("add workspace");
+
+    let legacy_attachment_dir =
+        resolve_repo_beads_attachment_dir(repo.as_path()).expect("legacy attachment dir");
+    let workspace_attachment_dir =
+        resolve_workspace_beads_attachment_dir(&workspace_id).expect("workspace attachment dir");
+    fs::create_dir_all(&legacy_attachment_dir).expect("create legacy dir");
+    fs::create_dir_all(&workspace_attachment_dir).expect("create workspace dir");
+
+    let workspaces = store
+        .load()
+        .expect("v2 load should not re-adopt legacy namespaces");
+    assert!(workspaces.workspaces.contains_key(&workspace_id));
 }

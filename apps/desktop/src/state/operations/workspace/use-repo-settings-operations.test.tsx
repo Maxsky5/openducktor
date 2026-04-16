@@ -622,26 +622,21 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saves settings snapshot atomically and applies returned workspaces", async () => {
+  test("saves settings snapshot atomically and refreshes normalized snapshot from the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const normalizedSnapshot: SettingsSnapshot = {
+      ...createSettingsSnapshot(),
+      workspaces: {
+        "repo-a": {
+          ...createRepoConfig(),
+          repoPath: "/canonical-repo-a",
+        },
+      },
+    };
     const workspaceGetSettingsSnapshot = mock(async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        rules: [],
-      },
-      workspaces: {},
-      globalPromptOverrides: {},
+      ...normalizedSnapshot,
     }));
 
     const original = {
@@ -659,6 +654,12 @@ describe("use-repo-settings-operations", () => {
     });
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      workspaces: {
+        "repo-a": {
+          ...createRepoConfig(),
+          repoPath: "/repo-a-link",
+        },
+      },
     };
 
     try {
@@ -666,8 +667,8 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(snapshot);
-      expect(workspaceGetSettingsSnapshot).not.toHaveBeenCalled();
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
@@ -683,11 +684,14 @@ describe("use-repo-settings-operations", () => {
       forwardedSnapshot = snapshotArg;
       return [];
     });
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
       workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
     };
     host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -770,6 +774,7 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
     }
   });
 

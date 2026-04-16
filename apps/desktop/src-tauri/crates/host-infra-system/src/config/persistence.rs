@@ -2,7 +2,7 @@
 use super::security::CONFIG_FILE_MODE;
 use super::security::{enforce_directory_permissions, validate_config_access};
 use anyhow::{anyhow, Context, Result};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,34 +50,6 @@ pub(super) fn should_enforce_private_parent_permissions(path: &Path, file_name: 
     resolve_default_path(file_name)
         .map(|default_path| default_path == path)
         .unwrap_or(false)
-}
-
-pub(super) fn load_config_or_default<T, Normalize, PostLoad>(
-    path: &Path,
-    enforce_private_parent_permissions: bool,
-    normalize: Normalize,
-    post_load: PostLoad,
-) -> Result<T>
-where
-    T: DeserializeOwned + Default,
-    Normalize: FnOnce(&mut T) -> Result<()>,
-    PostLoad: FnOnce(&mut T) -> Result<()>,
-{
-    if !path.exists() {
-        return Ok(T::default());
-    }
-
-    validate_config_access(path, enforce_private_parent_permissions)?;
-
-    let data = fs::read_to_string(path)
-        .with_context(|| format!("Failed reading config file {}", path.display()))?;
-    let mut parsed: T = serde_json::from_str(&data)
-        .with_context(|| format!("Failed parsing config file {}", path.display()))?;
-    normalize(&mut parsed)
-        .with_context(|| format!("Failed normalizing config file {}", path.display()))?;
-    post_load(&mut parsed)
-        .with_context(|| format!("Failed finalizing config file {}", path.display()))?;
-    Ok(parsed)
 }
 
 pub(super) fn save_config<T, Normalize>(

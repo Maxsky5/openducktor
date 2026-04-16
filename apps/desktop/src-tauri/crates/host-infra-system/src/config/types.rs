@@ -465,16 +465,38 @@ struct PersistedGlobalConfigV2 {
     pub recent_workspaces: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-enum PersistedGlobalConfig {
-    V2(PersistedGlobalConfigV2),
-    V1(LegacyGlobalConfigV1),
+pub(super) fn deserialize_global_config(data: &str) -> Result<(GlobalConfig, bool), String> {
+    let payload: serde_json::Value =
+        serde_json::from_str(data).map_err(|error| error.to_string())?;
+    let version = payload
+        .get("version")
+        .and_then(|value| value.as_u64())
+        .ok_or_else(|| "Missing config version.".to_string())?;
+
+    match version {
+        1 => {
+            let legacy: LegacyGlobalConfigV1 =
+                serde_json::from_value(payload).map_err(|error| error.to_string())?;
+            Ok((migrate_legacy_global_config(legacy)?, true))
+        }
+        2 => {
+            let config: PersistedGlobalConfigV2 =
+                serde_json::from_value(payload).map_err(|error| error.to_string())?;
+            Ok((
+                GlobalConfig::try_from(config).map_err(|error| error.to_string())?,
+                false,
+            ))
+        }
+        other => Err(format!(
+            "Unsupported config version {other}. Expected {} or 1.",
+            current_global_config_version()
+        )),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[serde(try_from = "PersistedGlobalConfig", into = "PersistedGlobalConfigV2")]
+#[serde(try_from = "PersistedGlobalConfigV2", into = "PersistedGlobalConfigV2")]
 pub struct GlobalConfig {
     pub version: u8,
     pub active_workspace: Option<String>,
@@ -496,35 +518,30 @@ pub struct GlobalConfig {
     pub recent_workspaces: Vec<String>,
 }
 
-impl TryFrom<PersistedGlobalConfig> for GlobalConfig {
+impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
     type Error = String;
 
-    fn try_from(value: PersistedGlobalConfig) -> Result<Self, Self::Error> {
-        match value {
-            PersistedGlobalConfig::V2(config) => {
-                if config.version != current_global_config_version() {
-                    return Err(format!(
-                        "Unsupported config version {}. Expected {}.",
-                        config.version,
-                        current_global_config_version()
-                    ));
-                }
-
-                Ok(Self {
-                    version: config.version,
-                    active_workspace: config.active_workspace,
-                    theme: config.theme,
-                    git: config.git,
-                    chat: config.chat,
-                    kanban: config.kanban,
-                    autopilot: config.autopilot,
-                    global_prompt_overrides: config.global_prompt_overrides,
-                    workspaces: config.workspaces,
-                    recent_workspaces: config.recent_workspaces,
-                })
-            }
-            PersistedGlobalConfig::V1(legacy) => migrate_legacy_global_config(legacy),
+    fn try_from(config: PersistedGlobalConfigV2) -> Result<Self, Self::Error> {
+        if config.version != current_global_config_version() {
+            return Err(format!(
+                "Unsupported config version {}. Expected {}.",
+                config.version,
+                current_global_config_version()
+            ));
         }
+
+        Ok(Self {
+            version: config.version,
+            active_workspace: config.active_workspace,
+            theme: config.theme,
+            git: config.git,
+            chat: config.chat,
+            kanban: config.kanban,
+            autopilot: config.autopilot,
+            global_prompt_overrides: config.global_prompt_overrides,
+            workspaces: config.workspaces,
+            recent_workspaces: config.recent_workspaces,
+        })
     }
 }
 

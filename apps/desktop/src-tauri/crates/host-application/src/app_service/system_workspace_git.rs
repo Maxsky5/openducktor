@@ -131,6 +131,14 @@ fn missing_bd_repo_store_health() -> RepoStoreHealth {
 }
 
 impl AppService {
+    fn best_effort_auto_detect_git_provider_for_repo(&self, repo_path: &str, operation: &str) {
+        if let Err(error) = self.auto_detect_git_provider_for_repo(repo_path) {
+            eprintln!(
+                "OpenDucktor warning: {operation} completed but GitHub repository auto-detect failed for {repo_path}: {error:#}"
+            );
+        }
+    }
+
     pub fn workspace_repo_path(&self, workspace_id: &str) -> Result<String> {
         Ok(self.workspace_get_repo_config(workspace_id)?.repo_path)
     }
@@ -404,7 +412,9 @@ impl AppService {
         let workspace = self
             .config_store
             .add_workspace(workspace_id, workspace_name, repo_path)?;
-        self.auto_detect_git_provider_for_repo(repo_path)?;
+        // Git provider discovery is advisory; opening a workspace must still succeed when
+        // remote inspection is unavailable, especially after a repo move.
+        self.best_effort_auto_detect_git_provider_for_repo(repo_path, "workspace create");
         Ok(workspace)
     }
 
@@ -418,7 +428,10 @@ impl AppService {
 
     pub fn workspace_select(&self, workspace_id: &str) -> Result<WorkspaceRecord> {
         let workspace = self.config_store.select_workspace(workspace_id)?;
-        self.auto_detect_git_provider_for_repo(workspace.repo_path.as_str())?;
+        self.best_effort_auto_detect_git_provider_for_repo(
+            workspace.repo_path.as_str(),
+            "workspace select",
+        );
         Ok(workspace)
     }
 
@@ -1341,5 +1354,25 @@ mod tests {
             state.ensure_calls.is_empty(),
             "workspace select should not initialize beads"
         );
+    }
+
+    #[test]
+    fn workspace_select_succeeds_when_git_provider_auto_detect_fails() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = unique_temp_path("workspace-select-autodetect-best-effort");
+        init_git_repo(&repo_path).expect("git repo should initialize");
+
+        let workspace = service
+            .workspace_add(repo_path.to_string_lossy().as_ref())
+            .expect("workspace add should succeed");
+
+        fs::remove_dir_all(&repo_path).expect("repo path should be removed to break auto-detect");
+
+        let selected = service
+            .workspace_select(workspace.workspace_id.as_str())
+            .expect("workspace select should succeed when auto-detect fails");
+
+        assert!(selected.is_active);
+        assert_eq!(selected.workspace_id, workspace.workspace_id);
     }
 }
