@@ -14,6 +14,8 @@
     "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",
     "release:version:check": "bun run scripts/release-version.ts check",
+    "release:homebrew:cask": "bun run scripts/release-homebrew-cask.ts",
+    "test:release:homebrew:cask": "bun test scripts/release-homebrew-cask.test.ts",
     "release:cef:env": "bun run --cwd apps/desktop scripts/resolve-cef-release-env.ts",
     "tauri": "cd apps/desktop && bun run tauri",
     "tauri:dev": "cd apps/desktop && bun run tauri:dev",
