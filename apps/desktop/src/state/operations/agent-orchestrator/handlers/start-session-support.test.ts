@@ -60,6 +60,7 @@ describe("agent-orchestrator/handlers/start-session-support", () => {
   test("createSessionStartTags maps context fields into workflow tag payload", () => {
     const startedCtx: StartedSessionContext = {
       repoPath: "/tmp/repo",
+      workspaceId: "workspace-1",
       taskId: "task-1",
       role: "build",
       isStaleRepoOperation: () => false,

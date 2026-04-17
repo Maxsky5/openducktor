@@ -41,7 +41,11 @@ const MODEL_SELECTION = {
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: "/repo",
+  activeWorkspace: {
+    repoPath: "/repo",
+    workspaceId: "workspace-1",
+    workspaceName: "Active Workspace",
+  },
   taskId: "task-1",
   role: "spec",
   activeSession: null,

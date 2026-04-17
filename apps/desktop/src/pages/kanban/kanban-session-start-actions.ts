@@ -3,7 +3,7 @@ import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { startSessionWorkflow } from "@/features/session-start";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import type {
   KanbanResolvedSessionStartIntent,
   KanbanSessionStartIntent,
@@ -11,7 +11,7 @@ import type {
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
 type StartKanbanSessionFlowInput = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   intent: KanbanResolvedSessionStartIntent;
   selection: AgentModelSelection | null;
   startInBackground: boolean;
@@ -29,7 +29,7 @@ type StartKanbanSessionFlowInput = {
 };
 
 export const startKanbanSessionFlow = async ({
-  activeRepo,
+  activeWorkspace,
   intent,
   selection,
   startInBackground,
@@ -46,7 +46,7 @@ export const startKanbanSessionFlow = async ({
     startInBackground && intent.postStartAction === "none" ? "kickoff" : intent.postStartAction;
   const task = tasks.find((entry) => entry.id === intent.taskId) ?? null;
   const workflow = await startSessionWorkflow({
-    activeRepo,
+    activeWorkspace,
     queryClient,
     intent: {
       ...intent,

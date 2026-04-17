@@ -111,11 +111,6 @@ impl BeadsLifecycle {
         Ok(())
     }
 
-    pub(crate) fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {
-        let repo_key = Self::repo_key(repo_path);
-        self.ensure_repo_initialized_for_identity(repo_path, &repo_key, None)
-    }
-
     pub(crate) fn ensure_repo_initialized_for_identity(
         &self,
         repo_path: &Path,

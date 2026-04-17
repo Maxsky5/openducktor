@@ -11,10 +11,6 @@ use crate::constants::CUSTOM_STATUS_VALUES;
 use super::{BeadsLifecycle, LifecycleError, RepoReadiness};
 
 impl BeadsLifecycle {
-    pub(crate) fn repair_repo_store(&self, repo_path: &Path) -> Result<()> {
-        self.repair_repo_store_for_identity(repo_path, None)
-    }
-
     pub(crate) fn repair_repo_store_for_identity(
         &self,
         repo_path: &Path,
@@ -40,10 +36,6 @@ impl BeadsLifecycle {
                 )
             })?;
         Ok(())
-    }
-
-    pub(crate) fn ensure_custom_statuses(&self, repo_path: &Path) -> Result<()> {
-        self.ensure_custom_statuses_for_identity(repo_path, None)
     }
 
     pub(crate) fn ensure_custom_statuses_for_identity(
@@ -85,14 +77,6 @@ impl BeadsLifecycle {
             )
         })?;
         Ok(())
-    }
-
-    pub(crate) fn materialize_shared_database_from_attachment(
-        &self,
-        repo_path: &Path,
-        beads_dir: &Path,
-    ) -> Result<()> {
-        self.materialize_shared_database_from_attachment_for_identity(repo_path, beads_dir, None)
     }
 
     pub(crate) fn materialize_shared_database_from_attachment_for_identity(
@@ -137,14 +121,6 @@ impl BeadsLifecycle {
         }
 
         Ok(())
-    }
-
-    pub(crate) fn ensure_new_store_is_ready(
-        &self,
-        repo_path: &Path,
-        beads_dir: &Path,
-    ) -> Result<()> {
-        self.ensure_new_store_is_ready_for_identity(repo_path, beads_dir, None)
     }
 
     pub(crate) fn ensure_new_store_is_ready_for_identity(

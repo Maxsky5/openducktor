@@ -501,7 +501,7 @@ mod tests {
     struct WorkspacePolicyFixture {
         service: AppService,
         workspace_id: String,
-        repo_path: String,
+        _repo_path: String,
         root: PathBuf,
         _env_lock: std::sync::MutexGuard<'static, ()>,
         _home_guard: EnvVarGuard,
@@ -541,7 +541,7 @@ mod tests {
         WorkspacePolicyFixture {
             service,
             workspace_id,
-            repo_path,
+            _repo_path: repo_path,
             root,
             _env_lock: env_lock,
             _home_guard: home_guard,

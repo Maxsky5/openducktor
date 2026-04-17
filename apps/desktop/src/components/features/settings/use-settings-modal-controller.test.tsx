@@ -278,7 +278,7 @@ describe("useSettingsModalController", () => {
     await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("repo", "opencode");
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
 
     await harness.unmount();
   });
@@ -303,7 +303,7 @@ describe("useSettingsModalController", () => {
     await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("repo-two", "codex");
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo-two", "codex");
 
     await harness.unmount();
   });

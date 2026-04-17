@@ -271,7 +271,7 @@ impl AppConfigStore {
             .workspaces
             .get(workspace_id)
             .cloned()
-            .ok_or_else(|| anyhow!("Workspace is not configured in {}", self.path.display()))
+            .ok_or_else(|| anyhow!("Workspace is not configured: {workspace_id}"))
     }
 
     pub fn repo_config_optional(&self, workspace_id: &str) -> Result<Option<RepoConfig>> {
@@ -292,7 +292,7 @@ impl AppConfigStore {
 
     pub fn repo_config_by_repo_path(&self, repo_path: &str) -> Result<RepoConfig> {
         self.repo_config_optional_by_repo_path(repo_path)?
-            .ok_or_else(|| anyhow!("Workspace is not configured in {}", self.path.display()))
+            .ok_or_else(|| anyhow!("Workspace is not configured for repository path: {repo_path}"))
     }
 
     pub fn repo_config_optional_by_repo_path(&self, repo_path: &str) -> Result<Option<RepoConfig>> {

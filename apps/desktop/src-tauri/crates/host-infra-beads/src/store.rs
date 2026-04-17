@@ -100,6 +100,7 @@ impl BeadsTaskStore {
         Self::with_metadata_namespace_and_runner(namespace, None, command_runner)
     }
 
+    #[cfg(test)]
     pub(crate) fn repo_key(repo_path: &Path) -> String {
         Self::durable_identity_key(None, repo_path)
     }

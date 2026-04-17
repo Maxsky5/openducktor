@@ -33,7 +33,11 @@ const MODEL_SELECTION = {
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: "/repo",
+  activeWorkspace: {
+    repoPath: "/repo",
+    workspaceId: "workspace-1",
+    workspaceName: "Active Workspace",
+  },
   taskId: "task-1",
   role: "spec",
   scenario: "spec_initial",
@@ -140,7 +144,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
-        activeRepo: null,
+        activeWorkspace: null,
         role: "qa",
         scenario: "qa_review",
         selectedTask: createTaskCardFixture({

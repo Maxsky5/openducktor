@@ -3,9 +3,8 @@ use super::approval_support::{
     publish_recorded_target_branch, publish_target_branch,
 };
 use super::cleanup_plans::{
-    is_definitive_non_worktree_git_error, is_task_named_managed_worktree_path,
-    normalize_path_for_comparison, path_exists_including_broken_symlink,
-    resolve_effective_worktree_base_path,
+    is_definitive_non_worktree_git_error, normalize_path_for_comparison,
+    path_exists_including_broken_symlink,
 };
 use crate::app_service::service_core::AppService;
 use crate::app_service::task_workflow::session_service::BuildContinuationTargetLookup;
@@ -292,7 +291,7 @@ impl<'a> BuilderBranchService<'a> {
         if !path_exists_including_broken_symlink(Path::new(working_directory.as_str()))
             .with_context(|| format!("Failed checking builder worktree path {working_directory}"))?
         {
-            return Ok(None);
+            return Ok(Some(BuilderCleanupTarget { working_directory }));
         }
         let current_branch = match self
             .service
@@ -344,25 +343,18 @@ impl<'a> BuilderBranchService<'a> {
             return Ok(false);
         }
 
-        let Some(managed_worktree_base) =
-            resolve_effective_worktree_base_path(self.service, repo_path)?
-        else {
-            return Ok(false);
-        };
-
         let normalized_worktree = normalize_path_for_comparison(working_directory);
         let normalized_repo = normalize_path_for_comparison(repo_path);
         if normalized_worktree == normalized_repo {
             return Ok(false);
         }
 
-        let normalized_worktree_base =
-            normalize_path_for_comparison(managed_worktree_base.as_str());
-        Ok(is_task_named_managed_worktree_path(
-            normalized_worktree_base.as_path(),
-            normalized_worktree.as_path(),
-            task_id,
-        ))
+        let sessions = self.service.agent_sessions_list(repo_path, task_id)?;
+        Ok(sessions
+            .into_iter()
+            .filter(|session| matches!(session.role.trim(), "build" | "qa"))
+            .map(|session| normalize_path_for_comparison(session.working_directory.as_str()))
+            .any(|recorded_path| recorded_path == normalized_worktree))
     }
 }
 

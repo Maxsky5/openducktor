@@ -22,7 +22,11 @@ import {
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  ActiveWorkspace,
+  AgentStateContextValue,
+  RepoSettingsInput,
+} from "@/types/state-slices";
 import type {
   KanbanResolvedSessionStartIntent,
   KanbanSessionStartIntent,
@@ -32,7 +36,7 @@ import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 type UseKanbanSessionStartFlowArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   tasks: TaskCard[];
@@ -136,15 +140,15 @@ export const resolveKanbanBuildStartScenario = (
 };
 
 export function useKanbanSessionStartFlow({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   repoSettings,
   tasks,
   sessions,
   navigate,
   loadRepoSettings: _loadRepoSettings,
-  bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory,
+  bootstrapTaskSessions: _bootstrapTaskSessions,
+  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
   loadAgentSessions: _loadAgentSessions,
   humanRequestChangesTask,
   setTaskTargetBranch,
@@ -152,6 +156,7 @@ export function useKanbanSessionStartFlow({
   sendAgentMessage,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const tasksRef = useRef(tasks);
   const sessionsRef = useRef(sessions);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
@@ -255,7 +260,7 @@ export function useKanbanSessionStartFlow({
           };
 
           const sessionId = await startKanbanSessionFlow({
-            activeRepo,
+            activeWorkspace,
             intent: resolvedIntent,
             selection: decision.startMode === "reuse" ? null : decision.selectedModel,
             startInBackground: runInBackground,
@@ -273,7 +278,7 @@ export function useKanbanSessionStartFlow({
       );
     },
     [
-      activeRepo,
+      activeWorkspace,
       humanRequestChangesTask,
       openSessionInAgentStudio,
       queryClient,

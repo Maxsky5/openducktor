@@ -2580,3 +2580,80 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
 
     Ok(())
 }
+
+#[test]
+fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_effective_base(
+) -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-legacy-builder-worktree-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+    let current_worktree_base = repo_path.join("worktrees");
+    let legacy_worktree = unique_temp_path("reset-implementation-legacy-builder-worktree");
+    fs::create_dir_all(&legacy_worktree)?;
+
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![task],
+        vec![GitBranch {
+            name: "odt/task-1".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(current_worktree_base.to_string_lossy().to_string()),
+            ..Default::default()
+        },
+    )?;
+    git_state
+        .lock()
+        .expect("git state lock poisoned")
+        .current_branches_by_path
+        .insert(
+            legacy_worktree.to_string_lossy().to_string(),
+            host_domain::GitCurrentBranch {
+                name: Some("odt/task-1".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: None,
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "opencode".to_string(),
+        working_directory: legacy_worktree.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    service.task_reset_implementation(&repo_path.to_string_lossy(), "task-1")?;
+
+    let git_calls = &git_state.lock().expect("git state lock poisoned").calls;
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
+            if worktree_path == &legacy_worktree.to_string_lossy() && *force
+    )));
+    assert!(git_calls.iter().any(|call| matches!(
+        call,
+        crate::app_service::test_support::GitCall::DeleteLocalBranch { branch, force, .. }
+            if branch == "odt/task-1" && *force
+    )));
+
+    Ok(())
+}

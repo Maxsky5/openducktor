@@ -12,14 +12,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::{BeadsLifecycle, LifecycleError};
 
 impl BeadsLifecycle {
-    pub(crate) fn beads_working_dir(&self, repo_path: &Path) -> Result<std::path::PathBuf> {
-        self.beads_working_dir_for_identity(repo_path, None)
-    }
-
-    pub(crate) fn ensure_beads_working_dir(&self, repo_path: &Path) -> Result<std::path::PathBuf> {
-        self.ensure_beads_working_dir_for_identity(repo_path, None)
-    }
-
     pub(crate) fn beads_working_dir_for_identity(
         &self,
         repo_path: &Path,
@@ -91,10 +83,6 @@ impl BeadsLifecycle {
 
         write_config_atomically(&config_path, updated.as_str())?;
         Ok(())
-    }
-
-    pub(crate) fn build_bd_env(&self, repo_path: &Path) -> Result<Vec<(String, String)>> {
-        self.build_bd_env_for_identity(repo_path, None)
     }
 
     pub(crate) fn build_bd_env_for_identity(

@@ -142,24 +142,6 @@ pub(crate) fn workspace_select_by_repo_path(
     service.workspace_select(workspace_id.as_str())
 }
 
-pub(crate) fn workspace_persist_trusted_hooks_by_repo_path(
-    service: &AppService,
-    repo_path: &str,
-    trusted: bool,
-    trusted_fingerprint: Option<&str>,
-) -> Result<WorkspaceRecord> {
-    let workspace_id = workspace_id_for_repo_path(service, repo_path)?;
-    service.workspace_persist_trusted_hooks(workspace_id.as_str(), trusted, trusted_fingerprint)
-}
-
-pub(crate) fn workspace_get_repo_config_optional_by_repo_path(
-    service: &AppService,
-    repo_path: &str,
-) -> Result<Option<RepoConfig>> {
-    let workspace_id = workspace_id_for_repo_path(service, repo_path)?;
-    service.workspace_get_repo_config_optional(workspace_id.as_str())
-}
-
 pub(crate) fn write_private_file(path: &Path, contents: &str) -> Result<()> {
     fs::write(path, contents)?;
     #[cfg(unix)]

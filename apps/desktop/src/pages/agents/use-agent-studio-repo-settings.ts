@@ -1,14 +1,17 @@
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-export function useAgentStudioRepoSettings(args: { activeRepo: string | null }): {
+export function useAgentStudioRepoSettings(args: { activeWorkspace: WorkspaceRecord | null }): {
   repoSettings: RepoSettingsInput | null;
 } {
-  const { activeRepo } = args;
+  const { activeWorkspace } = args;
   const { data: repoSettings } = useQuery({
-    ...(activeRepo ? repoConfigQueryOptions(activeRepo) : repoConfigQueryOptions("")),
-    enabled: activeRepo !== null,
+    ...(activeWorkspace
+      ? repoConfigQueryOptions(activeWorkspace.workspaceId)
+      : repoConfigQueryOptions("")),
+    enabled: activeWorkspace !== null,
     select: toRepoSettingsInput,
   });
 

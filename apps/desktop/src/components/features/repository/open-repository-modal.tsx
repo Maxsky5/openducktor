@@ -271,6 +271,23 @@ export function OpenRepositoryModal({
               </div>
 
               <div className="grid gap-1.5">
+                <Label htmlFor="open-workspace-id">Workspace ID</Label>
+                <Input
+                  id="open-workspace-id"
+                  value={workspaceId}
+                  disabled={isModalBusy}
+                  className="font-mono"
+                  onChange={(event) => {
+                    setHasEditedWorkspaceId(true);
+                    setWorkspaceId(event.currentTarget.value.trim());
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use lowercase letters, digits, and dashes only.
+                </p>
+              </div>
+
+              <div className="grid gap-1.5">
                 <Label htmlFor="open-workspace-name">Workspace name</Label>
                 <Input
                   id="open-workspace-name"
@@ -289,23 +306,6 @@ export function OpenRepositoryModal({
                     }
                   }}
                 />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="open-workspace-id">Workspace ID</Label>
-                <Input
-                  id="open-workspace-id"
-                  value={workspaceId}
-                  disabled={isModalBusy}
-                  className="font-mono"
-                  onChange={(event) => {
-                    setHasEditedWorkspaceId(true);
-                    setWorkspaceId(event.currentTarget.value.trim());
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use lowercase letters, digits, and dashes only.
-                </p>
               </div>
             </div>
           ) : (

@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{GitTargetBranch, TaskStatus};
 use host_infra_system::{
     build_branch_name, copy_configured_worktree_files, remove_worktree,
-    resolve_effective_worktree_base_dir, run_command, RepoConfig,
+    resolve_effective_worktree_base_dir_for_workspace, run_command, RepoConfig,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -83,13 +83,15 @@ impl AppService {
         let repo_path = repo_path.as_str().to_string();
         let repo_config = self.workspace_get_repo_config_by_repo_path(repo_path.as_str())?;
 
-        let worktree_base = resolve_effective_worktree_base_dir(
-            Path::new(repo_path.as_str()),
+        let worktree_base = resolve_effective_worktree_base_dir_for_workspace(
+            repo_config.workspace_id.as_str(),
             repo_config.worktree_base_path.as_deref(),
         )
         .with_context(|| {
             format!(
-                "Build blocked: unable to resolve effective worktree base path for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath in {}",
+                "Build blocked: unable to resolve effective worktree base path for workspace {} ({repo_path}). Ensure HOME is set or configure workspaces.{}.worktreeBasePath in {}",
+                repo_config.workspace_id,
+                repo_config.workspace_id,
                 self.config_store.path().display()
             )
         })
@@ -97,7 +99,9 @@ impl AppService {
             path_buf_to_utf8(
                 path,
                 &format!(
-                    "Build blocked: effective worktree base path must be valid UTF-8 for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath in {}",
+                    "Build blocked: effective worktree base path must be valid UTF-8 for workspace {} ({repo_path}). Ensure HOME is set or configure workspaces.{}.worktreeBasePath in {}",
+                    repo_config.workspace_id,
+                    repo_config.workspace_id,
                     self.config_store.path().display()
                 ),
             )

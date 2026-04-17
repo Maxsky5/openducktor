@@ -414,6 +414,11 @@ describe("KanbanPage session start modal flow", () => {
       },
       useWorkspaceState: () => ({
         activeRepo: "/repo",
+        activeWorkspace: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+        },
         isSwitchingWorkspace: false,
         loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
       }),

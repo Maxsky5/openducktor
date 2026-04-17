@@ -92,13 +92,13 @@ const attachSessionListenerAndGuard = async ({
 
 const resolveKickoffGitContext = async ({
   kickoffScenario,
-  repoPath,
+  workspaceId,
   kickoffTargetBranch,
   taskCard,
   model,
 }: {
   kickoffScenario: ReturnType<typeof assertAgentKickoffScenario>;
-  repoPath: string;
+  workspaceId: string;
   kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
   taskCard: TaskCard;
   model: Pick<StartSessionDependencies, "model">["model"];
@@ -120,7 +120,7 @@ const resolveKickoffGitContext = async ({
   }
 
   const repoDefaultTargetBranch = model.loadRepoDefaultTargetBranch
-    ? await model.loadRepoDefaultTargetBranch(repoPath)
+    ? await model.loadRepoDefaultTargetBranch(workspaceId)
     : null;
 
   return {
@@ -154,7 +154,7 @@ const maybeSendKickoff = async ({
   const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
   const git = await resolveKickoffGitContext({
     kickoffScenario,
-    repoPath: startedCtx.repoPath,
+    workspaceId: startedCtx.workspaceId,
     kickoffTargetBranch,
     taskCard,
     model,
@@ -200,7 +200,11 @@ export const createStartAgentSession = ({
   return async (input: StartAgentSessionInput): Promise<string> => {
     const { taskId, role, scenario, sendKickoff = false, startMode } = input;
     const effectiveScenario = scenario ?? defaultAgentScenarioForRole(role);
-    const repoPath = requireActiveRepo(repo.activeRepo);
+    const repoPath = requireActiveRepo(repo.activeWorkspace?.repoPath ?? null);
+    const workspaceId = repo.activeWorkspace?.workspaceId.trim();
+    if (!workspaceId) {
+      throw new Error("Active workspace is required.");
+    }
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef: repo.repoEpochRef,
@@ -211,6 +215,7 @@ export const createStartAgentSession = ({
 
     const startCtx: StartSessionContext = {
       repoPath,
+      workspaceId,
       taskId,
       role,
       isStaleRepoOperation,

@@ -174,14 +174,43 @@ const createDeferred = <T,>() => {
 
 const createHookHarness = (args: {
   activeRepo: string | null;
+  activeWorkspace?: import("@openducktor/contracts").WorkspaceRecord | null;
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: OpencodeSdkAdapter;
 }) => {
+  const createDefaultActiveWorkspace = (activeRepo: string | null) =>
+    activeRepo === null
+      ? null
+      : {
+          workspaceId: activeRepo.split("/").filter(Boolean).at(-1) ?? "workspace",
+          workspaceName: "Workspace",
+          repoPath: activeRepo,
+          branchPrefix: "odt",
+          defaultRuntimeKind: "opencode",
+          defaultTargetBranch: null,
+          defaultBuildProfileId: null,
+          defaultBuildProvider: null,
+          defaultBuildModel: null,
+          defaultBuildVariant: null,
+          defaultQaProfileId: null,
+          defaultQaProvider: null,
+          defaultQaModel: null,
+          defaultQaVariant: null,
+          git: { providers: {} },
+          hooks: { preStart: [], postComplete: [] },
+          trustedHooks: false,
+          isActive: true,
+          hasConfig: true,
+          defaultWorktreeBasePath: null,
+          configuredWorktreeBasePath: null,
+          effectiveWorktreeBasePath: null,
+        };
   let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
   let currentArgs = {
     ...args,
+    activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
   };
 
@@ -207,6 +236,7 @@ const createHookHarness = (args: {
   const updateArgs = async (
     nextArgs: Partial<{
       activeRepo: string | null;
+      activeWorkspace: import("@openducktor/contracts").WorkspaceRecord | null;
       tasks: TaskCard[];
       runs: RunSummary[];
       refreshTaskData: (repoPath: string) => Promise<void>;
@@ -216,6 +246,10 @@ const createHookHarness = (args: {
     currentArgs = {
       ...currentArgs,
       ...nextArgs,
+      activeWorkspace:
+        nextArgs.activeRepo !== undefined && nextArgs.activeWorkspace === undefined
+          ? createDefaultActiveWorkspace(nextArgs.activeRepo)
+          : currentArgs.activeWorkspace,
     };
     await sharedHarness.update(undefined);
   };

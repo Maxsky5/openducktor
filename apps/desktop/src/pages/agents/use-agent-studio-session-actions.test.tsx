@@ -202,7 +202,11 @@ const confirmSessionStartModal = async (
 
 const createBaseArgs = (): HookArgs => {
   return {
-    activeRepo: "/repo",
+    activeWorkspace: {
+      repoPath: "/repo",
+      workspaceId: "workspace-1",
+      workspaceName: "Active Workspace",
+    },
     taskId: "task-1",
     role: "spec",
     scenario: "spec_initial",

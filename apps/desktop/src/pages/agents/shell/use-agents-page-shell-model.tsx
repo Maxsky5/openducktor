@@ -326,6 +326,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const orchestration = useAgentStudioOrchestrationController({
     activeRepo,
+    activeWorkspace,
     branches,
     selection: {
       ...selection,

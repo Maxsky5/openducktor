@@ -174,7 +174,7 @@ export const useSettingsModalController = ({
         : null,
     [selectedRepoPath, workspaces],
   );
-  const selectedRepoRuntimePath = selectedRepoWorkspace?.repoPath ?? null;
+  const selectedRepoPathOnDisk = selectedRepoWorkspace?.repoPath ?? null;
 
   const {
     selectedRepoBranches,
@@ -183,7 +183,7 @@ export const useSettingsModalController = ({
     retrySelectedRepoBranchesLoad,
   } = useSettingsModalBranchesState({
     open,
-    selectedRepoPath: selectedRepoRuntimePath,
+    selectedRepoPath: selectedRepoPathOnDisk,
   });
 
   const catalogRuntimeKinds = useMemo(
@@ -198,7 +198,7 @@ export const useSettingsModalController = ({
     isLoadingCatalog,
   } = useSettingsModalCatalogState({
     enabled: shouldLoadCatalog,
-    selectedRepoPath,
+    selectedRepoPath: selectedRepoPathOnDisk,
     runtimeKinds: catalogRuntimeKinds,
   });
 
@@ -396,11 +396,11 @@ export const useSettingsModalController = ({
   }, [hasRepoScriptValidationErrors]);
 
   const detectSelectedRepoGithubRepository = useCallback(async () => {
-    if (!selectedRepoRuntimePath) {
+    if (!selectedRepoPathOnDisk) {
       return null;
     }
 
-    const detected = await detectGithubRepository(selectedRepoRuntimePath);
+    const detected = await detectGithubRepository(selectedRepoPathOnDisk);
     if (!detected) {
       return null;
     }
@@ -429,7 +429,7 @@ export const useSettingsModalController = ({
     });
 
     return detected;
-  }, [detectGithubRepository, selectedRepoRuntimePath, updateSelectedRepoConfig]);
+  }, [detectGithubRepository, selectedRepoPathOnDisk, updateSelectedRepoConfig]);
 
   const submit = useCallback(async (): Promise<boolean> => {
     if (!snapshotDraft) {

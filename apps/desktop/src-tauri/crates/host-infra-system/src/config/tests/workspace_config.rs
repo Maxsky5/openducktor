@@ -3,6 +3,7 @@ use super::{
 };
 use crate::{
     compute_beads_database_name, compute_beads_database_name_for_workspace,
+    resolve_default_worktree_base_dir, resolve_default_worktree_base_dir_for_workspace,
     resolve_repo_beads_attachment_dir, resolve_repo_live_database_dir,
     resolve_workspace_beads_attachment_dir, resolve_workspace_live_database_dir, GitTargetBranch,
 };
@@ -331,8 +332,13 @@ fn load_adopts_legacy_beads_namespace_into_workspace_identity() {
         resolve_repo_beads_attachment_dir(repo.as_path()).expect("legacy attachment dir");
     let legacy_live_database_dir =
         resolve_repo_live_database_dir(repo.as_path()).expect("legacy live db dir");
+    let legacy_worktree_dir =
+        resolve_default_worktree_base_dir(repo.as_path()).expect("legacy worktree dir");
+    let workspace_worktree_dir = resolve_default_worktree_base_dir_for_workspace(&workspace_id)
+        .expect("workspace worktree dir");
     fs::create_dir_all(&legacy_attachment_dir).expect("create legacy attachment dir");
     fs::create_dir_all(&legacy_live_database_dir).expect("create legacy live db dir");
+    fs::create_dir_all(&legacy_worktree_dir).expect("create legacy worktree dir");
     fs::write(
         legacy_attachment_dir.join("metadata.json"),
         json!({
@@ -364,6 +370,8 @@ fn load_adopts_legacy_beads_namespace_into_workspace_identity() {
     assert_eq!(workspace_record.repo_path, repo_path);
     assert!(!legacy_attachment_dir.exists());
     assert!(!legacy_live_database_dir.exists());
+    assert!(legacy_worktree_dir.exists());
+    assert!(!workspace_worktree_dir.exists());
     assert_eq!(
         fs::read_to_string(workspace_attachment_dir.join("task.json")).expect("task marker"),
         "legacy-task"

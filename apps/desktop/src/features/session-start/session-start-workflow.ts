@@ -10,7 +10,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import { kickoffPromptForScenario } from "./session-start-prompts";
 
@@ -40,7 +40,7 @@ export type SessionStartWorkflowResult = {
 };
 
 type StartSessionWorkflowArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   queryClient: QueryClient;
   intent: SessionStartWorkflowIntent;
   selection: AgentModelSelection | null;
@@ -84,11 +84,11 @@ const toError = (error: unknown): Error => {
 const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
 
 const buildPostStartMessage = async ({
-  activeRepo,
+  activeWorkspace,
   queryClient,
   intent,
   task,
-}: Pick<StartSessionWorkflowArgs, "activeRepo" | "queryClient" | "task"> & {
+}: Pick<StartSessionWorkflowArgs, "activeWorkspace" | "queryClient" | "task"> & {
   intent: SessionStartWorkflowIntent;
 }): Promise<string> => {
   if (intent.postStartAction === "send_message") {
@@ -107,11 +107,11 @@ const buildPostStartMessage = async ({
   if (kickoffScenario === "build_after_human_request_changes" && !humanFeedback) {
     throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
   }
-  const promptOverrides = activeRepo
-    ? await loadEffectivePromptOverrides(activeRepo, queryClient)
+  const promptOverrides = activeWorkspace?.workspaceId
+    ? await loadEffectivePromptOverrides(activeWorkspace.workspaceId, queryClient)
     : undefined;
-  const repoDefaultTargetBranch = activeRepo
-    ? (await loadRepoConfigFromQuery(queryClient, activeRepo)).defaultTargetBranch
+  const repoDefaultTargetBranch = activeWorkspace?.workspaceId
+    ? (await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId)).defaultTargetBranch
     : null;
   const git =
     kickoffScenario === "build_pull_request_generation"
@@ -177,7 +177,7 @@ const runBeforeStartAction = async ({
 };
 
 export const startSessionWorkflow = async ({
-  activeRepo,
+  activeWorkspace,
   queryClient,
   intent,
   selection,
@@ -252,7 +252,7 @@ export const startSessionWorkflow = async ({
         {
           kind: "text",
           text: await buildPostStartMessage({
-            activeRepo,
+            activeWorkspace,
             queryClient,
             intent,
             task,

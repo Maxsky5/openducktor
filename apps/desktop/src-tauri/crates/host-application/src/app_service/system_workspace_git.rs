@@ -14,9 +14,10 @@ use host_domain::{
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, discover_open_in_tools,
     open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
-    remove_worktree_path_if_present, repo_script_fingerprint, resolve_effective_worktree_base_dir,
-    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
-    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    remove_worktree_path_if_present, repo_script_fingerprint,
+    resolve_effective_worktree_base_dir_for_workspace, run_command,
+    run_command_allow_failure_with_env, version_command, AutopilotSettings, ChatSettings,
+    GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
 };
 #[cfg(test)]
 use host_infra_system::{
@@ -162,15 +163,36 @@ impl AppService {
         }
 
         let repo_config = self.config_store.repo_config_by_repo_path(repo_path)?;
-        let managed_worktree_base = resolve_effective_worktree_base_dir(
-            repo_path_ref,
+        let managed_worktree_base = resolve_effective_worktree_base_dir_for_workspace(
+            repo_config.workspace_id.as_str(),
             repo_config.worktree_base_path.as_deref(),
         )?;
 
-        Ok(path_is_within_root(
-            managed_worktree_base.as_path(),
-            candidate_path,
-        ))
+        Ok(
+            path_is_within_root(managed_worktree_base.as_path(), candidate_path)
+                || self.is_recorded_task_worktree_path(repo_path, candidate_path)?,
+        )
+    }
+
+    fn is_recorded_task_worktree_path(
+        &self,
+        repo_path: &str,
+        candidate_path: &Path,
+    ) -> Result<bool> {
+        let normalized_candidate =
+            normalize_path_for_comparison(candidate_path.to_string_lossy().as_ref());
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        if normalized_candidate == normalized_repo {
+            return Ok(false);
+        }
+
+        Ok(self
+            .task_store
+            .list_tasks(Path::new(repo_path))?
+            .into_iter()
+            .flat_map(|task| task.agent_sessions.into_iter())
+            .map(|session| normalize_path_for_comparison(session.working_directory.as_str()))
+            .any(|recorded_path| recorded_path == normalized_candidate))
     }
 
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {

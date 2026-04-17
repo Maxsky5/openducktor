@@ -20,7 +20,11 @@ import {
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  ActiveWorkspace,
+  AgentStateContextValue,
+  RepoSettingsInput,
+} from "@/types/state-slices";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useAgentStudioFreshSessionCreation } from "../use-agent-studio-fresh-session-creation";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
@@ -39,7 +43,7 @@ type SessionStartRequestInput = Omit<NewSessionStartRequest, "selectedModel"> & 
 };
 
 type UseAgentStudioSessionStartFlowArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
@@ -70,7 +74,7 @@ type AgentStudioSessionStartRequest = Omit<NewSessionStartRequest, "selectedMode
 };
 
 export function useAgentStudioSessionStartFlow({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   taskId,
   role,
@@ -98,6 +102,7 @@ export function useAgentStudioSessionStartFlow({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const [startingActivityCountByContext, setStartingActivityCountByContext] = useState<
     Record<string, number>
   >({});
@@ -195,7 +200,7 @@ export function useAgentStudioSessionStartFlow({
   );
 
   const { startSession, runSessionStart } = useAgentStudioSessionStartSession({
-    activeRepo,
+    activeWorkspace,
     taskId,
     role,
     scenario,
@@ -225,7 +230,7 @@ export function useAgentStudioSessionStartFlow({
     async (request: AgentStudioSessionStartRequest): Promise<string | undefined> => {
       return executeRequestedSessionStart(request, async (decision) => {
         const workflow = await startSessionWorkflow({
-          activeRepo,
+          activeWorkspace,
           queryClient,
           intent: {
             taskId: request.taskId,
@@ -272,7 +277,7 @@ export function useAgentStudioSessionStartFlow({
       });
     },
     [
-      activeRepo,
+      activeWorkspace,
       executeRequestedSessionStart,
       queryClient,
       selectedTask,
@@ -326,7 +331,7 @@ export function useAgentStudioSessionStartFlow({
   ]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({
-    activeRepo,
+    activeWorkspace,
     taskId,
     role,
     activeSession,

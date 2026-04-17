@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, RepoConfig, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RepoConfig,
+  TaskCard,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
 import {
@@ -82,12 +87,27 @@ const createRepoConfig = (): RepoConfig => ({
 
 const createQueryClient = (): QueryClient => {
   const queryClient = new QueryClient();
-  queryClient.setQueryData(repoConfigQueryOptions("/repo").queryKey, createRepoConfig());
+  const workspace: WorkspaceRecord = {
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/worktrees/repo",
+    effectiveWorktreeBasePath: "/worktrees/repo",
+  };
+  queryClient.setQueryData(workspaceQueryKeys.list(), [workspace]);
+  queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, createRepoConfig());
   return queryClient;
 };
 
 const createExecuteArgs = (task: TaskCard) => ({
-  repoPath: "/repo",
+  activeWorkspace: {
+    repoPath: "/repo",
+    workspaceId: "repo",
+    workspaceName: "Repo",
+  },
   task,
   queryClient: createQueryClient(),
   loadRepoRuntimeCatalog: mock(

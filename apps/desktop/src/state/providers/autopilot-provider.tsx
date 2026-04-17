@@ -22,10 +22,10 @@ import {
 import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
 import { errorMessage } from "@/lib/errors";
 import { isQaRejectedTask } from "@/lib/task-qa";
+import { useWorkspaceState } from "@/state";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import {
-  useActiveRepoContext,
   useAgentOperationsContext,
   useRuntimeDefinitionsContext,
   useTaskDataContext,
@@ -50,7 +50,7 @@ type AutopilotActionOutcome = {
 };
 
 type ExecuteAutopilotActionArgs = {
-  repoPath: string;
+  activeWorkspace: ActiveWorkspace;
   task: TaskCard;
   actionId: AutopilotActionId;
   queryClient: QueryClient;
@@ -156,13 +156,13 @@ const toAgentModelSelection = (
 };
 
 const resolveAutopilotSelection = async ({
-  repoPath,
+  activeWorkspace,
   role,
   preferredSelection,
   queryClient,
   loadRepoRuntimeCatalog,
 }: {
-  repoPath: string;
+  activeWorkspace: ActiveWorkspace;
   role: AgentRole;
   preferredSelection?: AgentModelSelection | null;
   queryClient: QueryClient;
@@ -172,11 +172,11 @@ const resolveAutopilotSelection = async ({
     return preferredSelection;
   }
 
-  const repoConfig = await loadRepoConfigFromQuery(queryClient, repoPath);
+  const repoConfig = await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId);
   const repoSettings = toRepoSettingsInput(repoConfig);
   const savedDefaultSelection = roleDefaultSelectionFor(repoSettings, role);
   const runtimeKind = savedDefaultSelection?.runtimeKind ?? repoSettings.defaultRuntimeKind;
-  const catalog = await loadRepoRuntimeCatalog(repoPath, runtimeKind);
+  const catalog = await loadRepoRuntimeCatalog(activeWorkspace.repoPath, runtimeKind);
 
   if (savedDefaultSelection) {
     const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
@@ -210,11 +210,14 @@ const isSkippableAutopilotError = (actionId: AutopilotActionId, error: unknown):
 };
 
 const resolveAutopilotStart = async ({
-  repoPath,
+  activeWorkspace,
   task,
   actionId,
   resolveBuildContinuationTarget,
-}: Pick<ExecuteAutopilotActionArgs, "repoPath" | "task" | "resolveBuildContinuationTarget"> & {
+}: Pick<
+  ExecuteAutopilotActionArgs,
+  "activeWorkspace" | "task" | "resolveBuildContinuationTarget"
+> & {
   actionId: AutopilotActionId;
 }): Promise<ResolvedAutopilotStart> => {
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
@@ -235,7 +238,10 @@ const resolveAutopilotStart = async ({
     };
   }
 
-  const continuationTarget = await resolveBuildContinuationTarget(repoPath, task.id);
+  const continuationTarget = await resolveBuildContinuationTarget(
+    activeWorkspace.repoPath,
+    task.id,
+  );
   if (!continuationTarget) {
     throw new Error(MISSING_BUILD_TARGET_ERROR);
   }
@@ -259,7 +265,7 @@ const resolveAutopilotStart = async ({
 };
 
 export const executeAutopilotAction = async ({
-  repoPath,
+  activeWorkspace,
   task,
   actionId,
   queryClient,
@@ -281,14 +287,14 @@ export const executeAutopilotAction = async ({
 
   try {
     const resolvedStart = await resolveAutopilotStart({
-      repoPath,
+      activeWorkspace,
       task,
       actionId,
       resolveBuildContinuationTarget,
     });
 
     await startSessionWorkflow({
-      activeRepo: repoPath,
+      activeWorkspace,
       queryClient,
       intent: {
         taskId: task.id,
@@ -307,7 +313,7 @@ export const executeAutopilotAction = async ({
         resolvedStart.startMode === "reuse"
           ? null
           : await resolveAutopilotSelection({
-              repoPath,
+              activeWorkspace,
               role: action.role,
               ...(resolvedStart.preferredSelection !== undefined
                 ? { preferredSelection: resolvedStart.preferredSelection }
@@ -343,7 +349,8 @@ export const executeAutopilotAction = async ({
 
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useWorkspaceState();
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const { tasks } = useTaskDataContext();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
   const { startAgentSession, sendAgentMessage } = useAgentOperationsContext();
@@ -352,7 +359,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const previousTasksByIdRef = useRef<Map<string, TaskCard>>(new Map());
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!activeRepo || !activeWorkspace) {
       previousRepoRef.current = null;
       previousTasksByIdRef.current = new Map();
       return;
@@ -385,7 +392,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
         for (const actionId of rule.actionIds) {
           try {
             const outcome = await executeAutopilotAction({
-              repoPath: activeRepo,
+              activeWorkspace,
               task: observedEvent.task,
               actionId,
               queryClient,
@@ -413,6 +420,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     })();
   }, [
     activeRepo,
+    activeWorkspace,
     loadRepoRuntimeCatalog,
     queryClient,
     sendAgentMessage,

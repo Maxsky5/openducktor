@@ -58,6 +58,7 @@ export type SessionLifecycleAdapter = Pick<
 
 export type SessionLoadIntent = {
   repoPath: string;
+  workspaceId: string;
   taskId: string;
   mode: AgentSessionLoadMode;
   requestedSessionId: string | null;
@@ -74,7 +75,7 @@ export type PersistedSessionMergeStageInput = {
   setSessionsById: Dispatch<SetStateAction<Record<string, AgentSessionState>>>;
   isStaleRepoOperation: () => boolean;
   loadPersistedRecords: () => Promise<AgentSessionRecord[]>;
-  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 export type PersistedSessionMergeStageOutput = {
@@ -315,7 +316,7 @@ export const preparePersistedSessionMergeStage = async ({
   let repoPromptOverridesPromise: Promise<RepoPromptOverrides> | null = null;
   const getRepoPromptOverrides = (): Promise<RepoPromptOverrides> => {
     if (repoPromptOverridesPromise === null) {
-      repoPromptOverridesPromise = loadRepoPromptOverrides(intent.repoPath);
+      repoPromptOverridesPromise = loadRepoPromptOverrides(intent.workspaceId);
     }
     return repoPromptOverridesPromise;
   };

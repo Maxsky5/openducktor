@@ -8,7 +8,11 @@ import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentOperationsContextValue, AgentStateContextValue } from "@/types/state-slices";
+import type {
+  ActiveWorkspace,
+  AgentOperationsContextValue,
+  AgentStateContextValue,
+} from "@/types/state-slices";
 import { upsertAgentSessionRecordInQuery } from "../../queries/agent-sessions";
 import { upsertAgentSessionInRepoTaskData } from "../../queries/tasks";
 import { host } from "../shared/host";
@@ -33,7 +37,7 @@ import { createSessionHydrationOperations } from "./lifecycle/session-hydration-
 import { findLastUserSessionMessage } from "./support/messages";
 
 type UseAgentOrchestratorOperationsArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
@@ -46,12 +50,13 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
 };
 
 export function useAgentOrchestratorOperations({
-  activeRepo,
+  activeWorkspace,
   tasks,
   runs,
   refreshTaskData,
   agentEngine,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const { sessionStore, refBridges, commitSessions } = useOrchestratorSessionState({
     activeRepo,
     tasks,
@@ -288,7 +293,7 @@ export function useAgentOrchestratorOperations({
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
-        activeRepo,
+        activeWorkspace,
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
         activeRepoRef: refBridges.activeRepoRef,
@@ -303,7 +308,7 @@ export function useAgentOrchestratorOperations({
         liveAgentSessionStore,
       }),
     [
-      activeRepo,
+      activeWorkspace,
       agentEngine,
       attachSessionListener,
       commitSessions,
@@ -439,7 +444,7 @@ export function useAgentOrchestratorOperations({
   const sessionActions = useMemo(
     () =>
       createAgentSessionActions({
-        activeRepo,
+        activeWorkspace,
         adapter: agentEngine,
         setSessionsById: commitSessions,
         sessionsRef: refBridges.sessionsRef,
@@ -470,7 +475,7 @@ export function useAgentOrchestratorOperations({
         invalidateSessionStopQueries,
       }),
     [
-      activeRepo,
+      activeWorkspace,
       agentEngine,
       attachSessionListener,
       clearTurnDuration,

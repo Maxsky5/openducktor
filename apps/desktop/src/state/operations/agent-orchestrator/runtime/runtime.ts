@@ -184,22 +184,22 @@ export const loadTaskDocuments = async (
   };
 };
 
-const loadRepoConfig = (repoPath: string): Promise<RepoConfig> => {
-  return loadRepoConfigFromQuery(appQueryClient, repoPath);
+const loadRepoConfig = (workspaceId: string): Promise<RepoConfig> => {
+  return loadRepoConfigFromQuery(appQueryClient, workspaceId);
 };
 
 export const loadRepoDefaultTargetBranch = async (
-  repoPath: string,
+  workspaceId: string,
 ): Promise<GitTargetBranch | null> => {
-  const config = await loadRepoConfig(repoPath);
+  const config = await loadRepoConfig(workspaceId);
   return config.defaultTargetBranch ?? null;
 };
 
 export const loadRepoDefaultModel = async (
-  repoPath: string,
+  workspaceId: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await loadRepoConfig(repoPath);
+  const config = await loadRepoConfig(workspaceId);
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -214,9 +214,11 @@ export const loadRepoDefaultModel = async (
   };
 };
 
-export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPromptOverrides> => {
+export const loadRepoPromptOverrides = async (
+  workspaceId: string,
+): Promise<RepoPromptOverrides> => {
   const [repoConfig, snapshot] = await Promise.all([
-    loadRepoConfig(repoPath),
+    loadRepoConfig(workspaceId),
     loadSettingsSnapshotFromQuery(appQueryClient),
   ]);
 

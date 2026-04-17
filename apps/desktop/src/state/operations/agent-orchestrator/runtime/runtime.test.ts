@@ -32,6 +32,18 @@ const runningRunFixture: RunSummary = {
 describe("agent-orchestrator-runtime", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
+    host.workspaceList = async () => [
+      {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/tmp/worktrees/repo",
+        effectiveWorktreeBasePath: "/tmp/worktrees/repo",
+      },
+    ];
     host.workspaceGetRepoConfig = async () => ({
       workspaceId: "repo",
       workspaceName: "Repo",

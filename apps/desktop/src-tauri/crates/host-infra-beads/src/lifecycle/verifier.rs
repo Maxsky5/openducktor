@@ -111,10 +111,6 @@ enum BdWhereCommandOutput<'a> {
 }
 
 impl BeadsLifecycle {
-    pub(crate) fn diagnose_repo_store(&self, repo_path: &Path) -> Result<RepoStoreHealth> {
-        self.diagnose_repo_store_for_identity(repo_path, None, None)
-    }
-
     pub(crate) fn diagnose_repo_store_for_identity(
         &self,
         repo_path: &Path,
@@ -263,6 +259,7 @@ impl BeadsLifecycle {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,

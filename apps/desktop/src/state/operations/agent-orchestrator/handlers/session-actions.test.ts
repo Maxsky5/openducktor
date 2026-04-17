@@ -54,7 +54,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
     const adapter = new OpencodeSdkAdapter();
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef: { current: {} },
@@ -119,7 +123,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -202,7 +210,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -282,7 +294,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -412,7 +428,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -503,7 +523,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -581,7 +605,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -661,7 +689,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -755,7 +787,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -836,7 +872,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -935,7 +975,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1030,7 +1074,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1145,7 +1193,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1220,7 +1272,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1290,7 +1346,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1379,7 +1439,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1454,7 +1518,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1517,7 +1585,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1589,7 +1661,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1668,7 +1744,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1761,7 +1841,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,
@@ -1853,7 +1937,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const actions = createAgentSessionActions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       setSessionsById: () => {},
       sessionsRef,

@@ -155,8 +155,6 @@ pub fn resolve_workspace_beads_paths(workspace_id: &str) -> Result<RepoBeadsPath
 pub(crate) fn adopt_legacy_workspace_namespace(repo_path: &Path, workspace_id: &str) -> Result<()> {
     let legacy_paths = resolve_repo_beads_paths(repo_path)?;
     let workspace_paths = resolve_workspace_beads_paths(workspace_id)?;
-    let legacy_worktree_dir = resolve_default_worktree_base_dir(repo_path)?;
-    let workspace_worktree_dir = resolve_default_worktree_base_dir_for_workspace(workspace_id)?;
 
     ensure_adoption_target_available(
         "Beads attachment root",
@@ -167,11 +165,6 @@ pub(crate) fn adopt_legacy_workspace_namespace(repo_path: &Path, workspace_id: &
         "shared Dolt database directory",
         &legacy_paths.live_database_dir,
         &workspace_paths.live_database_dir,
-    )?;
-    ensure_adoption_target_available(
-        "default worktree directory",
-        &legacy_worktree_dir,
-        &workspace_worktree_dir,
     )?;
 
     let moved_attachment = adopt_directory_if_present(
@@ -183,11 +176,6 @@ pub(crate) fn adopt_legacy_workspace_namespace(repo_path: &Path, workspace_id: &
         "shared Dolt database directory",
         &legacy_paths.live_database_dir,
         &workspace_paths.live_database_dir,
-    )?;
-    adopt_directory_if_present(
-        "default worktree directory",
-        &legacy_worktree_dir,
-        &workspace_worktree_dir,
     )?;
 
     if moved_attachment || moved_database {
@@ -218,6 +206,16 @@ pub fn resolve_effective_worktree_base_dir(
     match configured_worktree_base_path {
         Some(configured_path) => parse_user_path(configured_path),
         None => resolve_default_worktree_base_dir(repo_path),
+    }
+}
+
+pub fn resolve_effective_worktree_base_dir_for_workspace(
+    workspace_id: &str,
+    configured_worktree_base_path: Option<&str>,
+) -> Result<PathBuf> {
+    match configured_worktree_base_path {
+        Some(configured_path) => parse_user_path(configured_path),
+        None => resolve_default_worktree_base_dir_for_workspace(workspace_id),
     }
 }
 

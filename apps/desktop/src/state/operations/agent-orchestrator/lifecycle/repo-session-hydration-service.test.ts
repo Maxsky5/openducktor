@@ -304,6 +304,7 @@ describe("repo-session-hydration-service", () => {
             createRuntimeResolutionPlannerStage({
               intent: {
                 repoPath,
+                workspaceId: "workspace-1",
                 taskId,
                 mode: "reconcile_live",
                 requestedSessionId: null,

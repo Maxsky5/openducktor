@@ -8,7 +8,7 @@ import {
 
 const hostMock = {
   workspaceGetRepoConfig: mock(
-    async (_repoPath: string): Promise<RepoConfig> => ({
+    async (_workspaceId: string): Promise<RepoConfig> => ({
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
@@ -52,13 +52,22 @@ describe("useAgentStudioRepoSettings", () => {
     hostMock.workspaceGetRepoConfig.mockClear();
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/worktrees/default",
+        effectiveWorktreeBasePath: "/worktrees/default",
+      },
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.repoSettings !== null);
 
-    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("/repo");
+    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("workspace-repo");
     expect(harness.getLatest().repoSettings).toEqual({
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/worktrees",
@@ -84,13 +93,22 @@ describe("useAgentStudioRepoSettings", () => {
     hostMock.workspaceGetRepoConfig.mockClear();
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/worktrees/default",
+        effectiveWorktreeBasePath: "/worktrees/default",
+      },
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.repoSettings !== null);
 
-    await harness.update({ activeRepo: null });
+    await harness.update({ activeWorkspace: null });
 
     expect(harness.getLatest().repoSettings).toBeNull();
 
@@ -100,13 +118,13 @@ describe("useAgentStudioRepoSettings", () => {
   test("switches to the next repository key instead of reusing stale derived state", async () => {
     hostMock.workspaceGetRepoConfig.mockClear();
     hostMock.workspaceGetRepoConfig.mockImplementation(
-      async (repoPath: string): Promise<RepoConfig> => ({
-        workspaceId: repoPath === "/repo-a" ? "repo-a" : "repo-b",
-        workspaceName: repoPath === "/repo-a" ? "Repo A" : "Repo B",
-        repoPath,
+      async (workspaceId: string): Promise<RepoConfig> => ({
+        workspaceId,
+        workspaceName: workspaceId === "workspace-a" ? "Repo A" : "Repo B",
+        repoPath: workspaceId === "workspace-a" ? "/repo-a" : "/repo-b",
         defaultRuntimeKind: "opencode",
-        worktreeBasePath: repoPath === "/repo-a" ? "/worktrees/a" : "/worktrees/b",
-        branchPrefix: repoPath === "/repo-a" ? "feature-a/" : "feature-b/",
+        worktreeBasePath: workspaceId === "workspace-a" ? "/worktrees/a" : "/worktrees/b",
+        branchPrefix: workspaceId === "workspace-a" ? "feature-a/" : "feature-b/",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: { providers: {} },
         trustedHooks: false,
@@ -120,17 +138,37 @@ describe("useAgentStudioRepoSettings", () => {
     );
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Repo A",
+        repoPath: "/repo-a",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/worktrees/a",
+        effectiveWorktreeBasePath: "/worktrees/a",
+      },
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-a/");
 
-    await harness.update({ activeRepo: "/repo-b" });
+    await harness.update({
+      activeWorkspace: {
+        workspaceId: "workspace-b",
+        workspaceName: "Repo B",
+        repoPath: "/repo-b",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/worktrees/b",
+        effectiveWorktreeBasePath: "/worktrees/b",
+      },
+    });
     await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-b/");
 
-    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("/repo-a");
-    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("/repo-b");
+    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("workspace-a");
+    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("workspace-b");
     expect(harness.getLatest().repoSettings?.worktreeBasePath).toBe("/worktrees/b");
 
     await harness.unmount();
