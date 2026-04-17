@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Tabs } from "@/components/ui/tabs";
@@ -29,30 +29,6 @@ const buildModel = () => ({
   agentStudioReady: true,
 });
 
-const createDragEvent = (
-  type: string,
-  dataTransfer: {
-    effectAllowed: string;
-    dropEffect: string;
-    setData: () => void;
-    getData: () => string;
-  },
-  extras: Record<string, number> = {},
-): Event => {
-  const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", {
-    configurable: true,
-    value: dataTransfer,
-  });
-  for (const [key, value] of Object.entries(extras)) {
-    Object.defineProperty(event, key, {
-      configurable: true,
-      value,
-    });
-  }
-  return event;
-};
-
 const setElementRect = (element: HTMLElement, rect: Omit<DOMRect, "toJSON">): void => {
   Object.defineProperty(element, "getBoundingClientRect", {
     configurable: true,
@@ -60,6 +36,59 @@ const setElementRect = (element: HTMLElement, rect: Omit<DOMRect, "toJSON">): vo
       ...rect,
       toJSON: () => ({}),
     }),
+  });
+};
+
+const dragWithMouse = async (
+  element: HTMLElement,
+  start: { clientX: number; clientY: number },
+  moves: Array<{ clientX: number; clientY: number }>,
+): Promise<void> => {
+  await act(async () => {
+    fireEvent.mouseDown(element, {
+      button: 0,
+      buttons: 1,
+      ...start,
+    });
+
+    for (const move of moves) {
+      fireEvent.mouseMove(document, {
+        buttons: 1,
+        ...move,
+      });
+    }
+  });
+};
+
+const finishMouseDrag = async (position: { clientX: number; clientY: number }): Promise<void> => {
+  await act(async () => {
+    fireEvent.mouseUp(document, {
+      button: 0,
+      ...position,
+    });
+  });
+};
+
+const setDefaultTabRects = (firstTab: HTMLElement, secondTab: HTMLElement): void => {
+  setElementRect(firstTab, {
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 120,
+    bottom: 40,
+    width: 120,
+    height: 40,
+  });
+  setElementRect(secondTab, {
+    x: 130,
+    y: 0,
+    left: 130,
+    top: 0,
+    right: 260,
+    bottom: 40,
+    width: 130,
+    height: 40,
   });
 };
 
@@ -223,7 +252,7 @@ describe("AgentStudioTaskTabs", () => {
     ).toBeTruthy();
   });
 
-  test("reports browser-style tab reorders from drag and drop", () => {
+  test("reorders tabs with pointer dragging", async () => {
     const onReorderTab = mock(() => {});
     render(
       createElement(
@@ -248,42 +277,48 @@ describe("AgentStudioTaskTabs", () => {
     expect(firstTab).not.toBeNull();
     expect(secondTab).not.toBeNull();
 
-    setElementRect(firstTab as HTMLElement, {
-      x: 0,
-      y: 0,
-      left: 0,
-      top: 0,
-      right: 100,
-      bottom: 40,
-      width: 100,
-      height: 40,
-    });
-    setElementRect(secondTab as HTMLElement, {
-      x: 100,
-      y: 0,
-      left: 100,
-      top: 0,
-      right: 200,
-      bottom: 40,
-      width: 100,
-      height: 40,
-    });
+    setDefaultTabRects(firstTab as HTMLElement, secondTab as HTMLElement);
 
-    const dataTransfer = {
-      effectAllowed: "all",
-      dropEffect: "move",
-      setData: () => {},
-      getData: () => "task-2",
-    };
-
-    fireEvent(secondTab as HTMLElement, createDragEvent("dragstart", dataTransfer));
-    fireEvent(firstTab as HTMLElement, createDragEvent("dragover", dataTransfer, { clientX: 10 }));
-    fireEvent(firstTab as HTMLElement, createDragEvent("drop", dataTransfer, { clientX: 10 }));
+    await dragWithMouse(secondTab as HTMLElement, { clientX: 170, clientY: 20 }, [
+      { clientX: 150, clientY: 20 },
+      { clientX: 50, clientY: 20 },
+    ]);
+    await finishMouseDrag({ clientX: 50, clientY: 20 });
 
     expect(onReorderTab).toHaveBeenCalledWith("task-2", "task-1", "before");
   });
 
-  test("uses the actual drop target when release happens before a matching dragover state update", () => {
+  test("shows a dragged tab preview instead of only moving the source node", async () => {
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: {
+            ...buildModel(),
+          },
+        }),
+      ),
+    );
+
+    const firstTab = screen
+      .getByRole("tab", { name: /Add social login/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+    const secondTab = screen
+      .getByRole("tab", { name: /Ship QA checklist/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+
+    setDefaultTabRects(firstTab, secondTab);
+
+    await dragWithMouse(firstTab, { clientX: 40, clientY: 20 }, [{ clientX: 60, clientY: 20 }]);
+
+    expect(firstTab.getAttribute("data-dragging")).toBe("true");
+    expect(screen.getAllByText("Add social login").length).toBeGreaterThan(1);
+
+    await finishMouseDrag({ clientX: 60, clientY: 20 });
+  });
+
+  test("clears drag state when dragging ends without a drop", async () => {
     const onReorderTab = mock(() => {});
     render(
       createElement(
@@ -305,174 +340,18 @@ describe("AgentStudioTaskTabs", () => {
       .getByRole("tab", { name: /Ship QA checklist/i })
       .closest("[data-task-tab-id]") as HTMLElement;
 
-    setElementRect(firstTab, {
-      x: 0,
-      y: 0,
-      left: 0,
-      top: 0,
-      right: 100,
-      bottom: 40,
-      width: 100,
-      height: 40,
-    });
-    setElementRect(secondTab, {
-      x: 100,
-      y: 0,
-      left: 100,
-      top: 0,
-      right: 200,
-      bottom: 40,
-      width: 100,
-      height: 40,
-    });
+    setDefaultTabRects(firstTab, secondTab);
 
-    const dataTransfer = {
-      effectAllowed: "all",
-      dropEffect: "move",
-      setData: () => {},
-      getData: () => "task-1",
-    };
-
-    fireEvent(firstTab, createDragEvent("dragstart", dataTransfer));
-    fireEvent(firstTab, createDragEvent("dragover", dataTransfer, { clientX: 10 }));
-    fireEvent(secondTab, createDragEvent("drop", dataTransfer, { clientX: 190 }));
-
-    expect(onReorderTab).toHaveBeenCalledWith("task-1", "task-2", "after");
-  });
-
-  test("auto-scrolls the overflowed strip when dragging near the edge", () => {
-    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      requestAnimationFrameCallbacks.push(callback);
-      return requestAnimationFrameCallbacks.length;
-    }) as typeof globalThis.requestAnimationFrame;
-    globalThis.cancelAnimationFrame = (() => 0) as typeof globalThis.cancelAnimationFrame;
-
-    try {
-      render(
-        createElement(
-          Tabs,
-          { value: "task-1" },
-          createElement(AgentStudioTaskTabs, {
-            model: {
-              ...buildModel(),
-              tabs: [
-                { taskId: "task-1", taskTitle: "Tab 1", status: "working", isActive: true },
-                { taskId: "task-2", taskTitle: "Tab 2", status: "idle", isActive: false },
-                { taskId: "task-3", taskTitle: "Tab 3", status: "idle", isActive: false },
-                { taskId: "task-4", taskTitle: "Tab 4", status: "idle", isActive: false },
-                { taskId: "task-5", taskTitle: "Tab 5", status: "idle", isActive: false },
-                { taskId: "task-6", taskTitle: "Tab 6", status: "idle", isActive: false },
-              ],
-            },
-          }),
-        ),
-      );
-
-      const tabList = screen.getByRole("tablist", { name: "Agent Studio task tabs" });
-      const scrollRegion = tabList.parentElement?.parentElement as HTMLDivElement | null;
-      const firstTab = screen.getByRole("tab", { name: /Tab 1/i }).closest("[data-task-tab-id]");
-      const secondTab = screen.getByRole("tab", { name: /Tab 2/i }).closest("[data-task-tab-id]");
-
-      expect(scrollRegion).not.toBeNull();
-      expect(firstTab).not.toBeNull();
-      expect(secondTab).not.toBeNull();
-
-      setElementRect(scrollRegion as HTMLDivElement, {
-        x: 0,
-        y: 0,
-        left: 0,
-        top: 0,
-        right: 200,
-        bottom: 40,
-        width: 200,
-        height: 40,
-      });
-      setElementRect(secondTab as HTMLElement, {
-        x: 90,
-        y: 0,
-        left: 90,
-        top: 0,
-        right: 180,
-        bottom: 40,
-        width: 90,
-        height: 40,
-      });
-      (scrollRegion as HTMLDivElement).scrollLeft = 0;
-
-      const dataTransfer = {
-        effectAllowed: "all",
-        dropEffect: "move",
-        setData: () => {},
-        getData: () => "task-1",
-      };
-
-      fireEvent(firstTab as HTMLElement, createDragEvent("dragstart", dataTransfer));
-      fireEvent(
-        secondTab as HTMLElement,
-        createDragEvent("dragover", dataTransfer, { clientX: 196 }),
-      );
-
-      expect(requestAnimationFrameCallbacks.length).toBeGreaterThan(0);
-      requestAnimationFrameCallbacks.shift()?.(0);
-
-      expect((scrollRegion as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
-  });
-
-  test("clears drag state when dragging ends without a drop", () => {
-    render(
-      createElement(
-        Tabs,
-        { value: "task-1" },
-        createElement(AgentStudioTaskTabs, { model: buildModel() }),
-      ),
-    );
-
-    const firstTab = screen
-      .getByRole("tab", { name: /Add social login/i })
-      .closest("[data-task-tab-id]") as HTMLElement;
-    const secondTab = screen
-      .getByRole("tab", { name: /Ship QA checklist/i })
-      .closest("[data-task-tab-id]") as HTMLElement;
-
-    setElementRect(secondTab, {
-      x: 100,
-      y: 0,
-      left: 100,
-      top: 0,
-      right: 200,
-      bottom: 40,
-      width: 100,
-      height: 40,
-    });
-
-    const dataTransfer = {
-      effectAllowed: "all",
-      dropEffect: "move",
-      setData: () => {},
-      getData: () => "task-1",
-    };
-
-    fireEvent(firstTab, createDragEvent("dragstart", dataTransfer));
-    fireEvent(secondTab, createDragEvent("dragover", dataTransfer, { clientX: 110 }));
-
+    await dragWithMouse(firstTab, { clientX: 40, clientY: 20 }, [{ clientX: 55, clientY: 20 }]);
     expect(firstTab.getAttribute("data-dragging")).toBe("true");
-    expect(secondTab.getAttribute("data-drop-position")).toBe("before");
 
-    fireEvent(firstTab, createDragEvent("dragend", dataTransfer));
+    await finishMouseDrag({ clientX: 55, clientY: 20 });
 
     expect(firstTab.getAttribute("data-dragging")).toBe("false");
-    expect(secondTab.hasAttribute("data-drop-position")).toBeFalse();
+    expect(onReorderTab).toHaveBeenCalledTimes(0);
   });
 
-  test("does not start a reorder drag from the close button", () => {
+  test("does not start a reorder drag from the close button", async () => {
     const onReorderTab = mock(() => {});
     render(
       createElement(
@@ -492,14 +371,22 @@ describe("AgentStudioTaskTabs", () => {
       .getByRole("tab", { name: /Ship QA checklist/i })
       .closest("[data-task-tab-id]") as HTMLElement;
 
-    const dataTransfer = {
-      effectAllowed: "all",
-      dropEffect: "move",
-      setData: () => {},
-      getData: () => "task-2",
-    };
+    setElementRect(secondTab, {
+      x: 130,
+      y: 0,
+      left: 130,
+      top: 0,
+      right: 260,
+      bottom: 40,
+      width: 130,
+      height: 40,
+    });
 
-    fireEvent(closeButton, createDragEvent("dragstart", dataTransfer));
+    await act(async () => {
+      fireEvent.mouseDown(closeButton, { button: 0, buttons: 1, clientX: 200, clientY: 20 });
+      fireEvent.mouseMove(document, { buttons: 1, clientX: 240, clientY: 20 });
+    });
+    await finishMouseDrag({ clientX: 240, clientY: 20 });
 
     expect(secondTab.getAttribute("data-dragging")).toBe("false");
     expect(onReorderTab).toHaveBeenCalledTimes(0);
