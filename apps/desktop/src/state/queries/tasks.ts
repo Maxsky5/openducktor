@@ -6,7 +6,7 @@ import { toVisibleTasks } from "../read-models/task-read-model";
 const TASK_DATA_STALE_TIME_MS = 30_000;
 const RUN_DATA_STALE_TIME_MS = 30_000;
 
-type RepoTaskData = {
+export type RepoTaskData = {
   tasks: TaskCard[];
   runs: RunSummary[];
 };

@@ -1,13 +1,5 @@
 import { FolderOpen, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
-import {
-  lazy,
-  type ReactElement,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { lazy, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
@@ -18,11 +10,10 @@ import {
   BranchSwitcher,
   SidebarNavigation,
 } from "@/components/layout/sidebar";
-import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activity-model";
 import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useAgentSessionSummaries, useTasksState, useWorkspaceState } from "@/state";
+import { useShellAgentActivity, useWorkspaceState } from "@/state";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings/settings-modal");
@@ -32,20 +23,10 @@ const SettingsModal = lazy(async () => {
 export function AppShell(): ReactElement {
   const { activeWorkspace, workspaces } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { tasks } = useTasksState();
-  const sessions = useAgentSessionSummaries();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isRepositoryModalBlocking = !workspaceRepoPath && workspaces.length === 0;
-  const taskTitleById = useMemo(() => new Map(tasks.map((task) => [task.id, task.title])), [tasks]);
-  const agentActivity = useMemo(
-    () =>
-      summarizeAgentActivity({
-        sessions,
-        taskTitleById,
-      }),
-    [sessions, taskTitleById],
-  );
+  const agentActivity = useShellAgentActivity(workspaceRepoPath);
 
   useEffect(() => {
     if (workspaceRepoPath) {

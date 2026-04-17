@@ -1,50 +1,27 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 import { summarizeAgentActivity } from "./agent-activity-model";
 
 const buildSession = (
   overrides: {
-    runtimeKind?: string;
     sessionId?: string;
     taskId?: string;
-    role?: AgentSessionState["role"];
-    scenario?: AgentSessionState["scenario"];
+    role?: AgentActivitySessionSummary["role"];
+    scenario?: AgentActivitySessionSummary["scenario"];
     startedAt?: string;
-    status?: "starting" | "running" | "idle" | "error" | "stopped";
-    pendingPermissions?: number;
-    pendingQuestions?: number;
+    status?: AgentActivitySessionSummary["status"];
+    hasPendingPermissions?: boolean;
+    hasPendingQuestions?: boolean;
   } = {},
-) => ({
-  runtimeKind: overrides.runtimeKind ?? "opencode",
+): AgentActivitySessionSummary => ({
   sessionId: overrides.sessionId ?? "session-1",
-  externalSessionId: `external-${overrides.sessionId ?? "session-1"}`,
   taskId: overrides.taskId ?? "task-1",
   role: overrides.role ?? ("spec" as const),
   scenario: overrides.scenario ?? ("spec_initial" as const),
   status: overrides.status ?? "idle",
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
-  runtimeId: null,
-  runId: null,
-  runtimeRoute: { type: "local_http", endpoint: "http://localhost:4096" },
-  workingDirectory: "/repo",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingPermissions: Array.from({ length: overrides.pendingPermissions ?? 0 }, (_, index) => ({
-    requestId: `perm-${index}`,
-    permission: "read",
-    patterns: ["*"],
-  })),
-  pendingQuestions: Array.from({ length: overrides.pendingQuestions ?? 0 }, (_, index) => ({
-    requestId: `question-${index}`,
-    questions: [],
-  })),
-  todos: [],
-  modelCatalog: null,
-  selectedModel: null,
-  isLoadingModelCatalog: false,
+  hasPendingPermissions: overrides.hasPendingPermissions ?? false,
+  hasPendingQuestions: overrides.hasPendingQuestions ?? false,
 });
 
 describe("summarizeAgentActivity", () => {
@@ -61,10 +38,10 @@ describe("summarizeAgentActivity", () => {
         buildSession({ sessionId: "session-3", taskId: "task-3", status: "idle" }),
         buildSession({ sessionId: "session-4", taskId: "task-4", status: "error" }),
       ],
-      taskTitleById: new Map([
-        ["task-1", "One"],
-        ["task-2", "Two"],
-      ]),
+      taskTitleById: {
+        "task-1": "One",
+        "task-2": "Two",
+      },
     });
 
     expect(summary.activeSessionCount).toBe(2);
@@ -88,12 +65,12 @@ describe("summarizeAgentActivity", () => {
         buildSession({
           sessionId: "session-1",
           status: "running",
-          pendingPermissions: 1,
+          hasPendingPermissions: true,
         }),
         buildSession({
           sessionId: "session-2",
           status: "idle",
-          pendingQuestions: 1,
+          hasPendingQuestions: true,
           startedAt: "2026-02-26T10:00:00.000Z",
         }),
         buildSession({ sessionId: "session-3", status: "stopped" }),
@@ -105,5 +82,64 @@ describe("summarizeAgentActivity", () => {
     expect(summary.waitingForInputSessions).toHaveLength(2);
     expect(summary.waitingForInputSessions[0]?.sessionId).toBe("session-2");
     expect(summary.waitingForInputSessions[1]?.sessionId).toBe("session-1");
+  });
+
+  test("prioritizes waiting for input over active status", () => {
+    const summary = summarizeAgentActivity({
+      sessions: [
+        buildSession({
+          sessionId: "session-1",
+          status: "running",
+          hasPendingPermissions: true,
+        }),
+      ],
+    });
+
+    expect(summary.activeSessionCount).toBe(0);
+    expect(summary.waitingForInputCount).toBe(1);
+    expect(summary.waitingForInputSessions[0]?.sessionId).toBe("session-1");
+  });
+
+  test("falls back to the task id when the title is unavailable", () => {
+    const summary = summarizeAgentActivity({
+      sessions: [
+        buildSession({ sessionId: "session-1", taskId: "task-missing", status: "running" }),
+      ],
+      taskTitleById: {},
+    });
+
+    expect(summary.activeSessions[0]).toMatchObject({
+      taskId: "task-missing",
+      taskTitle: "task-missing",
+    });
+  });
+
+  test("breaks identical timestamps by session id in descending order", () => {
+    const summary = summarizeAgentActivity({
+      sessions: [
+        buildSession({ sessionId: "session-a", status: "running" }),
+        buildSession({ sessionId: "session-z", status: "running" }),
+      ],
+    });
+
+    expect(summary.activeSessions.map((session) => session.sessionId)).toEqual([
+      "session-z",
+      "session-a",
+    ]);
+  });
+
+  test("ignores non-active statuses without pending input", () => {
+    const summary = summarizeAgentActivity({
+      sessions: [
+        buildSession({ sessionId: "session-1", status: "idle" }),
+        buildSession({ sessionId: "session-2", status: "error" }),
+        buildSession({ sessionId: "session-3", status: "stopped" }),
+      ],
+    });
+
+    expect(summary.activeSessionCount).toBe(0);
+    expect(summary.waitingForInputCount).toBe(0);
+    expect(summary.activeSessions).toHaveLength(0);
+    expect(summary.waitingForInputSessions).toHaveLength(0);
   });
 });

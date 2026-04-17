@@ -1,4 +1,4 @@
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentActivitySessionItem = {
@@ -11,12 +11,14 @@ export type AgentActivitySessionItem = {
   startedAt: string;
 };
 
-type AgentActivitySummary = {
+export type AgentActivitySummary = {
   activeSessionCount: number;
   waitingForInputCount: number;
   activeSessions: AgentActivitySessionItem[];
   waitingForInputSessions: AgentActivitySessionItem[];
 };
+
+export type AgentActivityTaskTitleLookup = Readonly<Record<string, string>>;
 
 const ACTIVE_SESSION_STATUS: ReadonlySet<AgentSessionState["status"]> = new Set([
   "starting",
@@ -40,8 +42,8 @@ export const summarizeAgentActivity = ({
   sessions,
   taskTitleById,
 }: {
-  sessions: AgentSessionSummary[];
-  taskTitleById?: ReadonlyMap<string, string>;
+  sessions: AgentActivitySessionSummary[];
+  taskTitleById?: AgentActivityTaskTitleLookup;
 }): AgentActivitySummary => {
   const activeSessions: AgentActivitySessionItem[] = [];
   const waitingForInputSessions: AgentActivitySessionItem[] = [];
@@ -50,14 +52,14 @@ export const summarizeAgentActivity = ({
     const sessionItem: AgentActivitySessionItem = {
       sessionId: session.sessionId,
       taskId: session.taskId,
-      taskTitle: taskTitleById?.get(session.taskId) ?? session.taskId,
+      taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
       role: session.role,
       scenario: session.scenario,
       status: session.status,
       startedAt: session.startedAt,
     };
 
-    const isWaiting = session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0;
+    const isWaiting = session.hasPendingPermissions || session.hasPendingQuestions;
 
     if (isWaiting) {
       waitingForInputSessions.push(sessionItem);

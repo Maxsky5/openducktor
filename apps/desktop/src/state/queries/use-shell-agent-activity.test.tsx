@@ -1,0 +1,202 @@
+import { describe, expect, test } from "bun:test";
+import type { RunSummary } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
+import type { PropsWithChildren, ReactElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import {
+  createAgentSessionFixture,
+  createTaskCardFixture,
+  enableReactActEnvironment,
+} from "@/pages/agents/agent-studio-test-utils";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { AgentSessionsContext } from "@/state/app-state-contexts";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { taskQueryKeys } from "./tasks";
+import { useShellAgentActivity } from "./use-shell-agent-activity";
+
+enableReactActEnvironment();
+
+type HookArgs = {
+  activeRepo: string | null;
+};
+
+const createRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
+  runId: "run-1",
+  runtimeKind: "opencode",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4000",
+  },
+  repoPath: "/repo",
+  taskId: "task-1",
+  branch: "main",
+  worktreePath: "/tmp/worktree",
+  port: 4000,
+  state: "running",
+  lastMessage: null,
+  startedAt: "2026-03-17T10:00:00.000Z",
+  ...overrides,
+});
+
+const createHarness = (initialProps: HookArgs) => {
+  const sessionStore = createAgentSessionsStore();
+  let renderCount = 0;
+
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider useIsolatedClient>
+      <AgentSessionsContext.Provider value={sessionStore}>{children}</AgentSessionsContext.Provider>
+    </QueryProvider>
+  );
+
+  const sharedHarness = createSharedHookHarness(
+    (props: HookArgs) => {
+      renderCount += 1;
+      return {
+        activity: useShellAgentActivity(props.activeRepo),
+        queryClient: useQueryClient(),
+      };
+    },
+    initialProps,
+    { wrapper },
+  );
+
+  return {
+    sessionStore,
+    mount: sharedHarness.mount,
+    update: sharedHarness.update,
+    run: sharedHarness.run,
+    waitFor: sharedHarness.waitFor,
+    getLatest: sharedHarness.getLatest,
+    unmount: sharedHarness.unmount,
+    getRenderCount: () => renderCount,
+  };
+};
+
+describe("useShellAgentActivity", () => {
+  test("does not rerender for runs-only, unrelated task-title, or non-activity session churn", async () => {
+    const harness = createHarness({ activeRepo: null });
+    const session = createAgentSessionFixture({
+      sessionId: "session-1",
+      taskId: "task-1",
+      status: "running",
+      startedAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    harness.sessionStore.setSessionsById({ [session.sessionId]: session });
+    await harness.mount();
+
+    await harness.run(({ queryClient }) => {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [
+          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+          createTaskCardFixture({ id: "task-2", title: "Other Task" }),
+        ],
+        runs: [] satisfies RunSummary[],
+      });
+    });
+    await harness.update({ activeRepo: "/repo" });
+    await harness.waitFor(
+      ({ activity }) => activity.activeSessions[0]?.taskTitle === "Visible Task",
+    );
+
+    const baselineActivity = harness.getLatest().activity;
+    const baselineRenderCount = harness.getRenderCount();
+
+    await harness.run(({ queryClient }) => {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [
+          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+          createTaskCardFixture({ id: "task-2", title: "Other Task" }),
+        ],
+        runs: [createRun()],
+      });
+    });
+
+    expect(harness.getLatest().activity).toBe(baselineActivity);
+    expect(harness.getRenderCount()).toBe(baselineRenderCount);
+
+    await harness.run(({ queryClient }) => {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [
+          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+          createTaskCardFixture({ id: "task-2", title: "Renamed Other Task" }),
+        ],
+        runs: [createRun()],
+      });
+    });
+
+    expect(harness.getLatest().activity).toBe(baselineActivity);
+    expect(harness.getRenderCount()).toBe(baselineRenderCount);
+
+    await harness.run(() => {
+      harness.sessionStore.setSessionsById({
+        [session.sessionId]: {
+          ...session,
+          messages: [{ id: "m-1", role: "assistant", content: "still working", timestamp: "now" }],
+          draftAssistantText: "draft update",
+          todos: [{ id: "todo-1", content: "Review diff", status: "pending", priority: "medium" }],
+        },
+      });
+    });
+
+    expect(harness.getLatest().activity).toBe(baselineActivity);
+    expect(harness.getRenderCount()).toBe(baselineRenderCount);
+
+    await harness.unmount();
+  });
+
+  test("updates for visible task-title changes, repo clearing, and session removal", async () => {
+    const harness = createHarness({ activeRepo: null });
+    const session = createAgentSessionFixture({
+      sessionId: "session-1",
+      taskId: "task-1",
+      status: "running",
+      startedAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    harness.sessionStore.setSessionsById({ [session.sessionId]: session });
+    await harness.mount();
+
+    await harness.run(({ queryClient }) => {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [createTaskCardFixture({ id: "task-1", title: "Initial Title" })],
+        runs: [] satisfies RunSummary[],
+      });
+    });
+    await harness.update({ activeRepo: "/repo" });
+    await harness.waitFor(
+      ({ activity }) => activity.activeSessions[0]?.taskTitle === "Initial Title",
+    );
+
+    const initialRenderCount = harness.getRenderCount();
+
+    await harness.run(({ queryClient }) => {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [createTaskCardFixture({ id: "task-1", title: "Updated Title" })],
+        runs: [] satisfies RunSummary[],
+      });
+    });
+    await harness.waitFor(
+      ({ activity }) => activity.activeSessions[0]?.taskTitle === "Updated Title",
+    );
+
+    expect(harness.getRenderCount()).toBeGreaterThan(initialRenderCount);
+
+    await harness.update({ activeRepo: null });
+    await harness.waitFor(({ activity }) => activity.activeSessionCount === 0);
+    expect(harness.getLatest().activity.waitingForInputCount).toBe(0);
+
+    await harness.update({ activeRepo: "/repo" });
+    await harness.waitFor(
+      ({ activity }) => activity.activeSessions[0]?.taskTitle === "Updated Title",
+    );
+
+    await harness.run(() => {
+      harness.sessionStore.setSessionsById({});
+    });
+    await harness.waitFor(({ activity }) => activity.activeSessionCount === 0);
+    expect(harness.getLatest().activity.activeSessions).toHaveLength(0);
+
+    await harness.unmount();
+  });
+});
