@@ -53,6 +53,16 @@ const createDragEvent = (
   return event;
 };
 
+const setElementRect = (element: HTMLElement, rect: Omit<DOMRect, "toJSON">): void => {
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      ...rect,
+      toJSON: () => ({}),
+    }),
+  });
+};
+
 describe("AgentStudioTaskTabs", () => {
   test("renders browser-style tabs and status icons", () => {
     const html = renderToStaticMarkup(
@@ -238,33 +248,25 @@ describe("AgentStudioTaskTabs", () => {
     expect(firstTab).not.toBeNull();
     expect(secondTab).not.toBeNull();
 
-    Object.defineProperty(firstTab as HTMLElement, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({
-        x: 0,
-        y: 0,
-        left: 0,
-        top: 0,
-        right: 100,
-        bottom: 40,
-        width: 100,
-        height: 40,
-        toJSON: () => ({}),
-      }),
+    setElementRect(firstTab as HTMLElement, {
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 40,
+      width: 100,
+      height: 40,
     });
-    Object.defineProperty(secondTab as HTMLElement, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({
-        x: 100,
-        y: 0,
-        left: 100,
-        top: 0,
-        right: 200,
-        bottom: 40,
-        width: 100,
-        height: 40,
-        toJSON: () => ({}),
-      }),
+    setElementRect(secondTab as HTMLElement, {
+      x: 100,
+      y: 0,
+      left: 100,
+      top: 0,
+      right: 200,
+      bottom: 40,
+      width: 100,
+      height: 40,
     });
 
     const dataTransfer = {
@@ -322,33 +324,25 @@ describe("AgentStudioTaskTabs", () => {
       expect(firstTab).not.toBeNull();
       expect(secondTab).not.toBeNull();
 
-      Object.defineProperty(scrollRegion as HTMLDivElement, "getBoundingClientRect", {
-        configurable: true,
-        value: () => ({
-          x: 0,
-          y: 0,
-          left: 0,
-          top: 0,
-          right: 200,
-          bottom: 40,
-          width: 200,
-          height: 40,
-          toJSON: () => ({}),
-        }),
+      setElementRect(scrollRegion as HTMLDivElement, {
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 200,
+        bottom: 40,
+        width: 200,
+        height: 40,
       });
-      Object.defineProperty(secondTab as HTMLElement, "getBoundingClientRect", {
-        configurable: true,
-        value: () => ({
-          x: 90,
-          y: 0,
-          left: 90,
-          top: 0,
-          right: 180,
-          bottom: 40,
-          width: 90,
-          height: 40,
-          toJSON: () => ({}),
-        }),
+      setElementRect(secondTab as HTMLElement, {
+        x: 90,
+        y: 0,
+        left: 90,
+        top: 0,
+        right: 180,
+        bottom: 40,
+        width: 90,
+        height: 40,
       });
       (scrollRegion as HTMLDivElement).scrollLeft = 0;
 
@@ -373,5 +367,84 @@ describe("AgentStudioTaskTabs", () => {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
       globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
     }
+  });
+
+  test("clears drag state when dragging ends without a drop", () => {
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, { model: buildModel() }),
+      ),
+    );
+
+    const firstTab = screen
+      .getByRole("tab", { name: /Add social login/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+    const secondTab = screen
+      .getByRole("tab", { name: /Ship QA checklist/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+
+    setElementRect(secondTab, {
+      x: 100,
+      y: 0,
+      left: 100,
+      top: 0,
+      right: 200,
+      bottom: 40,
+      width: 100,
+      height: 40,
+    });
+
+    const dataTransfer = {
+      effectAllowed: "all",
+      dropEffect: "move",
+      setData: () => {},
+      getData: () => "task-1",
+    };
+
+    fireEvent(firstTab, createDragEvent("dragstart", dataTransfer));
+    fireEvent(secondTab, createDragEvent("dragover", dataTransfer, { clientX: 110 }));
+
+    expect(firstTab.getAttribute("data-dragging")).toBe("true");
+    expect(secondTab.getAttribute("data-drop-position")).toBe("before");
+
+    fireEvent(firstTab, createDragEvent("dragend", dataTransfer));
+
+    expect(firstTab.getAttribute("data-dragging")).toBe("false");
+    expect(secondTab.hasAttribute("data-drop-position")).toBeFalse();
+  });
+
+  test("does not start a reorder drag from the close button", () => {
+    const onReorderTab = mock(() => {});
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: {
+            ...buildModel(),
+            onReorderTab,
+          },
+        }),
+      ),
+    );
+
+    const closeButton = screen.getByRole("button", { name: "Close tab for Ship QA checklist" });
+    const secondTab = screen
+      .getByRole("tab", { name: /Ship QA checklist/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+
+    const dataTransfer = {
+      effectAllowed: "all",
+      dropEffect: "move",
+      setData: () => {},
+      getData: () => "task-2",
+    };
+
+    fireEvent(closeButton, createDragEvent("dragstart", dataTransfer));
+
+    expect(secondTab.getAttribute("data-dragging")).toBe("false");
+    expect(onReorderTab).toHaveBeenCalledTimes(0);
   });
 });
