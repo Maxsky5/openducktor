@@ -547,4 +547,81 @@ describe("KanbanTaskCard active sessions", () => {
       resizeObserver.restore();
     }
   }, 3000);
+
+  test("keeps visible labels whole and collapses overflow as full chips", async () => {
+    const resizeObserver = installMockResizeObserver();
+    const originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientWidth",
+    );
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).dataset.testid === "kanban-task-label-row" ? 170 : 0;
+      },
+    });
+
+    HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+      const text = this.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      const widthByText: Record<string, number> = {
+        "quality-gate": 96,
+        "queued-review": 104,
+        "+2": 36,
+      };
+      const width = widthByText[text] ?? 0;
+
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        bottom: 24,
+        right: width,
+        width,
+        height: 24,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+
+    try {
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={["/kanban"]}>
+            <KanbanTaskCard
+              task={createTaskCardFixture({
+                id: "TASK-11",
+                labels: ["quality-gate", "queued-review", "ops"],
+              })}
+              taskActivityState="idle"
+              taskSessions={[]}
+              onOpenDetails={noop}
+              onDelegate={noop}
+              onPlan={noop}
+              onBuild={noop}
+            />
+          </MemoryRouter>,
+        );
+      });
+
+      await act(async () => {
+        resizeObserver.trigger();
+      });
+
+      await waitFor(() => {
+        const labelRow = screen.getByTestId("kanban-task-label-row");
+        expect(labelRow.textContent).toContain("quality-gate");
+        expect(labelRow.textContent).toContain("+2");
+        expect(labelRow.querySelector('[title="quality-gate"]')).toBeTruthy();
+        expect(labelRow.querySelector('[title="queued-review"]')).toBeNull();
+      });
+    } finally {
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+      }
+      HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      resizeObserver.restore();
+    }
+  });
 });

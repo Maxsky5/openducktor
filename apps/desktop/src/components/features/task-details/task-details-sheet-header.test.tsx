@@ -240,6 +240,6 @@ describe("TaskDetailsSheetHeader", () => {
     expect(html).toContain("frontend");
     expect(html).toContain("ux");
     expect(html).toContain("lucide-tag");
-    expect(html).toContain("rounded-md");
+    expect(html).toContain("rounded-full");
   });
 });

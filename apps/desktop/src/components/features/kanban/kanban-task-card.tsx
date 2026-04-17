@@ -358,95 +358,16 @@ function useSingleRowChipOverflow(labels: string[]): {
 }
 
 function TaskPrimaryMeta({
-  taskId,
-  issueType,
-  priority,
-}: {
-  taskId: string;
-  issueType: TaskCard["issueType"];
-  priority: TaskCard["priority"];
-}): ReactElement {
-  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
-  const [issueTypeElement, setIssueTypeElement] = useState<HTMLDivElement | null>(null);
-  const [priorityElement, setPriorityElement] = useState<HTMLDivElement | null>(null);
-  const [taskIdContentElement, setTaskIdContentElement] = useState<HTMLDivElement | null>(null);
-  const [isTaskIdWrapped, setIsTaskIdWrapped] = useState(false);
-
-  useLayoutEffect(() => {
-    if (!containerElement || !issueTypeElement || !priorityElement || !taskIdContentElement) {
-      return undefined;
-    }
-
-    const updateWrapState = (): void => {
-      const gap = getFlexGap(containerElement);
-      const requiredWidth =
-        issueTypeElement.getBoundingClientRect().width +
-        priorityElement.getBoundingClientRect().width +
-        taskIdContentElement.getBoundingClientRect().width +
-        gap * 2;
-      const nextWrapped = requiredWidth > containerElement.clientWidth + LABEL_ROW_EPSILON_PX;
-
-      setIsTaskIdWrapped((currentWrapped) =>
-        currentWrapped === nextWrapped ? currentWrapped : nextWrapped,
-      );
-    };
-
-    updateWrapState();
-
-    if (typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateWrapState();
-    });
-
-    observer.observe(containerElement);
-    observer.observe(issueTypeElement);
-    observer.observe(priorityElement);
-    observer.observe(taskIdContentElement);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [containerElement, issueTypeElement, priorityElement, taskIdContentElement]);
-
-  return (
-    <div ref={setContainerElement} className="flex flex-wrap items-center gap-1.5">
-      <div ref={setIssueTypeElement}>
-        <IssueTypeBadge issueType={issueType} />
-      </div>
-      <div ref={setPriorityElement}>
-        <PriorityBadge priority={priority} />
-      </div>
-      <div className={cn("min-w-0", isTaskIdWrapped ? "basis-full" : "ml-auto")}>
-        <div ref={setTaskIdContentElement} className="w-fit max-w-full">
-          <TaskIdBadge taskId={taskId} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TaskSecondaryMeta({
   task,
   runState,
 }: {
   task: TaskCard;
   runState: VisibleKanbanRunState | undefined;
 }): ReactElement | null {
-  const hasSecondaryBadges =
-    task.subtaskIds.length > 0 ||
-    runState != null ||
-    task.pullRequest != null ||
-    task.documentSummary.qaReport.verdict === "rejected";
-
-  if (!hasSecondaryBadges) {
-    return null;
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      <IssueTypeBadge issueType={task.issueType} />
+      <PriorityBadge priority={task.priority} />
       <QaRejectedBadge task={task} />
       {task.subtaskIds.length > 0 ? (
         <Badge
@@ -471,7 +392,7 @@ function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="inline-flex h-6 shrink-0 items-center rounded-md border border-input bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex h-6 shrink-0 items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             aria-label={`Show ${hiddenLabels.length} more labels`}
             aria-describedby={hiddenLabelsDescriptionId}
             data-testid="kanban-task-label-overflow"
@@ -509,11 +430,11 @@ function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
     <div className="relative min-w-0">
       <div
         ref={containerRef}
-        className="flex min-w-0 items-center gap-1.5 overflow-hidden"
+        className="flex min-w-0 items-center gap-1.5"
         data-testid="kanban-task-label-row"
       >
         {visibleLabels.map((label) => (
-          <TaskLabelChip key={label} label={label} className="min-w-0 max-w-full shrink" />
+          <TaskLabelChip key={label} label={label} className="shrink-0" />
         ))}
         {hiddenLabels.length > 0 ? (
           <TaskLabelOverflowIndicator hiddenLabels={hiddenLabels} />
@@ -521,19 +442,19 @@ function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
       </div>
 
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 invisible flex items-center gap-1.5 overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 invisible flex items-center gap-1.5"
         aria-hidden="true"
       >
-        <div ref={measureRowRef} className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        <div ref={measureRowRef} className="flex min-w-0 items-center gap-1.5">
           {labels.map((label) => (
-            <div key={label} className="min-w-0">
-              <TaskLabelChip label={label} className="min-w-0 max-w-full shrink" />
+            <div key={label} className="shrink-0">
+              <TaskLabelChip label={label} className="shrink-0" />
             </div>
           ))}
         </div>
         <span
           ref={overflowMeasureRef}
-          className="inline-flex h-6 items-center rounded-md border border-input bg-muted px-2 py-0.5 text-xs font-medium"
+          className="inline-flex h-6 items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-semibold"
         >
           +1
         </span>
@@ -552,10 +473,9 @@ function TaskMeta({
   const displayLabels = toDisplayTaskLabels(task.labels);
 
   return (
-    <div className="flex flex-col gap-2">
-      <TaskPrimaryMeta taskId={task.id} issueType={task.issueType} priority={task.priority} />
+    <div className="flex flex-col gap-1.5">
+      <TaskPrimaryMeta task={task} runState={runState} />
       {displayLabels.length > 0 ? <TaskLabelRow labels={displayLabels} /> : null}
-      <TaskSecondaryMeta task={task} runState={runState} />
     </div>
   );
 }
@@ -688,7 +608,7 @@ function TaskActions({
   };
 
   return (
-    <div className="mt-3 cursor-default border-t border-border pt-2.5">
+    <div className="mt-2 cursor-default border-t border-border pt-2.5">
       <TaskWorkflowActionGroup
         task={task}
         includeActions={includeActions}
@@ -768,13 +688,13 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
-      <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
+      <div className="kanban-active-session-content flex min-w-0 flex-col space-y-1 p-3.5">
         {/* biome-ignore lint/a11y/useSemanticElements: TaskIdBadge contains a button element */}
         <div
           role="button"
           tabIndex={0}
           aria-label={`Open details for ${task.title}`}
-          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
           onKeyDown={(e) => {
             if (e.target !== e.currentTarget) return;
@@ -784,20 +704,21 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             }
           }}
         >
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 mb-1">
             <p
-              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
+              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground mb-1"
               title={task.title}
             >
               {task.title}
             </p>
+            <div className="flex justify-between items-center gap-1.5">
+              <TaskIdBadge taskId={task.id} />
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
+                <ExternalLink className="size-3" />
+                Open
+              </span>
+            </div>
           </div>
-          <span
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground"
-            data-testid="kanban-open-details-affordance"
-          >
-            <ExternalLink className="size-3" />
-          </span>
         </div>
         <TaskMeta task={task} runState={visibleRunState} />
         <TaskActions

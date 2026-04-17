@@ -127,7 +127,7 @@ export function TaskWorkflowActionGroup({
               className={cn(
                 compactMenuTrigger ? "px-2.5" : "px-3",
                 expandPrimary ? "shrink-0" : "",
-                "h-9",
+                "h-9 shadow-sm",
               )}
             >
               {compactMenuTrigger ? null : <MoreHorizontal className="size-3.5" />}
