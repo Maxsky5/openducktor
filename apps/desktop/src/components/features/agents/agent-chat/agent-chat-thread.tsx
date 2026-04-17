@@ -57,6 +57,7 @@ type AgentChatThreadMotionRowProps = {
 type AgentChatTranscriptProps = {
   activeStreamingAssistantMessageId: string | null;
   hasSession: boolean;
+  readinessState: AgentChatThreadModel["readinessState"];
   taskSelected: boolean;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
@@ -217,6 +218,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 const AgentChatTranscript = memo(function AgentChatTranscript({
   activeStreamingAssistantMessageId,
   hasSession,
+  readinessState,
   taskSelected,
   canKickoffNewSession,
   kickoffLabel,
@@ -240,6 +242,13 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   onRefreshChecks,
   showLoadingOverlay,
 }: AgentChatTranscriptProps): ReactElement {
+  const runtimeWaitingTitle =
+    readinessState === "ready" ? "Session runtime is reconnecting" : "Runtime is starting";
+  const runtimeWaitingDescription =
+    readinessState === "ready"
+      ? "Waiting for the selected session runtime to become available before loading this session."
+      : "Waiting for runtime and MCP health before loading this session.";
+
   return (
     <div
       ref={messagesContainerRef}
@@ -252,10 +261,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
               <LoaderCircle className="size-4 animate-spin" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-medium text-foreground">Runtime is starting</p>
-              <p className="text-muted-foreground">
-                Waiting for runtime and MCP health before loading this session.
-              </p>
+              <p className="font-medium text-foreground">{runtimeWaitingTitle}</p>
+              <p className="text-muted-foreground">{runtimeWaitingDescription}</p>
             </div>
           </div>
         </div>
@@ -724,6 +731,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <AgentChatTranscript
         activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
         hasSession={session !== null}
+        readinessState={readinessState}
         taskSelected={taskSelected}
         canKickoffNewSession={canKickoffNewSession}
         kickoffLabel={kickoffLabel}

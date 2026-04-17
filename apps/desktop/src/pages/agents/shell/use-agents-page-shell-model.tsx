@@ -1,4 +1,5 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
+import { useQueries } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
@@ -28,6 +29,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
+import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import { useAgentStudioBuildWorktreeRefresh } from "../use-agent-studio-build-worktree-refresh";
 import {
@@ -37,6 +39,10 @@ import {
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
+import {
+  type RuntimeAttachmentSource,
+  refreshRuntimeAttachmentSources,
+} from "../use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import {
   useAgentStudioReadiness,
@@ -159,6 +165,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const {
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
+    retrySessionRuntimeAttachment,
     readSessionFileSearch,
     readSessionModelCatalog,
     readSessionSlashCommands,
@@ -211,6 +218,36 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   }, []);
 
   const clearComposerInput = signalContextSwitchIntent;
+  const runtimeListQueries = useQueries({
+    queries:
+      activeRepo === null
+        ? []
+        : runtimeDefinitions.map((definition) => ({
+            ...runtimeListQueryOptions(definition.kind, activeRepo),
+          })),
+  });
+  const runtimeListRefetchersRef = useRef<Array<() => Promise<unknown>>>([]);
+  useEffect(() => {
+    runtimeListRefetchersRef.current = runtimeListQueries.map((query) => query.refetch);
+  }, [runtimeListQueries]);
+  const runtimeAttachmentSources = useMemo<RuntimeAttachmentSource[]>(
+    () =>
+      runtimeListQueries.flatMap((query) =>
+        (query.data ?? []).map((runtime) => ({
+          kind: runtime.kind,
+          runtimeId: runtime.runtimeId,
+          workingDirectory: runtime.workingDirectory,
+          route:
+            runtime.runtimeRoute.type === "local_http"
+              ? runtime.runtimeRoute.endpoint
+              : runtime.runtimeRoute.type,
+        })),
+      ),
+    [runtimeListQueries],
+  );
+  const refreshRuntimeAttachmentSourceList = useCallback(async (): Promise<void> => {
+    await refreshRuntimeAttachmentSources(runtimeListRefetchersRef.current);
+  }, []);
 
   const readiness = useAgentStudioReadiness({
     activeRepo,
@@ -237,6 +274,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
+    retrySessionRuntimeAttachment,
+    runtimeAttachmentSources,
+    refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
     readSessionModelCatalog,
     readSessionTodos,
     clearComposerInput,

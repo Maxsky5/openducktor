@@ -41,6 +41,13 @@ type CreatePublicOperationsArgs = {
     sessionId: string;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
+  retrySessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+    persistedRecords?: AgentSessionRecord[];
+    preloadedRuns?: RunSummary[];
+  }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
@@ -89,6 +96,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 export const createOrchestratorPublicOperations = ({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
+  retrySessionRuntimeAttachment,
   reconcileLiveTaskSessions,
   loadAgentSessions,
   readSessionModelCatalog,
@@ -105,6 +113,10 @@ export const createOrchestratorPublicOperations = ({
   hydrateRequestedTaskSessionHistory: (input) =>
     withErrorToast("Failed to hydrate session history", () =>
       hydrateRequestedTaskSessionHistory(input),
+    ),
+  retrySessionRuntimeAttachment: (input) =>
+    withErrorToast("Failed to reconnect session runtime", () =>
+      retrySessionRuntimeAttachment(input),
     ),
   reconcileLiveTaskSessions: (input) =>
     withErrorToast("Failed to reconcile live sessions", () => reconcileLiveTaskSessions(input)),

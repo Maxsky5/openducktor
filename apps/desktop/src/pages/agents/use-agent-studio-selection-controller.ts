@@ -17,6 +17,10 @@ import {
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
 import { useAgentStudioActiveSessionRuntimeData } from "./use-agent-studio-active-session-runtime-data";
+import {
+  type RuntimeAttachmentSource,
+  selectRuntimeAttachmentCandidates,
+} from "./use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
@@ -38,6 +42,13 @@ type UseAgentStudioSelectionControllerArgs = {
     taskId: string;
     sessionId: string;
   }) => Promise<void>;
+  retrySessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+  }) => Promise<boolean>;
+  runtimeAttachmentSources: RuntimeAttachmentSource[];
+  refreshRuntimeAttachmentSources: () => Promise<void>;
   readSessionModelCatalog: (
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     runtimeConnection: AgentRuntimeConnection,
@@ -167,6 +178,9 @@ export function useAgentStudioSelectionController({
   scenarioFromQuery,
   updateQuery,
   hydrateRequestedTaskSessionHistory,
+  retrySessionRuntimeAttachment,
+  runtimeAttachmentSources,
+  refreshRuntimeAttachmentSources,
   readSessionModelCatalog,
   readSessionTodos,
   clearComposerInput,
@@ -351,6 +365,15 @@ export function useAgentStudioSelectionController({
   });
   const viewRole = viewSelection.role;
   const viewScenario = viewSelection.scenario;
+  const runtimeAttachmentCandidates = useMemo(
+    () =>
+      selectRuntimeAttachmentCandidates({
+        repoPath: activeRepo ?? "",
+        session: hydratedViewActiveSession,
+        runtimeSources: runtimeAttachmentSources,
+      }),
+    [activeRepo, hydratedViewActiveSession, runtimeAttachmentSources],
+  );
 
   const {
     isActiveTaskHydrated,
@@ -365,6 +388,9 @@ export function useAgentStudioSelectionController({
     activeSession: hydratedViewActiveSession,
     agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
+    retrySessionRuntimeAttachment,
+    refreshRuntimeAttachmentSources,
+    runtimeAttachmentCandidates,
   });
 
   return {

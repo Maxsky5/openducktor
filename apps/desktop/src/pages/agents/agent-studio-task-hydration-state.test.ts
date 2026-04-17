@@ -12,12 +12,11 @@ describe("getAgentStudioTaskHydrationDecision", () => {
         runId: null,
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeRecoveryState: "idle",
       },
       historyHydrationState: "failed",
       sessionNeedsHydration: true,
       agentStudioReadinessState: "checking",
-      waitingRecoveryKey: null,
-      postReadyFailureRecoveryKey: null,
     });
 
     expect(decision.isWaitingForRuntimeReadiness).toBe(true);
@@ -34,12 +33,11 @@ describe("getAgentStudioTaskHydrationDecision", () => {
         runId: null,
         runtimeId: null,
         runtimeRoute: null,
+        runtimeRecoveryState: "idle",
       },
       historyHydrationState: "not_requested",
       sessionNeedsHydration: true,
       agentStudioReadinessState: "ready",
-      waitingRecoveryKey: null,
-      postReadyFailureRecoveryKey: null,
     });
 
     expect(decision.shouldWaitForSessionRuntime).toBe(true);
@@ -47,7 +45,7 @@ describe("getAgentStudioTaskHydrationDecision", () => {
     expect(decision.shouldHydrateSessionHistory).toBe(false);
   });
 
-  test("hydrates a remembered waiting session once readiness is restored", () => {
+  test("shows a recovering waiting session while runtime reattachment is in progress", () => {
     const decision = getAgentStudioTaskHydrationDecision({
       activeRepo: "/repo-a",
       activeTaskId: "task-1",
@@ -57,38 +55,35 @@ describe("getAgentStudioTaskHydrationDecision", () => {
         runId: null,
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeRecoveryState: "recovering_runtime",
       },
-      historyHydrationState: "failed",
+      historyHydrationState: "not_requested",
       sessionNeedsHydration: true,
       agentStudioReadinessState: "ready",
-      waitingRecoveryKey: "/repo-a::task-1::session-1",
-      postReadyFailureRecoveryKey: null,
     });
 
     expect(decision.isRecoveringWaitingSession).toBe(true);
-    expect(decision.shouldHydrateSessionHistory).toBe(true);
+    expect(decision.shouldHydrateSessionHistory).toBe(false);
   });
 
-  test("blocks automatic recovery after a sticky post-ready failure", () => {
+  test("allows recovery to retry after a session runtime recovery failure", () => {
     const decision = getAgentStudioTaskHydrationDecision({
       activeRepo: "/repo-a",
       activeTaskId: "task-1",
       activeSession: {
         sessionId: "session-1",
-        role: "planner",
+        role: "build",
         runId: null,
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeRoute: null,
+        runtimeRecoveryState: "failed",
       },
-      historyHydrationState: "failed",
+      historyHydrationState: "not_requested",
       sessionNeedsHydration: true,
       agentStudioReadinessState: "ready",
-      waitingRecoveryKey: "/repo-a::task-1::session-1",
-      postReadyFailureRecoveryKey: "/repo-a::task-1::session-1",
     });
 
-    expect(decision.blockedFromAutomaticRecovery).toBe(true);
-    expect(decision.isWaitingForRuntimeReadiness).toBe(false);
+    expect(decision.isWaitingForRuntimeReadiness).toBe(true);
     expect(decision.shouldHydrateSessionHistory).toBe(false);
   });
 });

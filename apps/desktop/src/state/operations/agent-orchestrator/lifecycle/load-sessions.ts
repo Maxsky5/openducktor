@@ -54,9 +54,20 @@ export const createLoadAgentSessions = ({
   options?: AgentSessionLoadOptions,
 ) => Promise<void>) => {
   const inFlightRequestedHistoryLoads = new Map<string, Promise<void>>();
+  const inFlightRuntimeAttachmentRecoveryLoads = new Map<string, Promise<void>>();
 
   const buildRequestedHistoryKey = (repoPath: string, taskId: string, sessionId: string): string =>
     `${repoPath}::${taskId}::${sessionId}`;
+
+  const buildRuntimeAttachmentRecoveryKey = (
+    repoPath: string,
+    taskId: string,
+    sessionId: string,
+    recoveryDedupKey?: string | null,
+  ): string =>
+    recoveryDedupKey?.trim().length
+      ? `${repoPath}::${taskId}::${sessionId}::${recoveryDedupKey.trim()}`
+      : `${repoPath}::${taskId}::${sessionId}`;
 
   const buildLoadIntent = (
     repoPath: string,
@@ -67,7 +78,9 @@ export const createLoadAgentSessions = ({
     const requestedSessionId = options?.targetSessionId?.trim() || null;
     const shouldHydrateRequestedSession =
       mode === "requested_history" && requestedSessionId !== null;
-    const shouldReconcileLiveSessions = mode === "reconcile_live";
+    const shouldRecoverRuntimeAttachment =
+      mode === "recover_runtime_attachment" && requestedSessionId !== null;
+    const shouldReconcileLiveSessions = mode === "reconcile_live" || shouldRecoverRuntimeAttachment;
     return {
       repoPath,
       workspaceId: activeWorkspace?.workspaceId ?? "",
@@ -107,8 +120,26 @@ export const createLoadAgentSessions = ({
 
     const intent = buildLoadIntent(repoPath, taskId, options);
     const requestedHistoryKey = intent.requestedHistoryKey;
+    const runtimeAttachmentRecoveryKeyWithSignal =
+      intent.mode === "recover_runtime_attachment" && intent.requestedSessionId !== null
+        ? buildRuntimeAttachmentRecoveryKey(
+            repoPath,
+            taskId,
+            intent.requestedSessionId,
+            options?.recoveryDedupKey,
+          )
+        : null;
     if (requestedHistoryKey) {
       const existingLoad = inFlightRequestedHistoryLoads.get(requestedHistoryKey);
+      if (existingLoad) {
+        await existingLoad;
+        return;
+      }
+    }
+    if (runtimeAttachmentRecoveryKeyWithSignal) {
+      const existingLoad = inFlightRuntimeAttachmentRecoveryLoads.get(
+        runtimeAttachmentRecoveryKeyWithSignal,
+      );
       if (existingLoad) {
         await existingLoad;
         return;
@@ -192,15 +223,28 @@ export const createLoadAgentSessions = ({
       });
     };
 
-    if (!requestedHistoryKey) {
+    if (!requestedHistoryKey && !runtimeAttachmentRecoveryKeyWithSignal) {
       await executeLoad();
       return;
     }
 
     const inFlightLoad = executeLoad().finally(() => {
-      inFlightRequestedHistoryLoads.delete(requestedHistoryKey);
+      if (requestedHistoryKey) {
+        inFlightRequestedHistoryLoads.delete(requestedHistoryKey);
+      }
+      if (runtimeAttachmentRecoveryKeyWithSignal) {
+        inFlightRuntimeAttachmentRecoveryLoads.delete(runtimeAttachmentRecoveryKeyWithSignal);
+      }
     });
-    inFlightRequestedHistoryLoads.set(requestedHistoryKey, inFlightLoad);
+    if (requestedHistoryKey) {
+      inFlightRequestedHistoryLoads.set(requestedHistoryKey, inFlightLoad);
+    }
+    if (runtimeAttachmentRecoveryKeyWithSignal) {
+      inFlightRuntimeAttachmentRecoveryLoads.set(
+        runtimeAttachmentRecoveryKeyWithSignal,
+        inFlightLoad,
+      );
+    }
     await inFlightLoad;
   };
 };

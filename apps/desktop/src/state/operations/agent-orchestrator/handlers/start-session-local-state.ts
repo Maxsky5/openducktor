@@ -39,6 +39,7 @@ export const buildInitialSession = ({
   runtimeRoute: runtime.runtimeRoute,
   workingDirectory: runtime.workingDirectory,
   historyHydrationState: "hydrated",
+  runtimeRecoveryState: "idle",
   messages:
     initialMessages ??
     buildSessionHeaderMessages({

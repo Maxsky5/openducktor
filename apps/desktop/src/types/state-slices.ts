@@ -161,6 +161,13 @@ export type AgentStateContextValue = {
     sessionId: string;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   }) => Promise<void>;
+  retrySessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+    preloadedRuns?: import("@openducktor/contracts").RunSummary[];
+  }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];

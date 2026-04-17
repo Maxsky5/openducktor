@@ -145,6 +145,7 @@ describe("app-state-context-values", () => {
       sessions: [],
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
+      retrySessionRuntimeAttachment: async () => false,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({

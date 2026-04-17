@@ -20,6 +20,9 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: null,
   agentStudioReadinessState: "ready",
   hydrateRequestedTaskSessionHistory: async () => {},
+  retrySessionRuntimeAttachment: async () => false,
+  refreshRuntimeAttachmentSources: async () => {},
+  runtimeAttachmentCandidates: [],
   ...overrides,
 });
 
@@ -36,6 +39,8 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   runId: null,
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo",
+  historyHydrationState: "not_requested",
+  runtimeRecoveryState: "idle",
   messages: [],
   draftAssistantText: "",
   draftAssistantMessageId: null,
@@ -139,7 +144,7 @@ describe("useAgentStudioTaskHydration", () => {
   test("waits for readiness before hydrating and retries the same waiting session once ready", async () => {
     const hydrationRequest = createDeferred<void>();
     const hydrateRequestedTaskSessionHistory = mock(() => hydrationRequest.promise);
-    const waitingSession = createSession({ historyHydrationState: "failed" });
+    const waitingSession = createSession({ historyHydrationState: "not_requested" });
     const harness = createHookHarness(
       createBaseArgs({
         activeSession: waitingSession,
@@ -189,7 +194,7 @@ describe("useAgentStudioTaskHydration", () => {
     const hydrateRequestedTaskSessionHistory = mock(async () => {
       throw new Error("recovery failed");
     });
-    const waitingSession = createSession({ historyHydrationState: "failed" });
+    const waitingSession = createSession({ historyHydrationState: "not_requested" });
     const harness = createHookHarness(
       createBaseArgs({
         activeSession: waitingSession,
@@ -219,7 +224,7 @@ describe("useAgentStudioTaskHydration", () => {
 
       await harness.update(
         createBaseArgs({
-          activeSession: createSession({ historyHydrationState: "failed" }),
+          activeSession: createSession({ historyHydrationState: "not_requested" }),
           agentStudioReadinessState: "checking",
           hydrateRequestedTaskSessionHistory,
         }),
@@ -230,7 +235,7 @@ describe("useAgentStudioTaskHydration", () => {
 
       await harness.update(
         createBaseArgs({
-          activeSession: createSession({ historyHydrationState: "failed" }),
+          activeSession: createSession({ historyHydrationState: "not_requested" }),
           agentStudioReadinessState: "ready",
           hydrateRequestedTaskSessionHistory,
         }),
@@ -295,12 +300,12 @@ describe("useAgentStudioTaskHydration", () => {
     const firstFailedSession = createSession({
       sessionId: "session-1",
       externalSessionId: "external-1",
-      historyHydrationState: "failed",
+      historyHydrationState: "not_requested",
     });
     const secondFailedSession = createSession({
       sessionId: "session-2",
       externalSessionId: "external-2",
-      historyHydrationState: "failed",
+      historyHydrationState: "not_requested",
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -352,7 +357,7 @@ describe("useAgentStudioTaskHydration", () => {
       sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
-      historyHydrationState: "failed",
+      historyHydrationState: "not_requested",
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -414,6 +419,7 @@ describe("useAgentStudioTaskHydration", () => {
 
   test("waits for a build session runtime attachment before hydrating restored session history", async () => {
     const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
+    const retrySessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
     const buildSessionWaitingForRuntime = createSession({
       role: "build",
       scenario: "build_implementation_start",
@@ -428,12 +434,19 @@ describe("useAgentStudioTaskHydration", () => {
         activeSession: buildSessionWaitingForRuntime,
         agentStudioReadinessState: "ready",
         hydrateRequestedTaskSessionHistory,
+        retrySessionRuntimeAttachment,
       }),
     );
 
     try {
       await harness.mount();
 
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(1);
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+        recoveryDedupKey: "/repo-a::task-1::session-1::attempt:1",
+      });
       expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
       expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
@@ -452,6 +465,7 @@ describe("useAgentStudioTaskHydration", () => {
           }),
           agentStudioReadinessState: "ready",
           hydrateRequestedTaskSessionHistory,
+          retrySessionRuntimeAttachment,
         }),
       );
 
@@ -461,6 +475,126 @@ describe("useAgentStudioTaskHydration", () => {
         sessionId: "session-1",
       });
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("retries build runtime attachment recovery when recovery candidates change", async () => {
+    const retrySessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: createSession({
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "stopped",
+          runId: null,
+          runtimeId: null,
+          runtimeRoute: null,
+          historyHydrationState: "not_requested",
+        }),
+        agentStudioReadinessState: "ready",
+        retrySessionRuntimeAttachment,
+        runtimeAttachmentCandidates: [],
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "stopped",
+            runId: null,
+            runtimeId: null,
+            runtimeRoute: null,
+            historyHydrationState: "not_requested",
+          }),
+          agentStudioReadinessState: "ready",
+          retrySessionRuntimeAttachment,
+          runtimeAttachmentCandidates: [],
+        }),
+      );
+
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createBaseArgs({
+          activeSession: createSession({
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "stopped",
+            runId: null,
+            runtimeId: null,
+            runtimeRoute: null,
+            historyHydrationState: "not_requested",
+          }),
+          agentStudioReadinessState: "ready",
+          retrySessionRuntimeAttachment,
+          runtimeAttachmentCandidates: [
+            {
+              runtimeKind: "opencode",
+              runtimeId: "runtime-1",
+              workingDirectory: "/repo-a",
+              route: "http://127.0.0.1:4444",
+            },
+          ],
+        }),
+      );
+
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(2);
+      expect(retrySessionRuntimeAttachment).toHaveBeenLastCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+        recoveryDedupKey: "/repo-a::task-1::session-1::attempt:2",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes runtime recovery sources while waiting for a session runtime", async () => {
+    const refreshRuntimeAttachmentSources = mock(async (): Promise<void> => {});
+    const timerOwner = typeof window === "undefined" ? globalThis : window;
+    const originalSetInterval = timerOwner.setInterval;
+    const originalClearInterval = timerOwner.clearInterval;
+    const intervalCallbacks: Array<() => void> = [];
+
+    timerOwner.setInterval = ((callback: TimerHandler) => {
+      if (typeof callback === "function") {
+        intervalCallbacks.push(callback as () => void);
+      }
+      return intervalCallbacks.length as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof timerOwner.setInterval;
+    timerOwner.clearInterval = (() => undefined) as typeof timerOwner.clearInterval;
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: createSession({
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "stopped",
+          runId: null,
+          runtimeId: null,
+          runtimeRoute: null,
+          historyHydrationState: "not_requested",
+        }),
+        refreshRuntimeAttachmentSources,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(intervalCallbacks).toHaveLength(1);
+
+      intervalCallbacks[0]?.();
+      expect(refreshRuntimeAttachmentSources).toHaveBeenCalledTimes(1);
+    } finally {
+      timerOwner.setInterval = originalSetInterval;
+      timerOwner.clearInterval = originalClearInterval;
       await harness.unmount();
     }
   });
