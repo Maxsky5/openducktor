@@ -147,7 +147,9 @@ fn configure_builder_session(
     ];
     drop(git);
 
-    service.workspace_add(repo_path)?;
+    if service.workspace_id_for_repo_path(repo_path).is_err() {
+        service.workspace_add(repo_path)?;
+    }
     Ok(())
 }
 
@@ -1027,16 +1029,13 @@ fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_work
         repo_path.as_str(),
         base_repo_config(&worktree_base),
     )?;
-    service.workspace_merge_repo_config(
-        repo_path.as_str(),
-        RepoConfigUpdate {
-            default_target_branch: Some(host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "beta".to_string(),
-            }),
-            ..RepoConfigUpdate::default()
-        },
-    )?;
+    service.workspace_merge_repo_config(service.workspace_id_for_repo_path(repo_path.as_str())?.as_str(), RepoConfigUpdate {
+        default_target_branch: Some(host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "beta".to_string(),
+        }),
+        ..RepoConfigUpdate::default()
+    })?;
 
     let mut session = make_session("task-1", "session-build");
     session.working_directory = missing_worktree_path.to_string_lossy().to_string();

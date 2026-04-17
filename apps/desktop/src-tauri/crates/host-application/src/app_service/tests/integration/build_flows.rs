@@ -35,8 +35,8 @@ use crate::app_service::test_support::{
     prepend_path, process_is_alive, repo_config_for_workspace, set_env_var,
     set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
     wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, write_private_file, EnvVarGuard, FakeTaskStore, GitCall,
-    TaskStoreState,
+    workspace_update_repo_config_by_repo_path, write_executable_script, write_private_file,
+    EnvVarGuard, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -116,7 +116,8 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -257,7 +258,8 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -346,7 +348,8 @@ fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -415,7 +418,8 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -576,7 +580,8 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -658,7 +663,8 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -744,7 +750,8 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         pre_start: vec!["sh -lc 'echo pre-fail >&2; exit 1'".to_string()],
         post_complete: Vec::new(),
     };
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -782,7 +789,8 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         pre_start: Vec::new(),
         post_complete: vec!["sh -lc 'echo post-fail >&2; exit 1'".to_string()],
     };
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -891,7 +899,8 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1036,7 +1045,8 @@ fn build_start_reports_home_or_override_guidance_when_default_worktree_resolutio
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1103,7 +1113,8 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1165,7 +1176,8 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1227,7 +1239,8 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1301,7 +1314,8 @@ fn build_start_reports_missing_task_from_targeted_lookup() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1356,7 +1370,8 @@ fn build_start_preserves_transition_validation_with_targeted_lookup() -> Result<
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1428,7 +1443,8 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1487,7 +1503,8 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1561,7 +1578,8 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),

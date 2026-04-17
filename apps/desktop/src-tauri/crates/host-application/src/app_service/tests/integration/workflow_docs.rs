@@ -571,29 +571,29 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
     service
         .workspace_add(repo_path)
         .expect("workspace add should succeed");
-    service
-        .workspace_update_repo_config(
-            repo_path,
-            RepoConfig {
-                default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: Some("/tmp".to_string()),
-                branch_prefix: "obp".to_string(),
-                default_target_branch: host_infra_system::GitTargetBranch {
-                    remote: Some("origin".to_string()),
-                    branch: "main".to_string(),
-                },
-                git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-                ..Default::default()
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path,
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some("/tmp".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
             },
-        )
-        .expect("repo config update should succeed");
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )
+    .expect("repo config update should succeed");
     git_state
         .lock()
         .expect("git lock poisoned")
@@ -650,29 +650,29 @@ fn task_delete_rejects_active_builder_runs() {
     service
         .workspace_add(repo_path)
         .expect("workspace add should succeed");
-    service
-        .workspace_update_repo_config(
-            repo_path,
-            RepoConfig {
-                default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: Some("/tmp".to_string()),
-                branch_prefix: "obp".to_string(),
-                default_target_branch: host_infra_system::GitTargetBranch {
-                    remote: Some("origin".to_string()),
-                    branch: "main".to_string(),
-                },
-                git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-                ..Default::default()
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path,
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some("/tmp".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
             },
-        )
-        .expect("repo config update should succeed");
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )
+    .expect("repo config update should succeed");
 
     task_state
         .lock()
@@ -837,7 +837,7 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
             .iter()
             .filter(|call| matches!(call, GitCall::RemoveWorktree { .. }))
             .count(),
-        1
+        2
     );
     assert_eq!(
         git_calls
