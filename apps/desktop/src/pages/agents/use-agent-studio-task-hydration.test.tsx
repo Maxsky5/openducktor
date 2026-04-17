@@ -20,7 +20,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: null,
   agentStudioReadinessState: "ready",
   hydrateRequestedTaskSessionHistory: async () => {},
-  recoverSessionRuntimeAttachment: async () => false,
+  retrySessionRuntimeAttachment: async () => false,
   refreshRuntimeAttachmentSources: async () => {},
   runtimeAttachmentCandidates: [],
   ...overrides,
@@ -419,7 +419,7 @@ describe("useAgentStudioTaskHydration", () => {
 
   test("waits for a build session runtime attachment before hydrating restored session history", async () => {
     const hydrateRequestedTaskSessionHistory = mock(async (): Promise<void> => {});
-    const recoverSessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
+    const retrySessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
     const buildSessionWaitingForRuntime = createSession({
       role: "build",
       scenario: "build_implementation_start",
@@ -434,15 +434,15 @@ describe("useAgentStudioTaskHydration", () => {
         activeSession: buildSessionWaitingForRuntime,
         agentStudioReadinessState: "ready",
         hydrateRequestedTaskSessionHistory,
-        recoverSessionRuntimeAttachment,
+        retrySessionRuntimeAttachment,
       }),
     );
 
     try {
       await harness.mount();
 
-      expect(recoverSessionRuntimeAttachment).toHaveBeenCalledTimes(1);
-      expect(recoverSessionRuntimeAttachment).toHaveBeenCalledWith({
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(1);
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledWith({
         taskId: "task-1",
         sessionId: "session-1",
         recoveryDedupKey: "/repo-a::task-1::session-1::attempt:1",
@@ -465,7 +465,7 @@ describe("useAgentStudioTaskHydration", () => {
           }),
           agentStudioReadinessState: "ready",
           hydrateRequestedTaskSessionHistory,
-          recoverSessionRuntimeAttachment,
+          retrySessionRuntimeAttachment,
         }),
       );
 
@@ -480,7 +480,7 @@ describe("useAgentStudioTaskHydration", () => {
   });
 
   test("retries build runtime attachment recovery when recovery candidates change", async () => {
-    const recoverSessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
+    const retrySessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
     const harness = createHookHarness(
       createBaseArgs({
         activeSession: createSession({
@@ -493,14 +493,14 @@ describe("useAgentStudioTaskHydration", () => {
           historyHydrationState: "not_requested",
         }),
         agentStudioReadinessState: "ready",
-        recoverSessionRuntimeAttachment,
+        retrySessionRuntimeAttachment,
         runtimeAttachmentCandidates: [],
       }),
     );
 
     try {
       await harness.mount();
-      expect(recoverSessionRuntimeAttachment).toHaveBeenCalledTimes(1);
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(1);
 
       await harness.update(
         createBaseArgs({
@@ -514,12 +514,12 @@ describe("useAgentStudioTaskHydration", () => {
             historyHydrationState: "not_requested",
           }),
           agentStudioReadinessState: "ready",
-          recoverSessionRuntimeAttachment,
+          retrySessionRuntimeAttachment,
           runtimeAttachmentCandidates: [],
         }),
       );
 
-      expect(recoverSessionRuntimeAttachment).toHaveBeenCalledTimes(1);
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(1);
 
       await harness.update(
         createBaseArgs({
@@ -533,7 +533,7 @@ describe("useAgentStudioTaskHydration", () => {
             historyHydrationState: "not_requested",
           }),
           agentStudioReadinessState: "ready",
-          recoverSessionRuntimeAttachment,
+          retrySessionRuntimeAttachment,
           runtimeAttachmentCandidates: [
             {
               runtimeKind: "opencode",
@@ -545,8 +545,8 @@ describe("useAgentStudioTaskHydration", () => {
         }),
       );
 
-      expect(recoverSessionRuntimeAttachment).toHaveBeenCalledTimes(2);
-      expect(recoverSessionRuntimeAttachment).toHaveBeenLastCalledWith({
+      expect(retrySessionRuntimeAttachment).toHaveBeenCalledTimes(2);
+      expect(retrySessionRuntimeAttachment).toHaveBeenLastCalledWith({
         taskId: "task-1",
         sessionId: "session-1",
         recoveryDedupKey: "/repo-a::task-1::session-1::attempt:2",

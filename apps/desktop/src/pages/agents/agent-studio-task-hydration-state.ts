@@ -22,7 +22,6 @@ type GetAgentStudioTaskHydrationDecisionArgs = {
 
 export type AgentStudioTaskHydrationDecision = {
   activeRuntimeAttachmentKey: string | null;
-  blockedFromAutomaticRecovery: boolean;
   shouldWaitForSessionRuntime: boolean;
   isWaitingForRuntimeReadiness: boolean;
   isRecoveringWaitingSession: boolean;
@@ -58,18 +57,15 @@ export const getAgentStudioTaskHydrationDecision = ({
     activeTaskId,
     activeSessionId: activeSession?.sessionId ?? null,
   });
-  const blockedFromAutomaticRecovery = false;
   const shouldWaitForSessionRuntime =
     activeRuntimeAttachmentKey !== null &&
     agentStudioReadinessState === "ready" &&
     sessionNeedsHydration &&
-    isWaitingForAttachedWorktreeRuntime(activeSession) &&
-    !blockedFromAutomaticRecovery;
+    isWaitingForAttachedWorktreeRuntime(activeSession);
   const isRecoveringWaitingSession = activeSession?.runtimeRecoveryState === "recovering_runtime";
   const isWaitingForRuntimeReadiness =
     activeRuntimeAttachmentKey !== null &&
     sessionNeedsHydration &&
-    !blockedFromAutomaticRecovery &&
     (agentStudioReadinessState !== "ready" ||
       shouldWaitForSessionRuntime ||
       isRecoveringWaitingSession);
@@ -79,12 +75,10 @@ export const getAgentStudioTaskHydrationDecision = ({
     !shouldWaitForSessionRuntime &&
     !isRecoveringWaitingSession &&
     sessionNeedsHydration &&
-    !blockedFromAutomaticRecovery &&
     historyHydrationState === "not_requested";
 
   return {
     activeRuntimeAttachmentKey,
-    blockedFromAutomaticRecovery,
     shouldWaitForSessionRuntime,
     isWaitingForRuntimeReadiness,
     isRecoveringWaitingSession,

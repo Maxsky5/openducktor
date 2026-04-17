@@ -345,7 +345,7 @@ export function useAgentOrchestratorOperations({
     [loadAgentSessions],
   );
 
-  const recoverSessionRuntimeAttachment = useCallback(
+  const retrySessionRuntimeAttachment = useCallback(
     async ({
       taskId,
       sessionId,
@@ -366,7 +366,7 @@ export function useAgentOrchestratorOperations({
       );
 
       await sessionHydration
-        .recoverSessionRuntimeAttachment({
+        .retrySessionRuntimeAttachment({
           taskId,
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
@@ -559,7 +559,7 @@ export function useAgentOrchestratorOperations({
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
-      recoverSessionRuntimeAttachment,
+      retrySessionRuntimeAttachment,
       reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
       loadAgentSessions,
       readSessionModelCatalog,
@@ -584,7 +584,7 @@ export function useAgentOrchestratorOperations({
     loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
-    recoverSessionRuntimeAttachment,
+    retrySessionRuntimeAttachment,
     readSessionSlashCommands,
     readSessionFileSearch,
     removeAgentSessions,

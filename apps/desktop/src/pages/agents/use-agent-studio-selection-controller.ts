@@ -42,7 +42,7 @@ type UseAgentStudioSelectionControllerArgs = {
     taskId: string;
     sessionId: string;
   }) => Promise<void>;
-  recoverSessionRuntimeAttachment: (input: {
+  retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
@@ -178,7 +178,7 @@ export function useAgentStudioSelectionController({
   scenarioFromQuery,
   updateQuery,
   hydrateRequestedTaskSessionHistory,
-  recoverSessionRuntimeAttachment,
+  retrySessionRuntimeAttachment,
   runtimeAttachmentSources,
   refreshRuntimeAttachmentSources,
   readSessionModelCatalog,
@@ -388,7 +388,7 @@ export function useAgentStudioSelectionController({
     activeSession: hydratedViewActiveSession,
     agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
-    recoverSessionRuntimeAttachment,
+    retrySessionRuntimeAttachment,
     refreshRuntimeAttachmentSources,
     runtimeAttachmentCandidates,
   });

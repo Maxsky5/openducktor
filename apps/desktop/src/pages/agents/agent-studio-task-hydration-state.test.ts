@@ -83,7 +83,6 @@ describe("getAgentStudioTaskHydrationDecision", () => {
       agentStudioReadinessState: "ready",
     });
 
-    expect(decision.blockedFromAutomaticRecovery).toBe(false);
     expect(decision.isWaitingForRuntimeReadiness).toBe(true);
     expect(decision.shouldHydrateSessionHistory).toBe(false);
   });

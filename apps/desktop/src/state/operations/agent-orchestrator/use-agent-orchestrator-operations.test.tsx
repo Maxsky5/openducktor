@@ -2087,7 +2087,7 @@ describe("use-agent-orchestrator-operations", () => {
       ).toBe("idle");
 
       await harness.run(async () => {
-        await harness.getLatest().recoverSessionRuntimeAttachment({
+        await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           sessionId: "session-1",
           persistedRecords: [persistedBuildSessionFixture],
@@ -2125,7 +2125,7 @@ describe("use-agent-orchestrator-operations", () => {
       await clearAppQueryClient();
 
       await harness.run(async () => {
-        await harness.getLatest().recoverSessionRuntimeAttachment({
+        await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           sessionId: "session-1",
           persistedRecords: [persistedBuildSessionFixture],

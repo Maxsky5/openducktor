@@ -24,7 +24,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
-const recoverSessionRuntimeAttachment = async (): Promise<boolean> => false;
+const retrySessionRuntimeAttachment = async (): Promise<boolean> => false;
 
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
@@ -35,7 +35,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      recoverSessionRuntimeAttachment,
+      retrySessionRuntimeAttachment,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {
         throw new Error("load failed");
@@ -72,7 +72,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      recoverSessionRuntimeAttachment,
+      retrySessionRuntimeAttachment,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -116,7 +116,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      recoverSessionRuntimeAttachment,
+      retrySessionRuntimeAttachment,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -157,7 +157,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      recoverSessionRuntimeAttachment,
+      retrySessionRuntimeAttachment,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -196,8 +196,8 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      recoverSessionRuntimeAttachment: async () => {
-        throw new Error("recover failed");
+      retrySessionRuntimeAttachment: async () => {
+        throw new Error("retry failed");
       },
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
@@ -217,10 +217,10 @@ describe("agent-orchestrator-public-operations", () => {
 
     try {
       await expect(
-        operations.recoverSessionRuntimeAttachment({ taskId: "task-1", sessionId: "session-1" }),
-      ).rejects.toThrow("recover failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to recover session runtime", {
-        description: "recover failed",
+        operations.retrySessionRuntimeAttachment({ taskId: "task-1", sessionId: "session-1" }),
+      ).rejects.toThrow("retry failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to reconnect session runtime", {
+        description: "retry failed",
       });
     } finally {
       toast.error = originalToastError;
@@ -232,7 +232,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      recoverSessionRuntimeAttachment,
+      retrySessionRuntimeAttachment,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({

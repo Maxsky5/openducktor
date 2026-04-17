@@ -22,7 +22,7 @@ type UseAgentStudioTaskHydrationParams = {
     taskId: string;
     sessionId: string;
   }) => Promise<void>;
-  recoverSessionRuntimeAttachment: (input: {
+  retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
@@ -46,7 +46,7 @@ export function useAgentStudioTaskHydration({
   activeSession,
   agentStudioReadinessState,
   hydrateRequestedTaskSessionHistory,
-  recoverSessionRuntimeAttachment,
+  retrySessionRuntimeAttachment,
   refreshRuntimeAttachmentSources,
   runtimeAttachmentCandidates,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
@@ -78,7 +78,7 @@ export function useAgentStudioTaskHydration({
     shouldWaitForSessionRuntime,
     activeRuntimeAttachmentKey,
     runtimeAttachmentCandidates,
-    recoverSessionRuntimeAttachment,
+    retrySessionRuntimeAttachment,
     refreshRuntimeAttachmentSources,
   });
 

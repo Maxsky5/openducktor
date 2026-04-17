@@ -165,7 +165,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const {
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
-    recoverSessionRuntimeAttachment,
+    retrySessionRuntimeAttachment,
     readSessionFileSearch,
     readSessionModelCatalog,
     readSessionSlashCommands,
@@ -274,7 +274,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
-    recoverSessionRuntimeAttachment,
+    retrySessionRuntimeAttachment,
     runtimeAttachmentSources,
     refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
     readSessionModelCatalog,

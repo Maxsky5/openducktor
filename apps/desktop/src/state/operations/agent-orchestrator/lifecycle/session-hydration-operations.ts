@@ -16,7 +16,7 @@ export type SessionHydrationOperations = {
     sessionId: string;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
-  recoverSessionRuntimeAttachment: (input: {
+  retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
@@ -60,7 +60,7 @@ export const createSessionHydrationOperations = ({
           persistedRecords,
         ),
       ),
-    recoverSessionRuntimeAttachment: ({
+    retrySessionRuntimeAttachment: ({
       taskId,
       sessionId,
       recoveryDedupKey,

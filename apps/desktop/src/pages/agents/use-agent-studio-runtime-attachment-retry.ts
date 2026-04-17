@@ -99,7 +99,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
   shouldWaitForSessionRuntime,
   activeRuntimeAttachmentKey,
   runtimeAttachmentCandidates,
-  recoverSessionRuntimeAttachment,
+  retrySessionRuntimeAttachment,
   refreshRuntimeAttachmentSources,
 }: {
   activeTaskId: string;
@@ -107,7 +107,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
   shouldWaitForSessionRuntime: boolean;
   activeRuntimeAttachmentKey: string | null;
   runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
-  recoverSessionRuntimeAttachment: (input: {
+  retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
@@ -157,7 +157,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
       candidates: cloneRuntimeAttachmentCandidates(runtimeAttachmentCandidates),
     };
 
-    void recoverSessionRuntimeAttachment({
+    void retrySessionRuntimeAttachment({
       taskId: activeTaskId,
       sessionId: activeSessionId,
       recoveryDedupKey,
@@ -168,7 +168,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
     activeRuntimeAttachmentKey,
     activeSessionId,
     activeTaskId,
-    recoverSessionRuntimeAttachment,
+    retrySessionRuntimeAttachment,
     runtimeAttachmentCandidates,
     shouldWaitForSessionRuntime,
   ]);

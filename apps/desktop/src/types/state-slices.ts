@@ -161,7 +161,7 @@ export type AgentStateContextValue = {
     sessionId: string;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   }) => Promise<void>;
-  recoverSessionRuntimeAttachment: (input: {
+  retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
