@@ -323,7 +323,7 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
         .as_deref()
         .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
-    let config = store.load().expect("legacy config should load");
+    let config = store.load().expect("persisted config should load");
     assert!(!config.chat.show_thinking_messages);
     assert_eq!(config.kanban.done_visible_days, 1);
 

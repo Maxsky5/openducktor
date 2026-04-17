@@ -476,9 +476,7 @@ pub(super) fn deserialize_global_config(data: &str) -> Result<GlobalConfig, Stri
         ));
     }
 
-    let config: PersistedGlobalConfigV2 =
-        serde_json::from_value(payload).map_err(|error| error.to_string())?;
-    GlobalConfig::try_from(config).map_err(|error| error.to_string())
+    serde_json::from_value::<GlobalConfig>(payload).map_err(|error| error.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -509,14 +507,6 @@ impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
     type Error = String;
 
     fn try_from(config: PersistedGlobalConfigV2) -> Result<Self, Self::Error> {
-        if config.version != current_global_config_version() {
-            return Err(format!(
-                "Unsupported config version {}. Expected {}.",
-                config.version,
-                current_global_config_version()
-            ));
-        }
-
         Ok(Self {
             version: config.version,
             active_workspace: config.active_workspace,
