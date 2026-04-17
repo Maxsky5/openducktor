@@ -26,10 +26,10 @@ import {
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
-import { TaskLabelChip } from "@/components/features/tasks/task-label-chip";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TaskLabelChip } from "@/components/ui/task-label-chip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -248,7 +248,7 @@ function TaskPrimaryMeta({
 }: {
   task: TaskCard;
   runState: VisibleKanbanRunState | undefined;
-}): ReactElement | null {
+}): ReactElement {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <IssueTypeBadge issueType={task.issueType} />
@@ -272,7 +272,7 @@ function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }
   const hiddenLabelsDescriptionId = useId();
 
   return (
-    <TooltipProvider>
+    <>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -303,7 +303,7 @@ function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }
       >
         {hiddenLabels.join(", ")}
       </span>
-    </TooltipProvider>
+    </>
   );
 }
 

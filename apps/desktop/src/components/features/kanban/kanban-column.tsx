@@ -17,6 +17,7 @@ import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type TaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["taskSessions"]>;
@@ -261,40 +262,79 @@ export function KanbanColumn({
   const isVirtualized = renderModel.kind === "virtualized";
 
   return (
-    <section
-      className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border shadow-sm",
-        KANBAN_LANE_WIDTH_CLASS,
-        theme.boardSurfaceClass,
-      )}
-    >
-      <LaneHeader id={column.id} title={column.title} count={column.tasks.length} />
-      <div ref={cardsViewportRef} className="flex-1 p-3">
-        {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
+    <TooltipProvider>
+      <section
+        className={cn(
+          "flex flex-col overflow-hidden rounded-2xl border shadow-sm",
+          KANBAN_LANE_WIDTH_CLASS,
+          theme.boardSurfaceClass,
+        )}
+      >
+        <LaneHeader id={column.id} title={column.title} count={column.tasks.length} />
+        <div ref={cardsViewportRef} className="flex-1 p-3">
+          {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
 
-        {column.tasks.length > 0 && isVirtualized ? (
-          <div style={{ minHeight: renderModel.totalHeight }}>
-            {renderModel.topSpacerHeight > 0 ? (
-              <div style={{ height: renderModel.topSpacerHeight }} />
-            ) : null}
+          {column.tasks.length > 0 && isVirtualized ? (
+            <div style={{ minHeight: renderModel.totalHeight }}>
+              {renderModel.topSpacerHeight > 0 ? (
+                <div style={{ height: renderModel.topSpacerHeight }} />
+              ) : null}
+              <div className="space-y-3">
+                {renderModel.visibleTasks.map((task) => {
+                  const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
+                  return (
+                    <MeasuredTaskCard
+                      key={task.id}
+                      task={task}
+                      runState={runStateByTaskId.get(task.id)}
+                      taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                      hasActiveSession={Boolean(activeSessionContext)}
+                      activeSessionRole={activeSessionContext?.role}
+                      activeSessionPresentationState={activeSessionContext?.presentationState}
+                      taskActivityState={getRequiredTaskActivityState(
+                        taskActivityStateByTaskId,
+                        task.id,
+                      )}
+                      measurementVersion={measurementVersion}
+                      onMeasuredHeight={handleMeasuredHeight}
+                      onOpenDetails={onOpenDetails}
+                      onDelegate={onDelegate}
+                      onOpenSession={onOpenSession}
+                      onPlan={onPlan}
+                      onBuild={onBuild}
+                      {...(onQaStart ? { onQaStart } : {})}
+                      {...(onQaOpen ? { onQaOpen } : {})}
+                      {...(onHumanApprove ? { onHumanApprove } : {})}
+                      {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+                      {...(onResetImplementation ? { onResetImplementation } : {})}
+                    />
+                  );
+                })}
+              </div>
+              {renderModel.bottomSpacerHeight > 0 ? (
+                <div style={{ height: renderModel.bottomSpacerHeight }} />
+              ) : null}
+            </div>
+          ) : null}
+
+          {column.tasks.length > 0 && !isVirtualized ? (
             <div className="space-y-3">
               {renderModel.visibleTasks.map((task) => {
                 const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
                 return (
-                  <MeasuredTaskCard
+                  <KanbanTaskCard
                     key={task.id}
                     task={task}
                     runState={runStateByTaskId.get(task.id)}
                     taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
                     hasActiveSession={Boolean(activeSessionContext)}
-                    activeSessionRole={activeSessionContext?.role}
-                    activeSessionPresentationState={activeSessionContext?.presentationState}
+                    {...(activeSessionContext?.role
+                      ? { activeSessionRole: activeSessionContext.role }
+                      : {})}
                     taskActivityState={getRequiredTaskActivityState(
                       taskActivityStateByTaskId,
                       task.id,
                     )}
-                    measurementVersion={measurementVersion}
-                    onMeasuredHeight={handleMeasuredHeight}
                     onOpenDetails={onOpenDetails}
                     onDelegate={onDelegate}
                     onOpenSession={onOpenSession}
@@ -309,46 +349,9 @@ export function KanbanColumn({
                 );
               })}
             </div>
-            {renderModel.bottomSpacerHeight > 0 ? (
-              <div style={{ height: renderModel.bottomSpacerHeight }} />
-            ) : null}
-          </div>
-        ) : null}
-
-        {column.tasks.length > 0 && !isVirtualized ? (
-          <div className="space-y-3">
-            {renderModel.visibleTasks.map((task) => {
-              const activeSessionContext = activeTaskSessionContextByTaskId.get(task.id);
-              return (
-                <KanbanTaskCard
-                  key={task.id}
-                  task={task}
-                  runState={runStateByTaskId.get(task.id)}
-                  taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
-                  hasActiveSession={Boolean(activeSessionContext)}
-                  {...(activeSessionContext?.role
-                    ? { activeSessionRole: activeSessionContext.role }
-                    : {})}
-                  taskActivityState={getRequiredTaskActivityState(
-                    taskActivityStateByTaskId,
-                    task.id,
-                  )}
-                  onOpenDetails={onOpenDetails}
-                  onDelegate={onDelegate}
-                  onOpenSession={onOpenSession}
-                  onPlan={onPlan}
-                  onBuild={onBuild}
-                  {...(onQaStart ? { onQaStart } : {})}
-                  {...(onQaOpen ? { onQaOpen } : {})}
-                  {...(onHumanApprove ? { onHumanApprove } : {})}
-                  {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-                  {...(onResetImplementation ? { onResetImplementation } : {})}
-                />
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    </section>
+          ) : null}
+        </div>
+      </section>
+    </TooltipProvider>
   );
 }

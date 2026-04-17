@@ -1,7 +1,7 @@
 import { Check, Plus, X } from "lucide-react";
 import { type KeyboardEvent, type ReactElement, useMemo, useState } from "react";
-import { TaskLabelChip } from "@/components/features/tasks/task-label-chip";
 import { Input } from "@/components/ui/input";
+import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { cn } from "@/lib/utils";
 
 const EMPTY_SUGGESTIONS: string[] = [];

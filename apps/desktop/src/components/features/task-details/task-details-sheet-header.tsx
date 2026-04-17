@@ -4,9 +4,9 @@ import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
-import { TaskLabelChip } from "@/components/features/tasks/task-label-chip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { canUnlinkTaskPullRequest, statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
