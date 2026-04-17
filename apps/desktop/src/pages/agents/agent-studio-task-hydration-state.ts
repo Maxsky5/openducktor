@@ -21,7 +21,7 @@ type GetAgentStudioTaskHydrationDecisionArgs = {
 };
 
 export type AgentStudioTaskHydrationDecision = {
-  activeRecoveryKey: string | null;
+  activeRuntimeAttachmentKey: string | null;
   blockedFromAutomaticRecovery: boolean;
   shouldWaitForSessionRuntime: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -29,7 +29,7 @@ export type AgentStudioTaskHydrationDecision = {
   shouldHydrateSessionHistory: boolean;
 };
 
-export const toRecoverySelectionKey = ({
+export const toRuntimeAttachmentSelectionKey = ({
   activeRepo,
   activeTaskId,
   activeSessionId,
@@ -53,28 +53,28 @@ export const getAgentStudioTaskHydrationDecision = ({
   sessionNeedsHydration,
   agentStudioReadinessState,
 }: GetAgentStudioTaskHydrationDecisionArgs): AgentStudioTaskHydrationDecision => {
-  const activeRecoveryKey = toRecoverySelectionKey({
+  const activeRuntimeAttachmentKey = toRuntimeAttachmentSelectionKey({
     activeRepo,
     activeTaskId,
     activeSessionId: activeSession?.sessionId ?? null,
   });
   const blockedFromAutomaticRecovery = false;
   const shouldWaitForSessionRuntime =
-    activeRecoveryKey !== null &&
+    activeRuntimeAttachmentKey !== null &&
     agentStudioReadinessState === "ready" &&
     sessionNeedsHydration &&
     isWaitingForAttachedWorktreeRuntime(activeSession) &&
     !blockedFromAutomaticRecovery;
   const isRecoveringWaitingSession = activeSession?.runtimeRecoveryState === "recovering_runtime";
   const isWaitingForRuntimeReadiness =
-    activeRecoveryKey !== null &&
+    activeRuntimeAttachmentKey !== null &&
     sessionNeedsHydration &&
     !blockedFromAutomaticRecovery &&
     (agentStudioReadinessState !== "ready" ||
       shouldWaitForSessionRuntime ||
       isRecoveringWaitingSession);
   const shouldHydrateSessionHistory =
-    activeRecoveryKey !== null &&
+    activeRuntimeAttachmentKey !== null &&
     agentStudioReadinessState === "ready" &&
     !shouldWaitForSessionRuntime &&
     !isRecoveringWaitingSession &&
@@ -83,7 +83,7 @@ export const getAgentStudioTaskHydrationDecision = ({
     historyHydrationState === "not_requested";
 
   return {
-    activeRecoveryKey,
+    activeRuntimeAttachmentKey,
     blockedFromAutomaticRecovery,
     shouldWaitForSessionRuntime,
     isWaitingForRuntimeReadiness,

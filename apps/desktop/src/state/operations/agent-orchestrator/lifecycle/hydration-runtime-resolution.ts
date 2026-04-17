@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
   RuntimeRoute,
@@ -28,13 +27,11 @@ export type ResolvedHydrationRuntime =
 
 export const createHydrationRuntimeResolver = ({
   repoPath,
-  liveRuns,
   runtimesByKind,
   preloadedRuntimeConnectionsByKey,
   ensureWorkspaceRuntime,
 }: {
   repoPath: string;
-  liveRuns: RunSummary[];
   runtimesByKind: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
   ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
@@ -63,17 +60,25 @@ export const createHydrationRuntimeResolver = ({
     );
   };
 
-  const findRunByWorkingDirectory = (
+  const findWorkspaceRuntime = (runtimeKind: RuntimeKind): RuntimeInstanceSummary | null => {
+    const runtimes = runtimesByKind.get(runtimeKind) ?? [];
+    const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+    return (
+      runtimes.find(
+        (runtime) =>
+          runtime.role === "workspace" &&
+          normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath,
+      ) ?? null
+    );
+  };
+
+  const findRuntimeForWorkingDirectory = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
-  ): RunSummary | null => {
-    const normalizedDirectory = normalizeWorkingDirectory(workingDirectory);
+  ): RuntimeInstanceSummary | null => {
     return (
-      liveRuns.find(
-        (run) =>
-          run.runtimeKind === runtimeKind &&
-          normalizeWorkingDirectory(run.worktreePath) === normalizedDirectory,
-      ) ?? null
+      findRuntimeByWorkingDirectory(runtimeKind, workingDirectory) ??
+      findWorkspaceRuntime(runtimeKind)
     );
   };
 
@@ -81,25 +86,7 @@ export const createHydrationRuntimeResolver = ({
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
 
-    if (record.role === "build" || record.role === "qa") {
-      const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
-      if (run) {
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          run.runtimeRoute,
-          workingDirectory,
-        );
-        return {
-          ok: true,
-          runtimeKind,
-          runtimeId: null,
-          runId: run.runId,
-          runtimeRoute: run.runtimeRoute,
-          runtimeConnection,
-        };
-      }
-    }
-
-    const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
+    const runtime = findRuntimeForWorkingDirectory(runtimeKind, workingDirectory);
     if (runtime) {
       const { runtimeConnection } = resolveRuntimeRouteConnection(
         runtime.runtimeRoute,

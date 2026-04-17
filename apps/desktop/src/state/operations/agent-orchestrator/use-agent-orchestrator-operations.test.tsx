@@ -2051,10 +2051,21 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("tracks explicit runtime recovery state while reattaching a restored session runtime", async () => {
     const originalRuntimeList = host.runtimeList;
-    const originalRunsList = host.runsList;
+    const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+    const originalListLiveAgentSessionSnapshots =
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
 
     host.runtimeList = async () => [];
-    host.runsList = async () => [];
+    OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [];
+    OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
@@ -2087,24 +2098,49 @@ describe("use-agent-orchestrator-operations", () => {
         harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
       ).toBe("waiting_for_runtime");
 
-      host.runsList = async () => [runningRunFixture];
+      host.runtimeList = async () => [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [
+        {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+          pendingPermissions: [],
+          pendingQuestions: [],
+        },
+      ];
+      await clearAppQueryClient();
 
       await harness.run(async () => {
         await harness.getLatest().recoverSessionRuntimeAttachment({
           taskId: "task-1",
           sessionId: "session-1",
           persistedRecords: [persistedBuildSessionFixture],
-          preloadedRuns: [runningRunFixture],
         });
       });
 
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
-      expect(recoveredSession?.runId).toBe("run-1");
+      expect(recoveredSession?.runId).toBeNull();
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
-      host.runsList = originalRunsList;
+      OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
+        originalListLiveAgentSessionSnapshots;
     }
   });
 

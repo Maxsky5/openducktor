@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RunSummary,
   type RuntimeInstanceSummary,
   type RuntimeKind,
 } from "@openducktor/contracts";
@@ -24,23 +23,6 @@ const createRecord = (
   selectedModel: null,
 });
 
-const createRun = (workingDirectory: string): RunSummary => ({
-  runId: "run-1",
-  runtimeKind: "opencode",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4444",
-  },
-  repoPath: "/tmp/repo",
-  taskId: "task-1",
-  branch: "obp/task-1",
-  worktreePath: workingDirectory,
-  port: 4444,
-  state: "running",
-  lastMessage: null,
-  startedAt: "2026-03-01T10:00:00.000Z",
-});
-
 const createRuntime = (workingDirectory: string): RuntimeInstanceSummary => ({
   kind: "opencode",
   runtimeId: "runtime-1",
@@ -57,40 +39,6 @@ const createRuntime = (workingDirectory: string): RuntimeInstanceSummary => ({
 });
 
 describe("createHydrationRuntimeResolver", () => {
-  test("prefers live run resolution over preloaded runtime connections", async () => {
-    const workingDirectory = "/tmp/repo/worktree";
-    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
-      [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:9999",
-          workingDirectory,
-        },
-      ],
-    ]);
-
-    const resolveHydrationRuntime = createHydrationRuntimeResolver({
-      repoPath: "/tmp/repo",
-      liveRuns: [createRun(workingDirectory)],
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-      preloadedRuntimeConnectionsByKey,
-      ensureWorkspaceRuntime: async () => null,
-    });
-
-    const result = await resolveHydrationRuntime(createRecord("build", workingDirectory));
-    if (!result.ok) {
-      throw new Error("Expected runtime resolution to succeed");
-    }
-
-    expect(result.runId).toBe("run-1");
-    expect(result.runtimeId).toBeNull();
-    expect(result.runtimeRoute).toEqual({
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-    });
-  });
-
   test("prefers live runtime resolution over preloaded runtime connections", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
@@ -106,7 +54,6 @@ describe("createHydrationRuntimeResolver", () => {
 
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
-      liveRuns: [],
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
         ["opencode", [createRuntime(workingDirectory)]],
       ]),
@@ -127,6 +74,29 @@ describe("createHydrationRuntimeResolver", () => {
     });
   });
 
+  test("attaches build sessions from the shared workspace runtime when no run is present", async () => {
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        ["opencode", [createRuntime("/tmp/repo")]],
+      ]),
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", "/tmp/repo/worktree"));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-1");
+    expect(result.runId).toBeNull();
+    expect(result.runtimeConnection).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+      workingDirectory: "/tmp/repo/worktree",
+    });
+  });
+
   test("falls back to preloaded runtime connection when no run or runtime exists", async () => {
     const workingDirectory = "/tmp/repo";
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
@@ -143,7 +113,6 @@ describe("createHydrationRuntimeResolver", () => {
 
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
-      liveRuns: [],
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
       preloadedRuntimeConnectionsByKey,
       ensureWorkspaceRuntime: async () => {
@@ -180,7 +149,6 @@ describe("createHydrationRuntimeResolver", () => {
 
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
-      liveRuns: [],
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
       preloadedRuntimeConnectionsByKey,
       ensureWorkspaceRuntime: async () => null,

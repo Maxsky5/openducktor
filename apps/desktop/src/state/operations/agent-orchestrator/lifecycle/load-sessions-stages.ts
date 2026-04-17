@@ -9,7 +9,6 @@ import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/cor
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
-import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type {
   AgentSessionHistoryHydrationPolicy,
   AgentSessionLoadMode,
@@ -439,12 +438,6 @@ export const createRuntimeResolutionPlannerStage = async ({
       ),
     );
 
-  const requiresRunInspection = recordsNeedingRuntimeResolution.some(
-    (record) => record.role === "build" || record.role === "qa",
-  );
-  const liveRuns = requiresRunInspection
-    ? (options?.preloadedRuns ?? (await loadRepoRunsFromQuery(appQueryClient, intent.repoPath)))
-    : [];
   const ensuredWorkspaceRuntimes = new Map<RuntimeKind, RuntimeInstanceSummary | null>();
 
   const ensureWorkspaceRuntime = async (
@@ -468,7 +461,6 @@ export const createRuntimeResolutionPlannerStage = async ({
 
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
-    liveRuns,
     runtimesByKind,
     ...(options?.preloadedRuntimeConnectionsByKey
       ? { preloadedRuntimeConnectionsByKey: options.preloadedRuntimeConnectionsByKey }

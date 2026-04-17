@@ -8,7 +8,10 @@ import {
   type AgentStudioReadinessState,
   getAgentStudioTaskHydrationDecision,
 } from "./agent-studio-task-hydration-state";
-import { useAgentStudioSessionRuntimeRecovery } from "./use-agent-studio-session-runtime-recovery";
+import {
+  type RuntimeAttachmentCandidate,
+  useAgentStudioRuntimeAttachmentRetry,
+} from "./use-agent-studio-runtime-attachment-retry";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
@@ -24,8 +27,8 @@ type UseAgentStudioTaskHydrationParams = {
     sessionId: string;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
-  refreshSessionRuntimeRecoverySources: () => Promise<void>;
-  sessionRuntimeRecoverySignal: string;
+  refreshRuntimeAttachmentSources: () => Promise<void>;
+  runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
 };
 
 type UseAgentStudioTaskHydrationResult = {
@@ -44,8 +47,8 @@ export function useAgentStudioTaskHydration({
   agentStudioReadinessState,
   hydrateRequestedTaskSessionHistory,
   recoverSessionRuntimeAttachment,
-  refreshSessionRuntimeRecoverySources,
-  sessionRuntimeRecoverySignal,
+  refreshRuntimeAttachmentSources,
+  runtimeAttachmentCandidates,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const activeSessionId = activeSession?.sessionId ?? null;
   const [requestState, setRequestState] = useState<{
@@ -55,7 +58,7 @@ export function useAgentStudioTaskHydration({
   const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
   const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
   const {
-    activeRecoveryKey,
+    activeRuntimeAttachmentKey,
     shouldWaitForSessionRuntime,
     isWaitingForRuntimeReadiness,
     isRecoveringWaitingSession,
@@ -69,14 +72,14 @@ export function useAgentStudioTaskHydration({
     agentStudioReadinessState,
   });
 
-  useAgentStudioSessionRuntimeRecovery({
+  useAgentStudioRuntimeAttachmentRetry({
     activeTaskId,
     activeSessionId,
     shouldWaitForSessionRuntime,
-    activeRecoveryKey,
-    sessionRuntimeRecoverySignal,
+    activeRuntimeAttachmentKey,
+    runtimeAttachmentCandidates,
     recoverSessionRuntimeAttachment,
-    refreshSessionRuntimeRecoverySources,
+    refreshRuntimeAttachmentSources,
   });
 
   const isRequestFailed =

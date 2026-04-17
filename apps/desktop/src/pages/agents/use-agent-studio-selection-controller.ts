@@ -1,4 +1,4 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentRole,
@@ -18,9 +18,9 @@ import {
 } from "./agents-page-selection";
 import { useAgentStudioActiveSessionRuntimeData } from "./use-agent-studio-active-session-runtime-data";
 import {
-  buildSelectedSessionRuntimeRecoverySignal,
-  type RuntimeRecoveryRuntimeSource,
-} from "./use-agent-studio-session-runtime-recovery";
+  type RuntimeAttachmentSource,
+  selectRuntimeAttachmentCandidates,
+} from "./use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
@@ -47,9 +47,8 @@ type UseAgentStudioSelectionControllerArgs = {
     sessionId: string;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
-  runtimeRecoveryRuns: RunSummary[];
-  runtimeRecoveryRuntimes: RuntimeRecoveryRuntimeSource[];
-  refreshSessionRuntimeRecoverySources: () => Promise<void>;
+  runtimeAttachmentSources: RuntimeAttachmentSource[];
+  refreshRuntimeAttachmentSources: () => Promise<void>;
   readSessionModelCatalog: (
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     runtimeConnection: AgentRuntimeConnection,
@@ -180,9 +179,8 @@ export function useAgentStudioSelectionController({
   updateQuery,
   hydrateRequestedTaskSessionHistory,
   recoverSessionRuntimeAttachment,
-  runtimeRecoveryRuns,
-  runtimeRecoveryRuntimes,
-  refreshSessionRuntimeRecoverySources,
+  runtimeAttachmentSources,
+  refreshRuntimeAttachmentSources,
   readSessionModelCatalog,
   readSessionTodos,
   clearComposerInput,
@@ -367,15 +365,14 @@ export function useAgentStudioSelectionController({
   });
   const viewRole = viewSelection.role;
   const viewScenario = viewSelection.scenario;
-  const sessionRuntimeRecoverySignal = useMemo(
+  const runtimeAttachmentCandidates = useMemo(
     () =>
-      buildSelectedSessionRuntimeRecoverySignal({
-        activeTaskId: viewTaskId,
+      selectRuntimeAttachmentCandidates({
+        repoPath: activeRepo ?? "",
         session: hydratedViewActiveSession,
-        runs: runtimeRecoveryRuns,
-        runtimes: runtimeRecoveryRuntimes,
+        runtimeSources: runtimeAttachmentSources,
       }),
-    [hydratedViewActiveSession, runtimeRecoveryRuns, runtimeRecoveryRuntimes, viewTaskId],
+    [activeRepo, hydratedViewActiveSession, runtimeAttachmentSources],
   );
 
   const {
@@ -392,8 +389,8 @@ export function useAgentStudioSelectionController({
     agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
     recoverSessionRuntimeAttachment,
-    refreshSessionRuntimeRecoverySources,
-    sessionRuntimeRecoverySignal,
+    refreshRuntimeAttachmentSources,
+    runtimeAttachmentCandidates,
   });
 
   return {

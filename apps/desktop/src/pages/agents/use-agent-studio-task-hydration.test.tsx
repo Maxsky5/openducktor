@@ -21,8 +21,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   agentStudioReadinessState: "ready",
   hydrateRequestedTaskSessionHistory: async () => {},
   recoverSessionRuntimeAttachment: async () => false,
-  refreshSessionRuntimeRecoverySources: async () => {},
-  sessionRuntimeRecoverySignal: "runs:0",
+  refreshRuntimeAttachmentSources: async () => {},
+  runtimeAttachmentCandidates: [],
   ...overrides,
 });
 
@@ -445,7 +445,7 @@ describe("useAgentStudioTaskHydration", () => {
       expect(recoverSessionRuntimeAttachment).toHaveBeenCalledWith({
         taskId: "task-1",
         sessionId: "session-1",
-        recoveryDedupKey: "/repo-a::task-1::session-1::runs:0",
+        recoveryDedupKey: "/repo-a::task-1::session-1::attempt:1",
       });
       expect(hydrateRequestedTaskSessionHistory).not.toHaveBeenCalled();
       expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
@@ -479,7 +479,7 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
-  test("retries build runtime attachment recovery when the run snapshot signal changes", async () => {
+  test("retries build runtime attachment recovery when recovery candidates change", async () => {
     const recoverSessionRuntimeAttachment = mock(async (): Promise<boolean> => false);
     const harness = createHookHarness(
       createBaseArgs({
@@ -494,7 +494,7 @@ describe("useAgentStudioTaskHydration", () => {
         }),
         agentStudioReadinessState: "ready",
         recoverSessionRuntimeAttachment,
-        sessionRuntimeRecoverySignal: "runs:0",
+        runtimeAttachmentCandidates: [],
       }),
     );
 
@@ -515,7 +515,7 @@ describe("useAgentStudioTaskHydration", () => {
           }),
           agentStudioReadinessState: "ready",
           recoverSessionRuntimeAttachment,
-          sessionRuntimeRecoverySignal: "runs:0",
+          runtimeAttachmentCandidates: [],
         }),
       );
 
@@ -534,7 +534,14 @@ describe("useAgentStudioTaskHydration", () => {
           }),
           agentStudioReadinessState: "ready",
           recoverSessionRuntimeAttachment,
-          sessionRuntimeRecoverySignal: "runs:1",
+          runtimeAttachmentCandidates: [
+            {
+              runtimeKind: "opencode",
+              runtimeId: "runtime-1",
+              workingDirectory: "/repo-a",
+              route: "http://127.0.0.1:4444",
+            },
+          ],
         }),
       );
 
@@ -542,7 +549,7 @@ describe("useAgentStudioTaskHydration", () => {
       expect(recoverSessionRuntimeAttachment).toHaveBeenLastCalledWith({
         taskId: "task-1",
         sessionId: "session-1",
-        recoveryDedupKey: "/repo-a::task-1::session-1::runs:1",
+        recoveryDedupKey: "/repo-a::task-1::session-1::attempt:2",
       });
     } finally {
       await harness.unmount();
@@ -550,7 +557,7 @@ describe("useAgentStudioTaskHydration", () => {
   });
 
   test("refreshes runtime recovery sources while waiting for a session runtime", async () => {
-    const refreshSessionRuntimeRecoverySources = mock(async (): Promise<void> => {});
+    const refreshRuntimeAttachmentSources = mock(async (): Promise<void> => {});
     const timerOwner = typeof window === "undefined" ? globalThis : window;
     const originalSetInterval = timerOwner.setInterval;
     const originalClearInterval = timerOwner.clearInterval;
@@ -575,7 +582,7 @@ describe("useAgentStudioTaskHydration", () => {
           runtimeRoute: null,
           historyHydrationState: "not_requested",
         }),
-        refreshSessionRuntimeRecoverySources,
+        refreshRuntimeAttachmentSources,
       }),
     );
 
@@ -584,7 +591,7 @@ describe("useAgentStudioTaskHydration", () => {
       expect(intervalCallbacks).toHaveLength(1);
 
       intervalCallbacks[0]?.();
-      expect(refreshSessionRuntimeRecoverySources).toHaveBeenCalledTimes(1);
+      expect(refreshRuntimeAttachmentSources).toHaveBeenCalledTimes(1);
     } finally {
       timerOwner.setInterval = originalSetInterval;
       timerOwner.clearInterval = originalClearInterval;
