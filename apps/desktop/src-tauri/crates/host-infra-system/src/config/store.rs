@@ -13,6 +13,7 @@ use crate::beads::adopt_legacy_workspace_namespace;
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{RuntimeRegistry, WorkspaceRecord};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -263,6 +264,42 @@ impl AppConfigStore {
             }
             Ok(())
         })
+    }
+
+    pub fn normalize_settings_snapshot_workspaces(
+        &self,
+        config: &GlobalConfig,
+        snapshot_workspaces: HashMap<String, RepoConfig>,
+    ) -> Result<HashMap<String, RepoConfig>> {
+        let mut next_workspaces = config.workspaces.clone();
+        for workspace_id in snapshot_workspaces.keys() {
+            if !config.workspaces.contains_key(workspace_id) {
+                return Err(anyhow!(
+                    "Workspace not found in config: {workspace_id}. Add/select the workspace before updating configuration."
+                ));
+            }
+            next_workspaces.remove(workspace_id);
+        }
+
+        for (workspace_id, mut repo_config) in snapshot_workspaces {
+            repo_config.workspace_id = workspace_id.clone();
+            repo_config.repo_path = validate_git_repo_path(&repo_config.repo_path)?;
+            normalize_repo_config(&mut repo_config)?;
+
+            if let Some((conflicting_workspace_id, _)) = next_workspaces
+                .iter()
+                .find(|(_, workspace)| workspace.repo_path == repo_config.repo_path)
+            {
+                return Err(anyhow!(
+                    "Repository path is already registered to workspace {conflicting_workspace_id}: {}",
+                    repo_config.repo_path
+                ));
+            }
+
+            next_workspaces.insert(workspace_id, repo_config);
+        }
+
+        Ok(next_workspaces)
     }
 
     pub fn repo_config(&self, workspace_id: &str) -> Result<RepoConfig> {

@@ -8,13 +8,6 @@ impl AppService {
             .to_string()
     }
 
-    fn durable_repo_key(&self, repo_path: &str) -> Result<String> {
-        match self.config_store.find_workspace_by_repo_path(repo_path)? {
-            Some(workspace) => Ok(workspace.workspace_id),
-            None => Ok(Self::repo_key(repo_path)),
-        }
-    }
-
     pub fn resolve_authorized_repo_path(&self, repo_path: &str) -> Result<String> {
         let repo_key = Self::repo_key(repo_path);
         if !self.enforce_repo_allowlist {
@@ -34,8 +27,8 @@ impl AppService {
         Ok(repo_key)
     }
 
-    fn ensure_repo_initialized_with_durable_key(&self, resolved_repo_path: &str) -> Result<()> {
-        let repo_key = self.durable_repo_key(resolved_repo_path)?;
+    fn ensure_repo_initialized_with_cache_key(&self, resolved_repo_path: &str) -> Result<()> {
+        let repo_key = Self::repo_key(resolved_repo_path);
         {
             let cache = self
                 .initialized_repos
@@ -63,7 +56,7 @@ impl AppService {
 
     pub(super) fn resolve_initialized_repo_path(&self, repo_path: &str) -> Result<String> {
         let resolved_repo_path = self.resolve_authorized_repo_path(repo_path)?;
-        self.ensure_repo_initialized_with_durable_key(resolved_repo_path.as_str())?;
+        self.ensure_repo_initialized_with_cache_key(resolved_repo_path.as_str())?;
 
         Ok(resolved_repo_path)
     }

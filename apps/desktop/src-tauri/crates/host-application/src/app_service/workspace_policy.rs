@@ -982,6 +982,51 @@ mod tests {
     }
 
     #[test]
+    fn workspace_save_settings_snapshot_rejects_duplicate_repo_paths() -> Result<()> {
+        let fixture = setup_fixture("snapshot-duplicate-repo-path", HookSet::default());
+        let confirmation = RecordingHookTrustConfirmationPort::default();
+        let second_repo = fixture.root.join("repo-two");
+        fs::create_dir_all(second_repo.join(".git")).expect("second repo should exist");
+        fixture.service.workspace_create(
+            "repo-two",
+            "Repo Two",
+            second_repo.to_string_lossy().as_ref(),
+        )?;
+
+        let (theme, git, chat, kanban, autopilot, mut workspaces, global_prompt_overrides) =
+            fixture.service.workspace_get_settings_snapshot()?;
+        let duplicate_path = fixture
+            .service
+            .workspace_get_repo_config(&fixture.workspace_id)?
+            .repo_path;
+        let second_config = workspaces
+            .get_mut("repo-two")
+            .ok_or_else(|| anyhow!("second repo config missing"))?;
+        second_config.repo_path = duplicate_path.clone();
+
+        let error = fixture
+            .service
+            .workspace_save_settings_snapshot(
+                WorkspaceSettingsSnapshotUpdate {
+                    theme,
+                    git,
+                    chat,
+                    kanban,
+                    autopilot,
+                    workspaces,
+                    global_prompt_overrides,
+                },
+                &confirmation,
+            )
+            .expect_err("duplicate repo path should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("Repository path is already registered to workspace repo"));
+        Ok(())
+    }
+
+    #[test]
     fn workspace_set_trusted_hooks_rejects_expired_challenge_entries() -> Result<()> {
         let fixture = setup_fixture("expired-challenge", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();

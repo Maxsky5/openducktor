@@ -530,13 +530,9 @@ impl AppService {
         snapshot: WorkspaceSettingsSnapshotUpdate,
     ) -> Result<()> {
         let mut config = self.config_store.load()?;
-        for workspace_id in snapshot.workspaces.keys() {
-            if !config.workspaces.contains_key(workspace_id) {
-                return Err(anyhow!(
-                    "Workspace not found in config: {workspace_id}. Add/select the workspace before updating configuration."
-                ));
-            }
-        }
+        let next_workspaces = self
+            .config_store
+            .normalize_settings_snapshot_workspaces(&config, snapshot.workspaces)?;
 
         config.theme = snapshot.theme;
         config.git = snapshot.git;
@@ -546,9 +542,7 @@ impl AppService {
         };
         config.autopilot = snapshot.autopilot;
         config.global_prompt_overrides = snapshot.global_prompt_overrides;
-        for (workspace_id, repo_config) in snapshot.workspaces {
-            config.workspaces.insert(workspace_id, repo_config);
-        }
+        config.workspaces = next_workspaces;
         self.config_store.save(&config)
     }
 
@@ -1396,5 +1390,37 @@ mod tests {
 
         assert!(selected.is_active);
         assert_eq!(selected.workspace_id, workspace.workspace_id);
+    }
+
+    #[test]
+    fn resolve_initialized_repo_path_reinitializes_after_workspace_rebind() {
+        let (service, task_state, _git_state) = build_service_with_state(vec![]);
+        let original_repo = unique_temp_path("workspace-rebind-init-original");
+        let rebound_repo = unique_temp_path("workspace-rebind-init-rebound");
+        init_git_repo(&original_repo).expect("original repo should initialize");
+        init_git_repo(&rebound_repo).expect("rebound repo should initialize");
+
+        let workspace = service
+            .workspace_add(original_repo.to_string_lossy().as_ref())
+            .expect("workspace add should succeed");
+        let original_resolved = service
+            .resolve_initialized_repo_path(original_repo.to_string_lossy().as_ref())
+            .expect("original repo should initialize");
+
+        let mut repo_config = service
+            .workspace_get_repo_config(workspace.workspace_id.as_str())
+            .expect("repo config should load");
+        repo_config.repo_path = rebound_repo.to_string_lossy().to_string();
+        service
+            .workspace_update_repo_config(workspace.workspace_id.as_str(), repo_config)
+            .expect("workspace rebind should succeed");
+        let rebound_resolved = service
+            .resolve_initialized_repo_path(rebound_repo.to_string_lossy().as_ref())
+            .expect("rebound repo should initialize");
+
+        let state = task_state.lock().expect("task state lock poisoned");
+        assert_eq!(state.ensure_calls.len(), 2);
+        assert!(state.ensure_calls.contains(&original_resolved));
+        assert!(state.ensure_calls.contains(&rebound_resolved));
     }
 }
