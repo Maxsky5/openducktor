@@ -24,9 +24,11 @@ const recordFixture: AgentSessionRecord = {
   },
 };
 
+const repoPathFixture = "/tmp/repo";
+
 describe("agent-orchestrator/support/persistence", () => {
   test("hydrates persisted sessions as stopped until runtime reconciliation", () => {
-    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
+    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.runtimeId).toBeNull();
@@ -38,7 +40,7 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("does not persist pending input requests in session snapshots", () => {
-    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
+    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
     const withPendingInput: AgentSessionState = {
       ...hydrated,
       pendingPermissions: [
@@ -71,7 +73,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("persists compact session fields and keeps scenario", () => {
     const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1"),
+      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
       status: "error",
     };
     const persisted = toPersistedSessionRecord(session);
@@ -92,7 +94,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     };
 
-    const hydrated = fromPersistedSessionRecord(customRuntimeRecord, "task-1");
+    const hydrated = fromPersistedSessionRecord(customRuntimeRecord, "task-1", repoPathFixture);
     expect(hydrated.runtimeKind).toBe("claude-code");
     expect(hydrated.selectedModel?.runtimeKind).toBe("claude-code");
 
@@ -106,7 +108,11 @@ describe("agent-orchestrator/support/persistence", () => {
     delete invalidRecord.runtimeKind;
 
     expect(() =>
-      fromPersistedSessionRecord(invalidRecord as unknown as AgentSessionRecord, "task-1"),
+      fromPersistedSessionRecord(
+        invalidRecord as unknown as AgentSessionRecord,
+        "task-1",
+        repoPathFixture,
+      ),
     ).toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
   });
 
@@ -119,7 +125,7 @@ describe("agent-orchestrator/support/persistence", () => {
       } as unknown as NonNullable<AgentSessionRecord["selectedModel"]>,
     };
 
-    expect(() => fromPersistedSessionRecord(invalidRecord, "task-1")).toThrow(
+    expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
       "Persisted session 'session-1' selected model is missing runtime kind metadata.",
     );
   });
@@ -136,6 +142,7 @@ describe("agent-orchestrator/support/persistence", () => {
           },
         },
         "task-1",
+        repoPathFixture,
       ),
     ).toThrow(
       "Persisted session 'session-1' selected model runtime kind does not match session runtime kind.",
@@ -144,7 +151,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("rejects persisting sessions without a top-level runtime kind", () => {
     const session = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1"),
+      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
     } as Record<string, unknown>;
     delete session.runtimeKind;
 
@@ -155,7 +162,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("rejects persisting selected models without a runtime kind", () => {
     const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1"),
+      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -169,7 +176,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("rejects persisting selected models whose runtime kind disagrees with the session", () => {
     const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1"),
+      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
       selectedModel: {
         runtimeKind: "claude-code",
         providerId: "openai",

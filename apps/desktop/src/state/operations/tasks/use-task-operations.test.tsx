@@ -81,6 +81,7 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "A",
+  repoPath: overrides.repoPath ?? "/repo",
   role: "build",
   scenario: "build_implementation_start",
   status: "running",

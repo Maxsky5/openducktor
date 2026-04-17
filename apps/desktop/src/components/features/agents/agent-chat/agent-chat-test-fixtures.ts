@@ -92,6 +92,7 @@ const baseSession: AgentSessionState = {
   sessionId: "session-1",
   externalSessionId: "ext-1",
   taskId: "task-1",
+  repoPath: "/repo",
   role: "spec",
   scenario: "spec_initial",
   status: "running",
@@ -128,6 +129,7 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
 export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   ...baseSession,
   ...overrides,
+  repoPath: overrides.repoPath ?? baseSession.repoPath ?? "/repo",
 });
 
 export const buildMessage = (

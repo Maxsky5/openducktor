@@ -60,6 +60,7 @@ export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
 export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
+  repoPath: string,
 ): AgentSessionState => {
   const runtimeKind = readPersistedRuntimeKind(session);
 
@@ -67,6 +68,7 @@ export const fromPersistedSessionRecord = (
     sessionId: session.sessionId,
     externalSessionId: session.externalSessionId ?? session.sessionId,
     taskId: fallbackTaskId,
+    repoPath,
     role: session.role,
     scenario: session.scenario,
     // Persisted Beads records are durable session metadata only.

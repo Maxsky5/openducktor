@@ -78,6 +78,7 @@ describe("useShellAgentActivity", () => {
     const session = createAgentSessionFixture({
       sessionId: "session-1",
       taskId: "task-1",
+      repoPath: "/repo",
       status: "running",
       startedAt: "2026-03-17T10:00:00.000Z",
     });
@@ -150,6 +151,7 @@ describe("useShellAgentActivity", () => {
     const session = createAgentSessionFixture({
       sessionId: "session-1",
       taskId: "task-1",
+      repoPath: "/repo",
       status: "running",
       startedAt: "2026-03-17T10:00:00.000Z",
     });
@@ -196,6 +198,61 @@ describe("useShellAgentActivity", () => {
     });
     await harness.waitFor(({ activity }) => activity.activeSessionCount === 0);
     expect(harness.getLatest().activity.activeSessions).toHaveLength(0);
+
+    await harness.unmount();
+  });
+
+  test("does not expose previous repo activity during a direct repo-to-repo switch", async () => {
+    const harness = createHarness({ activeRepo: "/repo-a" });
+    const repoASession = createAgentSessionFixture({
+      sessionId: "session-a",
+      taskId: "task-a",
+      repoPath: "/repo-a",
+      status: "running",
+      startedAt: "2026-03-17T10:00:00.000Z",
+    });
+    const repoBSession = createAgentSessionFixture({
+      sessionId: "session-b",
+      taskId: "task-b",
+      repoPath: "/repo-b",
+      status: "running",
+      startedAt: "2026-03-17T11:00:00.000Z",
+    });
+
+    harness.sessionStore.setSessionsById({ [repoASession.sessionId]: repoASession });
+    await harness.mount();
+
+    await harness.run(({ queryClient }) => {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
+        tasks: [createTaskCardFixture({ id: "task-a", title: "Repo A Task" })],
+        runs: [] satisfies RunSummary[],
+      });
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), {
+        tasks: [createTaskCardFixture({ id: "task-b", title: "Repo B Task" })],
+        runs: [] satisfies RunSummary[],
+      });
+    });
+    await harness.waitFor(
+      ({ activity }) => activity.activeSessions[0]?.taskTitle === "Repo A Task",
+    );
+
+    await harness.update({ activeRepo: "/repo-b" });
+
+    expect(harness.getLatest().activity.activeSessionCount).toBe(0);
+    expect(harness.getLatest().activity.waitingForInputCount).toBe(0);
+    expect(harness.getLatest().activity.activeSessions).toHaveLength(0);
+
+    await harness.run(() => {
+      harness.sessionStore.setSessionsById({ [repoBSession.sessionId]: repoBSession });
+    });
+    await harness.waitFor(
+      ({ activity }) => activity.activeSessions[0]?.taskTitle === "Repo B Task",
+    );
+
+    expect(harness.getLatest().activity.activeSessions[0]).toMatchObject({
+      sessionId: "session-b",
+      taskTitle: "Repo B Task",
+    });
 
     await harness.unmount();
   });

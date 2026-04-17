@@ -26,6 +26,17 @@ const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string
   return [...taskIds];
 };
 
+const filterSessionsForRepo = (
+  sessions: AgentActivitySessionSummary[],
+  activeRepo: string | null,
+): AgentActivitySessionSummary[] => {
+  if (activeRepo === null) {
+    return [];
+  }
+
+  return sessions.filter((session) => session.repoPath === activeRepo);
+};
+
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
   if (taskIds.length === 0) {
     return (): AgentActivityTaskTitleLookup => EMPTY_TASK_TITLES;
@@ -46,7 +57,11 @@ const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
 
 export const useShellAgentActivity = (activeRepo: string | null): AgentActivitySummary => {
   const sessions = useAgentActivitySessions();
-  const activityTaskIds = useMemo(() => collectActivityTaskIds(sessions), [sessions]);
+  const visibleSessions = useMemo(
+    () => filterSessionsForRepo(sessions, activeRepo),
+    [activeRepo, sessions],
+  );
+  const activityTaskIds = useMemo(() => collectActivityTaskIds(visibleSessions), [visibleSessions]);
   const selectTaskTitles = useMemo(
     () => selectTaskTitlesForActivity(activityTaskIds),
     [activityTaskIds],
@@ -59,13 +74,13 @@ export const useShellAgentActivity = (activeRepo: string | null): AgentActivityS
   const taskTitleById = taskTitleQuery.data ?? EMPTY_TASK_TITLES;
 
   return useMemo(() => {
-    if (activeRepo === null || sessions.length === 0) {
+    if (activeRepo === null || visibleSessions.length === 0) {
       return EMPTY_AGENT_ACTIVITY_SUMMARY;
     }
 
     return summarizeAgentActivity({
-      sessions,
+      sessions: visibleSessions,
       taskTitleById,
     });
-  }, [activeRepo, sessions, taskTitleById]);
+  }, [activeRepo, taskTitleById, visibleSessions]);
 };

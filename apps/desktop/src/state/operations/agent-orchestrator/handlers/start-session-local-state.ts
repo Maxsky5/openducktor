@@ -29,6 +29,7 @@ export const buildInitialSession = ({
   sessionId: startedCtx.summary.sessionId,
   externalSessionId: startedCtx.summary.externalSessionId,
   taskId: startedCtx.taskId,
+  repoPath: startedCtx.repoPath,
   runtimeKind: runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   role: startedCtx.role,
   scenario: startedCtx.resolvedScenario,

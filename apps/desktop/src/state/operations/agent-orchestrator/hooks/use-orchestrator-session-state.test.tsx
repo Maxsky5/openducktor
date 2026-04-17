@@ -56,6 +56,7 @@ const createSessionFixture = (): AgentSessionState => ({
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
+  repoPath: "/tmp/repo-a",
   role: "build",
   scenario: "build_implementation_start",
   status: "idle",

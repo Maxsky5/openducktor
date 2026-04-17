@@ -37,6 +37,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
+  repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "planner",
   scenario: "planner_initial",
   status: "idle",

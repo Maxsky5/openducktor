@@ -22,8 +22,17 @@ export type AgentActivitySessionSummary = Pick<
   AgentSessionState,
   "sessionId" | "taskId" | "role" | "scenario" | "status" | "startedAt"
 > & {
+  repoPath: string;
   hasPendingPermissions: boolean;
   hasPendingQuestions: boolean;
+};
+
+const requireSessionRepoPath = (session: AgentSessionState): string => {
+  if (!session.repoPath) {
+    throw new Error(`Agent session '${session.sessionId}' is missing repoPath metadata.`);
+  }
+
+  return session.repoPath;
 };
 
 type Listener = () => void;
@@ -61,6 +70,7 @@ export const toAgentActivitySessionSummary = (
 ): AgentActivitySessionSummary => ({
   sessionId: session.sessionId,
   taskId: session.taskId,
+  repoPath: requireSessionRepoPath(session),
   role: session.role,
   scenario: session.scenario,
   status: session.status,
@@ -96,6 +106,7 @@ const areActivitySummariesEquivalent = (
   return (
     left?.sessionId === right.sessionId &&
     left.taskId === right.taskId &&
+    left.repoPath === right.repoPath &&
     left.role === right.role &&
     left.scenario === right.scenario &&
     left.status === right.status &&

@@ -78,6 +78,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
+  repoPath: "/repo",
   role: "spec",
   scenario: "spec_initial",
   status: "idle",
@@ -236,10 +237,13 @@ export const createAgentSessionFixture = (
   defaults: Partial<AgentSessionState> = {},
   overrides: Partial<AgentSessionState> = {},
 ): AgentSessionState => {
+  const repoPath =
+    overrides.repoPath ?? defaults.repoPath ?? BASE_AGENT_SESSION_FIXTURE.repoPath ?? "/repo";
   const merged = {
     ...BASE_AGENT_SESSION_FIXTURE,
     ...defaults,
     ...overrides,
+    repoPath,
   } satisfies AgentSessionState;
 
   return structuredClone(merged);
