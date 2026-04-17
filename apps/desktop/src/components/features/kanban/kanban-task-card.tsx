@@ -251,18 +251,6 @@ const getFlexGap = (element: HTMLElement): number => {
   return Number.isFinite(parsedGap) ? parsedGap : DEFAULT_FLEX_GAP_PX;
 };
 
-const isWrappedBelowFirstRow = ({
-  container,
-  element,
-}: {
-  container: HTMLElement;
-  element: HTMLElement;
-}): boolean => {
-  const containerTop = container.getBoundingClientRect().top;
-  const elementTop = element.getBoundingClientRect().top;
-  return elementTop - containerTop > LABEL_ROW_EPSILON_PX;
-};
-
 const measureOverflowIndicatorWidth = ({
   overflowMeasure,
   hiddenCount,
@@ -280,48 +268,6 @@ const measureOverflowIndicatorWidth = ({
   overflowMeasure.textContent = previousText;
   return width;
 };
-
-function useWrappedBelowFirstRow({
-  container,
-  element,
-}: {
-  container: HTMLElement | null;
-  element: HTMLElement | null;
-}): boolean {
-  const [isWrapped, setIsWrapped] = useState(false);
-
-  useLayoutEffect(() => {
-    if (!container || !element) {
-      return undefined;
-    }
-
-    const updateWrapState = (): void => {
-      const nextWrapped = isWrappedBelowFirstRow({ container, element });
-      setIsWrapped((currentWrapped) =>
-        currentWrapped === nextWrapped ? currentWrapped : nextWrapped,
-      );
-    };
-
-    updateWrapState();
-
-    if (typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateWrapState();
-    });
-
-    observer.observe(container);
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [container, element]);
-
-  return isWrapped;
-}
 
 function useSingleRowChipOverflow(labels: string[]): {
   containerRef: (element: HTMLDivElement | null) => void;
@@ -421,21 +367,62 @@ function TaskPrimaryMeta({
   priority: TaskCard["priority"];
 }): ReactElement {
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
-  const [taskIdWrapperElement, setTaskIdWrapperElement] = useState<HTMLDivElement | null>(null);
-  const isTaskIdWrapped = useWrappedBelowFirstRow({
-    container: containerElement,
-    element: taskIdWrapperElement,
-  });
+  const [issueTypeElement, setIssueTypeElement] = useState<HTMLDivElement | null>(null);
+  const [priorityElement, setPriorityElement] = useState<HTMLDivElement | null>(null);
+  const [taskIdContentElement, setTaskIdContentElement] = useState<HTMLDivElement | null>(null);
+  const [isTaskIdWrapped, setIsTaskIdWrapped] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!containerElement || !issueTypeElement || !priorityElement || !taskIdContentElement) {
+      return undefined;
+    }
+
+    const updateWrapState = (): void => {
+      const gap = getFlexGap(containerElement);
+      const requiredWidth =
+        issueTypeElement.getBoundingClientRect().width +
+        priorityElement.getBoundingClientRect().width +
+        taskIdContentElement.getBoundingClientRect().width +
+        gap * 2;
+      const nextWrapped = requiredWidth > containerElement.clientWidth + LABEL_ROW_EPSILON_PX;
+
+      setIsTaskIdWrapped((currentWrapped) =>
+        currentWrapped === nextWrapped ? currentWrapped : nextWrapped,
+      );
+    };
+
+    updateWrapState();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateWrapState();
+    });
+
+    observer.observe(containerElement);
+    observer.observe(issueTypeElement);
+    observer.observe(priorityElement);
+    observer.observe(taskIdContentElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [containerElement, issueTypeElement, priorityElement, taskIdContentElement]);
 
   return (
     <div ref={setContainerElement} className="flex flex-wrap items-center gap-1.5">
-      <IssueTypeBadge issueType={issueType} />
-      <PriorityBadge priority={priority} />
-      <div
-        ref={setTaskIdWrapperElement}
-        className={cn("min-w-0", isTaskIdWrapped ? "basis-full" : "ml-auto")}
-      >
-        <TaskIdBadge taskId={taskId} />
+      <div ref={setIssueTypeElement}>
+        <IssueTypeBadge issueType={issueType} />
+      </div>
+      <div ref={setPriorityElement}>
+        <PriorityBadge priority={priority} />
+      </div>
+      <div className={cn("min-w-0", isTaskIdWrapped ? "basis-full" : "ml-auto")}>
+        <div ref={setTaskIdContentElement} className="w-fit max-w-full">
+          <TaskIdBadge taskId={taskId} />
+        </div>
       </div>
     </div>
   );
