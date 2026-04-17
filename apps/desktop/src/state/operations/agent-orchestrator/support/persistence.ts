@@ -7,10 +7,12 @@ import {
   type AgentUserMessageDisplayPart,
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
+import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type {
   AgentChatMessage,
   AgentSessionContextUsage,
   AgentSessionState,
+  RepoScopedAgentSessionState,
 } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
@@ -61,49 +63,51 @@ export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
   repoPath: string,
-): AgentSessionState => {
+): RepoScopedAgentSessionState => {
   const runtimeKind = readPersistedRuntimeKind(session);
 
-  return {
-    sessionId: session.sessionId,
-    externalSessionId: session.externalSessionId ?? session.sessionId,
-    taskId: fallbackTaskId,
+  return createRepoScopedAgentSessionState(
+    {
+      sessionId: session.sessionId,
+      externalSessionId: session.externalSessionId ?? session.sessionId,
+      taskId: fallbackTaskId,
+      role: session.role,
+      scenario: session.scenario,
+      // Persisted Beads records are durable session metadata only.
+      // Live state must always be derived from the runtime on hydration/reconciliation.
+      status: "stopped",
+      startedAt: session.startedAt,
+      runtimeKind,
+      runtimeId: null,
+      runId: null,
+      runtimeRoute: null,
+      workingDirectory: session.workingDirectory,
+      historyHydrationState: "not_requested",
+      runtimeRecoveryState: "idle",
+      messages: [],
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: session.selectedModel
+        ? normalizePersistedSelection({
+            ...session.selectedModel,
+            runtimeKind: requirePersistedSelectedModelRuntimeKind(
+              session.sessionId,
+              runtimeKind,
+              session.selectedModel,
+            ),
+          })
+        : null,
+      isLoadingModelCatalog: false,
+    },
     repoPath,
-    role: session.role,
-    scenario: session.scenario,
-    // Persisted Beads records are durable session metadata only.
-    // Live state must always be derived from the runtime on hydration/reconciliation.
-    status: "stopped",
-    startedAt: session.startedAt,
-    runtimeKind,
-    runtimeId: null,
-    runId: null,
-    runtimeRoute: null,
-    workingDirectory: session.workingDirectory,
-    historyHydrationState: "not_requested",
-    runtimeRecoveryState: "idle",
-    messages: [],
-    draftAssistantText: "",
-    draftAssistantMessageId: null,
-    draftReasoningText: "",
-    draftReasoningMessageId: null,
-    contextUsage: null,
-    pendingPermissions: [],
-    pendingQuestions: [],
-    todos: [],
-    modelCatalog: null,
-    selectedModel: session.selectedModel
-      ? normalizePersistedSelection({
-          ...session.selectedModel,
-          runtimeKind: requirePersistedSelectedModelRuntimeKind(
-            session.sessionId,
-            runtimeKind,
-            session.selectedModel,
-          ),
-        })
-      : null,
-    isLoadingModelCatalog: false,
-  };
+  );
 };
 
 const assistantDurationFromHistory = (

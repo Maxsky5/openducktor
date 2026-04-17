@@ -37,4 +37,10 @@ describe("shared test fixtures", () => {
     expect(second.pendingPermissions).toEqual([]);
     expect(getSessionMessageCount(second)).toBe(0);
   });
+
+  test("createAgentSessionFixture keeps repo identity explicit", () => {
+    const session = createAgentSessionFixture({}, { repoPath: "/repo-b" });
+
+    expect(session.repoPath).toBe("/repo-b");
+  });
 });

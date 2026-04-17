@@ -1,3 +1,4 @@
+import { requireRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
@@ -25,14 +26,6 @@ export type AgentActivitySessionSummary = Pick<
   repoPath: string;
   hasPendingPermissions: boolean;
   hasPendingQuestions: boolean;
-};
-
-const requireSessionRepoPath = (session: AgentSessionState): string => {
-  if (!session.repoPath) {
-    throw new Error(`Agent session '${session.sessionId}' is missing repoPath metadata.`);
-  }
-
-  return session.repoPath;
 };
 
 type Listener = () => void;
@@ -67,17 +60,21 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
 
 export const toAgentActivitySessionSummary = (
   session: AgentSessionState,
-): AgentActivitySessionSummary => ({
-  sessionId: session.sessionId,
-  taskId: session.taskId,
-  repoPath: requireSessionRepoPath(session),
-  role: session.role,
-  scenario: session.scenario,
-  status: session.status,
-  startedAt: session.startedAt,
-  hasPendingPermissions: session.pendingPermissions.length > 0,
-  hasPendingQuestions: session.pendingQuestions.length > 0,
-});
+): AgentActivitySessionSummary => {
+  const repoScopedSession = requireRepoScopedAgentSessionState(session);
+
+  return {
+    sessionId: repoScopedSession.sessionId,
+    taskId: repoScopedSession.taskId,
+    repoPath: repoScopedSession.repoPath,
+    role: repoScopedSession.role,
+    scenario: repoScopedSession.scenario,
+    status: repoScopedSession.status,
+    startedAt: repoScopedSession.startedAt,
+    hasPendingPermissions: repoScopedSession.pendingPermissions.length > 0,
+    hasPendingQuestions: repoScopedSession.pendingQuestions.length > 0,
+  };
+};
 
 const areSummariesEquivalent = (
   left: AgentSessionSummary | undefined,

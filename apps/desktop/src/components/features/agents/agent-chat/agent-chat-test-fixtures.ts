@@ -6,6 +6,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
   AgentChatMessage,
@@ -126,11 +127,19 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  ...baseSession,
-  ...overrides,
-  repoPath: overrides.repoPath ?? baseSession.repoPath ?? "/repo",
-});
+export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
+  const repoPath = overrides.repoPath ?? baseSession.repoPath ?? "/repo";
+  const { repoPath: _baseRepoPath, ...baseRepoSession } = baseSession;
+  const { repoPath: _overrideRepoPath, ...overrideSession } = overrides;
+
+  return createRepoScopedAgentSessionState(
+    {
+      ...baseRepoSession,
+      ...overrideSession,
+    },
+    repoPath,
+  );
+};
 
 export const buildMessage = (
   role: AgentChatMessage["role"],

@@ -1,4 +1,5 @@
 import type { BeadsCheck, TaskCard } from "@openducktor/contracts";
+import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
@@ -239,12 +240,17 @@ export const createAgentSessionFixture = (
 ): AgentSessionState => {
   const repoPath =
     overrides.repoPath ?? defaults.repoPath ?? BASE_AGENT_SESSION_FIXTURE.repoPath ?? "/repo";
-  const merged = {
-    ...BASE_AGENT_SESSION_FIXTURE,
-    ...defaults,
-    ...overrides,
+  const { repoPath: _baseRepoPath, ...baseSession } = BASE_AGENT_SESSION_FIXTURE;
+  const { repoPath: _defaultRepoPath, ...defaultSession } = defaults;
+  const { repoPath: _overrideRepoPath, ...overrideSession } = overrides;
+  const merged = createRepoScopedAgentSessionState(
+    {
+      ...baseSession,
+      ...defaultSession,
+      ...overrideSession,
+    },
     repoPath,
-  } satisfies AgentSessionState;
+  );
 
   return structuredClone(merged);
 };
