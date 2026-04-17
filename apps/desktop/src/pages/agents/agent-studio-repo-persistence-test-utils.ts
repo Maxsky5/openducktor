@@ -1,8 +1,4 @@
-import {
-  toContextStorageKey,
-  toLegacyRepoPathContextStorageKey,
-  toLegacyRepoPathTabsStorageKey,
-} from "./agent-studio-navigation";
+import { toContextStorageKey } from "./agent-studio-navigation";
 import { toTabsStorageKey } from "./agents-page-selection";
 import { toPersistedTaskTabs } from "./agents-page-session-tabs";
 
@@ -62,29 +58,11 @@ export const seedWorkspaceNavigationContexts = (
   }
 };
 
-export const seedLegacyRepoNavigationContexts = (
-  storage: Pick<Storage, "setItem">,
-  contexts: Record<string, Record<string, unknown>>,
-): void => {
-  for (const [repoPath, context] of Object.entries(contexts)) {
-    storage.setItem(toLegacyRepoPathContextStorageKey(repoPath), JSON.stringify(context));
-  }
-};
-
 export const seedWorkspaceTaskTabs = (
   storage: Pick<Storage, "setItem">,
   tabsByWorkspace: Record<string, { tabs: string[]; activeTaskId: string | null }>,
 ): void => {
   for (const [workspaceId, persistedTabs] of Object.entries(tabsByWorkspace)) {
     storage.setItem(toTabsStorageKey(workspaceId), toPersistedTaskTabs(persistedTabs));
-  }
-};
-
-export const seedLegacyRepoTaskTabs = (
-  storage: Pick<Storage, "setItem">,
-  tabsByRepo: Record<string, { tabs: string[]; activeTaskId: string | null }>,
-): void => {
-  for (const [repoPath, persistedTabs] of Object.entries(tabsByRepo)) {
-    storage.setItem(toLegacyRepoPathTabsStorageKey(repoPath), toPersistedTaskTabs(persistedTabs));
   }
 };

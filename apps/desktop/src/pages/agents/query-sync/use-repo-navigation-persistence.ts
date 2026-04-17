@@ -10,7 +10,6 @@ import {
   restoreNavigationFromPersistedContext,
   serializePersistedContext,
   toContextStorageKey,
-  toLegacyRepoPathContextStorageKey,
 } from "./agent-studio-navigation";
 
 type UseRepoNavigationPersistenceArgs = {
@@ -69,17 +68,6 @@ const writePersistedContextPayload = (storageKey: string, payload: string): void
   } catch (cause) {
     throw new Error(
       `Failed to persist agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-};
-
-const removePersistedContextPayload = (storageKey: string): void => {
-  try {
-    globalThis.localStorage.removeItem(storageKey);
-  } catch (cause) {
-    throw new Error(
-      `Failed to clear legacy agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
       { cause },
     );
   }
@@ -201,17 +189,7 @@ export function useRepoNavigationPersistence({
     let raw: string | null;
     let persisted: PersistedAgentStudioContext | null = null;
     try {
-      const storageKey = toContextStorageKey(persistenceWorkspaceId);
-      raw = readPersistedContextPayload(storageKey);
-      if (!raw) {
-        const legacyStorageKey = toLegacyRepoPathContextStorageKey(activeRepo);
-        const legacyRaw = readPersistedContextPayload(legacyStorageKey);
-        if (legacyRaw) {
-          writePersistedContextPayload(storageKey, legacyRaw);
-          removePersistedContextPayload(legacyStorageKey);
-          raw = legacyRaw;
-        }
-      }
+      raw = readPersistedContextPayload(toContextStorageKey(persistenceWorkspaceId));
       if (raw) {
         persisted = parsePersistedContext(raw);
       }

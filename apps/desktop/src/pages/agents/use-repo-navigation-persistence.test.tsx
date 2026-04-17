@@ -1,13 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
-import {
-  type AgentStudioNavigationState,
-  toContextStorageKey,
-  toLegacyRepoPathContextStorageKey,
-} from "./agent-studio-navigation";
+import { type AgentStudioNavigationState, toContextStorageKey } from "./agent-studio-navigation";
 import {
   createMemoryStorage,
-  seedLegacyRepoNavigationContexts,
   seedWorkspaceNavigationContexts,
   type TestStorageLike,
   withMockedLocalStorage,
@@ -691,32 +686,5 @@ describe("useRepoNavigationPersistence", () => {
         value: originalStorage,
       });
     }
-  });
-
-  test("migrates a legacy repo-path context into workspace storage on first restore", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      seedLegacyRepoNavigationContexts(memoryStorage, {
-        "/repo": {
-          taskId: "task-from-legacy-context",
-          role: "planner",
-          sessionId: "session-from-legacy-context",
-        },
-      });
-
-      const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          activeRepo: "/repo",
-        }),
-      );
-
-      await harness.mount();
-      await harness.waitFor((state) => state.navigation.taskId === "task-from-legacy-context");
-
-      expect(memoryStorage.getItem(toLegacyRepoPathContextStorageKey("/repo"))).toBeNull();
-      expect(memoryStorage.getItem(toContextStorageKey("workspace-repo"))).not.toBeNull();
-
-      await harness.unmount();
-    });
   });
 });

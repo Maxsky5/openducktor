@@ -13,7 +13,6 @@ import {
 } from "./agent-studio-test-utils";
 import { toTabsStorageKey } from "./agents-page-selection";
 import { toPersistedTaskTabs } from "./agents-page-session-tabs";
-import { toLegacyRepoPathTabsStorageKey } from "./query-sync/agent-studio-navigation";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 enableReactActEnvironment();
@@ -889,35 +888,5 @@ describe("useAgentStudioTaskTabs", () => {
         value: originalStorage,
       });
     }
-  });
-
-  test("migrates legacy repo-path task tabs into workspace storage on first load", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      memoryStorage.setItem(
-        toLegacyRepoPathTabsStorageKey("/repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-1", "task-2"],
-          activeTaskId: "task-2",
-        }),
-      );
-
-      const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          activeRepo: "/repo",
-          taskId: "task-2",
-          selectedTask: createTask("task-2"),
-          tasks: [createTask("task-1"), createTask("task-2")],
-        }),
-      );
-
-      await harness.mount();
-
-      expect(memoryStorage.getItem(toLegacyRepoPathTabsStorageKey("/repo"))).toBeNull();
-      expect(memoryStorage.getItem(toTabsStorageKey("workspace-repo"))).not.toBeNull();
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
-
-      await harness.unmount();
-    });
   });
 });

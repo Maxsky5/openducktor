@@ -9,7 +9,6 @@ use super::types::{
     deserialize_global_config, repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig,
     RuntimeConfig,
 };
-use crate::beads::adopt_legacy_workspace_namespace;
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{RuntimeRegistry, WorkspaceRecord};
@@ -132,17 +131,12 @@ impl AppConfigStore {
 
         let data = fs::read_to_string(&self.path)
             .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
-        let (mut parsed, migrated_from_legacy) = deserialize_global_config(&data)
+        let mut parsed = deserialize_global_config(&data)
             .map_err(anyhow::Error::msg)
             .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
         normalize_global_config(&mut parsed)
             .with_context(|| format!("Failed normalizing config file {}", self.path.display()))?;
         canonicalize_loaded_global_config(&mut parsed)?;
-
-        if migrated_from_legacy {
-            adopt_loaded_global_config_namespaces(&parsed)?;
-            self.save(&parsed)?;
-        }
 
         Ok(parsed)
     }
@@ -489,20 +483,6 @@ fn canonicalize_loaded_global_config(config: &mut GlobalConfig) -> Result<()> {
         if let Ok(canonical_repo_path) = canonicalize_repo_path(&repo.repo_path) {
             repo.repo_path = canonical_repo_path;
         }
-    }
-
-    Ok(())
-}
-
-fn adopt_loaded_global_config_namespaces(config: &GlobalConfig) -> Result<()> {
-    for repo in config.workspaces.values() {
-        adopt_legacy_workspace_namespace(Path::new(&repo.repo_path), &repo.workspace_id)
-            .with_context(|| {
-                format!(
-                    "Failed adopting legacy durable namespace for workspace {} ({})",
-                    repo.workspace_id, repo.repo_path
-                )
-            })?;
     }
 
     Ok(())

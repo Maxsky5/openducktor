@@ -5,12 +5,12 @@ use super::{
     resolve_default_worktree_base_dir, resolve_default_worktree_base_dir_for_workspace,
     resolve_dolt_config_dir, resolve_dolt_config_file, resolve_effective_worktree_base_dir,
     resolve_effective_worktree_base_dir_for_workspace, resolve_repo_beads_attachment_dir,
-    resolve_repo_beads_attachment_root, resolve_repo_beads_paths, resolve_repo_live_database_dir,
-    resolve_server_lock_file, resolve_server_state_file, resolve_shared_dolt_root,
-    resolve_shared_server_root, restore_shared_dolt_database_from_backup,
-    stop_shared_dolt_server_for_current_owner, wrap_port_candidate, write_dolt_config_file,
-    SharedDoltServerAcquisition, SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN,
-    SHARED_DOLT_PORT_RANGE_START, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
+    resolve_repo_beads_attachment_root, resolve_repo_live_database_dir, resolve_server_lock_file,
+    resolve_server_state_file, resolve_shared_dolt_root, resolve_shared_server_root,
+    restore_shared_dolt_database_from_backup, stop_shared_dolt_server_for_current_owner,
+    wrap_port_candidate, write_dolt_config_file, SharedDoltServerAcquisition,
+    SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
+    SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 use anyhow::{anyhow, Result};
 use host_test_support::{lock_env, EnvVarGuard};
@@ -148,7 +148,7 @@ fn repo_attachment_helpers_use_expected_layouts() {
         resolve_repo_beads_attachment_dir(repo_path).expect("attachment dir should resolve");
     let live_db_dir =
         resolve_repo_live_database_dir(repo_path).expect("live db dir should resolve");
-    let paths = resolve_repo_beads_paths(repo_path).expect("repo paths should resolve");
+    let database_name = compute_beads_database_name(repo_path).expect("database name");
 
     assert_eq!(
         attachment_root,
@@ -157,10 +157,8 @@ fn repo_attachment_helpers_use_expected_layouts() {
     assert_eq!(attachment_dir, attachment_root.join(".beads"));
     assert_eq!(
         live_db_dir,
-        PathBuf::from("/tmp/odt-config-root/beads/shared-server/dolt").join(&paths.database_name)
+        PathBuf::from("/tmp/odt-config-root/beads/shared-server/dolt").join(&database_name)
     );
-    assert_eq!(paths.attachment_dir, attachment_dir);
-    assert_eq!(paths.live_database_dir, live_db_dir);
 }
 
 #[test]

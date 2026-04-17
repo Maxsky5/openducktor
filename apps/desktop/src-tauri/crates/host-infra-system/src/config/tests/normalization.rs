@@ -24,11 +24,11 @@ fn load_clamps_negative_kanban_done_visible_days() {
 
     fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
     let payload = json!({
-        "version": 1,
+        "version": 2,
         "kanban": {
             "doneVisibleDays": -5
         },
-        "recentRepos": []
+        "recentWorkspaces": []
     });
     fs::write(
         store.path(),
@@ -243,18 +243,22 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
 #[test]
 fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     let _env_lock = lock_env();
-    let harness = TestStoreHarness::new("normalize-legacy");
+    let harness = TestStoreHarness::new("normalize-persisted-workspace-config");
     let store = harness.store();
     let root = harness.root();
     let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
-    let repo_str = repo.to_string_lossy().to_string();
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
-    let mut repos = serde_json::Map::new();
-    repos.insert(
-        repo_str.clone(),
+    let mut workspaces = serde_json::Map::new();
+    workspaces.insert(
+        workspace_id.clone(),
         json!({
+            "workspaceId": workspace_id,
+            "workspaceName": workspace_name,
+            "repoPath": repo_path,
             "defaultRuntimeKind": " opencode ",
             "worktreeBasePath": "",
             "branchPrefix": "   ",
@@ -288,10 +292,10 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
         }),
     );
     let payload = json!({
-        "version": 1,
-        "activeRepo": repo_str,
-        "repos": repos,
-        "recentRepos": []
+        "version": 2,
+        "activeWorkspace": "repo",
+        "workspaces": workspaces,
+        "recentWorkspaces": []
     });
     fs::write(
         store.path(),
@@ -312,7 +316,7 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     assert!(workspaces[0].has_config);
     assert_eq!(workspaces[0].workspace_id, "repo");
     assert_eq!(workspaces[0].workspace_name, "repo");
-    assert_eq!(workspaces[0].repo_path, repo_str);
+    assert_eq!(workspaces[0].repo_path, repo_path);
     assert!(workspaces[0].configured_worktree_base_path.is_none());
     assert!(workspaces[0]
         .effective_worktree_base_path
@@ -322,20 +326,6 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
     let config = store.load().expect("legacy config should load");
     assert!(!config.chat.show_thinking_messages);
     assert_eq!(config.kanban.done_visible_days, 1);
-
-    let persisted: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(store.path()).expect("persisted migrated config"))
-            .expect("parse migrated config");
-    assert_eq!(
-        persisted.get("version").and_then(|value| value.as_u64()),
-        Some(2)
-    );
-    assert!(persisted.get("workspaces").is_some());
-    assert!(persisted.get("activeWorkspace").is_some());
-    assert!(persisted.get("recentWorkspaces").is_some());
-    assert!(persisted.get("repos").is_none());
-    assert!(persisted.get("activeRepo").is_none());
-    assert!(persisted.get("recentRepos").is_none());
 
     let repo_config = store
         .repo_config(workspaces[0].workspace_id.as_str())
@@ -378,14 +368,18 @@ fn load_rejects_missing_default_runtime_kind_in_persisted_repo_config() {
     let root = harness.root();
     let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
-    let repo_str = repo.to_string_lossy().to_string();
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
     let payload = json!({
-        "version": 1,
-        "activeRepo": repo_str,
-        "repos": {
-            repo_str.clone(): {
+        "version": 2,
+        "activeWorkspace": workspace_id,
+        "workspaces": {
+            "repo": {
+                "workspaceId": "repo",
+                "workspaceName": workspace_name,
+                "repoPath": repo_path,
                 "branchPrefix": "duck",
                 "trustedHooks": false,
                 "hooks": {
@@ -394,7 +388,7 @@ fn load_rejects_missing_default_runtime_kind_in_persisted_repo_config() {
                 }
             }
         },
-        "recentRepos": []
+        "recentWorkspaces": []
     });
     fs::write(
         store.path(),
@@ -424,14 +418,18 @@ fn load_rejects_missing_agent_default_runtime_kind_in_persisted_repo_config() {
     let root = harness.root();
     let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
-    let repo_str = repo.to_string_lossy().to_string();
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
     let payload = json!({
-        "version": 1,
-        "activeRepo": repo_str,
-        "repos": {
-            repo_str.clone(): {
+        "version": 2,
+        "activeWorkspace": workspace_id,
+        "workspaces": {
+            "repo": {
+                "workspaceId": "repo",
+                "workspaceName": workspace_name,
+                "repoPath": repo_path,
                 "defaultRuntimeKind": "opencode",
                 "branchPrefix": "duck",
                 "trustedHooks": false,
@@ -447,7 +445,7 @@ fn load_rejects_missing_agent_default_runtime_kind_in_persisted_repo_config() {
                 }
             }
         },
-        "recentRepos": []
+        "recentWorkspaces": []
     });
     fs::write(
         store.path(),
@@ -526,23 +524,28 @@ fn update_repo_config_rejects_blank_runtime_kinds() {
 }
 
 #[test]
-fn load_rejects_legacy_string_default_target_branch_values() {
+fn load_rejects_string_default_target_branch_values_in_persisted_config() {
     let harness = TestStoreHarness::new("reject-legacy-target-branch");
     let store = harness.store();
     let root = harness.root();
     let repo = root.join("repo");
-    let repo_str = repo.to_string_lossy().to_string();
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
     let payload = json!({
-        "version": 1,
-        "activeRepo": repo_str,
-        "repos": {
-            repo_str.clone(): {
+        "version": 2,
+        "activeWorkspace": workspace_id,
+        "workspaces": {
+            "repo": {
+                "workspaceId": "repo",
+                "workspaceName": workspace_name,
+                "repoPath": repo_path,
+                "defaultRuntimeKind": "opencode",
                 "defaultTargetBranch": "origin/main"
             }
         },
-        "recentRepos": []
+        "recentWorkspaces": []
     });
     fs::write(
         store.path(),
@@ -575,14 +578,18 @@ fn load_rejects_invalid_persisted_dev_server_rows() {
     let root = harness.root();
     let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
     let repo = root.join("repo");
-    let repo_str = repo.to_string_lossy().to_string();
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
 
     fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
     let payload = json!({
-        "version": 1,
-        "activeRepo": repo_str,
-        "repos": {
-            repo_str.clone(): {
+        "version": 2,
+        "activeWorkspace": workspace_id,
+        "workspaces": {
+            "repo": {
+                "workspaceId": "repo",
+                "workspaceName": workspace_name,
+                "repoPath": repo_path,
                 "defaultRuntimeKind": "opencode",
                 "trustedHooks": false,
                 "hooks": { "preStart": [], "postComplete": [] },
@@ -594,7 +601,8 @@ fn load_rejects_invalid_persisted_dev_server_rows() {
                     }
                 ]
             }
-        }
+        },
+        "recentWorkspaces": []
     });
     fs::write(
         store.path(),
