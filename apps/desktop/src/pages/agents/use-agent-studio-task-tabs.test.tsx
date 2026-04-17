@@ -13,7 +13,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { toTabsStorageKey } from "./agents-page-selection";
-import { toPersistedTaskTabs } from "./agents-page-session-tabs";
+import { parsePersistedTaskTabs, toPersistedTaskTabs } from "./agents-page-session-tabs";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 enableReactActEnvironment();
@@ -388,6 +388,47 @@ describe("useAgentStudioTaskTabs", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("reordering tabs updates persisted order without changing the active task", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedWorkspaceTaskTabs(memoryStorage, {
+        "workspace-repo": {
+          tabs: ["task-1", "task-2", "task-3"],
+          activeTaskId: "task-2",
+        },
+      });
+
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-2",
+          selectedTask: createTask("task-2"),
+          tasks: [createTask("task-1"), createTask("task-2"), createTask("task-3")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: () => {},
+          clearComposerInput: () => {},
+        }),
+      );
+
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleReorderTab("task-3", "task-1", "before");
+      });
+
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-3", "task-1", "task-2"]);
+      expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+      expect(
+        parsePersistedTaskTabs(memoryStorage.getItem(toTabsStorageKey("workspace-repo"))),
+      ).toEqual({
+        tabs: ["task-3", "task-1", "task-2"],
+        activeTaskId: "task-2",
+      });
+
+      await harness.unmount();
+    });
   });
 
   test("routes fallback tab after hydration when URL task is empty", async () => {

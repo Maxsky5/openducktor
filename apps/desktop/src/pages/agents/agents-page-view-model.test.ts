@@ -92,6 +92,7 @@ describe("agents-page-view-model", () => {
   test("buildAgentStudioTaskTabsModel maps tab model fields", () => {
     const onCreateTab = mock(() => {});
     const onCloseTab = mock(() => {});
+    const onReorderTab = mock(() => {});
     const task = createTaskCard("task-1");
 
     const model = buildAgentStudioTaskTabsModel({
@@ -100,6 +101,7 @@ describe("agents-page-view-model", () => {
       isLoadingTasks: true,
       onCreateTab,
       onCloseTab,
+      onReorderTab,
       agentStudioReady: false,
     });
 
@@ -107,6 +109,8 @@ describe("agents-page-view-model", () => {
     expect(model.availableTabTasks[0]?.id).toBe("task-1");
     expect(model.isLoadingAvailableTabTasks).toBe(true);
     expect(model.agentStudioReady).toBe(false);
+    model.onReorderTab("task-1", "task-1", "before");
+    expect(onReorderTab).toHaveBeenCalledWith("task-1", "task-1", "before");
   });
 
   test("buildAgentStudioHeaderModel keeps selector and workflow contracts", () => {

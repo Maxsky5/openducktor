@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Tabs } from "@/components/ui/tabs";
@@ -25,6 +25,7 @@ const buildModel = () => ({
   isLoadingAvailableTabTasks: false,
   onCreateTab: () => {},
   onCloseTab: () => {},
+  onReorderTab: () => {},
   agentStudioReady: true,
 });
 
@@ -186,5 +187,93 @@ describe("AgentStudioTaskTabs", () => {
     expect(
       newTabButton.compareDocumentPosition(rightPanelToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  test("reports browser-style tab reorders from drag and drop", () => {
+    const onReorderTab = mock(() => {});
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: {
+            ...buildModel(),
+            onReorderTab,
+          },
+        }),
+      ),
+    );
+
+    const firstTabTrigger = screen.getByRole("tab", { name: /Add social login/i });
+    const secondTabTrigger = screen.getByRole("tab", { name: /Ship QA checklist/i });
+    const firstTab = firstTabTrigger.closest("[data-task-tab-id]");
+    const secondTab = secondTabTrigger.closest("[data-task-tab-id]");
+
+    expect(firstTab).not.toBeNull();
+    expect(secondTab).not.toBeNull();
+
+    Object.defineProperty(firstTabTrigger, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 100,
+        bottom: 40,
+        width: 100,
+        height: 40,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(secondTabTrigger, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        x: 100,
+        y: 0,
+        left: 100,
+        top: 0,
+        right: 200,
+        bottom: 40,
+        width: 100,
+        height: 40,
+        toJSON: () => ({}),
+      }),
+    });
+
+    const dataTransfer = {
+      effectAllowed: "all",
+      dropEffect: "move",
+      setData: () => {},
+      getData: () => "task-2",
+    };
+
+    const dragStartEvent = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStartEvent, "dataTransfer", {
+      configurable: true,
+      value: dataTransfer,
+    });
+
+    const dragOverEvent = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOverEvent, "dataTransfer", {
+      configurable: true,
+      value: dataTransfer,
+    });
+    Object.defineProperty(dragOverEvent, "clientX", {
+      configurable: true,
+      value: 10,
+    });
+
+    const dropEvent = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, "dataTransfer", {
+      configurable: true,
+      value: dataTransfer,
+    });
+
+    fireEvent(secondTabTrigger, dragStartEvent);
+    fireEvent(firstTabTrigger, dragOverEvent);
+    fireEvent(firstTabTrigger, dropEvent);
+
+    expect(onReorderTab).toHaveBeenCalledWith("task-2", "task-1", "before");
   });
 });

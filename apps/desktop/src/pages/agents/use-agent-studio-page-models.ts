@@ -51,6 +51,7 @@ type AgentStudioTaskTabsContext = {
   isLoadingTasks: boolean;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
+  onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
 };
 
 type AgentStudioSessionActionsContext = {
@@ -185,6 +186,7 @@ export function useAgentStudioPageModels({
         isLoadingTasks: taskTabs.isLoadingTasks,
         onCreateTab: taskTabs.onCreateTab,
         onCloseTab: taskTabs.onCloseTab,
+        onReorderTab: taskTabs.onReorderTab,
         agentStudioReady: readiness.agentStudioReady,
       }),
     [
@@ -193,6 +195,7 @@ export function useAgentStudioPageModels({
       taskTabs.isLoadingTasks,
       taskTabs.onCloseTab,
       taskTabs.onCreateTab,
+      taskTabs.onReorderTab,
       taskTabs.taskTabs,
     ],
   );

@@ -34,6 +34,7 @@ export const buildAgentStudioTaskTabsModel = (args: {
   isLoadingTasks: boolean;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
+  onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
   agentStudioReady: boolean;
 }): AgentStudioTaskTabsModel => ({
   tabs: args.taskTabs,
@@ -41,6 +42,7 @@ export const buildAgentStudioTaskTabsModel = (args: {
   isLoadingAvailableTabTasks: args.isLoadingTasks,
   onCreateTab: args.onCreateTab,
   onCloseTab: args.onCloseTab,
+  onReorderTab: args.onReorderTab,
   agentStudioReady: args.agentStudioReady,
 });
 

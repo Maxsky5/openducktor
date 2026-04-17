@@ -22,6 +22,7 @@ const session = createAgentSessionFixture({
 });
 const onCreateTab = () => {};
 const onCloseTab = () => {};
+const onReorderTab = () => {};
 const handleSelectAgent = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
@@ -49,6 +50,7 @@ const baseArgs: BuildArgs = {
     isLoadingTasks: false,
     handleCreateTab: onCreateTab,
     handleCloseTab: onCloseTab,
+    handleReorderTab: onReorderTab,
   },
   documents: {
     specDoc: taskDocument,
@@ -125,6 +127,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.core.isWaitingForRuntimeReadiness).toBe(false);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
+    expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");
     expect(mapped.readiness.agentStudioReadinessState).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgent);

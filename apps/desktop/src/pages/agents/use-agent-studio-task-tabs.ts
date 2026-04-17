@@ -52,6 +52,11 @@ export function useAgentStudioTaskTabs(args: {
   handleSelectTab: (nextTaskId: string) => void;
   handleCreateTab: (nextTaskId: string) => void;
   handleCloseTab: (taskIdToClose: string) => void;
+  handleReorderTab: (
+    draggedTaskId: string,
+    targetTaskId: string,
+    position: "before" | "after",
+  ) => void;
 } {
   const {
     activeWorkspace,
@@ -142,7 +147,7 @@ export function useAgentStudioTaskTabs(args: {
     [activeTaskTabId, activeSessionByTaskId, latestSessionByTaskId, tabTaskIds, tasks],
   );
 
-  const { handleCreateTab, handleCloseTab } = useTaskTabActions({
+  const { handleCreateTab, handleCloseTab, handleReorderTab } = useTaskTabActions({
     tabTaskIds,
     activeTaskTabId,
     clearComposerInput,
@@ -163,5 +168,6 @@ export function useAgentStudioTaskTabs(args: {
     handleSelectTab,
     handleCreateTab,
     handleCloseTab,
+    handleReorderTab,
   };
 }

@@ -75,6 +75,11 @@ export type AgentStudioSelectionControllerResult = {
   handleSelectTab: (nextTaskId: string) => void;
   handleCreateTab: (nextTaskId: string) => void;
   handleCloseTab: (taskIdToClose: string) => void;
+  handleReorderTab: (
+    draggedTaskId: string,
+    targetTaskId: string,
+    position: "before" | "after",
+  ) => void;
   viewTaskId: string;
   viewSelectedTask: TaskCard | null;
   viewSessionsForTask: AgentSessionSummary[];
@@ -294,6 +299,7 @@ export function useAgentStudioSelectionController({
     handleSelectTab,
     handleCreateTab,
     handleCloseTab,
+    handleReorderTab,
   } = useAgentStudioTaskTabs({
     activeWorkspace,
     isRepoNavigationBoundaryPending,
@@ -405,6 +411,7 @@ export function useAgentStudioSelectionController({
     handleSelectTab,
     handleCreateTab,
     handleCloseTab,
+    handleReorderTab,
     viewTaskId,
     viewSelectedTask,
     viewSessionsForTask,

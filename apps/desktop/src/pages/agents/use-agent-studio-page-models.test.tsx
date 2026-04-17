@@ -102,6 +102,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       isLoadingTasks: false,
       onCreateTab: () => {},
       onCloseTab: () => {},
+      onReorderTab: () => {},
       ...overrides.taskTabs,
     },
     documents: {

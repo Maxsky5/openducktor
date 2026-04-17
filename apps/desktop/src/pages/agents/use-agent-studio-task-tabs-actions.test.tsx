@@ -95,6 +95,7 @@ describe("useTaskTabActions", () => {
     expect(harness.getLatest()).toEqual({
       handleCreateTab: harness.getLatest().handleCreateTab,
       handleCloseTab: harness.getLatest().handleCloseTab,
+      handleReorderTab: harness.getLatest().handleReorderTab,
       openTaskTabs: ["task-1"],
       persistedActiveTaskId: "task-1",
       intentActiveTaskId: null,
@@ -140,6 +141,7 @@ describe("useTaskTabActions", () => {
       expect(latest.openTaskTabs).toEqual(["task-1", "task-3"]);
       expect(latest.persistedActiveTaskId).toBe("task-3");
       expect(latest.intentActiveTaskId).toBe("task-3");
+      expect(typeof latest.handleReorderTab).toBe("function");
       expect(clearComposerInput).toHaveBeenCalledTimes(1);
       expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
       expect(clearTaskSelection).toHaveBeenCalledTimes(0);
@@ -179,9 +181,48 @@ describe("useTaskTabActions", () => {
     expect(latest.openTaskTabs).toEqual([]);
     expect(latest.persistedActiveTaskId).toBeNull();
     expect(latest.intentActiveTaskId).toBeNull();
+    expect(typeof latest.handleReorderTab).toBe("function");
     expect(clearComposerInput).toHaveBeenCalledTimes(1);
     expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
     expect(clearTaskSelection).toHaveBeenCalledTimes(1);
+    expect(navigateToTaskIntent).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("reordering tabs updates order without changing active-tab side effects", async () => {
+    const clearComposerInput = mock(() => {});
+    const onContextSwitchIntent = mock(() => {});
+    const clearTaskSelection = mock(() => {});
+    const navigateToTaskIntent = mock(() => {});
+    const harness = createHookHarness({
+      initialOpenTaskTabs: ["task-1", "task-2", "task-3"],
+      initialPersistedActiveTaskId: "task-2",
+      initialIntentActiveTaskId: "task-2",
+      activeTaskTabId: "task-2",
+      clearComposerInput,
+      onContextSwitchIntent,
+      clearTaskSelection,
+      navigateToTaskIntent,
+      handleSelectTab: () => {},
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleReorderTab("task-3", "task-1", "before");
+    });
+
+    expect(harness.getLatest()).toEqual({
+      handleCreateTab: harness.getLatest().handleCreateTab,
+      handleCloseTab: harness.getLatest().handleCloseTab,
+      handleReorderTab: harness.getLatest().handleReorderTab,
+      openTaskTabs: ["task-3", "task-1", "task-2"],
+      persistedActiveTaskId: "task-2",
+      intentActiveTaskId: "task-2",
+    });
+    expect(clearComposerInput).toHaveBeenCalledTimes(0);
+    expect(onContextSwitchIntent).toHaveBeenCalledTimes(0);
+    expect(clearTaskSelection).toHaveBeenCalledTimes(0);
     expect(navigateToTaskIntent).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
