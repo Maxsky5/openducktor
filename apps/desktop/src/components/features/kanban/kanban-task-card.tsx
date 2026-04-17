@@ -1,7 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { ExternalLink, PlayCircle } from "lucide-react";
-import { memo, type ReactElement } from "react";
+import { ExternalLink, PlayCircle, Tag } from "lucide-react";
+import { memo, type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
@@ -25,10 +25,16 @@ import {
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
+import { TaskLabelChip } from "@/components/features/tasks/task-label-chip";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
+
+const LABEL_ROW_EPSILON_PX = 1;
+const DEFAULT_FLEX_GAP_PX = 6;
 
 const toVisibleKanbanRunState = (
   runState: RunSummary["state"] | undefined,
@@ -95,6 +101,7 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   left.status === right.status &&
   left.issueType === right.issueType &&
   left.priority === right.priority &&
+  areStringArraysEqual(left.labels, right.labels) &&
   areStringArraysEqual(left.subtaskIds, right.subtaskIds) &&
   left.pullRequest?.number === right.pullRequest?.number &&
   left.pullRequest?.url === right.pullRequest?.url &&
@@ -237,17 +244,101 @@ const getCardActivityClassName = ({
   return "kanban-active-session-card border-info-border shadow-info-border";
 };
 
-function TaskMeta({
+const getFlexGap = (element: HTMLElement): number => {
+  const styles = window.getComputedStyle(element);
+  const rawGap = styles.columnGap === "normal" ? styles.gap : styles.columnGap;
+  const parsedGap = Number.parseFloat(rawGap);
+  return Number.isFinite(parsedGap) ? parsedGap : DEFAULT_FLEX_GAP_PX;
+};
+
+const isWrappedBelowFirstRow = ({
+  container,
+  element,
+}: {
+  container: HTMLElement;
+  element: HTMLElement;
+}): boolean => {
+  const containerTop = container.getBoundingClientRect().top;
+  const elementTop = element.getBoundingClientRect().top;
+  return elementTop - containerTop > LABEL_ROW_EPSILON_PX;
+};
+
+function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const taskIdWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [isTaskIdWrapped, setIsTaskIdWrapped] = useState(false);
+  const taskPrimaryMetaSignature = `${task.id}:${task.issueType}:${task.priority}`;
+
+  useLayoutEffect(() => {
+    void taskPrimaryMetaSignature;
+    const container = containerRef.current;
+    const taskIdWrapper = taskIdWrapperRef.current;
+
+    if (!container || !taskIdWrapper) {
+      return undefined;
+    }
+
+    const updateWrapState = (): void => {
+      const nextWrapped = isWrappedBelowFirstRow({
+        container,
+        element: taskIdWrapper,
+      });
+      setIsTaskIdWrapped((currentWrapped) =>
+        currentWrapped === nextWrapped ? currentWrapped : nextWrapped,
+      );
+    };
+
+    updateWrapState();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateWrapState();
+    });
+
+    observer.observe(container);
+    observer.observe(taskIdWrapper);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [taskPrimaryMetaSignature]);
+
+  return (
+    <div ref={containerRef} className="flex flex-wrap items-center gap-1.5">
+      <IssueTypeBadge issueType={task.issueType} />
+      <PriorityBadge priority={task.priority} />
+      <div
+        ref={taskIdWrapperRef}
+        className={cn("min-w-0", isTaskIdWrapped ? "basis-full" : "ml-auto")}
+      >
+        <TaskIdBadge taskId={task.id} />
+      </div>
+    </div>
+  );
+}
+
+function TaskSecondaryMeta({
   task,
   runState,
 }: {
   task: TaskCard;
   runState: VisibleKanbanRunState | undefined;
-}): ReactElement {
+}): ReactElement | null {
+  const hasSecondaryBadges =
+    task.subtaskIds.length > 0 ||
+    runState != null ||
+    task.pullRequest != null ||
+    task.documentSummary.qaReport.verdict === "rejected";
+
+  if (!hasSecondaryBadges) {
+    return null;
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <IssueTypeBadge issueType={task.issueType} />
-      <PriorityBadge priority={task.priority} />
       <QaRejectedBadge task={task} />
       {task.subtaskIds.length > 0 ? (
         <Badge
@@ -259,6 +350,169 @@ function TaskMeta({
       ) : null}
       {runState ? <RunStateBadge runState={runState} /> : null}
       {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
+    </div>
+  );
+}
+
+function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }): ReactElement {
+  const hiddenLabelsDescriptionId = useId();
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-6 shrink-0 items-center rounded-md border border-input bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            aria-label={`Show ${hiddenLabels.length} more labels`}
+            aria-describedby={hiddenLabelsDescriptionId}
+            data-testid="kanban-task-label-overflow"
+          >
+            +{hiddenLabels.length}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-64 px-2.5 py-2">
+          <div className="flex flex-col gap-1">
+            {hiddenLabels.map((label) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <Tag className="size-3 shrink-0" />
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+      <span
+        id={hiddenLabelsDescriptionId}
+        className="sr-only"
+        data-testid="kanban-task-label-tooltip"
+      >
+        {hiddenLabels.join(", ")}
+      </span>
+    </TooltipProvider>
+  );
+}
+
+function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const measureRowRef = useRef<HTMLDivElement | null>(null);
+  const overflowMeasureRef = useRef<HTMLDivElement | null>(null);
+  const [visibleCount, setVisibleCount] = useState(labels.length);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const measureRow = measureRowRef.current;
+    const overflowMeasure = overflowMeasureRef.current;
+
+    if (!container || !measureRow || !overflowMeasure) {
+      return undefined;
+    }
+
+    const updateVisibleCount = (): void => {
+      const availableWidth = container.clientWidth;
+      if (availableWidth <= 0) {
+        setVisibleCount(labels.length);
+        return;
+      }
+
+      const chipElements = Array.from(measureRow.children) as HTMLElement[];
+      const overflowWidth = overflowMeasure.getBoundingClientRect().width;
+      const gap = getFlexGap(measureRow);
+      let nextVisibleCount = labels.length;
+      let usedWidth = 0;
+
+      for (let index = 0; index < chipElements.length; index += 1) {
+        const chipElement = chipElements[index];
+        const chipWidth = chipElement?.getBoundingClientRect().width ?? 0;
+        const nextWidth = usedWidth + (index > 0 ? gap : 0) + chipWidth;
+        const hiddenCount = labels.length - (index + 1);
+        const reservedOverflowWidth = hiddenCount > 0 ? gap + overflowWidth : 0;
+
+        if (nextWidth + reservedOverflowWidth <= availableWidth + LABEL_ROW_EPSILON_PX) {
+          usedWidth = nextWidth;
+          continue;
+        }
+
+        nextVisibleCount = index;
+        break;
+      }
+
+      setVisibleCount((currentVisibleCount) =>
+        currentVisibleCount === nextVisibleCount ? currentVisibleCount : nextVisibleCount,
+      );
+    };
+
+    updateVisibleCount();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateVisibleCount();
+    });
+
+    observer.observe(container);
+    observer.observe(measureRow);
+    observer.observe(overflowMeasure);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [labels]);
+
+  const hiddenLabels = labels.slice(visibleCount);
+
+  return (
+    <div className="relative min-w-0">
+      <div
+        ref={containerRef}
+        className="flex min-w-0 items-center gap-1.5 overflow-hidden"
+        data-testid="kanban-task-label-row"
+      >
+        {labels.slice(0, visibleCount).map((label) => (
+          <TaskLabelChip key={label} label={label} className="min-w-0 max-w-full shrink" />
+        ))}
+        {hiddenLabels.length > 0 ? (
+          <TaskLabelOverflowIndicator hiddenLabels={hiddenLabels} />
+        ) : null}
+      </div>
+
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 invisible flex items-center gap-1.5 overflow-hidden"
+        aria-hidden="true"
+      >
+        <div ref={measureRowRef} className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          {labels.map((label) => (
+            <div key={label} className="min-w-0">
+              <TaskLabelChip label={label} className="min-w-0 max-w-full shrink" />
+            </div>
+          ))}
+        </div>
+        <div ref={overflowMeasureRef}>
+          <span className="inline-flex h-6 items-center rounded-md border border-input bg-muted px-2 py-0.5 text-xs font-medium">
+            +{labels.length}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskMeta({
+  task,
+  runState,
+}: {
+  task: TaskCard;
+  runState: VisibleKanbanRunState | undefined;
+}): ReactElement {
+  const displayLabels = toDisplayTaskLabels(task.labels);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <TaskPrimaryMeta task={task} />
+      {displayLabels.length > 0 ? <TaskLabelRow labels={displayLabels} /> : null}
+      <TaskSecondaryMeta task={task} runState={runState} />
     </div>
   );
 }
@@ -487,18 +741,19 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             }
           }}
         >
-          <div className="min-w-0 space-y-1">
+          <div className="min-w-0 flex-1">
             <p
               className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
               title={task.title}
             >
               {task.title}
             </p>
-            <TaskIdBadge taskId={task.id} />
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
+          <span
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground"
+            data-testid="kanban-open-details-affordance"
+          >
             <ExternalLink className="size-3" />
-            Open
           </span>
         </div>
         <TaskMeta task={task} runState={visibleRunState} />

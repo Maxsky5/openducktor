@@ -1,6 +1,6 @@
-import { Check, Plus, Tag, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { type KeyboardEvent, type ReactElement, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { TaskLabelChip } from "@/components/features/tasks/task-label-chip";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -109,19 +109,23 @@ export function TagSelector({
       <div className="rounded-md border border-input bg-card px-2 py-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
         <div className="flex min-h-10 flex-wrap items-center gap-2">
           {value.map((label) => (
-            <Badge key={label} variant="secondary" className="gap-1.5 rounded-md px-2 py-1">
-              <Tag className="size-3" />
-              {label}
-              <button
-                type="button"
-                className="cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                onClick={() => removeTag(label)}
-                aria-label={`Remove label ${label}`}
-                disabled={disabled}
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
+            <TaskLabelChip
+              key={label}
+              label={label}
+              className="max-w-full"
+              endAdornment={
+                <button
+                  type="button"
+                  className="-mr-0.5 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => removeTag(label)}
+                  aria-label={`Remove label ${label}`}
+                  disabled={disabled}
+                >
+                  <X className="size-3" />
+                </button>
+              }
+            />
           ))}
 
           <Input

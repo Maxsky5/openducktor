@@ -174,4 +174,47 @@ describe("KanbanTaskCard rerender behavior", () => {
     expect(container.innerHTML).not.toContain("kanban-active-session-ray");
     unmount();
   });
+
+  test("rerenders when visible task labels change", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-4",
+      title: "Labels card",
+      labels: ["frontend"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const { rerender, container, unmount } = render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="idle"
+          taskSessions={[]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(container.innerHTML).toContain("frontend");
+
+    rerender(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={{ ...task, labels: ["backend"], updatedAt: "2026-01-01T00:00:01.000Z" }}
+          taskActivityState="idle"
+          taskSessions={[]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(container.innerHTML).toContain("backend");
+    expect(container.innerHTML).not.toContain("frontend");
+    unmount();
+  });
 });

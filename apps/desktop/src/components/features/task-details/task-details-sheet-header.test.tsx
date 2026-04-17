@@ -225,4 +225,21 @@ describe("TaskDetailsSheetHeader", () => {
 
     expect(html).toContain(`title="${longTitle}"`);
   });
+
+  test("renders task labels with the shared chip style and tag icon", () => {
+    const task = createTaskCardFixture({ id: "TASK-8" });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: ["frontend", "ux"],
+      }),
+    );
+
+    expect(html).toContain("frontend");
+    expect(html).toContain("ux");
+    expect(html).toContain("lucide-tag");
+    expect(html).toContain("rounded-md");
+  });
 });

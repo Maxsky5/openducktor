@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import { toDisplayTaskLabels } from "@/lib/task-labels";
 
 type TaskWorkflowCallbacks = {
   onPlan: ((taskId: string, action: "set_spec" | "set_plan") => void) | undefined;
@@ -32,8 +33,7 @@ type TaskWorkflowActionContext = {
     | undefined;
 };
 
-export const toTaskLabels = (labels: string[] | undefined): string[] =>
-  (labels ?? []).filter((label) => !label.startsWith("phase:"));
+export const toTaskLabels = toDisplayTaskLabels;
 
 export const toSubtasks = (task: TaskCard | null, taskById: Map<string, TaskCard>): TaskCard[] => {
   if (!task) {

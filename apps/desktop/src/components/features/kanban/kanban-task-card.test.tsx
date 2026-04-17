@@ -1,11 +1,61 @@
 import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
+import { render, screen, waitFor } from "@testing-library/react";
+import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
+import {
+  createTaskCardFixture,
+  enableReactActEnvironment,
+} from "@/pages/agents/agent-studio-test-utils";
 import { KanbanTaskCard } from "./kanban-task-card";
 
 const noop = (): void => {};
+
+enableReactActEnvironment();
+
+const installMockResizeObserver = () => {
+  const globalWithResizeObserver = globalThis as typeof globalThis & {
+    ResizeObserver?: typeof ResizeObserver;
+  };
+  const previousResizeObserver = globalWithResizeObserver.ResizeObserver;
+  const activeCallbacks = new Set<ResizeObserverCallback>();
+
+  class MockResizeObserver {
+    private readonly callback: ResizeObserverCallback;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+
+    observe(_target: Element): void {
+      activeCallbacks.add(this.callback);
+    }
+
+    unobserve(_target: Element): void {}
+
+    disconnect(): void {
+      activeCallbacks.delete(this.callback);
+    }
+  }
+
+  globalWithResizeObserver.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+  return {
+    trigger: (): void => {
+      for (const callback of [...activeCallbacks]) {
+        callback([], {} as ResizeObserver);
+      }
+    },
+    restore: (): void => {
+      if (typeof previousResizeObserver === "undefined") {
+        delete globalWithResizeObserver.ResizeObserver;
+        return;
+      }
+
+      globalWithResizeObserver.ResizeObserver = previousResizeObserver;
+    },
+  };
+};
 
 describe("KanbanTaskCard active sessions", () => {
   test("renders active-session primary action and removes sessions section", () => {
@@ -206,6 +256,67 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("QA Rejected");
   });
 
+  test("renders filtered task labels, moves task id into metadata, and removes visible open text", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-8",
+      title: "Polish Kanban metadata",
+      issueType: "feature",
+      priority: 1,
+      labels: ["frontend", "phase:open", "ux"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          taskSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("frontend");
+    expect(html).toContain("ux");
+    expect(html).not.toContain("phase:open");
+    expect(html).toContain("TASK-8");
+    expect(html.indexOf("Feature")).toBeLessThan(html.indexOf("P1"));
+    expect(html.indexOf("P1")).toBeLessThan(html.indexOf("TASK-8"));
+    expect(html).toContain('data-testid="kanban-open-details-affordance"');
+    expect(html).not.toContain(">Open<");
+    expect(html).toContain("lucide-tag");
+  });
+
+  test("omits the label row when only phase labels exist", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-9",
+      labels: ["phase:open", "phase:ready_for_dev"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          taskSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).not.toContain('data-testid="kanban-task-label-row"');
+  });
+
   test("renders a pull request link badge when the task is linked to a PR", () => {
     const task = createTaskCardFixture({
       id: "TASK-4",
@@ -349,4 +460,91 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).not.toContain("Ready to finish");
   });
+
+  test("shows a +N overflow chip and tooltip with hidden labels when labels exceed one row", async () => {
+    const resizeObserver = installMockResizeObserver();
+    const originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientWidth",
+    );
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).dataset.testid === "kanban-task-label-row" ? 190 : 0;
+      },
+    });
+
+    HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+      const text = this.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      const widthByText: Record<string, number> = {
+        frontend: 68,
+        backend: 66,
+        ops: 40,
+        urgent: 54,
+        "+4": 34,
+      };
+      const width = widthByText[text] ?? 0;
+
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        bottom: 24,
+        right: width,
+        width,
+        height: 24,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+
+    try {
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={["/kanban"]}>
+            <KanbanTaskCard
+              task={createTaskCardFixture({
+                id: "TASK-10",
+                labels: ["frontend", "backend", "ops", "urgent"],
+              })}
+              taskActivityState="idle"
+              taskSessions={[]}
+              onOpenDetails={noop}
+              onDelegate={noop}
+              onPlan={noop}
+              onBuild={noop}
+            />
+          </MemoryRouter>,
+        );
+      });
+
+      await act(async () => {
+        resizeObserver.trigger();
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("kanban-task-label-overflow").textContent).toBe("+2");
+        },
+        { timeout: 500 },
+      );
+
+      await waitFor(
+        () => {
+          const tooltip = screen.getByTestId("kanban-task-label-tooltip");
+          expect(tooltip.textContent).toContain("ops");
+          expect(tooltip.textContent).toContain("urgent");
+        },
+        { timeout: 500 },
+      );
+    } finally {
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+      }
+      HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      resizeObserver.restore();
+    }
+  }, 3000);
 });
