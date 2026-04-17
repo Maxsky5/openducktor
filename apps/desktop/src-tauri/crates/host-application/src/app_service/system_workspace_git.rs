@@ -134,7 +134,7 @@ fn missing_bd_repo_store_health() -> RepoStoreHealth {
 impl AppService {
     fn best_effort_auto_detect_git_provider_for_repo(&self, repo_path: &str, operation: &str) {
         if let Err(error) = self.auto_detect_git_provider_for_repo(repo_path) {
-            eprintln!(
+            tracing::warn!(
                 "OpenDucktor warning: {operation} completed but GitHub repository auto-detect failed for {repo_path}: {error:#}"
             );
         }

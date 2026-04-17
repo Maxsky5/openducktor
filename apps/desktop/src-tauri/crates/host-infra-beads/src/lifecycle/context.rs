@@ -31,7 +31,7 @@ impl BeadsLifecycle {
         let working_dir = self.beads_working_dir_for_identity(repo_path, workspace_id)?;
         fs::create_dir_all(&working_dir).with_context(|| {
             format!(
-                "Failed to create Beads attachment root {}",
+                "Failed to create Beads working directory {}",
                 working_dir.display()
             )
         })?;

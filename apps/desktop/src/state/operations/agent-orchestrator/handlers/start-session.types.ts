@@ -73,6 +73,7 @@ export type RuntimeDependencies = {
     taskId: string,
     role: AgentRole,
     options?: {
+      workspaceId?: string | null;
       targetWorkingDirectory?: string | null;
       runtimeKind?: AgentModelSelection["runtimeKind"] | null;
     },

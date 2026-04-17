@@ -38,6 +38,7 @@ type EnsureSessionReadyDependencies = {
     taskId: string,
     role: AgentSessionState["role"],
     options?: {
+      workspaceId?: string | null;
       targetWorkingDirectory?: string | null;
       runtimeKind?: AgentSessionState["selectedModel"] extends infer T
         ? T extends { runtimeKind?: infer K }
@@ -174,6 +175,7 @@ export const createEnsureSessionReady = ({
             throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
           }
           const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+            workspaceId,
             targetWorkingDirectory: session.workingDirectory,
             ...(session.selectedModel?.runtimeKind
               ? { runtimeKind: session.selectedModel.runtimeKind }
@@ -262,6 +264,7 @@ export const createEnsureSessionReady = ({
     });
     assertNotStale();
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+      workspaceId,
       targetWorkingDirectory: session.workingDirectory,
       ...(session.selectedModel?.runtimeKind
         ? { runtimeKind: session.selectedModel.runtimeKind }
@@ -269,12 +272,12 @@ export const createEnsureSessionReady = ({
     });
     assertNotStale();
     const requestedRuntimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
-    if (!requestedRuntimeKind && !runtime.runtimeKind) {
-      throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
-    }
-    const resolvedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
+    let resolvedRuntimeKind = runtime.runtimeKind;
     if (!resolvedRuntimeKind) {
-      throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+      if (!requestedRuntimeKind) {
+        throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+      }
+      resolvedRuntimeKind = requestedRuntimeKind;
     }
     const runtimeConnection = requireRuntimeConnectionSupport(
       resolvedRuntimeKind,

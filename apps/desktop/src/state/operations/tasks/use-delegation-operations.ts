@@ -1,11 +1,12 @@
 import type { BuildRespondInput } from "@openducktor/adapters-tauri-host";
 import { useCallback } from "react";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { loadRepoDefaultRuntimeKind } from "../agent-orchestrator/runtime/runtime";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
 type UseDelegationOperationsArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 };
 
@@ -17,19 +18,25 @@ type UseDelegationOperationsResult = {
 };
 
 export function useDelegationOperations({
-  activeRepo,
+  activeWorkspace,
   refreshTaskData,
 }: UseDelegationOperationsArgs): UseDelegationOperationsResult {
   const delegateTask = useCallback(
     async (taskId: string): Promise<void> => {
-      const repo = requireActiveRepo(activeRepo);
-      const runtimeKind = await loadRepoDefaultRuntimeKind(repo, "build");
+      const repo = requireActiveRepo(activeWorkspace?.repoPath ?? null);
+      const workspaceId = activeWorkspace?.workspaceId;
+      if (!workspaceId) {
+        throw new Error("Active workspace is required.");
+      }
+      const runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, "build");
 
       await host.buildStart(repo, taskId, runtimeKind);
       await refreshTaskData(repo);
     },
-    [activeRepo, refreshTaskData],
+    [activeWorkspace, refreshTaskData],
   );
+
+  const activeRepo = activeWorkspace?.repoPath ?? null;
 
   const delegateRespond = useCallback(
     async (runId: string, input: BuildRespondInput) => {

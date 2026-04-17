@@ -36,6 +36,7 @@ export const resolveRuntimeAndModel = async ({
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
   });

@@ -102,7 +102,9 @@ describe("agent-orchestrator-runtime", () => {
         },
       });
 
-      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build");
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
+      });
       expect(runtime).toEqual({
         runtimeKind: "opencode",
         runtimeId: null,
@@ -146,7 +148,9 @@ describe("agent-orchestrator-runtime", () => {
         },
       });
 
-      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build");
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
+      });
       expect(runtime.runId).toBe("run-1");
       expect(buildStartCalls).toBe(1);
       expect(refreshCalls).toBe(1);
@@ -173,7 +177,9 @@ describe("agent-orchestrator-runtime", () => {
         },
       });
 
-      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build");
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
+      });
       expect(runtime.runId).toBe("run-1");
       expect(buildStartCalls).toBe(1);
       expect(refreshCalls).toBe(1);
@@ -194,7 +200,9 @@ describe("agent-orchestrator-runtime", () => {
         refreshTaskData: async () => refreshDeferred.promise,
       });
 
-      const runtimePromise = ensureRuntime("/tmp/repo", "task-1", "build");
+      const runtimePromise = ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
+      });
       const raceResult = await withTimeout(runtimePromise, 20);
       refreshDeferred.resolve();
 
@@ -263,6 +271,7 @@ describe("agent-orchestrator-runtime", () => {
       });
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
         targetWorkingDirectory: "/tmp/repo/worktree",
       });
       expect(runtime).toEqual({
@@ -320,6 +329,7 @@ describe("agent-orchestrator-runtime", () => {
       });
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
         targetWorkingDirectory: "/tmp/repo/conflict-worktree",
       });
       expect(runtime).toEqual({
@@ -371,6 +381,7 @@ describe("agent-orchestrator-runtime", () => {
       });
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
         targetWorkingDirectory: "/tmp/repo",
       });
       expect(runtime).toEqual({
@@ -606,7 +617,9 @@ describe("agent-orchestrator-runtime", () => {
         refreshTaskData: async () => {},
       });
 
-      const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa");
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa", {
+        workspaceId: "workspace-1",
+      });
       expect(runtime).toEqual({
         runtimeKind: "opencode",
         runtimeId: null,
@@ -652,7 +665,9 @@ describe("agent-orchestrator-runtime", () => {
         refreshTaskData: async () => {},
       });
 
-      const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa");
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa", {
+        workspaceId: "workspace-1",
+      });
       expect(runtime).toEqual({
         runtimeKind: "opencode",
         runtimeId: "runtime-shared",
@@ -694,7 +709,9 @@ describe("agent-orchestrator-runtime", () => {
         refreshTaskData: async () => {},
       });
 
-      const runtime = await ensureRuntime("/tmp/repo", "task-1", "planner");
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "planner", {
+        workspaceId: "workspace-1",
+      });
       expect(runtime).toEqual({
         runtimeKind: "opencode",
         runtimeId: "runtime-shared",
@@ -734,7 +751,11 @@ describe("agent-orchestrator-runtime", () => {
         refreshTaskData: async () => {},
       });
 
-      await expect(ensureRuntime("/tmp/repo", "task-1", "planner")).rejects.toThrow(
+      await expect(
+        ensureRuntime("/tmp/repo", "task-1", "planner", {
+          workspaceId: "workspace-1",
+        }),
+      ).rejects.toThrow(
         "Runtime connection type 'stdio' is unsupported for planner sessions in runtime 'opencode'; local_http is required.",
       );
     } finally {
