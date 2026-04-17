@@ -2,6 +2,8 @@ use super::support::*;
 
 #[test]
 fn runtime_ensure_registers_external_runtimes_without_local_child_processes() -> Result<()> {
+    let repo_path = unique_temp_path("external-runtime");
+    fs::create_dir_all(repo_path.join(".git"))?;
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
             Arc::new(TestRuntimeAdapter {
@@ -33,8 +35,9 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
     )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
+    service.workspace_add(repo_path.to_string_lossy().as_ref())?;
 
-    let runtime = service.runtime_ensure("test-runtime", "/tmp/external-runtime")?;
+    let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;
 
     assert_eq!(runtime.kind, AgentRuntimeKind::from("test-runtime"));
     assert_eq!(
@@ -45,7 +48,7 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
     );
     assert_eq!(
         service
-            .runtime_list("test-runtime", Some("/tmp/external-runtime"))?
+            .runtime_list("test-runtime", Some(repo_path.to_string_lossy().as_ref()))?
             .len(),
         1
     );
