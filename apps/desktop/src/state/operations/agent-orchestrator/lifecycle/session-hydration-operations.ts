@@ -16,6 +16,12 @@ export type SessionHydrationOperations = {
     sessionId: string;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
+  recoverSessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+    persistedRecords?: AgentSessionRecord[];
+  }) => Promise<void>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
@@ -49,6 +55,19 @@ export const createSessionHydrationOperations = ({
             mode: "requested_history",
             targetSessionId: sessionId,
             historyPolicy: "requested_only",
+          },
+          persistedRecords,
+        ),
+      ),
+    recoverSessionRuntimeAttachment: ({ taskId, sessionId, recoveryDedupKey, persistedRecords }) =>
+      loadAgentSessions(
+        taskId,
+        withPersistedRecords(
+          {
+            mode: "recover_runtime_attachment",
+            targetSessionId: sessionId,
+            ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
+            historyPolicy: "none",
           },
           persistedRecords,
         ),

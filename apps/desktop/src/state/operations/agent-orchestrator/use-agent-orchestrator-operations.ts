@@ -36,6 +36,25 @@ import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydr
 import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
 import { findLastUserSessionMessage } from "./support/messages";
 
+const hasAttachedRuntime = (
+  session: Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeRoute"> | null | undefined,
+): boolean => {
+  if (!session) {
+    return false;
+  }
+
+  return session.runId !== null || session.runtimeId !== null || session.runtimeRoute !== null;
+};
+
+const withRuntimeRecoveryState = (
+  session: AgentSessionState,
+  runtimeRecoveryState: NonNullable<AgentSessionState["runtimeRecoveryState"]>,
+): AgentSessionState => {
+  return session.runtimeRecoveryState === runtimeRecoveryState
+    ? session
+    : { ...session, runtimeRecoveryState };
+};
+
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
@@ -326,6 +345,49 @@ export function useAgentOrchestratorOperations({
     [loadAgentSessions],
   );
 
+  const recoverSessionRuntimeAttachment = useCallback(
+    async ({
+      taskId,
+      sessionId,
+      recoveryDedupKey,
+      persistedRecords,
+    }: {
+      taskId: string;
+      sessionId: string;
+      recoveryDedupKey?: string | null;
+      persistedRecords?: AgentSessionRecord[];
+    }): Promise<boolean> => {
+      updateSession(
+        sessionId,
+        (current) => withRuntimeRecoveryState(current, "recovering_runtime"),
+        { persist: false },
+      );
+
+      await sessionHydration
+        .recoverSessionRuntimeAttachment({
+          taskId,
+          sessionId,
+          ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
+          ...(persistedRecords ? { persistedRecords } : {}),
+        })
+        .catch((error) => {
+          updateSession(sessionId, (current) => withRuntimeRecoveryState(current, "failed"), {
+            persist: false,
+          });
+          throw error;
+        });
+
+      const attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
+      updateSession(
+        sessionId,
+        (current) => withRuntimeRecoveryState(current, attached ? "idle" : "waiting_for_runtime"),
+        { persist: false },
+      );
+      return attached;
+    },
+    [sessionHydration, sessionsRef, updateSession],
+  );
+
   const repoSessionHydrationService = useMemo(
     () =>
       createRepoSessionHydrationService({
@@ -494,6 +556,7 @@ export function useAgentOrchestratorOperations({
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
+      recoverSessionRuntimeAttachment,
       reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
       loadAgentSessions,
       readSessionModelCatalog,
@@ -518,6 +581,7 @@ export function useAgentOrchestratorOperations({
     loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
+    recoverSessionRuntimeAttachment,
     readSessionSlashCommands,
     readSessionFileSearch,
     removeAgentSessions,

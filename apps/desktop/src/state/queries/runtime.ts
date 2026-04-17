@@ -35,7 +35,7 @@ export const runtimeDefinitionsQueryOptions = () =>
     staleTime: RUNTIME_DEFINITIONS_STALE_TIME_MS,
   });
 
-const runtimeListQueryOptions = (runtimeKind: RuntimeKind, repoPath: string) =>
+export const runtimeListQueryOptions = (runtimeKind: RuntimeKind, repoPath: string) =>
   queryOptions({
     queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
     queryFn: (): Promise<RuntimeInstanceSummary[]> => host.runtimeList(repoPath, runtimeKind),

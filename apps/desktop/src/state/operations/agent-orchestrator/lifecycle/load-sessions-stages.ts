@@ -183,6 +183,7 @@ const mergePersistedSessionRecord = (
       current.historyHydrationState ??
       persisted.historyHydrationState ??
       DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE,
+    runtimeRecoveryState: current.runtimeRecoveryState ?? persisted.runtimeRecoveryState ?? "idle",
     promptOverrides,
   };
 };
@@ -358,9 +359,11 @@ export const preparePersistedSessionMergeStage = async ({
     };
   }
 
-  const recordsToHydrate = intent.shouldHydrateRequestedSession
-    ? persistedRecords.filter((record) => record.sessionId === intent.requestedSessionId)
-    : persistedRecords;
+  const recordsToHydrate =
+    intent.requestedSessionId !== null &&
+    (intent.shouldHydrateRequestedSession || intent.mode === "recover_runtime_attachment")
+      ? persistedRecords.filter((record) => record.sessionId === intent.requestedSessionId)
+      : persistedRecords;
   const historyHydrationSessionIds = new Set(
     recordsToHydrate
       .filter((record) => {
@@ -855,6 +858,7 @@ export const hydrateSessionRecordsStage = async ({
           status: liveSessionStatus ?? current.status,
           workingDirectory,
           historyHydrationState: "hydrated",
+          runtimeRecoveryState: "idle",
           promptOverrides,
           pendingPermissions: livePendingPermissions,
           pendingQuestions: livePendingQuestions,

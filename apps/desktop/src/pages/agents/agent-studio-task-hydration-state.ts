@@ -8,7 +8,7 @@ export type AgentStudioReadinessState = "ready" | "checking" | "blocked";
 
 type TaskHydrationSessionState = Pick<
   AgentSessionState,
-  "sessionId" | "role" | "runId" | "runtimeId" | "runtimeRoute"
+  "sessionId" | "role" | "runId" | "runtimeId" | "runtimeRoute" | "runtimeRecoveryState"
 >;
 
 type GetAgentStudioTaskHydrationDecisionArgs = {
@@ -18,8 +18,6 @@ type GetAgentStudioTaskHydrationDecisionArgs = {
   historyHydrationState: AgentSessionHistoryHydrationState;
   sessionNeedsHydration: boolean;
   agentStudioReadinessState: AgentStudioReadinessState;
-  waitingRecoveryKey: string | null;
-  postReadyFailureRecoveryKey: string | null;
 };
 
 export type AgentStudioTaskHydrationDecision = {
@@ -54,40 +52,35 @@ export const getAgentStudioTaskHydrationDecision = ({
   historyHydrationState,
   sessionNeedsHydration,
   agentStudioReadinessState,
-  waitingRecoveryKey,
-  postReadyFailureRecoveryKey,
 }: GetAgentStudioTaskHydrationDecisionArgs): AgentStudioTaskHydrationDecision => {
   const activeRecoveryKey = toRecoverySelectionKey({
     activeRepo,
     activeTaskId,
     activeSessionId: activeSession?.sessionId ?? null,
   });
-  const blockedFromAutomaticRecovery =
-    activeRecoveryKey !== null && postReadyFailureRecoveryKey === activeRecoveryKey;
+  const blockedFromAutomaticRecovery = activeSession?.runtimeRecoveryState === "failed";
   const shouldWaitForSessionRuntime =
     activeRecoveryKey !== null &&
     agentStudioReadinessState === "ready" &&
     sessionNeedsHydration &&
     isWaitingForAttachedWorktreeRuntime(activeSession) &&
     !blockedFromAutomaticRecovery;
+  const isRecoveringWaitingSession = activeSession?.runtimeRecoveryState === "recovering_runtime";
   const isWaitingForRuntimeReadiness =
     activeRecoveryKey !== null &&
     sessionNeedsHydration &&
     !blockedFromAutomaticRecovery &&
-    (agentStudioReadinessState !== "ready" || shouldWaitForSessionRuntime);
-  const isRecoveringWaitingSession =
-    activeRecoveryKey !== null &&
-    agentStudioReadinessState === "ready" &&
-    !shouldWaitForSessionRuntime &&
-    waitingRecoveryKey === activeRecoveryKey &&
-    sessionNeedsHydration;
+    (agentStudioReadinessState !== "ready" ||
+      shouldWaitForSessionRuntime ||
+      isRecoveringWaitingSession);
   const shouldHydrateSessionHistory =
     activeRecoveryKey !== null &&
     agentStudioReadinessState === "ready" &&
     !shouldWaitForSessionRuntime &&
+    !isRecoveringWaitingSession &&
     sessionNeedsHydration &&
     !blockedFromAutomaticRecovery &&
-    (historyHydrationState === "not_requested" || waitingRecoveryKey === activeRecoveryKey);
+    historyHydrationState === "not_requested";
 
   return {
     activeRecoveryKey,

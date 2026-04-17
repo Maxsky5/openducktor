@@ -8,6 +8,7 @@ import {
   type AgentStudioReadinessState,
   getAgentStudioTaskHydrationDecision,
 } from "./agent-studio-task-hydration-state";
+import { useAgentStudioSessionRuntimeRecovery } from "./use-agent-studio-session-runtime-recovery";
 
 type UseAgentStudioTaskHydrationParams = {
   activeRepo: string | null;
@@ -18,6 +19,13 @@ type UseAgentStudioTaskHydrationParams = {
     taskId: string;
     sessionId: string;
   }) => Promise<void>;
+  recoverSessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+  }) => Promise<boolean>;
+  refreshSessionRuntimeRecoverySources: () => Promise<void>;
+  sessionRuntimeRecoverySignal: string;
 };
 
 type UseAgentStudioTaskHydrationResult = {
@@ -35,16 +43,15 @@ export function useAgentStudioTaskHydration({
   activeSession,
   agentStudioReadinessState,
   hydrateRequestedTaskSessionHistory,
+  recoverSessionRuntimeAttachment,
+  refreshSessionRuntimeRecoverySources,
+  sessionRuntimeRecoverySignal,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const activeSessionId = activeSession?.sessionId ?? null;
   const [requestState, setRequestState] = useState<{
     sessionId: string | null;
     status: "idle" | "pending" | "failed";
   }>({ sessionId: null, status: "idle" });
-  const [waitingRecoveryKey, setWaitingRecoveryKey] = useState<string | null>(null);
-  const [postReadyFailureRecoveryKey, setPostReadyFailureRecoveryKey] = useState<string | null>(
-    null,
-  );
   const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
   const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
   const {
@@ -60,54 +67,21 @@ export function useAgentStudioTaskHydration({
     historyHydrationState,
     sessionNeedsHydration,
     agentStudioReadinessState,
-    waitingRecoveryKey,
-    postReadyFailureRecoveryKey,
   });
 
-  useEffect(() => {
-    if (!activeRepo) {
-      setWaitingRecoveryKey(null);
-      setPostReadyFailureRecoveryKey(null);
-      return;
-    }
-
-    if (!activeRecoveryKey) {
-      return;
-    }
-
-    if (!sessionNeedsHydration) {
-      setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
-      setPostReadyFailureRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
-      return;
-    }
-
-    if (isWaitingForRuntimeReadiness) {
-      setWaitingRecoveryKey((current) => {
-        if (historyHydrationState === "failed") {
-          return activeRecoveryKey;
-        }
-
-        if (shouldWaitForSessionRuntime) {
-          return current ?? activeRecoveryKey;
-        }
-
-        return current;
-      });
-      return;
-    }
-
-    if (waitingRecoveryKey === activeRecoveryKey && historyHydrationState === "hydrated") {
-      setWaitingRecoveryKey(null);
-    }
-  }, [
-    activeRecoveryKey,
-    activeRepo,
-    historyHydrationState,
-    isWaitingForRuntimeReadiness,
+  useAgentStudioSessionRuntimeRecovery({
+    activeTaskId,
+    activeSessionId,
     shouldWaitForSessionRuntime,
-    sessionNeedsHydration,
-    waitingRecoveryKey,
-  ]);
+    activeRecoveryKey,
+    sessionRuntimeRecoverySignal,
+    recoverSessionRuntimeAttachment,
+    refreshSessionRuntimeRecoverySources,
+  });
+
+  const isRequestFailed =
+    requestState.sessionId === activeSessionId && requestState.status === "failed";
+  const shouldRequestHydration = shouldHydrateSessionHistory && !isRequestFailed;
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -115,7 +89,7 @@ export function useAgentStudioTaskHydration({
       return;
     }
 
-    if (!shouldHydrateSessionHistory) {
+    if (!shouldRequestHydration) {
       setRequestState((current) =>
         current.sessionId === activeSessionId && current.status === "pending"
           ? { sessionId: activeSessionId, status: "idle" }
@@ -135,10 +109,6 @@ export function useAgentStudioTaskHydration({
             ? { sessionId: activeSessionId, status: "idle" }
             : current,
         );
-        setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
-        setPostReadyFailureRecoveryKey((current) =>
-          current === activeRecoveryKey ? null : current,
-        );
       })
       .catch(() => {
         setRequestState((current) =>
@@ -146,24 +116,12 @@ export function useAgentStudioTaskHydration({
             ? { sessionId: activeSessionId, status: "failed" }
             : current,
         );
-        if (activeRecoveryKey) {
-          setPostReadyFailureRecoveryKey(activeRecoveryKey);
-        }
-        setWaitingRecoveryKey((current) => (current === activeRecoveryKey ? null : current));
       });
-  }, [
-    activeRecoveryKey,
-    activeSessionId,
-    activeTaskId,
-    hydrateRequestedTaskSessionHistory,
-    shouldHydrateSessionHistory,
-  ]);
+  }, [activeSessionId, activeTaskId, hydrateRequestedTaskSessionHistory, shouldRequestHydration]);
 
   const isRequestPending =
     requestState.sessionId === activeSessionId && requestState.status === "pending";
-  const isRequestFailed =
-    requestState.sessionId === activeSessionId && requestState.status === "failed";
-  const shouldShowPendingHydrationState = shouldHydrateSessionHistory && !isRequestFailed;
+  const shouldShowPendingHydrationState = shouldRequestHydration;
 
   return {
     isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
@@ -178,6 +136,8 @@ export function useAgentStudioTaskHydration({
     isActiveSessionHistoryHydrating: activeSessionId
       ? shouldShowPendingHydrationState || historyHydrationState === "hydrating" || isRequestPending
       : false,
-    isWaitingForRuntimeReadiness: activeSessionId ? isWaitingForRuntimeReadiness : false,
+    isWaitingForRuntimeReadiness: activeSessionId
+      ? isWaitingForRuntimeReadiness && !isRequestFailed
+      : false,
   };
 }

@@ -3,6 +3,7 @@ import type { AgentSessionRecord, RuntimeInstanceSummary } from "@openducktor/co
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import {
   findSessionMessageForTest,
   sessionMessageAt,
@@ -788,6 +789,136 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(runtimeListCalls).toEqual([]);
     expect(runsListCalls).toEqual([]);
     expect(runtimeEnsureCalls).toEqual([]);
+  });
+
+  test("recovers a targeted session runtime attachment without hydrating history", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": {
+          sessionId: "session-1",
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "stopped",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeKind: "opencode",
+          runtimeId: null,
+          runId: null,
+          runtimeRoute: null,
+          workingDirectory: "/tmp/repo/worktree",
+          historyHydrationState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+        },
+      },
+    };
+    let state = sessionsRef.current;
+    let historyLoads = 0;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        loadSessionHistory: async () => {
+          historyLoads += 1;
+          return [];
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      activeRepoRef: { current: "/tmp/repo" },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: (sessionId, updater) => {
+        const current = state[sessionId];
+        if (!current) {
+          return;
+        }
+        state = {
+          ...state,
+          [sessionId]: updater(current),
+        };
+        sessionsRef.current = state;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../shared/host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      persistedSessionRecord({
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    ];
+    appQueryClient.setQueryData(taskQueryKeys.runs("/tmp/repo"), [
+      {
+        runId: "run-1",
+        runtimeKind: "opencode",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4444",
+        },
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+        branch: "obp/task-1",
+        worktreePath: "/tmp/repo/worktree",
+        port: 4444,
+        state: "running" as const,
+        lastMessage: null,
+        startedAt: "2026-02-22T08:00:00.000Z",
+      },
+    ]);
+
+    try {
+      await loadAgentSessions("task-1", {
+        mode: "recover_runtime_attachment",
+        targetSessionId: "session-1",
+        historyPolicy: "none",
+      });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(historyLoads).toBe(0);
+    expect(getSession(state, "session-1").runId).toBe("run-1");
+    expect(getSession(state, "session-1").runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+    });
+    expect(getSession(state, "session-1").historyHydrationState).toBe("not_requested");
+    expect(sessionMessagesToArray(getSession(state, "session-1"))).toEqual([]);
   });
 
   test("composes bootstrap, requested history hydration, and live reconciliation without cross-mode regressions", async () => {

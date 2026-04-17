@@ -379,8 +379,10 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Runtime is starting");
-    expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
+    expect(html).toContain("Session runtime is reconnecting");
+    expect(html).toContain(
+      "Waiting for the selected session runtime to become available before loading this session.",
+    );
     expect(html).toContain("Cached transcript");
   });
 

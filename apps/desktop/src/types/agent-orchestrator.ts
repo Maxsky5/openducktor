@@ -132,6 +132,12 @@ export type AgentSessionHistoryHydrationState =
   | "hydrated"
   | "failed";
 
+export type AgentSessionRuntimeRecoveryState =
+  | "idle"
+  | "waiting_for_runtime"
+  | "recovering_runtime"
+  | "failed";
+
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
@@ -146,6 +152,7 @@ export type AgentSessionState = {
   runtimeRoute: RuntimeRoute | null;
   workingDirectory: string;
   historyHydrationState?: AgentSessionHistoryHydrationState;
+  runtimeRecoveryState?: AgentSessionRuntimeRecoveryState;
   messages: AgentSessionMessages;
   draftAssistantText: string;
   draftAssistantMessageId: string | null;
@@ -162,12 +169,17 @@ export type AgentSessionState = {
   stopRequestedAt?: string | null;
 };
 
-export type AgentSessionLoadMode = "bootstrap" | "requested_history" | "reconcile_live";
+export type AgentSessionLoadMode =
+  | "bootstrap"
+  | "requested_history"
+  | "reconcile_live"
+  | "recover_runtime_attachment";
 export type AgentSessionHistoryHydrationPolicy = "none" | "requested_only" | "live_if_empty";
 
 export type AgentSessionLoadOptions = {
   mode?: AgentSessionLoadMode;
   targetSessionId?: string | null;
+  recoveryDedupKey?: string | null;
   historyPolicy?: AgentSessionHistoryHydrationPolicy;
   persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   preloadedRuns?: import("@openducktor/contracts").RunSummary[];

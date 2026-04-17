@@ -7,7 +7,8 @@ import {
   type TaskCard,
 } from "@openducktor/contracts";
 import { toast } from "sonner";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
@@ -2047,6 +2048,59 @@ describe("use-agent-orchestrator-operations", () => {
         OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       }
     });
+  });
+
+  test("tracks explicit runtime recovery state while reattaching a restored session runtime", async () => {
+    const originalRuntimeList = host.runtimeList;
+    const originalRunsList = host.runsList;
+
+    host.runtimeList = async () => [];
+    host.runsList = async () => [];
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixtureWithPersistedBuildSession],
+      runs: [],
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().loadAgentSessions("task-1", {
+        persistedRecords: [persistedBuildSessionFixture],
+      });
+
+      expect(
+        harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
+      ).toBe("idle");
+
+      await harness.getLatest().recoverSessionRuntimeAttachment({
+        taskId: "task-1",
+        sessionId: "session-1",
+        persistedRecords: [persistedBuildSessionFixture],
+      });
+
+      expect(
+        harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
+      ).toBe("waiting_for_runtime");
+
+      host.runsList = async () => [runningRunFixture];
+      appQueryClient.setQueryData(taskQueryKeys.runs("/tmp/repo"), [runningRunFixture]);
+
+      await harness.getLatest().recoverSessionRuntimeAttachment({
+        taskId: "task-1",
+        sessionId: "session-1",
+        persistedRecords: [persistedBuildSessionFixture],
+      });
+
+      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
+      expect(recoveredSession?.runId).toBe("run-1");
+      expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
+    } finally {
+      await harness.unmount();
+      host.runtimeList = originalRuntimeList;
+      host.runsList = originalRunsList;
+    }
   });
 
   test("scans each runtime endpoint only once during repo reconciliation", async () => {

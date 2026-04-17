@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentRole,
@@ -17,6 +17,10 @@ import {
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
 import { useAgentStudioActiveSessionRuntimeData } from "./use-agent-studio-active-session-runtime-data";
+import {
+  buildSelectedSessionRuntimeRecoverySignal,
+  type RuntimeRecoveryRuntimeSource,
+} from "./use-agent-studio-session-runtime-recovery";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
@@ -38,6 +42,14 @@ type UseAgentStudioSelectionControllerArgs = {
     taskId: string;
     sessionId: string;
   }) => Promise<void>;
+  recoverSessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+  }) => Promise<boolean>;
+  runtimeRecoveryRuns: RunSummary[];
+  runtimeRecoveryRuntimes: RuntimeRecoveryRuntimeSource[];
+  refreshSessionRuntimeRecoverySources: () => Promise<void>;
   readSessionModelCatalog: (
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     runtimeConnection: AgentRuntimeConnection,
@@ -167,6 +179,10 @@ export function useAgentStudioSelectionController({
   scenarioFromQuery,
   updateQuery,
   hydrateRequestedTaskSessionHistory,
+  recoverSessionRuntimeAttachment,
+  runtimeRecoveryRuns,
+  runtimeRecoveryRuntimes,
+  refreshSessionRuntimeRecoverySources,
   readSessionModelCatalog,
   readSessionTodos,
   clearComposerInput,
@@ -351,6 +367,16 @@ export function useAgentStudioSelectionController({
   });
   const viewRole = viewSelection.role;
   const viewScenario = viewSelection.scenario;
+  const sessionRuntimeRecoverySignal = useMemo(
+    () =>
+      buildSelectedSessionRuntimeRecoverySignal({
+        activeTaskId: viewTaskId,
+        session: hydratedViewActiveSession,
+        runs: runtimeRecoveryRuns,
+        runtimes: runtimeRecoveryRuntimes,
+      }),
+    [hydratedViewActiveSession, runtimeRecoveryRuns, runtimeRecoveryRuntimes, viewTaskId],
+  );
 
   const {
     isActiveTaskHydrated,
@@ -365,6 +391,9 @@ export function useAgentStudioSelectionController({
     activeSession: hydratedViewActiveSession,
     agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
+    recoverSessionRuntimeAttachment,
+    refreshSessionRuntimeRecoverySources,
+    sessionRuntimeRecoverySignal,
   });
 
   return {

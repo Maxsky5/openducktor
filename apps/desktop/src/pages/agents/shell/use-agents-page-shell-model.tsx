@@ -1,4 +1,5 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
@@ -28,6 +29,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
+import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import { useAgentStudioBuildWorktreeRefresh } from "../use-agent-studio-build-worktree-refresh";
 import {
@@ -38,6 +40,10 @@ import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-sessio
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
+import {
+  type RuntimeRecoveryRuntimeSource,
+  refreshSelectedSessionRuntimeRecoverySources,
+} from "../use-agent-studio-session-runtime-recovery";
 import {
   useAgentStudioReadiness,
   useRunCompletionRecoverySignal,
@@ -136,6 +142,7 @@ const noopOpenSession = (
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeRepo, activeBranch, branches, activeWorkspace } = useWorkspaceState();
+  const queryClient = useQueryClient();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
@@ -159,6 +166,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const {
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
+    recoverSessionRuntimeAttachment,
     readSessionFileSearch,
     readSessionModelCatalog,
     readSessionSlashCommands,
@@ -211,6 +219,48 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   }, []);
 
   const clearComposerInput = signalContextSwitchIntent;
+  const runtimeListQueries = useQueries({
+    queries:
+      activeRepo === null
+        ? []
+        : runtimeDefinitions.map((definition) => ({
+            ...runtimeListQueryOptions(definition.kind, activeRepo),
+          })),
+  });
+  const runtimeRecoveryRuntimes = useMemo<RuntimeRecoveryRuntimeSource[]>(
+    () =>
+      runtimeListQueries
+        .flatMap((query) =>
+          (query.data ?? []).map((runtime) => ({
+            kind: runtime.kind,
+            runtimeId: runtime.runtimeId,
+            workingDirectory: runtime.workingDirectory,
+            route:
+              runtime.runtimeRoute.type === "local_http"
+                ? runtime.runtimeRoute.endpoint
+                : runtime.runtimeRoute.type,
+          })),
+        )
+        .sort((left, right) =>
+          [left.kind, left.runtimeId, left.workingDirectory, left.route]
+            .join(":")
+            .localeCompare(
+              [right.kind, right.runtimeId, right.workingDirectory, right.route].join(":"),
+            ),
+        ),
+    [runtimeListQueries],
+  );
+  const refreshSessionRuntimeRecoverySources = useCallback(async (): Promise<void> => {
+    if (!activeRepo) {
+      return;
+    }
+
+    await refreshSelectedSessionRuntimeRecoverySources({
+      queryClient,
+      repoPath: activeRepo,
+      refetchRuntimeLists: runtimeListQueries.map((query) => query.refetch),
+    });
+  }, [activeRepo, queryClient, runtimeListQueries]);
 
   const readiness = useAgentStudioReadiness({
     activeRepo,
@@ -237,6 +287,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
+    recoverSessionRuntimeAttachment,
+    runtimeRecoveryRuns: runs,
+    runtimeRecoveryRuntimes,
+    refreshSessionRuntimeRecoverySources,
     readSessionModelCatalog,
     readSessionTodos,
     clearComposerInput,

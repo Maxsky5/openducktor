@@ -79,6 +79,7 @@ export const fromPersistedSessionRecord = (
     runtimeRoute: null,
     workingDirectory: session.workingDirectory,
     historyHydrationState: "not_requested",
+    runtimeRecoveryState: "idle",
     messages: [],
     draftAssistantText: "",
     draftAssistantMessageId: null,
