@@ -121,6 +121,9 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).not.toContain("bg-card/80");
     expect(html).toContain("bg-studio-chrome");
     expect(html).toContain("size-[1.4rem]");
+    expect(html).toContain("cursor-pointer");
+    expect(html).not.toContain("cursor-grab");
+    expect(html).not.toContain("cursor-inherit");
 
     const { unmount } = render(
       createElement(

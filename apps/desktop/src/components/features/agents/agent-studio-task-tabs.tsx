@@ -68,7 +68,7 @@ function AgentStudioTaskTabLabel({
   isPreview?: boolean;
 }): ReactElement {
   const className = cn(
-    "h-9 max-w-[19rem] cursor-inherit justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
+    "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
     "text-inherit",
     !isPreview &&
       "data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -137,13 +137,12 @@ function AgentStudioTaskTabShell({
       style={style}
       className={cn(
         "group relative z-1 inline-flex h-10 shrink-0 select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
-        "cursor-grab active:cursor-grabbing",
+        "cursor-pointer",
         tab.isActive
           ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
           : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
         isDragSource && "opacity-0",
-        isDragOverlay &&
-          "z-50 scale-[1.03] border-input bg-card shadow-xl ring-1 ring-border/60 after:hidden",
+        isDragOverlay && "z-50 border-input bg-card after:hidden",
       )}
       {...dragListeners}
     >
