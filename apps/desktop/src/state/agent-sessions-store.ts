@@ -1,4 +1,3 @@
-import { requireRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
@@ -61,18 +60,16 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
 export const toAgentActivitySessionSummary = (
   session: AgentSessionState,
 ): AgentActivitySessionSummary => {
-  const repoScopedSession = requireRepoScopedAgentSessionState(session);
-
   return {
-    sessionId: repoScopedSession.sessionId,
-    taskId: repoScopedSession.taskId,
-    repoPath: repoScopedSession.repoPath,
-    role: repoScopedSession.role,
-    scenario: repoScopedSession.scenario,
-    status: repoScopedSession.status,
-    startedAt: repoScopedSession.startedAt,
-    hasPendingPermissions: repoScopedSession.pendingPermissions.length > 0,
-    hasPendingQuestions: repoScopedSession.pendingQuestions.length > 0,
+    sessionId: session.sessionId,
+    taskId: session.taskId,
+    repoPath: session.repoPath,
+    role: session.role,
+    scenario: session.scenario,
+    status: session.status,
+    startedAt: session.startedAt,
+    hasPendingPermissions: session.pendingPermissions.length > 0,
+    hasPendingQuestions: session.pendingQuestions.length > 0,
   };
 };
 

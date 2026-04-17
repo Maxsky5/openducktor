@@ -31,6 +31,7 @@ const sessionStateFixture: AgentSessionState = {
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
+  repoPath: "/tmp/repo",
   role: "build",
   scenario: "build_implementation_start",
   status: "idle",

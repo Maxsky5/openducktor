@@ -142,7 +142,7 @@ export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
   taskId: string;
-  repoPath?: string;
+  repoPath: string;
   runtimeKind?: RuntimeKind;
   role: AgentRole;
   scenario: AgentScenario;
@@ -175,10 +175,6 @@ export type AgentSessionLoadMode =
   | "requested_history"
   | "reconcile_live"
   | "recover_runtime_attachment";
-export type RepoScopedAgentSessionState = AgentSessionState & {
-  repoPath: string;
-};
-
 export type AgentSessionHistoryHydrationPolicy = "none" | "requested_only" | "live_if_empty";
 
 export type AgentSessionLoadOptions = {

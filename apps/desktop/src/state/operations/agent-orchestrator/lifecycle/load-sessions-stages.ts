@@ -168,6 +168,7 @@ const mergePersistedSessionRecord = (
 
   return {
     ...current,
+    repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
     role: persisted.role,

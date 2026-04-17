@@ -12,7 +12,6 @@ import type {
   AgentChatMessage,
   AgentSessionContextUsage,
   AgentSessionState,
-  RepoScopedAgentSessionState,
 } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
@@ -63,7 +62,7 @@ export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
   repoPath: string,
-): RepoScopedAgentSessionState => {
+): AgentSessionState => {
   const runtimeKind = readPersistedRuntimeKind(session);
 
   return createRepoScopedAgentSessionState(
