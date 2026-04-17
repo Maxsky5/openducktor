@@ -160,14 +160,20 @@ export function useAgentStudioTaskTabReorderDrag({
     },
     onDragEnd: clearDragState,
     onDrop: (event) => {
-      if (!draggedTaskId || !dropTarget) {
+      if (!draggedTaskId) {
         clearDragState();
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-      onReorderTab(draggedTaskId, dropTarget.taskId, dropTarget.position);
+
+      if (draggedTaskId === taskId) {
+        clearDragState();
+        return;
+      }
+
+      onReorderTab(draggedTaskId, taskId, getDragDropPosition(event));
       clearDragState();
     },
   });

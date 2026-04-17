@@ -278,9 +278,66 @@ describe("AgentStudioTaskTabs", () => {
 
     fireEvent(secondTab as HTMLElement, createDragEvent("dragstart", dataTransfer));
     fireEvent(firstTab as HTMLElement, createDragEvent("dragover", dataTransfer, { clientX: 10 }));
-    fireEvent(firstTab as HTMLElement, createDragEvent("drop", dataTransfer));
+    fireEvent(firstTab as HTMLElement, createDragEvent("drop", dataTransfer, { clientX: 10 }));
 
     expect(onReorderTab).toHaveBeenCalledWith("task-2", "task-1", "before");
+  });
+
+  test("uses the actual drop target when release happens before a matching dragover state update", () => {
+    const onReorderTab = mock(() => {});
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: {
+            ...buildModel(),
+            onReorderTab,
+          },
+        }),
+      ),
+    );
+
+    const firstTab = screen
+      .getByRole("tab", { name: /Add social login/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+    const secondTab = screen
+      .getByRole("tab", { name: /Ship QA checklist/i })
+      .closest("[data-task-tab-id]") as HTMLElement;
+
+    setElementRect(firstTab, {
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 40,
+      width: 100,
+      height: 40,
+    });
+    setElementRect(secondTab, {
+      x: 100,
+      y: 0,
+      left: 100,
+      top: 0,
+      right: 200,
+      bottom: 40,
+      width: 100,
+      height: 40,
+    });
+
+    const dataTransfer = {
+      effectAllowed: "all",
+      dropEffect: "move",
+      setData: () => {},
+      getData: () => "task-1",
+    };
+
+    fireEvent(firstTab, createDragEvent("dragstart", dataTransfer));
+    fireEvent(firstTab, createDragEvent("dragover", dataTransfer, { clientX: 10 }));
+    fireEvent(secondTab, createDragEvent("drop", dataTransfer, { clientX: 190 }));
+
+    expect(onReorderTab).toHaveBeenCalledWith("task-1", "task-2", "after");
   });
 
   test("auto-scrolls the overflowed strip when dragging near the edge", () => {
