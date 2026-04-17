@@ -351,11 +351,13 @@ export function useAgentOrchestratorOperations({
       sessionId,
       recoveryDedupKey,
       persistedRecords,
+      preloadedRuns,
     }: {
       taskId: string;
       sessionId: string;
       recoveryDedupKey?: string | null;
       persistedRecords?: AgentSessionRecord[];
+      preloadedRuns?: RunSummary[];
     }): Promise<boolean> => {
       updateSession(
         sessionId,
@@ -369,6 +371,7 @@ export function useAgentOrchestratorOperations({
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
+          ...(preloadedRuns ? { preloadedRuns } : {}),
         })
         .catch((error) => {
           updateSession(sessionId, (current) => withRuntimeRecoveryState(current, "failed"), {

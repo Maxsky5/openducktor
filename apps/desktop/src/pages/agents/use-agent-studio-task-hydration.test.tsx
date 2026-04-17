@@ -551,17 +551,18 @@ describe("useAgentStudioTaskHydration", () => {
 
   test("refreshes runtime recovery sources while waiting for a session runtime", async () => {
     const refreshSessionRuntimeRecoverySources = mock(async (): Promise<void> => {});
-    const originalSetInterval = globalThis.setInterval;
-    const originalClearInterval = globalThis.clearInterval;
+    const timerOwner = typeof window === "undefined" ? globalThis : window;
+    const originalSetInterval = timerOwner.setInterval;
+    const originalClearInterval = timerOwner.clearInterval;
     const intervalCallbacks: Array<() => void> = [];
 
-    globalThis.setInterval = ((callback: TimerHandler) => {
+    timerOwner.setInterval = ((callback: TimerHandler) => {
       if (typeof callback === "function") {
         intervalCallbacks.push(callback as () => void);
       }
       return intervalCallbacks.length as unknown as ReturnType<typeof setInterval>;
-    }) as unknown as typeof globalThis.setInterval;
-    globalThis.clearInterval = (() => undefined) as typeof globalThis.clearInterval;
+    }) as unknown as typeof timerOwner.setInterval;
+    timerOwner.clearInterval = (() => undefined) as typeof timerOwner.clearInterval;
 
     const harness = createHookHarness(
       createBaseArgs({
@@ -585,8 +586,8 @@ describe("useAgentStudioTaskHydration", () => {
       intervalCallbacks[0]?.();
       expect(refreshSessionRuntimeRecoverySources).toHaveBeenCalledTimes(1);
     } finally {
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
+      timerOwner.setInterval = originalSetInterval;
+      timerOwner.clearInterval = originalClearInterval;
       await harness.unmount();
     }
   });

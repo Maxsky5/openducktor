@@ -5,12 +5,16 @@ import { normalizeWorkingDirectory } from "@/state/operations/agent-orchestrator
 import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
+const RUNTIME_RECOVERY_POLLING_INTERVAL_MS = 2_000;
+
 export type RuntimeRecoveryRuntimeSource = {
   kind: string;
   runtimeId: string;
   workingDirectory: string;
   route: string;
 };
+
+const toRuntimeRecoverySignalEntry = (parts: readonly string[]): string => JSON.stringify(parts);
 
 export const buildSelectedSessionRuntimeRecoverySignal = ({
   activeTaskId,
@@ -52,14 +56,25 @@ export const buildSelectedSessionRuntimeRecoverySignal = ({
 
   return [
     ...relevantRuns.map((run) =>
-      [run.runId, run.taskId, run.state, run.worktreePath, run.runtimeKind].join(":"),
+      toRuntimeRecoverySignalEntry([
+        run.runId,
+        run.taskId,
+        run.state,
+        run.worktreePath,
+        run.runtimeKind,
+      ]),
     ),
     ...relevantRuntimes.map((runtime) =>
-      [runtime.kind, runtime.runtimeId, runtime.workingDirectory, runtime.route].join(":"),
+      toRuntimeRecoverySignalEntry([
+        runtime.kind,
+        runtime.runtimeId,
+        runtime.workingDirectory,
+        runtime.route,
+      ]),
     ),
   ]
     .sort()
-    .join("||");
+    .join("|");
 };
 
 export function useAgentStudioSessionRuntimeRecovery({
@@ -95,10 +110,10 @@ export function useAgentStudioSessionRuntimeRecovery({
   );
 
   useEffect(() => {
-    if (!activeSessionId || !shouldWaitForSessionRuntime) {
+    if (!activeSessionId) {
       setLastRuntimeRecoveryAttemptKey(null);
     }
-  }, [activeSessionId, shouldWaitForSessionRuntime]);
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (!activeSessionId || !runtimeRecoveryAttemptKey) {
@@ -134,7 +149,7 @@ export function useAgentStudioSessionRuntimeRecovery({
       void refreshSessionRuntimeRecoverySources().catch(() => {
         // The refresh path is best-effort; recovery attempts surface actionable failures.
       });
-    }, 2000);
+    }, RUNTIME_RECOVERY_POLLING_INTERVAL_MS);
 
     return () => {
       window.clearInterval(intervalId);

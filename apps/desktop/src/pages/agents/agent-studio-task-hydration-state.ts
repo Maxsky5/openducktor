@@ -58,7 +58,7 @@ export const getAgentStudioTaskHydrationDecision = ({
     activeTaskId,
     activeSessionId: activeSession?.sessionId ?? null,
   });
-  const blockedFromAutomaticRecovery = activeSession?.runtimeRecoveryState === "failed";
+  const blockedFromAutomaticRecovery = false;
   const shouldWaitForSessionRuntime =
     activeRecoveryKey !== null &&
     agentStudioReadinessState === "ready" &&

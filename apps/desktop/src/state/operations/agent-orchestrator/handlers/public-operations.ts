@@ -46,6 +46,7 @@ type CreatePublicOperationsArgs = {
     sessionId: string;
     recoveryDedupKey?: string | null;
     persistedRecords?: AgentSessionRecord[];
+    preloadedRuns?: RunSummary[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;

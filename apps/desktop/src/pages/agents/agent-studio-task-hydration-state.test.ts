@@ -66,25 +66,25 @@ describe("getAgentStudioTaskHydrationDecision", () => {
     expect(decision.shouldHydrateSessionHistory).toBe(false);
   });
 
-  test("blocks automatic recovery after a session runtime recovery failure", () => {
+  test("allows recovery to retry after a session runtime recovery failure", () => {
     const decision = getAgentStudioTaskHydrationDecision({
       activeRepo: "/repo-a",
       activeTaskId: "task-1",
       activeSession: {
         sessionId: "session-1",
-        role: "planner",
+        role: "build",
         runId: null,
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeRoute: null,
         runtimeRecoveryState: "failed",
       },
-      historyHydrationState: "failed",
+      historyHydrationState: "not_requested",
       sessionNeedsHydration: true,
       agentStudioReadinessState: "ready",
     });
 
-    expect(decision.blockedFromAutomaticRecovery).toBe(true);
-    expect(decision.isWaitingForRuntimeReadiness).toBe(false);
+    expect(decision.blockedFromAutomaticRecovery).toBe(false);
+    expect(decision.isWaitingForRuntimeReadiness).toBe(true);
     expect(decision.shouldHydrateSessionHistory).toBe(false);
   });
 });

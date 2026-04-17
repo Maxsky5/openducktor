@@ -3,7 +3,6 @@ import type { AgentSessionRecord, RuntimeInstanceSummary } from "@openducktor/co
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
-import { taskQueryKeys } from "@/state/queries/tasks";
 import {
   findSessionMessageForTest,
   sessionMessageAt,
@@ -882,10 +881,10 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/worktree",
       }),
     ];
-    appQueryClient.setQueryData(taskQueryKeys.runs("/tmp/repo"), [
+    const preloadedRuns = [
       {
         runId: "run-1",
-        runtimeKind: "opencode",
+        runtimeKind: "opencode" as const,
         runtimeRoute: {
           type: "local_http" as const,
           endpoint: "http://127.0.0.1:4444",
@@ -899,13 +898,14 @@ describe("agent-orchestrator-load-sessions", () => {
         lastMessage: null,
         startedAt: "2026-02-22T08:00:00.000Z",
       },
-    ]);
+    ];
 
     try {
       await loadAgentSessions("task-1", {
         mode: "recover_runtime_attachment",
         targetSessionId: "session-1",
         historyPolicy: "none",
+        preloadedRuns,
       });
     } finally {
       hostModule.host.agentSessionsList = originalList;

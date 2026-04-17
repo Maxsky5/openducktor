@@ -7,8 +7,7 @@ import {
   type TaskCard,
 } from "@openducktor/contracts";
 import { toast } from "sonner";
-import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
-import { taskQueryKeys } from "@/state/queries/tasks";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { host } from "../shared/host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
@@ -2066,18 +2065,22 @@ describe("use-agent-orchestrator-operations", () => {
 
     try {
       await harness.mount();
-      await harness.getLatest().loadAgentSessions("task-1", {
-        persistedRecords: [persistedBuildSessionFixture],
+      await harness.run(async () => {
+        await harness.getLatest().loadAgentSessions("task-1", {
+          persistedRecords: [persistedBuildSessionFixture],
+        });
       });
 
       expect(
         harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
       ).toBe("idle");
 
-      await harness.getLatest().recoverSessionRuntimeAttachment({
-        taskId: "task-1",
-        sessionId: "session-1",
-        persistedRecords: [persistedBuildSessionFixture],
+      await harness.run(async () => {
+        await harness.getLatest().recoverSessionRuntimeAttachment({
+          taskId: "task-1",
+          sessionId: "session-1",
+          persistedRecords: [persistedBuildSessionFixture],
+        });
       });
 
       expect(
@@ -2085,12 +2088,14 @@ describe("use-agent-orchestrator-operations", () => {
       ).toBe("waiting_for_runtime");
 
       host.runsList = async () => [runningRunFixture];
-      appQueryClient.setQueryData(taskQueryKeys.runs("/tmp/repo"), [runningRunFixture]);
 
-      await harness.getLatest().recoverSessionRuntimeAttachment({
-        taskId: "task-1",
-        sessionId: "session-1",
-        persistedRecords: [persistedBuildSessionFixture],
+      await harness.run(async () => {
+        await harness.getLatest().recoverSessionRuntimeAttachment({
+          taskId: "task-1",
+          sessionId: "session-1",
+          persistedRecords: [persistedBuildSessionFixture],
+          preloadedRuns: [runningRunFixture],
+        });
       });
 
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");

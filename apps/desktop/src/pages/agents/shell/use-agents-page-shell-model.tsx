@@ -227,27 +227,23 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
             ...runtimeListQueryOptions(definition.kind, activeRepo),
           })),
   });
+  const runtimeListRefetchersRef = useRef<Array<() => Promise<unknown>>>([]);
+  useEffect(() => {
+    runtimeListRefetchersRef.current = runtimeListQueries.map((query) => query.refetch);
+  }, [runtimeListQueries]);
   const runtimeRecoveryRuntimes = useMemo<RuntimeRecoveryRuntimeSource[]>(
     () =>
-      runtimeListQueries
-        .flatMap((query) =>
-          (query.data ?? []).map((runtime) => ({
-            kind: runtime.kind,
-            runtimeId: runtime.runtimeId,
-            workingDirectory: runtime.workingDirectory,
-            route:
-              runtime.runtimeRoute.type === "local_http"
-                ? runtime.runtimeRoute.endpoint
-                : runtime.runtimeRoute.type,
-          })),
-        )
-        .sort((left, right) =>
-          [left.kind, left.runtimeId, left.workingDirectory, left.route]
-            .join(":")
-            .localeCompare(
-              [right.kind, right.runtimeId, right.workingDirectory, right.route].join(":"),
-            ),
-        ),
+      runtimeListQueries.flatMap((query) =>
+        (query.data ?? []).map((runtime) => ({
+          kind: runtime.kind,
+          runtimeId: runtime.runtimeId,
+          workingDirectory: runtime.workingDirectory,
+          route:
+            runtime.runtimeRoute.type === "local_http"
+              ? runtime.runtimeRoute.endpoint
+              : runtime.runtimeRoute.type,
+        })),
+      ),
     [runtimeListQueries],
   );
   const refreshSessionRuntimeRecoverySources = useCallback(async (): Promise<void> => {
@@ -258,9 +254,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     await refreshSelectedSessionRuntimeRecoverySources({
       queryClient,
       repoPath: activeRepo,
-      refetchRuntimeLists: runtimeListQueries.map((query) => query.refetch),
+      refetchRuntimeLists: runtimeListRefetchersRef.current,
     });
-  }, [activeRepo, queryClient, runtimeListQueries]);
+  }, [activeRepo, queryClient]);
 
   const readiness = useAgentStudioReadiness({
     activeRepo,
