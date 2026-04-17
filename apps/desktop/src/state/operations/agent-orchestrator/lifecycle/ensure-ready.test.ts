@@ -87,7 +87,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.hasSession = () => true;
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -146,7 +150,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -235,7 +243,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -341,7 +353,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -427,7 +443,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -502,7 +522,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef,
@@ -570,7 +594,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef,
@@ -648,7 +676,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -699,7 +731,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.hasSession = () => false;
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 1 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -746,7 +782,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.hasSession = () => false;
 
     const ensureReady = createEnsureSessionReady({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef,
       previousRepoRef,

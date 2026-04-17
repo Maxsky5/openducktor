@@ -22,7 +22,7 @@ impl AppService {
         task_id: &str,
     ) -> Result<DevServerGroupState> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        let repo_config = self.workspace_get_repo_config_by_repo_path(repo_path.as_str())?;
         let worktree_path = self.resolve_dev_server_worktree_path(repo_path.as_str(), task_id);
         let key = dev_server_group_key(repo_path.as_str(), task_id);
         let mut groups = self
@@ -55,7 +55,7 @@ impl AppService {
         emitter: DevServerEmitter,
     ) -> Result<DevServerGroupState> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        let repo_config = self.workspace_get_repo_config_by_repo_path(repo_path.as_str())?;
         if repo_config.dev_servers.is_empty() {
             return Err(anyhow!(
                 "No builder dev server scripts are configured for {repo_path}. Add them in repository settings first."
@@ -130,7 +130,7 @@ impl AppService {
 
     pub fn dev_server_stop(&self, repo_path: &str, task_id: &str) -> Result<DevServerGroupState> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        let repo_config = self.workspace_get_repo_config_by_repo_path(repo_path.as_str())?;
         let key = dev_server_group_key(repo_path.as_str(), task_id);
         {
             let mut groups = self

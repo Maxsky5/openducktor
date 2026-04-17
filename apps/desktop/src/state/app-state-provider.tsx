@@ -67,15 +67,15 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       <SpecStateProvider>
         <ChecksStateProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
           <TasksStateProvider>
-            <AgentStudioStateProvider agentEngine={agentEngine}>
+            <WorkspaceStateProvider>
               <DelegationStateProvider>
-                <WorkspaceStateProvider>
+                <AgentStudioStateProvider agentEngine={agentEngine}>
                   <AppLifecycleStateProvider>
                     <AutopilotProvider>{children}</AutopilotProvider>
                   </AppLifecycleStateProvider>
-                </WorkspaceStateProvider>
+                </AgentStudioStateProvider>
               </DelegationStateProvider>
-            </AgentStudioStateProvider>
+            </WorkspaceStateProvider>
           </TasksStateProvider>
         </ChecksStateProvider>
       </SpecStateProvider>

@@ -41,7 +41,11 @@ const MODEL_SELECTION = {
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: "/repo",
+  activeWorkspace: {
+    repoPath: "/repo",
+    workspaceId: "workspace-1",
+    workspaceName: "Active Workspace",
+  },
   taskId: "task-1",
   role: "spec",
   activeSession: null,
@@ -90,6 +94,9 @@ beforeEach(() => {
   toastErrorMock.mockClear();
   host.workspaceGetRepoConfig = async () =>
     ({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
       promptOverrides: {},
     }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
   host.workspaceGetSettingsSnapshot = async () => ({
@@ -106,7 +113,7 @@ beforeEach(() => {
     autopilot: {
       rules: [],
     },
-    repos: {},
+    workspaces: {},
     globalPromptOverrides: {},
   });
   host.buildContinuationTargetGet = async () => ({

@@ -61,6 +61,9 @@ const CODEX_DESCRIPTOR = {
 } satisfies RuntimeDescriptor;
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",

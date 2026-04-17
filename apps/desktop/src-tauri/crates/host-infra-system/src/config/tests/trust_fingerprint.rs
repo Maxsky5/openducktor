@@ -1,4 +1,7 @@
-use super::{fake_git_workspace, hook_set_fingerprint, HookSet, RepoConfig, TestStoreHarness};
+use super::{
+    fake_git_workspace, hook_set_fingerprint, workspace_identity, HookSet, RepoConfig,
+    TestStoreHarness,
+};
 use crate::GitTargetBranch;
 
 #[test]
@@ -9,14 +12,18 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
     let repo = root.join("repo-main");
     fake_git_workspace(&repo);
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
     store
-        .add_workspace(repo_str.as_str())
+        .add_workspace(&workspace_id, &workspace_name, repo_str.as_str())
         .expect("workspace should be added before updating config");
 
     let updated = store
         .update_repo_config(
-            repo_str.as_str(),
+            workspace_id.as_str(),
             RepoConfig {
+                workspace_id: workspace_id.clone(),
+                workspace_name: workspace_name.clone(),
+                repo_path: repo_path.clone(),
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                 branch_prefix: "duck".to_string(),
@@ -44,7 +51,7 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
 
     let trusted = store
         .set_repo_trust_hooks(
-            repo_str.as_str(),
+            workspace_id.as_str(),
             true,
             Some(hook_set_fingerprint(&Default::default())),
         )
@@ -58,7 +65,7 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
     );
 
     let repo_config = store
-        .repo_config(repo_str.as_str())
+        .repo_config(workspace_id.as_str())
         .expect("repo config should exist");
     assert!(repo_config.trusted_hooks);
     assert_eq!(
@@ -67,7 +74,7 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
     );
 
     let optional = store
-        .repo_config_optional(repo_str.as_str())
+        .repo_config_optional(workspace_id.as_str())
         .expect("optional lookup should succeed");
     assert!(optional.is_some());
 }
@@ -80,14 +87,18 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
     let repo = root.join("repo");
     fake_git_workspace(&repo);
     let repo_str = repo.to_string_lossy().to_string();
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
     store
-        .add_workspace(repo_str.as_str())
+        .add_workspace(&workspace_id, &workspace_name, repo_str.as_str())
         .expect("workspace should be added before updating config");
 
     store
         .update_repo_config(
-            repo_str.as_str(),
+            workspace_id.as_str(),
             RepoConfig {
+                workspace_id: workspace_id.clone(),
+                workspace_name,
+                repo_path,
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                 branch_prefix: "duck".to_string(),
@@ -109,7 +120,7 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
 
     store
         .set_repo_trust_hooks(
-            repo_str.as_str(),
+            workspace_id.as_str(),
             true,
             Some(hook_set_fingerprint(&Default::default())),
         )
@@ -117,7 +128,7 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
 
     store
         .update_repo_hooks(
-            repo_str.as_str(),
+            workspace_id.as_str(),
             HookSet {
                 pre_start: vec!["echo pre".to_string()],
                 post_complete: Vec::new(),
@@ -126,7 +137,7 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
         .expect("updating hooks should succeed");
 
     let repo_config = store
-        .repo_config(repo_str.as_str())
+        .repo_config(workspace_id.as_str())
         .expect("repo config should exist");
     assert!(!repo_config.trusted_hooks);
     assert!(repo_config.trusted_hooks_fingerprint.is_none());

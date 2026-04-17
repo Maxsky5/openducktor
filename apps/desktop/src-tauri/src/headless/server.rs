@@ -884,8 +884,12 @@ mod tests {
         let root = unique_temp_path("server");
         fs::create_dir_all(&root).expect("test root should exist");
         let config_store = AppConfigStore::from_path(root.join("config.json"));
-        let task_store: Arc<dyn TaskStore> =
-            Arc::new(BeadsTaskStore::with_metadata_namespace("openducktor"));
+        let task_store: Arc<dyn TaskStore> = Arc::new(
+            BeadsTaskStore::with_metadata_namespace_and_config(
+                "openducktor",
+                config_store.clone(),
+            ),
+        );
         let service = Arc::new(AppService::new(task_store, config_store));
         let registry = Arc::new(build_registry().expect("registry should build"));
 
@@ -906,18 +910,31 @@ mod tests {
 
     fn test_state_fixture_with_task_store(
         tasks: Vec<TaskCard>,
-    ) -> (TestStateFixture, Arc<Mutex<TestTaskStoreState>>, PathBuf) {
+    ) -> (TestStateFixture, Arc<Mutex<TestTaskStoreState>>, PathBuf, String) {
         let root = unique_temp_path("server-task-store");
         fs::create_dir_all(&root).expect("test root should exist");
         let repo_path = root.join("repo");
         fs::create_dir_all(repo_path.join(".git")).expect("test repo should exist");
+        let workspace_id = "repo".to_string();
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         config_store
-            .add_workspace(repo_path.to_string_lossy().as_ref())
+            .add_workspace(
+                workspace_id.as_str(),
+                "repo",
+                repo_path.to_string_lossy().as_ref(),
+            )
             .expect("workspace should be registered");
         config_store
-            .update_repo_config(repo_path.to_string_lossy().as_ref(), RepoConfig::default())
+            .update_repo_config(
+                workspace_id.as_str(),
+                RepoConfig {
+                    workspace_id: workspace_id.clone(),
+                    workspace_name: "repo".to_string(),
+                    repo_path: repo_path.to_string_lossy().to_string(),
+                    ..RepoConfig::default()
+                },
+            )
             .expect("repo config should be saved");
 
         let task_state = Arc::new(Mutex::new(TestTaskStoreState {
@@ -945,6 +962,7 @@ mod tests {
             },
             task_state,
             repo_path,
+            workspace_id,
         )
     }
 
@@ -989,13 +1007,14 @@ mod tests {
 
     #[tokio::test]
     async fn invoke_handler_creates_task_through_flat_odt_mcp_bridge_payload() {
-        let (fixture, task_state, repo_path) = test_state_fixture_with_task_store(Vec::new());
+        let (fixture, task_state, repo_path, workspace_id) =
+            test_state_fixture_with_task_store(Vec::new());
 
         let response = invoke_handler(
             Path("odt_create_task".to_string()),
             State(fixture.state.clone()),
             Ok(Json(json!({
-                "repoPath": repo_path,
+                "workspaceId": workspace_id,
                 "title": "Bridge task",
                 "issueType": "task",
                 "priority": 2,
@@ -1042,13 +1061,14 @@ mod tests {
             make_task("task-1", "Bridge task", TaskStatus::Open, vec!["mcp"]),
             make_task("task-2", "Closed task", TaskStatus::Closed, vec!["mcp"]),
         ];
-        let (fixture, _task_state, repo_path) = test_state_fixture_with_task_store(tasks);
+        let (fixture, _task_state, _repo_path, workspace_id) =
+            test_state_fixture_with_task_store(tasks);
 
         let response = invoke_handler(
             Path("odt_search_tasks".to_string()),
             State(fixture.state.clone()),
             Ok(Json(json!({
-                "repoPath": repo_path,
+                "workspaceId": workspace_id,
                 "status": "open",
                 "title": "Bridge",
                 "tags": ["mcp"],
@@ -1078,13 +1098,14 @@ mod tests {
             TaskStatus::Open,
             vec!["mcp"],
         )];
-        let (fixture, _task_state, repo_path) = test_state_fixture_with_task_store(tasks);
+        let (fixture, _task_state, _repo_path, workspace_id) =
+            test_state_fixture_with_task_store(tasks);
 
         let response = invoke_handler(
             Path("odt_read_task_documents".to_string()),
             State(fixture.state.clone()),
             Ok(Json(json!({
-                "repoPath": repo_path,
+                "workspaceId": workspace_id,
                 "taskId": "task-1",
             }))),
         )

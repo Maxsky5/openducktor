@@ -15,6 +15,8 @@ use serde_json::json;
 use std::{fs, path::Path};
 use tauri::Manager;
 
+const WORKSPACE_ID: &str = "repo";
+
 #[test]
 fn git_create_worktree_invalidates_authorized_worktree_cache() {
     let fixture = setup_command_git_fixture_with_mutations(
@@ -231,7 +233,7 @@ fn workspace_select_invalidates_authorized_worktree_cache() {
 
     tauri::async_runtime::block_on(workspace_select(
         fixture.app.state(),
-        fixture.repo_path.clone(),
+        WORKSPACE_ID.to_string(),
     ))
     .expect("workspace_select should succeed");
 
@@ -294,7 +296,7 @@ fn workspace_select_invalidates_only_selected_repo_cache_entry() {
 
     tauri::async_runtime::block_on(workspace_select(
         fixture.app.state(),
-        fixture.repo_path.clone(),
+        WORKSPACE_ID.to_string(),
     ))
     .expect("workspace_select should succeed");
 
@@ -365,7 +367,7 @@ fn workspace_update_repo_config_invalidates_authorized_worktree_cache() {
 
     tauri::async_runtime::block_on(workspace_update_repo_config(
         fixture.app.state(),
-        fixture.repo_path.clone(),
+        WORKSPACE_ID.to_string(),
         RepoConfigPayload {
             default_runtime_kind: None,
             worktree_base_path: Some(
@@ -452,7 +454,7 @@ fn workspace_save_repo_settings_invalidates_authorized_worktree_cache() {
     tauri::async_runtime::block_on(workspace_save_repo_settings(
         fixture.app.state(),
         fixture.app.handle().clone(),
-        fixture.repo_path.clone(),
+        WORKSPACE_ID.to_string(),
         RepoSettingsPayload {
             default_runtime_kind: None,
             worktree_base_path: Some(

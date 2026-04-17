@@ -4,8 +4,9 @@ use host_domain::{
     RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
 };
 use host_infra_system::{
-    compute_beads_database_name, is_process_alive, read_shared_dolt_server_state,
-    resolve_repo_beads_attachment_dir, SharedDoltServerAcquisition, SHARED_DOLT_SERVER_HOST,
+    compute_beads_database_name, compute_beads_database_name_for_workspace, is_process_alive,
+    read_shared_dolt_server_state, resolve_repo_beads_attachment_dir,
+    resolve_workspace_beads_attachment_dir, SharedDoltServerAcquisition, SHARED_DOLT_SERVER_HOST,
 };
 use serde::Deserialize;
 use std::fs;
@@ -110,11 +111,24 @@ enum BdWhereCommandOutput<'a> {
 }
 
 impl BeadsLifecycle {
-    pub(crate) fn diagnose_repo_store(&self, repo_path: &Path) -> Result<RepoStoreHealth> {
-        let repo_key = Self::repo_key(repo_path);
-        let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
+    pub(crate) fn diagnose_repo_store_for_identity(
+        &self,
+        repo_path: &Path,
+        repo_key_override: Option<&str>,
+        workspace_id: Option<&str>,
+    ) -> Result<RepoStoreHealth> {
+        let repo_key = repo_key_override
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| Self::repo_key(repo_path));
+        let beads_dir = match workspace_id {
+            Some(workspace_id) => resolve_workspace_beads_attachment_dir(workspace_id)?,
+            None => resolve_repo_beads_attachment_dir(repo_path)?,
+        };
         let attachment_path = beads_dir.to_string_lossy().to_string();
-        let database_name = compute_beads_database_name(repo_path)?;
+        let database_name = match workspace_id {
+            Some(workspace_id) => compute_beads_database_name_for_workspace(workspace_id)?,
+            None => compute_beads_database_name(repo_path)?,
+        };
         let base_shared_server = self.repo_store_shared_server_snapshot()?;
 
         if self.is_repo_initializing(&repo_key)? {
@@ -142,34 +156,38 @@ impl BeadsLifecycle {
             ));
         }
 
-        let (env, shared_server, verify_contract) =
-            match self.diagnostics_env_for_repo_store(repo_path, &beads_dir, &base_shared_server) {
-                Ok(Some(values)) => values,
-                Ok(None) => {
-                    let detail = LifecycleError::SharedDoltStateMissing {
-                        repo_path: repo_path.to_path_buf(),
-                    }
-                    .to_string();
-                    return Ok(self.build_repo_store_health(
-                        RepoStoreHealthCategory::SharedServerUnavailable,
-                        RepoStoreHealthStatus::Blocking,
-                        Some(detail),
-                        attachment_path,
-                        database_name,
-                        &base_shared_server,
-                    ));
+        let (env, shared_server, verify_contract) = match self.diagnostics_env_for_repo_store(
+            repo_path,
+            &beads_dir,
+            &base_shared_server,
+            workspace_id,
+        ) {
+            Ok(Some(values)) => values,
+            Ok(None) => {
+                let detail = LifecycleError::SharedDoltStateMissing {
+                    repo_path: repo_path.to_path_buf(),
                 }
-                Err(error) => {
-                    return Ok(self.build_repo_store_health(
-                        RepoStoreHealthCategory::AttachmentContractInvalid,
-                        RepoStoreHealthStatus::Blocking,
-                        Some(error.to_string()),
-                        attachment_path,
-                        database_name,
-                        &base_shared_server,
-                    ));
-                }
-            };
+                .to_string();
+                return Ok(self.build_repo_store_health(
+                    RepoStoreHealthCategory::SharedServerUnavailable,
+                    RepoStoreHealthStatus::Blocking,
+                    Some(detail),
+                    attachment_path,
+                    database_name,
+                    &base_shared_server,
+                ));
+            }
+            Err(error) => {
+                return Ok(self.build_repo_store_health(
+                    RepoStoreHealthCategory::AttachmentContractInvalid,
+                    RepoStoreHealthStatus::Blocking,
+                    Some(error.to_string()),
+                    attachment_path,
+                    database_name,
+                    &base_shared_server,
+                ));
+            }
+        };
 
         let detail_from_readiness = |readiness: &RepoReadiness| match readiness {
             RepoReadiness::Ready => {
@@ -186,7 +204,13 @@ impl BeadsLifecycle {
             )),
         };
 
-        match self.verify_repo_initialized_with_env(repo_path, &beads_dir, &env, verify_contract) {
+        match self.verify_repo_initialized_with_env(
+            repo_path,
+            &beads_dir,
+            &env,
+            verify_contract,
+            workspace_id,
+        ) {
             Ok(readiness) => {
                 let (category, status) = match &readiness {
                     RepoReadiness::Ready => (
@@ -235,17 +259,27 @@ impl BeadsLifecycle {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn verify_repo_initialized(
         &self,
         repo_path: &Path,
         beads_dir: &Path,
     ) -> Result<RepoReadiness> {
+        self.verify_repo_initialized_for_identity(repo_path, beads_dir, None)
+    }
+
+    pub(crate) fn verify_repo_initialized_for_identity(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<RepoReadiness> {
         if !attachment_dir_exists(beads_dir)? {
             return Ok(RepoReadiness::MissingAttachment);
         }
 
-        let env = self.build_bd_env(repo_path)?;
-        self.verify_repo_initialized_with_env(repo_path, beads_dir, &env, true)
+        let env = self.build_bd_env_for_identity(repo_path, workspace_id)?;
+        self.verify_repo_initialized_with_env(repo_path, beads_dir, &env, true, workspace_id)
     }
 
     fn verify_repo_initialized_with_env(
@@ -254,9 +288,12 @@ impl BeadsLifecycle {
         beads_dir: &Path,
         env: &[(String, String)],
         verify_contract: bool,
+        workspace_id: Option<&str>,
     ) -> Result<RepoReadiness> {
         if verify_contract {
-            if let Err(error) = self.verify_repo_attachment_contract(repo_path, beads_dir, env) {
+            if let Err(error) =
+                self.verify_repo_attachment_contract(repo_path, beads_dir, env, workspace_id)
+            {
                 return Ok(RepoReadiness::BrokenAttachmentContract {
                     reason: error.to_string(),
                 });
@@ -264,7 +301,11 @@ impl BeadsLifecycle {
         }
 
         let shared_dolt_connection = SharedDoltConnection::from_env(env)?;
-        match self.probe_shared_database_presence(repo_path, &shared_dolt_connection)? {
+        match self.probe_shared_database_presence(
+            repo_path,
+            &shared_dolt_connection,
+            workspace_id,
+        )? {
             SharedDatabaseProbe::Available => {}
             SharedDatabaseProbe::Missing { database_name } => {
                 return Ok(RepoReadiness::MissingSharedDatabase { database_name });
@@ -274,7 +315,7 @@ impl BeadsLifecycle {
             }
         }
 
-        self.probe_beads_where(repo_path, beads_dir, env)
+        self.probe_beads_where(repo_path, beads_dir, env, workspace_id)
     }
 
     fn diagnostics_env_for_repo_store(
@@ -282,10 +323,11 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
         shared_server: &SharedServerSnapshot,
+        workspace_id: Option<&str>,
     ) -> Result<Option<DiagnosticsEnv>> {
         if shared_server.host.is_some() && shared_server.port.is_some() {
             return Ok(Some((
-                self.build_bd_env(repo_path)?,
+                self.build_bd_env_for_identity(repo_path, workspace_id)?,
                 shared_server.clone(),
                 true,
             )));
@@ -293,14 +335,14 @@ impl BeadsLifecycle {
 
         if !self.command_runner().uses_real_processes() {
             return Ok(Some((
-                self.build_bd_env(repo_path)?,
+                self.build_bd_env_for_identity(repo_path, workspace_id)?,
                 shared_server.clone(),
                 true,
             )));
         }
 
         let metadata = Self::read_attachment_metadata(beads_dir)?;
-        Self::validate_attachment_metadata_for_diagnostics(repo_path, &metadata)?;
+        Self::validate_attachment_metadata_for_diagnostics(repo_path, &metadata, workspace_id)?;
         Ok(None)
     }
 
@@ -330,6 +372,7 @@ impl BeadsLifecycle {
     fn validate_attachment_metadata_for_diagnostics(
         repo_path: &Path,
         metadata: &BeadsAttachmentMetadata,
+        workspace_id: Option<&str>,
     ) -> Result<()> {
         if metadata.backend.as_deref() != Some("dolt") {
             return Err(anyhow!(
@@ -359,7 +402,10 @@ impl BeadsLifecycle {
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| anyhow!("Beads attachment user is missing from metadata"))?;
 
-        let expected_database = compute_beads_database_name(repo_path)?;
+        let expected_database = match workspace_id {
+            Some(workspace_id) => compute_beads_database_name_for_workspace(workspace_id)?,
+            None => compute_beads_database_name(repo_path)?,
+        };
         if metadata.dolt_database.as_deref() != Some(expected_database.as_str()) {
             return Err(anyhow!(
                 "Beads attachment database is {:?}, expected {}",
@@ -376,12 +422,13 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
         env: &[(String, String)],
+        workspace_id: Option<&str>,
     ) -> Result<RepoReadiness> {
         let env_refs = env
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect::<Vec<_>>();
-        let working_dir = self.ensure_beads_working_dir(repo_path)?;
+        let working_dir = self.ensure_beads_working_dir_for_identity(repo_path, workspace_id)?;
         let (ok, stdout, stderr) = self.command_runner().run_allow_failure_with_env(
             "bd",
             &["where", "--json"],
@@ -614,8 +661,12 @@ impl BeadsLifecycle {
         &self,
         repo_path: &Path,
         shared_dolt_connection: &SharedDoltConnection,
+        workspace_id: Option<&str>,
     ) -> Result<SharedDatabaseProbe> {
-        let expected_database = compute_beads_database_name(repo_path)?;
+        let expected_database = match workspace_id {
+            Some(workspace_id) => compute_beads_database_name_for_workspace(workspace_id)?,
+            None => compute_beads_database_name(repo_path)?,
+        };
         let mut args = shared_dolt_connection.show_databases_args().to_vec();
         args.push("show databases");
         let (ok, stdout, stderr) =
@@ -650,6 +701,7 @@ impl BeadsLifecycle {
         repo_path: &Path,
         beads_dir: &Path,
         env: &[(String, String)],
+        workspace_id: Option<&str>,
     ) -> Result<()> {
         let metadata_path = beads_dir.join("metadata.json");
         if !metadata_path.is_file() {
@@ -673,7 +725,10 @@ impl BeadsLifecycle {
                 )
             })?;
 
-        let expected_database = compute_beads_database_name(repo_path)?;
+        let expected_database = match workspace_id {
+            Some(workspace_id) => compute_beads_database_name_for_workspace(workspace_id)?,
+            None => compute_beads_database_name(repo_path)?,
+        };
         let expected_host = Self::required_env_value(env, "BEADS_DOLT_SERVER_HOST")?;
         let expected_port_value = Self::required_env_value(env, "BEADS_DOLT_SERVER_PORT")?;
         let expected_port =

@@ -117,6 +117,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         },
     );
@@ -336,6 +337,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         },
     );
@@ -410,7 +412,7 @@ fn shutdown_stops_running_dev_server_process_groups() -> Result<()> {
         },
     );
     let workspace = service.workspace_add(&repo_path.to_string_lossy())?;
-    let canonical_repo_path = workspace.path;
+    let canonical_repo_path = workspace.repo_path;
 
     let mut child = spawn_sleep_process_group(20);
     let pid = child.id();
@@ -1028,14 +1030,14 @@ fn default_mcp_workspace_root_ignores_empty_override() -> Result<()> {
 
 #[test]
 fn parse_mcp_command_json_accepts_non_empty_string_array() {
-    let parsed = parse_mcp_command_json(r#"["openducktor-mcp","--repo","/tmp/repo"]"#)
+    let parsed = parse_mcp_command_json(r#"["openducktor-mcp","--workspace-id","repo"]"#)
         .expect("command should parse");
     assert_eq!(
         parsed,
         vec![
             "openducktor-mcp".to_string(),
-            "--repo".to_string(),
-            "/tmp/repo".to_string()
+            "--workspace-id".to_string(),
+            "repo".to_string()
         ]
     );
 }
@@ -1049,14 +1051,14 @@ fn parse_mcp_command_json_rejects_invalid_payloads() {
 
 #[test]
 fn parse_mcp_command_json_trims_entries() {
-    let parsed = parse_mcp_command_json(r#"["  openducktor-mcp  "," --repo "," /tmp/repo "]"#)
+    let parsed = parse_mcp_command_json(r#"["  openducktor-mcp  "," --workspace-id "," repo "]"#)
         .expect("command should parse");
     assert_eq!(
         parsed,
         vec![
             "openducktor-mcp".to_string(),
-            "--repo".to_string(),
-            "/tmp/repo".to_string()
+            "--workspace-id".to_string(),
+            "repo".to_string()
         ]
     );
 }
@@ -1072,9 +1074,8 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
         r#"["/usr/local/bin/openducktor-mcp","--stdio"]"#,
     );
 
-    let config =
-        build_opencode_config_content(Path::new("/tmp/openducktor-repo"), "http://127.0.0.1:14327")
-            .expect("config should serialize");
+    let config = build_opencode_config_content("repo", "http://127.0.0.1:14327")
+        .expect("config should serialize");
 
     match previous {
         Some(value) => std::env::set_var("OPENDUCKTOR_MCP_COMMAND_JSON", value),
@@ -1093,6 +1094,6 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
     assert_eq!(command, vec!["/usr/local/bin/openducktor-mcp", "--stdio"]);
 
     let env = &parsed["mcp"]["openducktor"]["environment"];
-    assert_eq!(env["ODT_REPO_PATH"].as_str(), Some("/tmp/openducktor-repo"));
+    assert_eq!(env["ODT_WORKSPACE_ID"].as_str(), Some("repo"));
     assert_eq!(env["ODT_HOST_URL"].as_str(), Some("http://127.0.0.1:14327"));
 }

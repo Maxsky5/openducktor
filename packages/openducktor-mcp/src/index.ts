@@ -72,8 +72,8 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
       continue;
     }
 
-    if (current === "--repo") {
-      next.repoPath = value;
+    if (current === "--workspace-id") {
+      next.workspaceId = value;
       index += 1;
       continue;
     }
@@ -300,7 +300,3 @@ if (import.meta.main) {
     process.exit(1);
   });
 }
-
-// `@openducktor/mcp` is intentionally published as a standalone CLI/server package.
-// The package root does not expose a supported JavaScript or TypeScript API.
-export {};

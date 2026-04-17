@@ -4,6 +4,7 @@ import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } fro
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
+export const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const DEFAULT_SOFT_GUARDRAILS = {
   cpuHighWatermarkPercent: 85,
@@ -88,7 +89,21 @@ export const repoAgentDefaultsSchema = z.object({
 });
 export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 
+export const workspaceIdSchema = z
+  .string()
+  .trim()
+  .min(1, "Workspace ID cannot be blank.")
+  .regex(
+    WORKSPACE_ID_PATTERN,
+    "Workspace ID must contain only lowercase letters, digits, and single dashes.",
+  );
+
+export const workspaceNameSchema = trimmedRequiredString("Workspace name");
+
 export const repoConfigSchema = z.object({
+  workspaceId: workspaceIdSchema,
+  workspaceName: workspaceNameSchema,
+  repoPath: trimmedRequiredString("Repository path"),
   defaultRuntimeKind: runtimeKindSchema,
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
@@ -183,16 +198,16 @@ export const themeSchema = themeValueSchema.default(DEFAULT_THEME);
 export type Theme = z.infer<typeof themeValueSchema>;
 
 export const globalConfigSchema = z.object({
-  version: z.literal(1),
-  activeRepo: z.string().optional(),
+  version: z.literal(2),
+  activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
-  repos: z.record(z.string(), repoConfigSchema).default({}),
+  workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
-  recentRepos: z.array(z.string()).default([]),
+  recentWorkspaces: z.array(workspaceIdSchema).default([]),
 });
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
@@ -202,7 +217,7 @@ export const settingsSnapshotSchema = z.object({
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
-  repos: z.record(z.string(), repoConfigSchema).default({}),
+  workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });
 export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;

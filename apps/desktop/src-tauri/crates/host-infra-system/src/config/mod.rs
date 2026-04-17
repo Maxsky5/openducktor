@@ -5,6 +5,9 @@ mod security;
 mod store;
 mod types;
 
+pub use migrate::{
+    derive_workspace_name_from_repo_path, propose_workspace_id, uniquify_workspace_id,
+};
 pub use normalize::{normalize_hook_set, normalize_repo_dev_servers};
 pub use persistence::resolve_openducktor_base_dir;
 pub use store::{AppConfigStore, RuntimeConfigStore};

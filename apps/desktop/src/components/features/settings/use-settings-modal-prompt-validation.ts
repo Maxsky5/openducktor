@@ -42,14 +42,14 @@ export const useSettingsModalPromptValidation = ({
 
     const repoErrorsByPath: Record<string, Partial<Record<AgentPromptTemplateId, string>>> = {};
     const repoErrorCountByPath: Record<string, number> = {};
-    for (const [repoPath, repoConfig] of Object.entries(snapshotDraft.repos)) {
+    for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
       const repoErrors = buildPromptOverrideValidationErrors(repoConfig.promptOverrides);
       const repoErrorCount = Object.keys(repoErrors).length;
       if (repoErrorCount === 0) {
         continue;
       }
-      repoErrorsByPath[repoPath] = repoErrors;
-      repoErrorCountByPath[repoPath] = repoErrorCount;
+      repoErrorsByPath[workspaceId] = repoErrors;
+      repoErrorCountByPath[workspaceId] = repoErrorCount;
       repoTotalErrorCount += repoErrorCount;
       totalErrorCount += repoErrorCount;
     }

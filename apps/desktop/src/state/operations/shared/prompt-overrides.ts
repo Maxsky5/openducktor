@@ -5,15 +5,15 @@ import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "../../queries/workspace";
 
 export const loadEffectivePromptOverrides = async (
-  repoPath: string,
+  workspaceId: string,
   queryClient: QueryClient = appQueryClient,
 ): Promise<RepoPromptOverrides> => {
-  const normalizedRepoPath = repoPath.trim();
-  if (normalizedRepoPath.length === 0) {
-    throw new Error("Repository path is required to load prompt overrides.");
+  const normalizedWorkspaceId = workspaceId.trim();
+  if (normalizedWorkspaceId.length === 0) {
+    throw new Error("Workspace id is required to load prompt overrides.");
   }
   const [repoConfig, snapshot] = await Promise.all([
-    loadRepoConfigFromQuery(queryClient, normalizedRepoPath),
+    loadRepoConfigFromQuery(queryClient, normalizedWorkspaceId),
     loadSettingsSnapshotFromQuery(queryClient),
   ]);
 

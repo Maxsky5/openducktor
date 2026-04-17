@@ -62,7 +62,7 @@ Key boundary:
   - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
   - `qa` role: runtime orchestration resolves the build continuation working directory, reuses a matching running build run when available, and otherwise ensures the selected runtime for that continuation target through the shared runtime acquisition path.
   - `spec`/`planner`: `host.runtimeEnsure(repo, runtimeKind)` ensures a shared workspace runtime for the selected kind.
-6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_REPO_PATH` and `ODT_HOST_URL`.
+6. Rust host resolves the requested runtime kind, then runs runtime-specific startup. For OpenCode this starts a local loopback bridge in the desktop host and spawns the MCP server `openducktor` with `ODT_WORKSPACE_ID` and `ODT_HOST_URL`.
 7. The MCP process uses only that host-bridge contract. Direct Beads/Dolt startup inputs are rejected so storage ownership stays in the Rust host.
 8. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts, resumes, or forks the session and subscribes to OpenCode stream events.
 9. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.

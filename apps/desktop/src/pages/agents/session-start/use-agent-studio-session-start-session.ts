@@ -11,7 +11,7 @@ import type {
 } from "@/features/session-start";
 import { startSessionWorkflow } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import {
   applyAgentStudioSelectionQuery,
   buildAgentStudioAsyncActivityContextKey,
@@ -25,7 +25,7 @@ import {
 type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
 type UseAgentStudioSessionStartSessionArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
@@ -47,7 +47,7 @@ type UseAgentStudioSessionStartSessionArgs = {
 };
 
 export function useAgentStudioSessionStartSession({
-  activeRepo,
+  activeWorkspace,
   taskId,
   role,
   scenario,
@@ -70,6 +70,7 @@ export function useAgentStudioSessionStartSession({
   }) => Promise<SessionStartWorkflowResult | undefined>;
 } {
   const queryClient = useQueryClient();
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const startRequestedSession = useCallback(
     async (params: {
       reason: SessionStartRequestReason;
@@ -89,7 +90,7 @@ export function useAgentStudioSessionStartSession({
         );
         try {
           const workflow = await startSessionWorkflow({
-            activeRepo,
+            activeWorkspace,
             queryClient,
             intent: {
               taskId,
@@ -141,6 +142,7 @@ export function useAgentStudioSessionStartSession({
     },
     [
       activeRepo,
+      activeWorkspace,
       role,
       scenario,
       queryClient,

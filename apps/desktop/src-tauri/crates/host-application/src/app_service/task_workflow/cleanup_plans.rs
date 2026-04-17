@@ -11,34 +11,6 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
-fn task_named_managed_worktree_dir_name_matches(dir_name: &str, task_id: &str) -> bool {
-    dir_name == task_id || dir_name.starts_with(&format!("{task_id}-"))
-}
-
-pub(crate) fn is_task_named_managed_worktree_path(
-    managed_worktree_base: &Path,
-    candidate_path: &Path,
-    task_id: &str,
-) -> bool {
-    let Ok(relative_path) = candidate_path.strip_prefix(managed_worktree_base) else {
-        return false;
-    };
-
-    let mut components = relative_path.components();
-    let Some(Component::Normal(first_component)) = components.next() else {
-        return false;
-    };
-    if components.next().is_some() {
-        return false;
-    }
-
-    let Some(dir_name) = first_component.to_str() else {
-        return false;
-    };
-
-    task_named_managed_worktree_dir_name_matches(dir_name, task_id)
-}
-
 pub(crate) fn is_definitive_non_worktree_git_error(error: &anyhow::Error) -> bool {
     let error_text = format!("{error:#}").to_ascii_lowercase();
     [
@@ -119,17 +91,10 @@ impl WorktreeCleanupPlan {
         let mut paths = Vec::new();
         let mut seen_worktree_keys = HashSet::new();
         let normalized_repo = normalize_path_for_comparison(repo_path);
-        let managed_worktree_base = resolve_effective_worktree_base_path(service, repo_path)?
-            .map(|path| normalize_path_for_comparison(path.as_str()));
-
-        let Some(managed_worktree_base) = managed_worktree_base else {
-            return Ok(Self { paths });
-        };
         let scope = ManagedTaskWorktreeScope {
             task_id,
             branch_prefix,
             normalized_repo: normalized_repo.as_path(),
-            managed_worktree_base: managed_worktree_base.as_path(),
             operation_label: options.operation_label,
             skip_detached_head: options.skip_detached_head,
         };
@@ -403,7 +368,6 @@ struct ManagedTaskWorktreeScope<'a> {
     task_id: &'a str,
     branch_prefix: &'a str,
     normalized_repo: &'a Path,
-    managed_worktree_base: &'a Path,
     operation_label: &'static str,
     skip_detached_head: bool,
 }
@@ -420,26 +384,18 @@ fn is_managed_task_worktree_session(
     }
 
     let normalized_worktree = normalize_path_for_comparison(working_directory);
-    if normalized_worktree == scope.normalized_repo
-        || !normalized_worktree.starts_with(scope.managed_worktree_base)
-    {
+    if normalized_worktree == scope.normalized_repo {
         return Ok(false);
     }
 
     let worktree_path = Path::new(working_directory);
     if !path_exists_including_broken_symlink(worktree_path)? {
-        return Ok(false);
+        return Ok(true);
     }
-
-    let is_task_named_path = is_task_named_managed_worktree_path(
-        scope.managed_worktree_base,
-        normalized_worktree.as_path(),
-        scope.task_id,
-    );
 
     let current_branch = match service.git_port.get_current_branch(worktree_path) {
         Ok(current_branch) => current_branch,
-        Err(error) if is_task_named_path && is_definitive_non_worktree_git_error(&error) => {
+        Err(error) if is_definitive_non_worktree_git_error(&error) => {
             return Ok(true);
         }
         Err(error) => {
@@ -514,18 +470,6 @@ fn collect_related_task_branches(
         .filter(|branch| is_related_task_branch(branch.name.as_str(), branch_prefix, task_id))
         .map(|branch| branch.name)
         .collect())
-}
-
-pub(crate) fn resolve_effective_worktree_base_path(
-    service: &AppService,
-    repo_path: &str,
-) -> Result<Option<String>> {
-    let normalized_repo = normalize_path_for_comparison(repo_path);
-    Ok(service
-        .workspace_list()?
-        .into_iter()
-        .find(|workspace| normalize_path_for_comparison(workspace.path.as_str()) == normalized_repo)
-        .and_then(|workspace| workspace.effective_worktree_base_path))
 }
 
 fn ensure_related_branches_are_unused_by_worktrees(

@@ -17,6 +17,7 @@ describe("agent-orchestrator/handlers/start-session-policies", () => {
       resolveStartTask({
         ctx: {
           repoPath: "/tmp/repo",
+          workspaceId: "workspace-1",
           taskId: "task-1",
           role: "build",
           isStaleRepoOperation: () => false,

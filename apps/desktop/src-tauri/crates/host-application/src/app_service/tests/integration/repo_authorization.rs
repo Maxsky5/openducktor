@@ -7,8 +7,9 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use crate::app_service::test_support::{
-    build_service_with_git_state_enforced, builtin_opencode_runtime_route, init_git_repo,
-    make_emitter, make_task, spawn_sleep_process, unique_temp_path,
+    add_workspace_with_repo_config, build_service_with_git_state_enforced,
+    builtin_opencode_runtime_route, init_git_repo, make_emitter, make_task, spawn_sleep_process,
+    unique_temp_path,
 };
 use crate::app_service::RunProcess;
 
@@ -192,8 +193,7 @@ fn canonical_repo_path_variants_are_authorized() -> Result<()> {
     init_git_repo(&repo)?;
 
     let canonical_repo = fs::canonicalize(&repo)?.to_string_lossy().to_string();
-    service.workspace_add(canonical_repo.as_str())?;
-    service.workspace_update_repo_config(canonical_repo.as_str(), Default::default())?;
+    add_workspace_with_repo_config(&service, canonical_repo.as_str(), Default::default())?;
 
     let repo_variant = format!("{}/.", canonical_repo);
     let tasks = service.tasks_list(repo_variant.as_str())?;
@@ -215,11 +215,21 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
         },
     );
 
-    let unknown_repo_path = "/tmp/odt-repo-unauthorized-config";
+    let root = unique_temp_path("repo-auth-unknown-workspace-update");
+    let repo = root.join("repo");
+    init_git_repo(&repo).expect("repo should be initialized");
+    let repo_path = fs::canonicalize(&repo)
+        .expect("repo should canonicalize")
+        .to_string_lossy()
+        .to_string();
+    let unknown_workspace_id = "unknown-workspace";
     let error = service
         .workspace_update_repo_config(
-            unknown_repo_path,
+            unknown_workspace_id,
             RepoConfig {
+                workspace_id: unknown_workspace_id.to_string(),
+                workspace_name: "Unknown Workspace".to_string(),
+                repo_path: repo_path.clone(),
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some("/tmp/wt".to_string()),
                 branch_prefix: "odt".to_string(),
@@ -238,12 +248,15 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
             },
         )
         .expect_err("updating unknown workspace should fail");
-    assert!(error.to_string().contains("Workspace not found in config"));
+    assert!(error
+        .to_string()
+        .contains("Add/select the workspace before updating configuration"));
 
     let task_error = service
-        .tasks_list(unknown_repo_path)
+        .tasks_list(repo_path.as_str())
         .expect_err("unknown path must still be blocked");
     assert!(task_error.to_string().contains("workspace allowlist"));
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]

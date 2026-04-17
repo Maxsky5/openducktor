@@ -14,7 +14,10 @@ impl AppService {
             return Ok(repo_key);
         }
 
-        let is_allowed = self.config_store.repo_config_optional(repo_path)?.is_some();
+        let is_allowed = self
+            .config_store
+            .repo_config_optional_by_repo_path(repo_path)?
+            .is_some();
         if !is_allowed {
             return Err(anyhow!(
                 "Repository path is not in the configured workspace allowlist: {repo_path}"
@@ -24,21 +27,23 @@ impl AppService {
         Ok(repo_key)
     }
 
-    pub(super) fn resolve_initialized_repo_path(&self, repo_path: &str) -> Result<String> {
-        let repo_key = self.resolve_authorized_repo_path(repo_path)?;
+    fn ensure_repo_initialized_with_cache_key(&self, resolved_repo_path: &str) -> Result<()> {
+        let repo_key = Self::repo_key(resolved_repo_path);
         {
             let cache = self
                 .initialized_repos
                 .lock()
                 .map_err(|_| anyhow!("Initialized repo cache lock poisoned"))?;
             if cache.contains(&repo_key) {
-                return Ok(repo_key);
+                return Ok(());
             }
         }
 
         self.task_store
-            .ensure_repo_initialized(Path::new(&repo_key))
-            .with_context(|| format!("Failed to initialize task store for {}", repo_key))?;
+            .ensure_repo_initialized(Path::new(resolved_repo_path))
+            .with_context(|| {
+                format!("Failed to initialize task store for {}", resolved_repo_path)
+            })?;
 
         let mut cache = self
             .initialized_repos
@@ -46,6 +51,13 @@ impl AppService {
             .map_err(|_| anyhow!("Initialized repo cache lock poisoned"))?;
         cache.insert(repo_key.clone());
 
-        Ok(repo_key)
+        Ok(())
+    }
+
+    pub(super) fn resolve_initialized_repo_path(&self, repo_path: &str) -> Result<String> {
+        let resolved_repo_path = self.resolve_authorized_repo_path(repo_path)?;
+        self.ensure_repo_initialized_with_cache_key(resolved_repo_path.as_str())?;
+
+        Ok(resolved_repo_path)
     }
 }

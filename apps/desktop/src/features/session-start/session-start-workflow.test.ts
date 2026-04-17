@@ -20,7 +20,11 @@ describe("session-start-workflow", () => {
 
     await expect(
       startSessionWorkflow({
-        activeRepo: "/repo",
+        activeWorkspace: {
+          repoPath: "/repo",
+          workspaceId: "workspace-1",
+          workspaceName: "Active Workspace",
+        },
         queryClient: new QueryClient(),
         intent: {
           taskId: "TASK-1",
@@ -47,7 +51,11 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => "session-new");
 
     const result = await startSessionWorkflow({
-      activeRepo: "/repo",
+      activeWorkspace: {
+        repoPath: "/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-1",
@@ -79,7 +87,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => "session-pr");
 
     const result = await startSessionWorkflow({
-      activeRepo: null,
+      activeWorkspace: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-2",
@@ -131,7 +139,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => "session-build-new");
 
     const result = await startSessionWorkflow({
-      activeRepo: null,
+      activeWorkspace: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-3",

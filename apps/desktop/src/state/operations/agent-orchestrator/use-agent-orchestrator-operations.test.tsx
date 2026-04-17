@@ -174,14 +174,43 @@ const createDeferred = <T,>() => {
 
 const createHookHarness = (args: {
   activeRepo: string | null;
+  activeWorkspace?: import("@openducktor/contracts").WorkspaceRecord | null;
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: OpencodeSdkAdapter;
 }) => {
+  const createDefaultActiveWorkspace = (activeRepo: string | null) =>
+    activeRepo === null
+      ? null
+      : {
+          workspaceId: activeRepo.split("/").filter(Boolean).at(-1) ?? "workspace",
+          workspaceName: "Workspace",
+          repoPath: activeRepo,
+          branchPrefix: "odt",
+          defaultRuntimeKind: "opencode",
+          defaultTargetBranch: null,
+          defaultBuildProfileId: null,
+          defaultBuildProvider: null,
+          defaultBuildModel: null,
+          defaultBuildVariant: null,
+          defaultQaProfileId: null,
+          defaultQaProvider: null,
+          defaultQaModel: null,
+          defaultQaVariant: null,
+          git: { providers: {} },
+          hooks: { preStart: [], postComplete: [] },
+          trustedHooks: false,
+          isActive: true,
+          hasConfig: true,
+          defaultWorktreeBasePath: null,
+          configuredWorktreeBasePath: null,
+          effectiveWorktreeBasePath: null,
+        };
   let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
   let currentArgs = {
     ...args,
+    activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
   };
 
@@ -207,6 +236,7 @@ const createHookHarness = (args: {
   const updateArgs = async (
     nextArgs: Partial<{
       activeRepo: string | null;
+      activeWorkspace: import("@openducktor/contracts").WorkspaceRecord | null;
       tasks: TaskCard[];
       runs: RunSummary[];
       refreshTaskData: (repoPath: string) => Promise<void>;
@@ -216,6 +246,10 @@ const createHookHarness = (args: {
     currentArgs = {
       ...currentArgs,
       ...nextArgs,
+      activeWorkspace:
+        nextArgs.activeRepo !== undefined && nextArgs.activeWorkspace === undefined
+          ? createDefaultActiveWorkspace(nextArgs.activeRepo)
+          : currentArgs.activeWorkspace,
     };
     await sharedHarness.update(undefined);
   };
@@ -267,7 +301,19 @@ describe("use-agent-orchestrator-operations", () => {
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
       ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        trustedHooks: false,
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeFileCopies: [],
         promptOverrides: {},
+        agentDefaults: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
       theme: "light" as const,
@@ -283,7 +329,7 @@ describe("use-agent-orchestrator-operations", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
     host.runtimeList = async () => [];
@@ -652,6 +698,9 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -790,6 +839,9 @@ describe("use-agent-orchestrator-operations", () => {
         source: "active_build_run",
       });
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1066,6 +1118,9 @@ describe("use-agent-orchestrator-operations", () => {
 
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
         repoConfigDeferred.resolve({
+          workspaceId: "repo-a",
+          workspaceName: "Repo A",
+          repoPath: "/tmp/repo-a",
           defaultRuntimeKind: "opencode" as const,
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1134,6 +1189,9 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo-a",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -1438,6 +1496,9 @@ describe("use-agent-orchestrator-operations", () => {
         return runningRunFixture;
       };
       host.workspaceGetRepoConfig = async () => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -2235,6 +2296,9 @@ describe("use-agent-orchestrator-operations", () => {
           throw new Error("temporary repo config failure");
         }
         return {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/tmp/repo",
           defaultRuntimeKind: "opencode" as const,
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },

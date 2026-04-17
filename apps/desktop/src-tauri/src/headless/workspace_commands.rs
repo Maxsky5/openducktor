@@ -2,7 +2,7 @@ use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_path_operation, handle_repo_path_operation_blocking,
     run_headless_blocking, serialize_value, service_error, CommandResult,
-    HeadlessHookTrustConfirmationPort, HeadlessState, RepoPathArgs,
+    HeadlessHookTrustConfirmationPort, HeadlessState,
 };
 use crate::commands::workspace::{
     resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
@@ -27,22 +27,36 @@ struct RuntimeCheckArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceUpdateRepoConfigArgs {
-    repo_path: String,
+    workspace_id: String,
     config: RepoConfigPayload,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceSaveRepoSettingsArgs {
-    repo_path: String,
+    workspace_id: String,
     settings: RepoSettingsPayload,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceUpdateRepoHooksArgs {
-    repo_path: String,
+    workspace_id: String,
     hooks: host_infra_system::HookSet,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceIdArgs {
+    workspace_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceAddArgs {
+    workspace_id: String,
+    workspace_name: String,
+    repo_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,7 +74,7 @@ struct WorkspaceUpdateGlobalGitConfigArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceSetTrustedHooksArgs {
-    repo_path: String,
+    workspace_id: String,
     trusted: bool,
     challenge_nonce: Option<String>,
     challenge_fingerprint: Option<String>,
@@ -108,9 +122,7 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
         Box::pin(async move { handle_workspace_list(state) })
     })?;
     registry.register("workspace_add", |state, args| {
-        Box::pin(async move {
-            handle_repo_path_operation(args, |repo_path| state.service.workspace_add(&repo_path))
-        })
+        Box::pin(async move { handle_workspace_add(state, args) })
     })?;
     registry.register("workspace_select", |state, args| {
         Box::pin(handle_workspace_select(state, args))
@@ -127,21 +139,11 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register(
         "workspace_prepare_trusted_hooks_challenge",
         |state, args| {
-            Box::pin(async move {
-                handle_repo_path_operation(args, |repo_path| {
-                    state
-                        .service
-                        .workspace_prepare_trusted_hooks_challenge(&repo_path)
-                })
-            })
+            Box::pin(handle_workspace_prepare_trusted_hooks_challenge(state, args))
         },
     )?;
     registry.register("workspace_get_repo_config", |state, args| {
-        Box::pin(async move {
-            handle_repo_path_operation(args, |repo_path| {
-                state.service.workspace_get_repo_config(&repo_path)
-            })
-        })
+        Box::pin(handle_workspace_get_repo_config(state, args))
     })?;
     registry.register("workspace_detect_github_repository", |state, args| {
         Box::pin(async move {
@@ -190,22 +192,39 @@ fn handle_workspace_list(state: &HeadlessState) -> CommandResult {
     serialize_value(state.service.workspace_list().map_err(service_error)?)
 }
 
+fn handle_workspace_add(state: &HeadlessState, args: Value) -> CommandResult {
+    let WorkspaceAddArgs {
+        workspace_id,
+        workspace_name,
+        repo_path,
+    } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .workspace_create(&workspace_id, &workspace_name, &repo_path)
+            .map_err(service_error)?,
+    )
+}
+
 async fn handle_workspace_select(state: &HeadlessState, args: Value) -> CommandResult {
-    let RepoPathArgs { repo_path } = deserialize_args(args)?;
+    let WorkspaceIdArgs { workspace_id } = deserialize_args(args)?;
     let selected = state
         .service
-        .workspace_select(&repo_path)
+        .workspace_select(&workspace_id)
         .map_err(service_error)?;
-    super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
+    super::command_support::invalidate_repo_worktree_cache(&selected.repo_path)?;
     serialize_value(selected)
 }
 
 fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> CommandResult {
-    let WorkspaceUpdateRepoConfigArgs { repo_path, config } = deserialize_args(args)?;
+    let WorkspaceUpdateRepoConfigArgs {
+        workspace_id,
+        config,
+    } = deserialize_args(args)?;
     let updated = state
         .service
         .workspace_merge_repo_config(
-            &repo_path,
+            &workspace_id,
             RepoConfigUpdate {
                 default_runtime_kind: config.default_runtime_kind,
                 worktree_base_path: config.worktree_base_path,
@@ -219,17 +238,17 @@ fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> Co
             },
         )
         .map_err(service_error)?;
-    super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
+    super::command_support::invalidate_repo_worktree_cache(&updated.repo_path)?;
     serialize_value(updated)
 }
 
 async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value) -> CommandResult {
     let WorkspaceSaveRepoSettingsArgs {
-        repo_path,
+        workspace_id,
         settings,
     } = deserialize_args(args)?;
     let service = state.service.clone();
-    let repo_path_for_worker = repo_path.clone();
+    let workspace_id_for_worker = workspace_id.clone();
     let confirmation_port = HeadlessHookTrustConfirmationPort;
     let update = RepoSettingsUpdate {
         default_runtime_kind: settings.default_runtime_kind,
@@ -245,26 +264,52 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
         agent_defaults: settings.agent_defaults,
     };
     let updated = run_service_blocking_tokio("workspace_save_repo_settings", move || {
-        service.workspace_save_repo_settings(&repo_path_for_worker, update, &confirmation_port)
+        service.workspace_save_repo_settings(&workspace_id_for_worker, update, &confirmation_port)
     })
     .await
     .map_err(service_error)?;
-    super::command_support::invalidate_repo_worktree_cache(&repo_path)?;
+    super::command_support::invalidate_repo_worktree_cache(&updated.repo_path)?;
     serialize_value(updated)
 }
 
 fn handle_workspace_update_repo_hooks(state: &HeadlessState, args: Value) -> CommandResult {
-    let WorkspaceUpdateRepoHooksArgs { repo_path, hooks } = deserialize_args(args)?;
+    let WorkspaceUpdateRepoHooksArgs {
+        workspace_id,
+        hooks,
+    } = deserialize_args(args)?;
     serialize_value(
         state
             .service
-            .workspace_update_repo_hooks(&repo_path, hooks)
+            .workspace_update_repo_hooks(&workspace_id, hooks)
+            .map_err(service_error)?,
+    )
+}
+
+async fn handle_workspace_prepare_trusted_hooks_challenge(
+    state: &HeadlessState,
+    args: Value,
+) -> CommandResult {
+    let WorkspaceIdArgs { workspace_id } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .workspace_prepare_trusted_hooks_challenge(&workspace_id)
+            .map_err(service_error)?,
+    )
+}
+
+async fn handle_workspace_get_repo_config(state: &HeadlessState, args: Value) -> CommandResult {
+    let WorkspaceIdArgs { workspace_id } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .workspace_get_repo_config(&workspace_id)
             .map_err(service_error)?,
     )
 }
 
 fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResult {
-    let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = state
+    let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = state
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
@@ -274,7 +319,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
         chat,
         kanban,
         autopilot,
-        repos,
+        workspaces,
         global_prompt_overrides,
     })
 }
@@ -339,10 +384,13 @@ async fn handle_workspace_save_settings_snapshot(
         chat,
         kanban,
         autopilot,
-        repos,
+        workspaces,
         global_prompt_overrides,
     } = snapshot;
-    let repo_paths_to_invalidate = repos.keys().cloned().collect::<Vec<_>>();
+    let repo_paths_to_invalidate = workspaces
+        .values()
+        .map(|workspace| workspace.repo_path.clone())
+        .collect::<Vec<_>>();
     let updated = run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
         service.workspace_save_settings_snapshot(
             WorkspaceSettingsSnapshotUpdate {
@@ -351,7 +399,7 @@ async fn handle_workspace_save_settings_snapshot(
                 chat,
                 kanban,
                 autopilot,
-                repos,
+                workspaces,
                 global_prompt_overrides,
             },
             &confirmation_port,
@@ -367,7 +415,7 @@ async fn handle_workspace_save_settings_snapshot(
 
 async fn handle_workspace_set_trusted_hooks(state: &HeadlessState, args: Value) -> CommandResult {
     let WorkspaceSetTrustedHooksArgs {
-        repo_path,
+        workspace_id,
         trusted,
         challenge_nonce,
         challenge_fingerprint,
@@ -377,7 +425,7 @@ async fn handle_workspace_set_trusted_hooks(state: &HeadlessState, args: Value) 
     serialize_value(
         run_service_blocking_tokio("workspace_set_trusted_hooks", move || {
             service.workspace_set_trusted_hooks(
-                &repo_path,
+                &workspace_id,
                 trusted,
                 challenge_nonce.as_deref(),
                 challenge_fingerprint.as_deref(),

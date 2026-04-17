@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskDocuments } from "../runtime/runtime";
 import { createRepoStaleGuard } from "../support/core";
 import { getSessionMessageCount } from "../support/messages";
@@ -19,7 +20,7 @@ import {
 } from "./load-sessions-stages";
 
 type CreateLoadAgentSessionsArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   adapter: SessionLifecycleAdapter;
   repoEpochRef: MutableRefObject<number>;
   activeRepoRef?: MutableRefObject<string | null>;
@@ -29,13 +30,13 @@ type CreateLoadAgentSessionsArgs = {
   taskRef: MutableRefObject<TaskCard[]>;
   updateSession: UpdateSession;
   attachSessionListener?: (repoPath: string, sessionId: string) => void;
-  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   liveAgentSessionStore?: LiveAgentSessionStore;
 };
 
 export const createLoadAgentSessions = ({
-  activeRepo,
+  activeWorkspace,
   adapter,
   repoEpochRef,
   activeRepoRef,
@@ -69,6 +70,7 @@ export const createLoadAgentSessions = ({
     const shouldReconcileLiveSessions = mode === "reconcile_live";
     return {
       repoPath,
+      workspaceId: activeWorkspace?.workspaceId ?? "",
       taskId,
       mode,
       requestedSessionId,
@@ -88,11 +90,11 @@ export const createLoadAgentSessions = ({
   };
 
   return async (taskId: string, options?: AgentSessionLoadOptions): Promise<void> => {
-    if (!activeRepo || taskId.trim().length === 0) {
+    if (!activeWorkspace?.repoPath || !activeWorkspace.workspaceId || taskId.trim().length === 0) {
       return;
     }
 
-    const repoPath = activeRepo;
+    const repoPath = activeWorkspace.repoPath;
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,

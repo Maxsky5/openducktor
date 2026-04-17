@@ -13,7 +13,10 @@ pub use types::{
 mod tests {
     use super::task_resolution::resolve_task_reference;
     use super::*;
-    use crate::app_service::test_support::build_service_with_state;
+    use crate::app_service::test_support::{
+        build_service_with_state, init_git_repo, unique_temp_path, workspace_id_for_repo_path,
+    };
+    use crate::app_service::AppService;
     use host_domain::{
         AgentWorkflows, IssueType, TaskCard, TaskDocumentPresence, TaskDocumentSummary,
         TaskQaDocumentPresence,
@@ -49,6 +52,17 @@ mod tests {
         }
     }
 
+    fn create_workspace_id(service: &AppService, label: &str) -> String {
+        let repo_path = unique_temp_path(label);
+        init_git_repo(&repo_path).expect("test repo should initialize");
+        let repo_path = repo_path.to_string_lossy().to_string();
+        service
+            .workspace_add(repo_path.as_str())
+            .expect("workspace should be created");
+        workspace_id_for_repo_path(service, repo_path.as_str())
+            .expect("workspace id should resolve")
+    }
+
     #[test]
     fn resolve_task_reference_matches_unique_suffix() {
         let tasks = vec![task("alpha-wsp", "Alpha workflow")];
@@ -71,10 +85,11 @@ mod tests {
     #[test]
     fn odt_create_task_returns_summary_for_created_task() {
         let (service, task_state, _) = build_service_with_state(Vec::new());
+        let workspace_id = create_workspace_id(&service, "odt-mcp-create-task");
 
         let result = service
             .odt_create_task(
-                "/repo",
+                workspace_id.as_str(),
                 OdtCreateTaskInput {
                     title: "Bridge task".to_string(),
                     issue_type: IssueType::Task,
@@ -108,10 +123,11 @@ mod tests {
         closed.labels = vec!["mcp".to_string()];
 
         let (service, _, _) = build_service_with_state(vec![open, closed]);
+        let workspace_id = create_workspace_id(&service, "odt-mcp-search-tasks");
 
         let result = service
             .odt_search_tasks(
-                "/repo",
+                workspace_id.as_str(),
                 OdtSearchTasksInput {
                     priority: None,
                     issue_type: None,
@@ -132,9 +148,10 @@ mod tests {
     #[test]
     fn odt_read_task_documents_returns_requested_empty_documents_consistently() {
         let (service, _, _) = build_service_with_state(vec![task("fairnest-4y3", "Fairnest")]);
+        let workspace_id = create_workspace_id(&service, "odt-mcp-read-empty-documents");
 
         let result = service
-            .odt_read_task_documents("/repo", "fairnest-4y3", true, true, true)
+            .odt_read_task_documents(workspace_id.as_str(), "fairnest-4y3", true, true, true)
             .expect("read task documents should succeed");
 
         let spec = result
@@ -164,6 +181,7 @@ mod tests {
     fn odt_read_task_documents_preserves_qa_decode_errors() {
         let (service, task_state, _) =
             build_service_with_state(vec![task("fairnest-4y3", "Fairnest")]);
+        let workspace_id = create_workspace_id(&service, "odt-mcp-read-qa-errors");
         {
             let mut state = task_state.lock().expect("task state lock poisoned");
             state.latest_qa_report = Some(host_domain::QaReportDocument {
@@ -179,7 +197,7 @@ mod tests {
         }
 
         let result = service
-            .odt_read_task_documents("/repo", "fairnest-4y3", false, false, true)
+            .odt_read_task_documents(workspace_id.as_str(), "fairnest-4y3", false, false, true)
             .expect("read task documents should succeed");
 
         let qa = result
@@ -199,6 +217,7 @@ mod tests {
     fn odt_read_task_documents_preserves_spec_and_plan_decode_errors() {
         let (service, task_state, _) =
             build_service_with_state(vec![task("fairnest-4y3", "Fairnest")]);
+        let workspace_id = create_workspace_id(&service, "odt-mcp-read-spec-plan-errors");
         {
             let mut state = task_state.lock().expect("task state lock poisoned");
             state.metadata_spec = Some(host_domain::SpecDocument {
@@ -222,7 +241,7 @@ mod tests {
         }
 
         let result = service
-            .odt_read_task_documents("/repo", "fairnest-4y3", true, true, false)
+            .odt_read_task_documents(workspace_id.as_str(), "fairnest-4y3", true, true, false)
             .expect("read task documents should succeed");
 
         let spec = result

@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import {
   createMemoryStorage,
-  seedRepoNavigationContexts,
+  seedWorkspaceNavigationContexts,
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
 import {
@@ -22,13 +22,16 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioQuerySync, initialProps);
 
 const createStatefulQuerySyncHarness = (
-  initialProps: Pick<HookArgs, "activeRepo"> & { initialSearchParams: string },
+  initialProps: Pick<HookArgs, "activeRepo" | "persistenceWorkspaceId"> & {
+    initialSearchParams: string;
+  },
 ) =>
   createSharedHookHarness(
     ({
       activeRepo,
+      persistenceWorkspaceId,
       initialSearchParams,
-    }: Pick<HookArgs, "activeRepo"> & {
+    }: Pick<HookArgs, "activeRepo" | "persistenceWorkspaceId"> & {
       initialSearchParams: string;
     }) => {
       const [searchParams, setSearchParamsState] = useState(
@@ -45,6 +48,7 @@ const createStatefulQuerySyncHarness = (
 
       return useAgentStudioQuerySync({
         activeRepo,
+        persistenceWorkspaceId,
         navigationType: "REPLACE",
         searchParams,
         setSearchParams,
@@ -52,6 +56,16 @@ const createStatefulQuerySyncHarness = (
     },
     initialProps,
   );
+
+const withPersistenceWorkspaceId = (
+  overrides: Partial<HookArgs> & Pick<HookArgs, "activeRepo">,
+): HookArgs => ({
+  persistenceWorkspaceId: overrides.activeRepo ? "workspace-repo" : null,
+  navigationType: "REPLACE",
+  searchParams: new URLSearchParams(""),
+  setSearchParams: () => {},
+  ...overrides,
+});
 
 describe("useAgentStudioQuerySync", () => {
   test("parses initial search params and syncs updates through a root-owned URL effect", async () => {
@@ -62,6 +76,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
+      persistenceWorkspaceId: null,
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build"),
       setSearchParams,
@@ -103,6 +118,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
+      persistenceWorkspaceId: null,
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=spec"),
       setSearchParams,
@@ -115,6 +131,7 @@ describe("useAgentStudioQuerySync", () => {
 
     await harness.update({
       activeRepo: null,
+      persistenceWorkspaceId: null,
       navigationType: "POP",
       searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
       setSearchParams,
@@ -145,7 +162,7 @@ describe("useAgentStudioQuerySync", () => {
 
     try {
       memoryStorage.setItem(
-        toContextStorageKey("/repo"),
+        toContextStorageKey("workspace-repo"),
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
@@ -154,12 +171,14 @@ describe("useAgentStudioQuerySync", () => {
         }),
       );
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        navigationType: "REPLACE",
-        searchParams: new URLSearchParams(""),
-        setSearchParams,
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          navigationType: "REPLACE",
+          searchParams: new URLSearchParams(""),
+          setSearchParams,
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor((state) => state.taskIdParam === "task-from-context");
@@ -187,14 +206,16 @@ describe("useAgentStudioQuerySync", () => {
     });
 
     try {
-      memoryStorage.setItem(toContextStorageKey("/repo"), "{not-json");
+      memoryStorage.setItem(toContextStorageKey("workspace-repo"), "{not-json");
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        navigationType: "REPLACE",
-        searchParams: new URLSearchParams(""),
-        setSearchParams: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          navigationType: "REPLACE",
+          searchParams: new URLSearchParams(""),
+          setSearchParams: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(
@@ -207,7 +228,7 @@ describe("useAgentStudioQuerySync", () => {
       expect(harness.getLatest().taskIdParam).toBe("");
 
       memoryStorage.setItem(
-        toContextStorageKey("/repo"),
+        toContextStorageKey("workspace-repo"),
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
@@ -249,12 +270,16 @@ describe("useAgentStudioQuerySync", () => {
         }),
       );
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        navigationType: "REPLACE",
-        searchParams: new URLSearchParams("task=task-from-url&session=session-from-url&agent=spec"),
-        setSearchParams: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          navigationType: "REPLACE",
+          searchParams: new URLSearchParams(
+            "task=task-from-url&session=session-from-url&agent=spec",
+          ),
+          setSearchParams: () => {},
+        }),
+      );
 
       await harness.mount();
       const latest = harness.getLatest();
@@ -275,7 +300,7 @@ describe("useAgentStudioQuerySync", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       memoryStorage.setItem(
-        toContextStorageKey("/repo-b"),
+        toContextStorageKey("workspace-repo-b"),
         JSON.stringify({
           taskId: "task-from-repo-b",
           role: "planner",
@@ -285,6 +310,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const harness = createStatefulQuerySyncHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
         initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
       });
 
@@ -292,6 +318,7 @@ describe("useAgentStudioQuerySync", () => {
 
       await harness.update({
         activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
         initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
       });
 
@@ -310,23 +337,32 @@ describe("useAgentStudioQuerySync", () => {
   test("restores repo-scoped URL context when switching back to a previous repository", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
-      seedRepoNavigationContexts(memoryStorage, {
-        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
-        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      seedWorkspaceNavigationContexts(memoryStorage, {
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
       });
 
       const harness = createStatefulQuerySyncHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
         initialSearchParams: "",
       });
 
       await harness.mount();
       await harness.waitFor((state) => state.taskIdParam === "task-a");
 
-      await harness.update({ activeRepo: "/repo-b", initialSearchParams: "" });
+      await harness.update({
+        activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
+        initialSearchParams: "",
+      });
       await harness.waitFor((state) => state.taskIdParam === "task-b");
 
-      await harness.update({ activeRepo: "/repo-a", initialSearchParams: "" });
+      await harness.update({
+        activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
+        initialSearchParams: "",
+      });
       await harness.waitFor((state) => state.taskIdParam === "task-a");
 
       const latest = harness.getLatest();
@@ -341,21 +377,30 @@ describe("useAgentStudioQuerySync", () => {
   test("rapid repo changes keep the final repository context authoritative", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
-      seedRepoNavigationContexts(memoryStorage, {
-        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
-        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      seedWorkspaceNavigationContexts(memoryStorage, {
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
       });
 
       const harness = createStatefulQuerySyncHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
         initialSearchParams: "",
       });
 
       await harness.mount();
       await harness.waitFor((state) => state.taskIdParam === "task-a");
 
-      await harness.update({ activeRepo: "/repo-b", initialSearchParams: "" });
-      await harness.update({ activeRepo: "/repo-a", initialSearchParams: "" });
+      await harness.update({
+        activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
+        initialSearchParams: "",
+      });
+      await harness.update({
+        activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
+        initialSearchParams: "",
+      });
       await harness.waitFor((state) => state.taskIdParam === "task-a");
 
       const latest = harness.getLatest();
@@ -376,12 +421,14 @@ describe("useAgentStudioQuerySync", () => {
     });
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        navigationType: "REPLACE",
-        searchParams: new URLSearchParams("agent=spec"),
-        setSearchParams: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          navigationType: "REPLACE",
+          searchParams: new URLSearchParams("agent=spec"),
+          setSearchParams: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.run((state) => {
@@ -390,7 +437,7 @@ describe("useAgentStudioQuerySync", () => {
 
       await harness.unmount();
 
-      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      const stored = memoryStorage.getItem(toContextStorageKey("workspace-repo"));
       if (!stored) {
         throw new Error("Expected persisted context payload after unmount cleanup");
       }

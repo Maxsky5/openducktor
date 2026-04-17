@@ -168,6 +168,6 @@ pub struct OdtCreateTaskInput {
 #[serde(rename_all = "camelCase")]
 pub struct OdtHostBridgeReady {
     pub bridge_version: u8,
-    pub repo_path: String,
+    pub workspace_id: String,
     pub tool_names: Vec<String>,
 }

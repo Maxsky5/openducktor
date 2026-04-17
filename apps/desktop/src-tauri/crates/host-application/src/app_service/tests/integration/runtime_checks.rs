@@ -25,10 +25,10 @@ use crate::app_service::opencode_runtime::test_support::{
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_store, create_failing_opencode,
-    create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
+    add_workspace_with_repo_config, build_service_with_git_state, build_service_with_store,
+    create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
+    empty_patch, init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
+    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
     wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
     write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
 };
@@ -131,13 +131,16 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
 
     let workspace = service.workspace_add(repo_path.as_str())?;
     assert!(workspace.is_active);
-    let selected = service.workspace_select(repo_path.as_str())?;
+    let selected = service.workspace_select(workspace.workspace_id.as_str())?;
     assert!(selected.is_active);
 
     let worktree_base = root.join("worktrees").to_string_lossy().to_string();
     let updated = service.workspace_update_repo_config(
-        repo_path.as_str(),
+        workspace.workspace_id.as_str(),
         RepoConfig {
+            workspace_id: workspace.workspace_id.clone(),
+            workspace_name: workspace.workspace_name.clone(),
+            repo_path: workspace.repo_path.clone(),
             default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.clone()),
             branch_prefix: "odt".to_string(),
@@ -161,23 +164,27 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
         Some(worktree_base.as_str())
     );
 
-    let config = service.workspace_get_repo_config(repo_path.as_str())?;
+    let config = service.workspace_get_repo_config(workspace.workspace_id.as_str())?;
     assert_eq!(config.branch_prefix, "odt");
     assert_eq!(
         config.worktree_base_path.as_deref(),
         Some(worktree_base.as_str())
     );
     assert!(service
-        .workspace_get_repo_config_optional(repo_path.as_str())?
+        .workspace_get_repo_config_optional(workspace.workspace_id.as_str())?
         .is_some());
     let stale_trust_error = service
-        .workspace_persist_trusted_hooks(repo_path.as_str(), true, Some("stale-fingerprint"))
+        .workspace_persist_trusted_hooks(
+            workspace.workspace_id.as_str(),
+            true,
+            Some("stale-fingerprint"),
+        )
         .expect_err("stale fingerprint should be rejected");
     assert!(stale_trust_error
         .to_string()
         .contains("Hook trust challenge is stale"));
     let trusted = service.workspace_persist_trusted_hooks(
-        repo_path.as_str(),
+        workspace.workspace_id.as_str(),
         true,
         Some(host_infra_system::hook_set_fingerprint(&config.hooks).as_str()),
     )?;

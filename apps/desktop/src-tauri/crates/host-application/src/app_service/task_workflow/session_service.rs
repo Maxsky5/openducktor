@@ -213,7 +213,7 @@ fn validate_task_agent_session(
         .workspace_list()?
         .into_iter()
         .find(|workspace| {
-            try_canonicalize_existing_path(workspace.path.as_str())
+            try_canonicalize_existing_path(workspace.repo_path.as_str())
                 .is_some_and(|workspace_path| workspace_path == canonical_repo)
         })
         .and_then(|workspace| workspace.effective_worktree_base_path);

@@ -32,9 +32,10 @@ use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_route,
     create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
     empty_patch, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_session, make_task,
-    prepend_path, process_is_alive, set_env_var, set_fake_opencode_and_bridge_binaries,
-    spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
-    wait_for_path_exists, wait_for_process_exit, write_executable_script, write_private_file,
+    prepend_path, process_is_alive, repo_config_for_workspace, set_env_var,
+    set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
+    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
+    workspace_update_repo_config_by_repo_path, write_executable_script, write_private_file,
     EnvVarGuard, FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
@@ -115,7 +116,8 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -133,6 +135,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -255,7 +258,8 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -273,6 +277,7 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -343,7 +348,8 @@ fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -361,6 +367,7 @@ fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
     task_state.lock().expect("task state lock poisoned").tasks[0].target_branch =
@@ -411,7 +418,8 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -429,6 +437,7 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
             worktree_file_copies: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -504,6 +513,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         },
     );
@@ -570,7 +580,8 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -588,6 +599,7 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -651,7 +663,8 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -669,6 +682,7 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -736,7 +750,8 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         pre_start: vec!["sh -lc 'echo pre-fail >&2; exit 1'".to_string()],
         post_complete: Vec::new(),
     };
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -754,6 +769,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -773,7 +789,8 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         pre_start: Vec::new(),
         post_complete: vec!["sh -lc 'echo post-fail >&2; exit 1'".to_string()],
     };
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -791,6 +808,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -881,7 +899,8 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -899,6 +918,7 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
             worktree_file_copies: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -952,7 +972,7 @@ fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
     let expected_worktree_base =
-        host_infra_system::resolve_default_worktree_base_dir(repo.as_path())?;
+        host_infra_system::resolve_default_worktree_base_dir_for_workspace("repo")?;
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
@@ -963,26 +983,30 @@ fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
         },
         config_store,
     );
-    service.workspace_add(repo_path.as_str())?;
+    let workspace = service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: None,
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
+                worktree_base_path: None,
+                branch_prefix: "odt".to_string(),
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                dev_servers: Vec::new(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
+                ..Default::default()
             },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-        },
+        ),
     )?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
@@ -1021,7 +1045,8 @@ fn build_start_reports_home_or_override_guidance_when_default_worktree_resolutio
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1039,6 +1064,7 @@ fn build_start_reports_home_or_override_guidance_when_default_worktree_resolutio
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1087,7 +1113,8 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1108,6 +1135,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1148,7 +1176,8 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1166,6 +1195,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1209,7 +1239,8 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1227,6 +1258,7 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1282,7 +1314,8 @@ fn build_start_reports_missing_task_from_targeted_lookup() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1300,6 +1333,7 @@ fn build_start_reports_missing_task_from_targeted_lookup() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1336,7 +1370,8 @@ fn build_start_preserves_transition_validation_with_targeted_lookup() -> Result<
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1354,6 +1389,7 @@ fn build_start_preserves_transition_validation_with_targeted_lookup() -> Result<
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1407,7 +1443,8 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1425,6 +1462,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1465,7 +1503,8 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1483,6 +1522,7 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 
@@ -1538,7 +1578,8 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service.workspace_update_repo_config(
+    workspace_update_repo_config_by_repo_path(
+        &service,
         repo_path.as_str(),
         RepoConfig {
             default_runtime_kind: "opencode".to_string(),
@@ -1556,6 +1597,7 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
+            ..Default::default()
         },
     )?;
 

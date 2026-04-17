@@ -5,6 +5,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
   type SettingsSnapshot,
+  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -40,8 +41,11 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
     doneVisibleDays: 1,
   },
   autopilot: createDefaultAutopilotSettings(),
-  repos: {
-    "/repo": {
+  workspaces: {
+    repo: {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
       defaultRuntimeKind: "opencode",
       worktreeBasePath: undefined,
       branchPrefix: "odt",
@@ -57,7 +61,10 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       promptOverrides: {},
       agentDefaults: {},
     },
-    "/repo-two": {
+    "repo-two": {
+      workspaceId: "repo-two",
+      workspaceName: "Repo Two",
+      repoPath: "/repo-two",
       defaultRuntimeKind: "codex",
       worktreeBasePath: undefined,
       branchPrefix: "odt",
@@ -82,9 +89,11 @@ const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => createS
 let refreshChecks = mock(async () => {});
 let saveGlobalGitConfig = mock(async () => {});
 let saveSettingsSnapshot = mock(async () => {});
-let workspaceRecords = [
+let workspaceRecords: WorkspaceRecord[] = [
   {
-    path: "/repo",
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
     isActive: true,
     hasConfig: true,
     configuredWorktreeBasePath: null,
@@ -92,7 +101,9 @@ let workspaceRecords = [
     effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
   },
   {
-    path: "/repo-two",
+    workspaceId: "repo-two",
+    workspaceName: "Repo Two",
+    repoPath: "/repo-two",
     isActive: false,
     hasConfig: true,
     configuredWorktreeBasePath: null,
@@ -198,7 +209,9 @@ describe("useSettingsModalController", () => {
   beforeEach(async () => {
     workspaceRecords = [
       {
-        path: "/repo",
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
         isActive: true,
         hasConfig: true,
         configuredWorktreeBasePath: null,
@@ -206,7 +219,9 @@ describe("useSettingsModalController", () => {
         effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
       },
       {
-        path: "/repo-two",
+        workspaceId: "repo-two",
+        workspaceName: "Repo Two",
+        repoPath: "/repo-two",
         isActive: false,
         hasConfig: true,
         configuredWorktreeBasePath: null,
@@ -283,7 +298,7 @@ describe("useSettingsModalController", () => {
     loadRepoRuntimeCatalog.mockClear();
 
     await harness.run((state) => {
-      state.setSelectedRepoPath("/repo-two");
+      state.setSelectedRepoPath("repo-two");
     });
     await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
 

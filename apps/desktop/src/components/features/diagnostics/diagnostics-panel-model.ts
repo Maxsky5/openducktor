@@ -457,7 +457,7 @@ export const buildDiagnosticsPanelModel = (
           { label: "Repository", value: repoName },
           {
             label: "Repository path",
-            value: activeWorkspace.path,
+            value: activeWorkspace.repoPath,
             breakAll: true,
             valueClassName: "text-muted-foreground",
           },

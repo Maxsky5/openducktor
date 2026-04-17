@@ -98,21 +98,13 @@ pub(super) struct RepoTaskReasonArgs {
     pub(super) reason: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct RepoScopedInputArgs<T> {
-    pub(super) repo_path: String,
-    #[serde(flatten)]
-    pub(super) input: T,
-}
-
 pub(super) struct HeadlessHookTrustConfirmationPort;
 
 impl HookTrustConfirmationPort for HeadlessHookTrustConfirmationPort {
     fn confirm_trusted_hooks(&self, request: &HookTrustConfirmationRequest) -> anyhow::Result<()> {
         Err(anyhow!(
             "Trusted hook confirmation for '{}' requires the desktop shell. Browser mode cannot open the native confirmation dialog.",
-            request.repo_path
+            request.workspace_id
         ))
     }
 }
@@ -244,24 +236,6 @@ where
             operation(service, repo_path, task_id, reason)
         })
         .await?,
-    )
-}
-
-pub(super) async fn handle_repo_scoped_input_operation_blocking<TInput, TResult, F>(
-    state: &HeadlessState,
-    args: Value,
-    operation_name: &'static str,
-    operation: F,
-) -> CommandResult
-where
-    TInput: DeserializeOwned + Send + 'static,
-    TResult: serde::Serialize + Send + 'static,
-    F: FnOnce(Arc<AppService>, String, TInput) -> anyhow::Result<TResult> + Send + 'static,
-{
-    let RepoScopedInputArgs { repo_path, input } = deserialize_args(args)?;
-    let service = state.service.clone();
-    serialize_value(
-        run_headless_blocking(operation_name, move || operation(service, repo_path, input)).await?,
     )
 }
 

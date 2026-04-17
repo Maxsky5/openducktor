@@ -25,12 +25,12 @@ impl AppService {
     pub(crate) fn spawn_opencode_server(
         &self,
         working_directory: &Path,
-        repo_path_for_mcp: &Path,
+        workspace_id_for_mcp: &str,
         port: u16,
     ) -> Result<Child> {
         let host_url = self.ensure_mcp_bridge_url()?;
         let config_content =
-            mcp_config::build_opencode_config_content(repo_path_for_mcp, host_url.as_str())?;
+            mcp_config::build_opencode_config_content(workspace_id_for_mcp, host_url.as_str())?;
         process_lifecycle::spawn_opencode_server_with_config(
             working_directory,
             config_content.as_str(),

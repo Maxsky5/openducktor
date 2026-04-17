@@ -25,6 +25,7 @@ import { requireActiveRepo } from "../tasks/task-operations-model";
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;
+  activeWorkspace: WorkspaceRecord | null;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
@@ -40,6 +41,7 @@ type UseRepoSettingsOperationsResult = {
 
 export function useRepoSettingsOperations({
   activeRepo,
+  activeWorkspace,
   applyWorkspaceRecords,
   applyWorkspaceRecord,
 }: UseRepoSettingsOperationsArgs): UseRepoSettingsOperationsResult {
@@ -52,7 +54,9 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(
         workspaceQueryKeys.list(),
         (current: WorkspaceRecord[] | undefined) =>
-          current?.map((entry) => (entry.path === workspace.path ? workspace : entry)) ?? current,
+          current?.map((entry) =>
+            entry.workspaceId === workspace.workspaceId ? workspace : entry,
+          ) ?? current,
       );
     },
     [queryClient],
@@ -66,15 +70,23 @@ export function useRepoSettingsOperations({
   );
 
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
-    const repo = requireActiveRepo(activeRepo);
+    requireActiveRepo(activeRepo);
+    const workspaceId = activeWorkspace?.workspaceId;
+    if (!workspaceId) {
+      throw new Error("Select a workspace first.");
+    }
 
-    const config = await loadRepoConfigFromQuery(queryClient, repo);
+    const config = await loadRepoConfigFromQuery(queryClient, workspaceId);
     return toRepoSettingsInput(config);
-  }, [activeRepo, queryClient]);
+  }, [activeRepo, activeWorkspace, queryClient]);
 
   const saveRepoSettings = useCallback(
     async (input: RepoSettingsInput) => {
-      const repo = requireActiveRepo(activeRepo);
+      requireActiveRepo(activeRepo);
+      const workspaceId = activeWorkspace?.workspaceId;
+      if (!workspaceId) {
+        throw new Error("Select a workspace first.");
+      }
 
       const specDefault = toConfigDefault("spec", input.agentDefaults.spec);
       const plannerDefault = toConfigDefault("planner", input.agentDefaults.planner);
@@ -104,7 +116,7 @@ export function useRepoSettingsOperations({
         ...(qaDefault ? { qa: qaDefault } : {}),
       };
 
-      const workspace = await host.workspaceSaveRepoSettings(repo, {
+      const workspace = await host.workspaceSaveRepoSettings(workspaceId, {
         defaultRuntimeKind,
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
@@ -117,7 +129,7 @@ export function useRepoSettingsOperations({
       });
 
       await queryClient.invalidateQueries({
-        queryKey: workspaceQueryKeys.repoConfig(repo),
+        queryKey: workspaceQueryKeys.repoConfig(workspaceId),
       });
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,
@@ -128,6 +140,7 @@ export function useRepoSettingsOperations({
     },
     [
       activeRepo,
+      activeWorkspace,
       applyWorkspaceRecord,
       queryClient,
       settingsSnapshotQueryKey,
@@ -167,13 +180,18 @@ export function useRepoSettingsOperations({
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshot): Promise<void> => {
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
-      queryClient.setQueryData(settingsSnapshotQueryKey, snapshot);
-      for (const [repoPath, repoConfig] of Object.entries(snapshot.repos)) {
-        queryClient.setQueryData(workspaceQueryKeys.repoConfig(repoPath), repoConfig);
+      queryClient.removeQueries({
+        queryKey: settingsSnapshotQueryKey,
+        exact: true,
+      });
+      const normalizedSnapshot = await loadSettingsSnapshotFromQuery(queryClient);
+      for (const [workspaceId, repoConfig] of Object.entries(normalizedSnapshot.workspaces)) {
+        queryClient.setQueryData(workspaceQueryKeys.repoConfig(workspaceId), repoConfig);
       }
       await queryClient.invalidateQueries({
         queryKey: repoConfigQueryKeyPrefix,
       });
+      queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
     },

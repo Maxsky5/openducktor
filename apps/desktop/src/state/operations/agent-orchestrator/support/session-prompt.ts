@@ -22,8 +22,8 @@ type SessionPromptContext = {
 };
 
 type LoadSessionPromptInputsInput = {
-  repoPath: string;
-  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  workspaceId: string;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 type CreateSessionPromptContextInput = SessionPromptInput;
@@ -59,10 +59,10 @@ export const buildSessionSystemPrompt = ({
   });
 
 export const loadSessionPromptInputs = async ({
-  repoPath,
+  workspaceId,
   loadRepoPromptOverrides,
 }: LoadSessionPromptInputsInput): Promise<Pick<SessionPromptContext, "promptOverrides">> => {
-  const promptOverrides = await loadRepoPromptOverrides(repoPath);
+  const promptOverrides = await loadRepoPromptOverrides(workspaceId);
 
   return {
     promptOverrides,
@@ -87,7 +87,7 @@ export const createSessionPromptContext = ({
 };
 
 export const loadSessionPromptContext = async ({
-  repoPath,
+  workspaceId,
   role,
   scenario,
   task,
@@ -98,7 +98,7 @@ export const loadSessionPromptContext = async ({
   task: SessionPromptTask;
 }): Promise<SessionPromptContext> => {
   const { promptOverrides } = await loadSessionPromptInputs({
-    repoPath,
+    workspaceId,
     loadRepoPromptOverrides,
   });
 

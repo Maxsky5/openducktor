@@ -10,21 +10,29 @@ use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadyArgs {
-    repo_path: String,
+struct WorkspaceArgs {
+    workspace_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RepoTaskArgs {
-    repo_path: String,
+struct WorkspaceTaskArgs {
+    workspace_id: String,
     task_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct WorkspaceScopedInputArgs<T> {
+    workspace_id: String,
+    #[serde(flatten)]
+    input: T,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ReadTaskDocumentsArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     include_spec: Option<bool>,
     include_plan: Option<bool>,
@@ -34,7 +42,7 @@ struct ReadTaskDocumentsArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SetSpecArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     markdown: String,
 }
@@ -42,7 +50,7 @@ struct SetSpecArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SetPlanArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     markdown: String,
     subtasks: Option<Vec<PlanSubtaskInput>>,
@@ -51,7 +59,7 @@ struct SetPlanArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BuildBlockedArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     reason: String,
 }
@@ -59,7 +67,7 @@ struct BuildBlockedArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BuildCompletedArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     summary: Option<String>,
 }
@@ -67,7 +75,7 @@ struct BuildCompletedArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SetPullRequestArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     provider_id: String,
     number: u32,
@@ -76,7 +84,7 @@ struct SetPullRequestArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct QaOutcomeArgs {
-    repo_path: String,
+    workspace_id: String,
     task_id: String,
     report_markdown: String,
 }
@@ -125,22 +133,25 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
 }
 
 async fn handle_odt_mcp_ready(state: &HeadlessState, args: Value) -> CommandResult {
-    let ReadyArgs { repo_path } = deserialize_args(args)?;
+    let WorkspaceArgs { workspace_id } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_mcp_ready", move || {
-            service.odt_mcp_ready(&repo_path)
+            service.odt_mcp_ready(&workspace_id)
         })
         .await?,
     )
 }
 
 async fn handle_odt_read_task(state: &HeadlessState, args: Value) -> CommandResult {
-    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let WorkspaceTaskArgs {
+        workspace_id,
+        task_id,
+    } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_read_task", move || {
-            service.odt_read_task(&repo_path, &task_id)
+            service.odt_read_task(&workspace_id, &task_id)
         })
         .await?,
     )
@@ -148,7 +159,7 @@ async fn handle_odt_read_task(state: &HeadlessState, args: Value) -> CommandResu
 
 async fn handle_odt_read_task_documents(state: &HeadlessState, args: Value) -> CommandResult {
     let ReadTaskDocumentsArgs {
-        repo_path,
+        workspace_id,
         task_id,
         include_spec,
         include_plan,
@@ -166,7 +177,7 @@ async fn handle_odt_read_task_documents(state: &HeadlessState, args: Value) -> C
     serialize_value(
         super::command_support::run_headless_blocking("odt_read_task_documents", move || {
             service.odt_read_task_documents(
-                &repo_path,
+                &workspace_id,
                 &task_id,
                 include_spec.unwrap_or(false),
                 include_plan.unwrap_or(false),
@@ -178,39 +189,57 @@ async fn handle_odt_read_task_documents(state: &HeadlessState, args: Value) -> C
 }
 
 async fn handle_create_task(state: &HeadlessState, args: Value) -> CommandResult {
-    let super::command_support::RepoScopedInputArgs { repo_path, input } =
-        deserialize_args::<super::command_support::RepoScopedInputArgs<OdtCreateTaskInput>>(args)?;
-    let repo_path_for_create = repo_path.clone();
+    let WorkspaceScopedInputArgs {
+        workspace_id,
+        input,
+    } = deserialize_args::<WorkspaceScopedInputArgs<OdtCreateTaskInput>>(args)?;
+    let workspace_id_for_create = workspace_id.clone();
     let service = state.service.clone();
     let created: OdtTaskSummary =
         super::command_support::run_headless_blocking("odt_create_task", move || {
-            service.odt_create_task(&repo_path_for_create, input)
+            service.odt_create_task(&workspace_id_for_create, input)
         })
         .await?;
 
-    emit_task_created_event(state, &repo_path, &created);
+    emit_task_created_event(state, &workspace_id, &created);
 
     serialize_value(created)
 }
 
 async fn handle_search_tasks(state: &HeadlessState, args: Value) -> CommandResult {
-    super::command_support::handle_repo_scoped_input_operation_blocking(
-        state,
-        args,
-        "odt_search_tasks",
-        |service, repo_path, input: OdtSearchTasksInput| {
-            service.odt_search_tasks(&repo_path, input)
-        },
+    let WorkspaceScopedInputArgs {
+        workspace_id,
+        input,
+    } = deserialize_args::<WorkspaceScopedInputArgs<OdtSearchTasksInput>>(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        super::command_support::run_headless_blocking("odt_search_tasks", move || {
+            service.odt_search_tasks(&workspace_id, input)
+        })
+        .await?,
     )
-    .await
 }
 
-fn emit_task_created_event(state: &HeadlessState, repo_path: &str, created: &OdtTaskSummary) {
-    let canonical_repo_path = match state.service.resolve_authorized_repo_path(repo_path) {
+fn emit_task_created_event(state: &HeadlessState, workspace_id: &str, created: &OdtTaskSummary) {
+    let repo_path = match state.service.workspace_repo_path(workspace_id) {
         Ok(repo_path) => repo_path,
         Err(error) => {
             tracing::error!(
                 target: "openducktor.task-sync",
+                workspace_id,
+                error = %format!("{error:#}"),
+                "External task create succeeded but workspace repo-path lookup for task sync failed"
+            );
+            return;
+        }
+    };
+
+    let canonical_repo_path = match state.service.resolve_authorized_repo_path(&repo_path) {
+        Ok(repo_path) => repo_path,
+        Err(error) => {
+            tracing::error!(
+                target: "openducktor.task-sync",
+                workspace_id,
                 repo_path,
                 error = %format!("{error:#}"),
                 "External task create succeeded but canonical repo-path resolution for task sync failed"
@@ -235,14 +264,14 @@ fn emit_task_created_event(state: &HeadlessState, repo_path: &str, created: &Odt
 
 async fn handle_odt_set_spec(state: &HeadlessState, args: Value) -> CommandResult {
     let SetSpecArgs {
-        repo_path,
+        workspace_id,
         task_id,
         markdown,
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_set_spec", move || {
-            service.odt_set_spec(&repo_path, &task_id, &markdown)
+            service.odt_set_spec(&workspace_id, &task_id, &markdown)
         })
         .await?,
     )
@@ -250,7 +279,7 @@ async fn handle_odt_set_spec(state: &HeadlessState, args: Value) -> CommandResul
 
 async fn handle_odt_set_plan(state: &HeadlessState, args: Value) -> CommandResult {
     let SetPlanArgs {
-        repo_path,
+        workspace_id,
         task_id,
         markdown,
         subtasks,
@@ -258,7 +287,7 @@ async fn handle_odt_set_plan(state: &HeadlessState, args: Value) -> CommandResul
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_set_plan", move || {
-            service.odt_set_plan(&repo_path, &task_id, &markdown, subtasks)
+            service.odt_set_plan(&workspace_id, &task_id, &markdown, subtasks)
         })
         .await?,
     )
@@ -266,25 +295,28 @@ async fn handle_odt_set_plan(state: &HeadlessState, args: Value) -> CommandResul
 
 async fn handle_odt_build_blocked(state: &HeadlessState, args: Value) -> CommandResult {
     let BuildBlockedArgs {
-        repo_path,
+        workspace_id,
         task_id,
         reason,
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_build_blocked", move || {
-            service.odt_build_blocked(&repo_path, &task_id, &reason)
+            service.odt_build_blocked(&workspace_id, &task_id, &reason)
         })
         .await?,
     )
 }
 
 async fn handle_odt_build_resumed(state: &HeadlessState, args: Value) -> CommandResult {
-    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let WorkspaceTaskArgs {
+        workspace_id,
+        task_id,
+    } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_build_resumed", move || {
-            service.odt_build_resumed(&repo_path, &task_id)
+            service.odt_build_resumed(&workspace_id, &task_id)
         })
         .await?,
     )
@@ -292,14 +324,14 @@ async fn handle_odt_build_resumed(state: &HeadlessState, args: Value) -> Command
 
 async fn handle_odt_build_completed(state: &HeadlessState, args: Value) -> CommandResult {
     let BuildCompletedArgs {
-        repo_path,
+        workspace_id,
         task_id,
         summary,
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_build_completed", move || {
-            service.odt_build_completed(&repo_path, &task_id, summary)
+            service.odt_build_completed(&workspace_id, &task_id, summary)
         })
         .await?,
     )
@@ -307,7 +339,7 @@ async fn handle_odt_build_completed(state: &HeadlessState, args: Value) -> Comma
 
 async fn handle_odt_set_pull_request(state: &HeadlessState, args: Value) -> CommandResult {
     let SetPullRequestArgs {
-        repo_path,
+        workspace_id,
         task_id,
         provider_id,
         number,
@@ -315,7 +347,7 @@ async fn handle_odt_set_pull_request(state: &HeadlessState, args: Value) -> Comm
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_set_pull_request", move || {
-            service.odt_set_pull_request(&repo_path, &task_id, &provider_id, number)
+            service.odt_set_pull_request(&workspace_id, &task_id, &provider_id, number)
         })
         .await?,
     )
@@ -336,7 +368,7 @@ async fn handle_qa_outcome(
     approved: bool,
 ) -> CommandResult {
     let QaOutcomeArgs {
-        repo_path,
+        workspace_id,
         task_id,
         report_markdown,
     } = deserialize_args(args)?;
@@ -344,9 +376,9 @@ async fn handle_qa_outcome(
     serialize_value(
         super::command_support::run_headless_blocking(operation_name, move || {
             if approved {
-                service.odt_qa_approved(&repo_path, &task_id, &report_markdown)
+                service.odt_qa_approved(&workspace_id, &task_id, &report_markdown)
             } else {
-                service.odt_qa_rejected(&repo_path, &task_id, &report_markdown)
+                service.odt_qa_rejected(&workspace_id, &task_id, &report_markdown)
             }
         })
         .await?,
@@ -356,20 +388,19 @@ async fn handle_qa_outcome(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::headless::command_support::RepoScopedInputArgs;
     use host_application::{OdtCreateTaskInput, OdtSearchTasksInput};
 
     #[test]
-    fn ready_args_deserialize_repo_path() {
-        let parsed: ReadyArgs = serde_json::from_value(serde_json::json!({ "repoPath": "/repo" }))
+    fn ready_args_deserialize_workspace_id() {
+        let parsed: WorkspaceArgs = serde_json::from_value(serde_json::json!({ "workspaceId": "repo" }))
             .expect("args should parse");
-        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.workspace_id, "repo");
     }
 
     #[test]
     fn read_task_documents_args_support_optional_flags() {
         let parsed: ReadTaskDocumentsArgs = serde_json::from_value(serde_json::json!({
-            "repoPath": "/repo",
+            "workspaceId": "repo",
             "taskId": "task-1",
             "includeSpec": true,
         }))
@@ -381,7 +412,7 @@ mod tests {
     #[test]
     fn read_task_documents_args_require_at_least_one_include_flag() {
         let parsed: ReadTaskDocumentsArgs = serde_json::from_value(serde_json::json!({
-            "repoPath": "/repo",
+            "workspaceId": "repo",
             "taskId": "task-1",
         }))
         .expect("args should parse");
@@ -406,7 +437,7 @@ mod tests {
     #[test]
     fn set_pull_request_args_keep_provider_and_number() {
         let parsed: SetPullRequestArgs = serde_json::from_value(serde_json::json!({
-            "repoPath": "/repo",
+            "workspaceId": "repo",
             "taskId": "task-1",
             "providerId": "github",
             "number": 42,
@@ -418,9 +449,9 @@ mod tests {
 
     #[test]
     fn create_task_args_accept_flat_public_tool_shape() {
-        let parsed: RepoScopedInputArgs<OdtCreateTaskInput> =
+        let parsed: WorkspaceScopedInputArgs<OdtCreateTaskInput> =
             serde_json::from_value(serde_json::json!({
-                "repoPath": "/repo",
+                "workspaceId": "repo",
                 "title": "Bridge task",
                 "issueType": "task",
                 "priority": 2,
@@ -430,7 +461,7 @@ mod tests {
             }))
             .expect("args should parse");
 
-        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.workspace_id, "repo");
         assert_eq!(parsed.input.title, "Bridge task");
         assert_eq!(parsed.input.priority, 2);
         assert_eq!(parsed.input.labels, Some(vec!["mcp".to_string()]));
@@ -438,9 +469,9 @@ mod tests {
 
     #[test]
     fn search_tasks_args_accept_flat_public_tool_shape() {
-        let parsed: RepoScopedInputArgs<OdtSearchTasksInput> =
+        let parsed: WorkspaceScopedInputArgs<OdtSearchTasksInput> =
             serde_json::from_value(serde_json::json!({
-                "repoPath": "/repo",
+                "workspaceId": "repo",
                 "status": "open",
                 "title": "bridge",
                 "tags": ["mcp"],
@@ -448,7 +479,7 @@ mod tests {
             }))
             .expect("args should parse");
 
-        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.workspace_id, "repo");
         assert_eq!(parsed.input.limit, 10);
         assert_eq!(parsed.input.title.as_deref(), Some("bridge"));
         assert_eq!(parsed.input.tags, Some(vec!["mcp".to_string()]));
@@ -456,14 +487,14 @@ mod tests {
 
     #[test]
     fn search_tasks_args_default_limit_when_omitted() {
-        let parsed: RepoScopedInputArgs<OdtSearchTasksInput> =
+        let parsed: WorkspaceScopedInputArgs<OdtSearchTasksInput> =
             serde_json::from_value(serde_json::json!({
-                "repoPath": "/repo",
+                "workspaceId": "repo",
                 "status": "open",
             }))
             .expect("args should parse");
 
-        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.workspace_id, "repo");
         assert_eq!(parsed.input.limit, 50);
     }
 }

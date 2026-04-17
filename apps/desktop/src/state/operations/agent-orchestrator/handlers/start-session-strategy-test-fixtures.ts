@@ -19,6 +19,7 @@ export const createStartSessionContextFixture = (
   overrides: Partial<StartSessionContext> = {},
 ): StartSessionContext => ({
   repoPath: "/tmp/repo",
+  workspaceId: "workspace-1",
   taskId: "task-1",
   role: "build",
   isStaleRepoOperation: () => false,

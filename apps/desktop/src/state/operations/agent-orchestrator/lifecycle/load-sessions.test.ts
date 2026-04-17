@@ -93,7 +93,7 @@ describe("agent-orchestrator-load-sessions", () => {
   test("no-ops when active repo is missing", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: null,
+      activeWorkspace: null,
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
       activeRepoRef: { current: null },
@@ -115,7 +115,11 @@ describe("agent-orchestrator-load-sessions", () => {
   test("no-ops for blank task ids", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -162,7 +166,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -282,7 +290,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -415,7 +427,11 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => [],
         listLiveAgentSessionSnapshots: async () => [
@@ -543,7 +559,11 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => [
           {
@@ -682,7 +702,11 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: string;
     } | null = null;
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async (input) => {
           historyLoadInput = {
@@ -835,7 +859,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         hasSession: () => attachedToAdapter,
         listLiveAgentSessionSnapshots: async () => {
@@ -1068,7 +1096,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         hasSession: () => attachedToAdapter,
         listLiveAgentSessionSnapshots: async () => [
@@ -1185,7 +1217,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [
@@ -1350,7 +1386,11 @@ describe("agent-orchestrator-load-sessions", () => {
     );
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         listLiveAgentSessionSnapshots: async () => {
           throw new Error("should not reload live snapshots");
@@ -1439,7 +1479,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
     let historyLoads = 0;
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => {
           historyLoads += 1;
@@ -1564,7 +1608,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => [],
         listLiveAgentSessionSnapshots: async ({ directories }) => {
@@ -1660,7 +1708,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => historyDeferred.promise,
         listLiveAgentSessionSnapshots: async () => [
@@ -1796,7 +1848,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => {
           historyLoads += 1;
@@ -1878,7 +1934,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async ({ runtimeConnection }) => {
           observedRuntimeEndpoint =
@@ -2021,7 +2081,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2103,7 +2167,11 @@ describe("agent-orchestrator-load-sessions", () => {
       },
     };
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2226,7 +2294,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     let historyLoads = 0;
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => {
           historyLoads += 1;
@@ -2373,7 +2445,11 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter,
       repoEpochRef: { current: 0 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2470,7 +2546,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2545,7 +2625,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2648,7 +2732,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2754,7 +2842,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2851,7 +2943,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -2966,7 +3062,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -3072,7 +3172,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         listLiveAgentSessionSnapshots: async () => [
           {
@@ -3224,7 +3328,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         listLiveAgentSessionSnapshots: async () => [
           {
@@ -3336,7 +3444,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         listLiveAgentSessionSnapshots: async () => [],
         resumeSession: async (input) => {
@@ -3445,7 +3557,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         hasSession: () => true,
         listLiveAgentSessionSnapshots: async () => [
@@ -3560,7 +3676,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         hasSession: () => false,
         resumeSession: async (input) => {
@@ -3737,7 +3857,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         hasSession: () => true,
         listLiveAgentSessionSnapshots: async () => [],
@@ -3834,7 +3958,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => {
           historyLoads += 1;
@@ -3918,7 +4046,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       activeRepoRef: { current: "/tmp/repo" },
@@ -4025,7 +4157,11 @@ describe("agent-orchestrator-load-sessions", () => {
       createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
     let historyCalls = 0;
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => {
           historyCalls += 1;
@@ -4199,7 +4335,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      activeRepo: "/tmp/repo",
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
       adapter: createAdapter({
         loadSessionHistory: async () => [
           {

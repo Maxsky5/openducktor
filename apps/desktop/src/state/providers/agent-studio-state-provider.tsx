@@ -3,9 +3,10 @@ import type { PropsWithChildren, ReactElement } from "react";
 import {
   AgentOperationsContext,
   AgentSessionsContext,
-  useActiveRepoContext,
+  useRequiredContext,
   useTaskControlContext,
   useTaskDataContext,
+  WorkspaceStateContext,
 } from "../app-state-contexts";
 import { useAgentOrchestratorOperations } from "../operations";
 
@@ -17,11 +18,11 @@ export function AgentStudioStateProvider({
   agentEngine,
   children,
 }: AgentStudioStateProviderProps): ReactElement {
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useRequiredContext(WorkspaceStateContext, "AgentStudioStateProvider");
   const { tasks, runs } = useTaskDataContext();
   const { refreshTaskData } = useTaskControlContext();
   const { sessionStore, operations } = useAgentOrchestratorOperations({
-    activeRepo,
+    activeWorkspace,
     tasks,
     runs,
     refreshTaskData,

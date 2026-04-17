@@ -177,7 +177,7 @@ pub(crate) struct SettingsSnapshotPayload {
     chat: host_infra_system::ChatSettings,
     kanban: host_infra_system::KanbanSettings,
     autopilot: host_infra_system::AutopilotSettings,
-    repos: HashMap<String, host_infra_system::RepoConfig>,
+    workspaces: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }
 
@@ -189,7 +189,7 @@ pub(crate) struct SettingsSnapshotResponsePayload {
     chat: host_infra_system::ChatSettings,
     kanban: host_infra_system::KanbanSettings,
     autopilot: host_infra_system::AutopilotSettings,
-    repos: HashMap<String, host_infra_system::RepoConfig>,
+    workspaces: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }
 
@@ -275,8 +275,9 @@ pub(crate) fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
     let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
     validate_startup_config(&config_store, &runtime_config_store)?;
-    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
+    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace_and_config(
         TASK_METADATA_NAMESPACE,
+        config_store.clone(),
     ));
     let service = Arc::new(AppService::new(task_store, config_store));
 

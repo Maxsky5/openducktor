@@ -252,10 +252,12 @@ export const resolveFallbackTaskId = (params: {
 };
 
 export const canPersistTaskTabs = (
-  activeRepo: string | null,
-  tabsStorageHydratedRepo: string | null,
+  persistenceWorkspaceId: string | null,
+  tabsStorageHydratedWorkspaceId: string | null,
 ): boolean => {
-  return Boolean(activeRepo) && tabsStorageHydratedRepo === activeRepo;
+  return (
+    Boolean(persistenceWorkspaceId) && tabsStorageHydratedWorkspaceId === persistenceWorkspaceId
+  );
 };
 
 export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> => {

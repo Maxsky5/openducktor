@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   createMemoryStorage,
-  seedRepoTaskTabs,
+  seedWorkspaceTaskTabs,
   type TestStorageLike,
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
@@ -13,6 +13,7 @@ import {
 } from "./agent-studio-test-utils";
 import { toTabsStorageKey } from "./agents-page-selection";
 import { toPersistedTaskTabs } from "./agents-page-session-tabs";
+import { toLegacyRepoPathTabsStorageKey } from "./query-sync/agent-studio-navigation";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 enableReactActEnvironment();
@@ -64,6 +65,20 @@ const createSession = (taskId: string, sessionId: string) =>
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioTaskTabs, initialProps);
 
+const withPersistenceWorkspaceId = (
+  overrides: Partial<HookArgs> & Pick<HookArgs, "activeRepo">,
+): HookArgs => ({
+  persistenceWorkspaceId: "workspace-repo",
+  taskId: "",
+  selectedTask: null,
+  tasks: [],
+  isLoadingTasks: false,
+  latestSessionByTaskId: new Map(),
+  updateQuery: () => {},
+  clearComposerInput: () => {},
+  ...overrides,
+});
+
 describe("useAgentStudioTaskTabs", () => {
   test("hydrates persisted task tabs from localStorage", async () => {
     const memoryStorage = createMemoryStorage();
@@ -78,21 +93,23 @@ describe("useAgentStudioTaskTabs", () => {
         tabs: ["task-1", "task-2"],
         activeTaskId: "task-1",
       });
-      memoryStorage.setItem(toTabsStorageKey("/repo"), persistedValue);
+      memoryStorage.setItem(toTabsStorageKey("workspace-repo"), persistedValue);
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        selectedTask: createTask("task-1"),
-        tasks: [createTask("task-1"), createTask("task-2")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-1",
+          selectedTask: createTask("task-1"),
+          tasks: [createTask("task-1"), createTask("task-2")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
 
@@ -124,18 +141,20 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const clearComposerInput = mock(() => {});
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        selectedTask: taskOne,
-        tasks: [taskOne, taskTwo],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput,
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-1",
+          selectedTask: taskOne,
+          tasks: [taskOne, taskTwo],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-2", latestSession]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput,
+        }),
+      );
 
       await harness.mount();
       await harness.run((state) => {
@@ -193,19 +212,21 @@ describe("useAgentStudioTaskTabs", () => {
       });
       const updateCalls: Array<Record<string, string | undefined>> = [];
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        selectedTask: taskOne,
-        tasks: [taskOne, taskTwo],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-2", newerIdleSession]]),
-        activeSessionByTaskId: new Map([["task-2", runningBuildSession]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-1",
+          selectedTask: taskOne,
+          tasks: [taskOne, taskTwo],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-2", newerIdleSession]]),
+          activeSessionByTaskId: new Map([["task-2", runningBuildSession]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.run((state) => {
@@ -240,23 +261,25 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo"),
+        toTabsStorageKey("workspace-repo"),
         toPersistedTaskTabs({
           tabs: ["task-1", "task-2"],
           activeTaskId: "task-2",
         }),
       );
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        selectedTask: createTask("task-1"),
-        tasks: [createTask("task-1"), createTask("task-2")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        updateQuery: () => {},
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-1",
+          selectedTask: createTask("task-1"),
+          tasks: [createTask("task-1"), createTask("task-2")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: () => {},
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       expect(harness.getLatest().activeTaskTabId).toBe("task-1");
@@ -279,7 +302,7 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo"),
+        toTabsStorageKey("workspace-repo"),
         toPersistedTaskTabs({
           tabs: ["task-1", "task-2"],
           activeTaskId: "task-2",
@@ -291,18 +314,20 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const clearComposerInput = mock(() => {});
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        selectedTask: taskOne,
-        tasks: [taskOne, taskTwo],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput,
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-1",
+          selectedTask: taskOne,
+          tasks: [taskOne, taskTwo],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput,
+        }),
+      );
 
       await harness.mount();
       expect(harness.getLatest().activeTaskTabId).toBe("task-1");
@@ -347,7 +372,7 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo"),
+        toTabsStorageKey("workspace-repo"),
         toPersistedTaskTabs({
           tabs: ["task-2"],
           activeTaskId: "task-2",
@@ -357,18 +382,20 @@ describe("useAgentStudioTaskTabs", () => {
       const latestSession = createSession("task-2", "session-2");
       const updateCalls: Array<Record<string, string | undefined>> = [];
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-1"), createTask("task-2")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "",
+          selectedTask: null,
+          tasks: [createTask("task-1"), createTask("task-2")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-2", latestSession]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(() => updateCalls.length > 0);
@@ -402,7 +429,7 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo"),
+        toTabsStorageKey("workspace-repo"),
         toPersistedTaskTabs({
           tabs: ["task-2"],
           activeTaskId: "task-2",
@@ -411,24 +438,27 @@ describe("useAgentStudioTaskTabs", () => {
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const latestSession = createSession("task-2", "session-2");
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-2")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "",
+          selectedTask: null,
+          tasks: [createTask("task-2")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-2", latestSession]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(() => updateCalls.length === 1);
 
       await harness.update({
         activeRepo: "/repo",
+        persistenceWorkspaceId: "workspace-repo",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-2")],
@@ -442,6 +472,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       await harness.update({
         activeRepo: "/repo",
+        persistenceWorkspaceId: "workspace-repo",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-2")],
@@ -474,7 +505,7 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo-b"),
+        toTabsStorageKey("workspace-repo-b"),
         toPersistedTaskTabs({
           tabs: ["task-b"],
           activeTaskId: "task-b",
@@ -482,18 +513,21 @@ describe("useAgentStudioTaskTabs", () => {
       );
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const harness = createHookHarness({
-        activeRepo: "/repo-a",
-        taskId: "task-a",
-        selectedTask: createTask("task-a"),
-        tasks: [createTask("task-a")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo-a",
+          persistenceWorkspaceId: "workspace-repo-a",
+          taskId: "task-a",
+          selectedTask: createTask("task-a"),
+          tasks: [createTask("task-a")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       expect(updateCalls).toHaveLength(0);
@@ -501,6 +535,7 @@ describe("useAgentStudioTaskTabs", () => {
       const repoBSession = createSession("task-b", "session-b");
       await harness.update({
         activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-b")],
@@ -537,7 +572,7 @@ describe("useAgentStudioTaskTabs", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo-b"),
+        toTabsStorageKey("workspace-repo-b"),
         toPersistedTaskTabs({
           tabs: ["task-b"],
           activeTaskId: "task-b",
@@ -545,19 +580,22 @@ describe("useAgentStudioTaskTabs", () => {
       );
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const harness = createHookHarness({
-        activeRepo: "/repo-b",
-        isRepoNavigationBoundaryPending: true,
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-b")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo-b",
+          persistenceWorkspaceId: "workspace-repo-b",
+          isRepoNavigationBoundaryPending: true,
+          taskId: "",
+          selectedTask: null,
+          tasks: [createTask("task-b")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
 
@@ -571,30 +609,34 @@ describe("useAgentStudioTaskTabs", () => {
   test("restores repo-scoped fallback tabs when switching away and back", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
-      seedRepoTaskTabs(memoryStorage, {
-        "/repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
-        "/repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
+      seedWorkspaceTaskTabs(memoryStorage, {
+        "workspace-repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
+        "workspace-repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
       });
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const harness = createHookHarness({
-        activeRepo: "/repo-a",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-a")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a")]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo-a",
+          persistenceWorkspaceId: "workspace-repo-a",
+          taskId: "",
+          selectedTask: null,
+          tasks: [createTask("task-a")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a")]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(() => updateCalls.length === 1);
 
       await harness.update({
         activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-b")],
@@ -609,6 +651,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       await harness.update({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-a")],
@@ -637,7 +680,7 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo"),
+        toTabsStorageKey("workspace-repo"),
         toPersistedTaskTabs({
           tabs: ["task-1", "task-2"],
           activeTaskId: "task-2",
@@ -648,24 +691,27 @@ describe("useAgentStudioTaskTabs", () => {
       const taskTwo = createTask("task-2");
       const latestSession = createSession("task-1", "session-1");
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-2",
-        selectedTask: taskTwo,
-        tasks: [taskOne, taskTwo],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-1", latestSession]]),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-2",
+          selectedTask: taskTwo,
+          tasks: [taskOne, taskTwo],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-1", latestSession]]),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
 
       await harness.update({
         activeRepo: "/repo",
+        persistenceWorkspaceId: "workspace-repo",
         taskId: "task-2",
         selectedTask: createTaskCardFixture({
           id: "task-2",
@@ -720,7 +766,7 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       memoryStorage.setItem(
-        toTabsStorageKey("/repo"),
+        toTabsStorageKey("workspace-repo"),
         toPersistedTaskTabs({
           tabs: ["task-1"],
           activeTaskId: "task-1",
@@ -728,18 +774,20 @@ describe("useAgentStudioTaskTabs", () => {
       );
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-1")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        updateQuery: (updates) => {
-          updateCalls.push(updates);
-        },
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "",
+          selectedTask: null,
+          tasks: [createTask("task-1")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: (updates) => {
+            updateCalls.push(updates);
+          },
+          clearComposerInput: () => {},
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(() => updateCalls.length > 0);
@@ -747,6 +795,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       await harness.update({
         activeRepo: null,
+        persistenceWorkspaceId: null,
         taskId: "",
         selectedTask: null,
         tasks: [],
@@ -782,19 +831,21 @@ describe("useAgentStudioTaskTabs", () => {
     });
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-1")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        updateQuery: () => {},
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "",
+          selectedTask: null,
+          tasks: [createTask("task-1")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: () => {},
+          clearComposerInput: () => {},
+        }),
+      );
 
       await expect(harness.mount()).rejects.toThrow(
-        `Failed to read agent studio task tabs storage key "${toTabsStorageKey("/repo")}": read blocked`,
+        `Failed to read agent studio task tabs storage key "${toTabsStorageKey("workspace-repo")}": read blocked`,
       );
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
@@ -816,19 +867,21 @@ describe("useAgentStudioTaskTabs", () => {
     });
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        selectedTask: createTask("task-1"),
-        tasks: [createTask("task-1")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        updateQuery: () => {},
-        clearComposerInput: () => {},
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-1",
+          selectedTask: createTask("task-1"),
+          tasks: [createTask("task-1")],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map(),
+          updateQuery: () => {},
+          clearComposerInput: () => {},
+        }),
+      );
 
       await expect(harness.mount()).rejects.toThrow(
-        `Failed to persist agent studio task tabs storage key "${toTabsStorageKey("/repo")}": write blocked`,
+        `Failed to persist agent studio task tabs storage key "${toTabsStorageKey("workspace-repo")}": write blocked`,
       );
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
@@ -836,5 +889,35 @@ describe("useAgentStudioTaskTabs", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("migrates legacy repo-path task tabs into workspace storage on first load", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      memoryStorage.setItem(
+        toLegacyRepoPathTabsStorageKey("/repo"),
+        toPersistedTaskTabs({
+          tabs: ["task-1", "task-2"],
+          activeTaskId: "task-2",
+        }),
+      );
+
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          taskId: "task-2",
+          selectedTask: createTask("task-2"),
+          tasks: [createTask("task-1"), createTask("task-2")],
+        }),
+      );
+
+      await harness.mount();
+
+      expect(memoryStorage.getItem(toLegacyRepoPathTabsStorageKey("/repo"))).toBeNull();
+      expect(memoryStorage.getItem(toTabsStorageKey("workspace-repo"))).not.toBeNull();
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+
+      await harness.unmount();
+    });
   });
 });

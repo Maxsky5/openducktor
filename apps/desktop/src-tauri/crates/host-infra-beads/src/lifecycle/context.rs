@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use host_infra_system::{
     read_shared_dolt_server_state, resolve_repo_beads_attachment_dir,
-    resolve_repo_beads_attachment_root, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
+    resolve_repo_beads_attachment_root, resolve_workspace_beads_attachment_dir,
+    resolve_workspace_beads_attachment_root, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 use std::fs;
 use std::io::ErrorKind;
@@ -11,24 +12,50 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::{BeadsLifecycle, LifecycleError};
 
 impl BeadsLifecycle {
-    pub(crate) fn beads_working_dir(&self, repo_path: &Path) -> Result<std::path::PathBuf> {
-        resolve_repo_beads_attachment_root(repo_path)
+    pub(crate) fn beads_working_dir_for_identity(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<std::path::PathBuf> {
+        match workspace_id {
+            Some(workspace_id) => resolve_workspace_beads_attachment_root(workspace_id),
+            None => resolve_repo_beads_attachment_root(repo_path),
+        }
     }
 
-    pub(crate) fn ensure_beads_working_dir(&self, repo_path: &Path) -> Result<std::path::PathBuf> {
-        let working_dir = self.beads_working_dir(repo_path)?;
+    pub(crate) fn ensure_beads_working_dir_for_identity(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<std::path::PathBuf> {
+        let working_dir = self.beads_working_dir_for_identity(repo_path, workspace_id)?;
         fs::create_dir_all(&working_dir).with_context(|| {
             format!(
-                "Failed to create Beads attachment root {}",
+                "Failed to create Beads working directory {}",
                 working_dir.display()
             )
         })?;
-        self.ensure_existing_attachment_runs_without_git_ops(repo_path)?;
+        self.ensure_existing_attachment_runs_without_git_ops(repo_path, workspace_id)?;
         Ok(working_dir)
     }
 
-    fn ensure_existing_attachment_runs_without_git_ops(&self, repo_path: &Path) -> Result<()> {
-        let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
+    pub(crate) fn beads_attachment_dir_for_identity(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<PathBuf> {
+        match workspace_id {
+            Some(workspace_id) => resolve_workspace_beads_attachment_dir(workspace_id),
+            None => resolve_repo_beads_attachment_dir(repo_path),
+        }
+    }
+
+    fn ensure_existing_attachment_runs_without_git_ops(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
+        let beads_dir = self.beads_attachment_dir_for_identity(repo_path, workspace_id)?;
         let metadata_path = beads_dir.join("metadata.json");
         if !metadata_path.is_file() {
             return Ok(());
@@ -58,8 +85,12 @@ impl BeadsLifecycle {
         Ok(())
     }
 
-    pub(crate) fn build_bd_env(&self, repo_path: &Path) -> Result<Vec<(String, String)>> {
-        let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
+    pub(crate) fn build_bd_env_for_identity(
+        &self,
+        repo_path: &Path,
+        workspace_id: Option<&str>,
+    ) -> Result<Vec<(String, String)>> {
+        let beads_dir = self.beads_attachment_dir_for_identity(repo_path, workspace_id)?;
         let mut env = vec![(
             "BEADS_DIR".to_string(),
             beads_dir.to_string_lossy().to_string(),

@@ -2,9 +2,11 @@ import type { StartSessionDependencies } from "./start-session";
 
 export type FlatStartSessionDependencies = Omit<
   StartSessionDependencies["repo"],
-  "activeRepoRef"
+  "activeRepoRef" | "activeWorkspace"
 > & {
   activeRepoRef?: { current: string | null };
+  activeRepo?: string | null;
+  activeWorkspaceId?: string | null;
   loadRepoDefaultModel?: unknown;
 } & StartSessionDependencies["session"] &
   Omit<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget"> &
@@ -17,7 +19,14 @@ export const toStartSessionDependencies = (
 ): StartSessionDependencies => {
   return {
     repo: {
-      activeRepo: deps.activeRepo,
+      activeWorkspace:
+        deps.activeRepo == null
+          ? null
+          : {
+              repoPath: deps.activeRepo,
+              workspaceId: deps.activeWorkspaceId ?? "workspace-1",
+              workspaceName: "Active Workspace",
+            },
       repoEpochRef: deps.repoEpochRef,
       previousRepoRef: deps.previousRepoRef,
       ...(deps.activeRepoRef ? { activeRepoRef: deps.activeRepoRef } : {}),

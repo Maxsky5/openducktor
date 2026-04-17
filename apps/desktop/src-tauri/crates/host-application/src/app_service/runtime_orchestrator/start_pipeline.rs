@@ -24,6 +24,7 @@ pub(crate) struct RuntimeStartInput<'a> {
     pub(crate) runtime_kind: AgentRuntimeKind,
     pub(crate) startup_scope: &'a str,
     pub(crate) repo_path: &'a str,
+    pub(crate) workspace_id_for_mcp: &'a str,
     pub(crate) repo_key: String,
     pub(crate) startup_started_at_instant: Instant,
     pub(crate) startup_started_at: String,
@@ -137,8 +138,10 @@ mod tests {
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let pipeline_error = thread::scope(|scope| -> Result<anyhow::Error> {
             let pipeline_handle = scope.spawn(|| {
+                let workspace_id_for_mcp = service.workspace_id_for_repo_path(repo_path.as_str())?;
                 let startup_error_context = format!(
                     "{} workspace runtime failed to start for {repo_path}",
                     AgentRuntimeKind::opencode().as_str()
@@ -156,6 +159,7 @@ mod tests {
                     runtime_kind: AgentRuntimeKind::opencode(),
                     startup_scope: "workspace_runtime",
                     repo_path: repo_path.as_str(),
+                    workspace_id_for_mcp: workspace_id_for_mcp.as_str(),
                     repo_key: repo_path.clone(),
                     startup_started_at_instant: Instant::now(),
                     startup_started_at: now_rfc3339(),
@@ -245,8 +249,10 @@ mod tests {
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let pipeline_error = thread::scope(|scope| -> Result<anyhow::Error> {
             let pipeline_handle = scope.spawn(|| {
+                let workspace_id_for_mcp = service.workspace_id_for_repo_path(repo_path.as_str())?;
                 let startup_error_context = format!(
                     "{} workspace runtime failed to start for {repo_path}",
                     AgentRuntimeKind::opencode().as_str()
@@ -264,6 +270,7 @@ mod tests {
                     runtime_kind: AgentRuntimeKind::opencode(),
                     startup_scope: "workspace_runtime",
                     repo_path: repo_path.as_str(),
+                    workspace_id_for_mcp: workspace_id_for_mcp.as_str(),
                     repo_key: repo_path.clone(),
                     startup_started_at_instant: Instant::now(),
                     startup_started_at: now_rfc3339(),

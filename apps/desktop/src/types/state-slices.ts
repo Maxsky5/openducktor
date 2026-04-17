@@ -33,6 +33,14 @@ import type {
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
+export type WorkspaceSelectionOperationsInput = {
+  workspaceId: string;
+  workspaceName: string;
+  repoPath: string;
+};
+
+export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
+
 export type RepoAgentDefaultInput = {
   runtimeKind?: RuntimeKind;
   providerId: string;
@@ -71,7 +79,7 @@ export type WorkspaceStateContextValue = {
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
-  addWorkspace: (repoPath: string) => Promise<void>;
+  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (repoPath: string) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;

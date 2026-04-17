@@ -119,8 +119,12 @@ mod tests {
         let root = unique_temp_path("registry");
         fs::create_dir_all(&root).expect("test root should exist");
         let config_store = AppConfigStore::from_path(root.join("config.json"));
-        let task_store: Arc<dyn TaskStore> =
-            Arc::new(BeadsTaskStore::with_metadata_namespace("openducktor"));
+        let task_store: Arc<dyn TaskStore> = Arc::new(
+            BeadsTaskStore::with_metadata_namespace_and_config(
+                "openducktor",
+                config_store.clone(),
+            ),
+        );
         let service = Arc::new(AppService::new(task_store, config_store));
 
         TestStateFixture {

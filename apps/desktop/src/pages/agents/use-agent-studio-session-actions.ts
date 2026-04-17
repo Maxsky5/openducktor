@@ -22,7 +22,11 @@ import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type {
+  ActiveWorkspace,
+  AgentStateContextValue,
+  RepoSettingsInput,
+} from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -52,7 +56,7 @@ export type AgentSessionActionState = Pick<
 >;
 
 type UseAgentStudioSessionActionsArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
@@ -78,7 +82,7 @@ type UseAgentStudioSessionActionsArgs = {
 };
 
 export function useAgentStudioSessionActions({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   taskId,
   role,
@@ -94,9 +98,9 @@ export function useAgentStudioSessionActions({
   repoSettings,
   startAgentSession,
   sendAgentMessage,
-  bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory,
-  humanRequestChangesTask,
+  bootstrapTaskSessions: _bootstrapTaskSessions,
+  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
+  humanRequestChangesTask: _humanRequestChangesTask,
   setTaskTargetBranch,
   answerAgentQuestion,
   updateQuery,
@@ -137,6 +141,7 @@ export function useAgentStudioSessionActions({
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
   >({});
@@ -198,7 +203,7 @@ export function useAgentStudioSessionActions({
     startScenarioKickoff,
     handleCreateSession,
   } = useAgentStudioSessionStartFlow({
-    activeRepo,
+    activeWorkspace,
     branches,
     taskId,
     role,

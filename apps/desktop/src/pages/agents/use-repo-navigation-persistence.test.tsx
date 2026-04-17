@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
-import { type AgentStudioNavigationState, toContextStorageKey } from "./agent-studio-navigation";
+import {
+  type AgentStudioNavigationState,
+  toContextStorageKey,
+  toLegacyRepoPathContextStorageKey,
+} from "./agent-studio-navigation";
 import {
   createMemoryStorage,
-  seedRepoNavigationContexts,
+  seedLegacyRepoNavigationContexts,
+  seedWorkspaceNavigationContexts,
   type TestStorageLike,
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
@@ -20,6 +25,7 @@ enableReactActEnvironment();
 
 type HookArgs = {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   initialNavigation?: AgentStudioNavigationState;
 };
 
@@ -81,7 +87,7 @@ const createThrowingStorage = (args: {
   };
 };
 
-const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
+const useHookHarness = ({ activeRepo, persistenceWorkspaceId, initialNavigation }: HookArgs) => {
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
     initialNavigation ?? {
       taskId: "",
@@ -94,6 +100,7 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
   const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
     useRepoNavigationPersistence({
       activeRepo,
+      persistenceWorkspaceId,
       navigation,
       setNavigation,
     });
@@ -109,6 +116,13 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
+
+const withPersistenceWorkspaceId = (
+  overrides: Partial<HookArgs> & Pick<HookArgs, "activeRepo">,
+): HookArgs => ({
+  persistenceWorkspaceId: overrides.activeRepo ? "workspace-repo" : null,
+  ...overrides,
+});
 
 describe("useRepoNavigationPersistence", () => {
   test("treats the first render after a repo change as boundary-pending before effects run", () => {
@@ -138,7 +152,7 @@ describe("useRepoNavigationPersistence", () => {
 
     try {
       memoryStorage.setItem(
-        toContextStorageKey("/repo"),
+        toContextStorageKey("workspace-repo"),
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
@@ -146,9 +160,11 @@ describe("useRepoNavigationPersistence", () => {
         }),
       );
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor((state) => state.navigation.taskId === "task-from-context");
@@ -171,8 +187,8 @@ describe("useRepoNavigationPersistence", () => {
   test("does not override explicit role-only selection with persisted repo context", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
-      seedRepoNavigationContexts(memoryStorage, {
-        "/repo": {
+      seedWorkspaceNavigationContexts(memoryStorage, {
+        "workspace-repo": {
           taskId: "task-from-context",
           role: "qa",
           sessionId: "session-from-context",
@@ -180,15 +196,17 @@ describe("useRepoNavigationPersistence", () => {
         },
       });
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-        initialNavigation: {
-          taskId: "",
-          sessionId: null,
-          role: "planner",
-          scenario: "planner_initial",
-        },
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+          initialNavigation: {
+            taskId: "",
+            sessionId: null,
+            role: "planner",
+            scenario: "planner_initial",
+          },
+        }),
+      );
 
       await harness.mount();
 
@@ -212,9 +230,11 @@ describe("useRepoNavigationPersistence", () => {
     });
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
 
       await harness.mount();
       await harness.run((latest) => {
@@ -228,7 +248,7 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.unmount();
 
-      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      const stored = memoryStorage.getItem(toContextStorageKey("workspace-repo"));
       if (!stored) {
         throw new Error("Expected persisted context payload after unmount cleanup");
       }
@@ -255,9 +275,11 @@ describe("useRepoNavigationPersistence", () => {
     });
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
 
       await harness.mount();
       await harness.run((latest) => {
@@ -271,7 +293,7 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.unmount();
 
-      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      const stored = memoryStorage.getItem(toContextStorageKey("workspace-repo"));
       if (!stored) {
         throw new Error("Expected persisted context payload");
       }
@@ -297,11 +319,13 @@ describe("useRepoNavigationPersistence", () => {
     });
 
     try {
-      memoryStorage.setItem(toContextStorageKey("/repo"), "{not-json");
+      memoryStorage.setItem(toContextStorageKey("workspace-repo"), "{not-json");
 
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(
@@ -319,7 +343,7 @@ describe("useRepoNavigationPersistence", () => {
       });
 
       memoryStorage.setItem(
-        toContextStorageKey("/repo"),
+        toContextStorageKey("workspace-repo"),
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
@@ -353,19 +377,21 @@ describe("useRepoNavigationPersistence", () => {
     });
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
 
       await harness.mount();
       await harness.waitFor(
         (state) =>
           state.persistenceError?.message ===
-          `Failed to read agent studio context storage key "${toContextStorageKey("/repo")}": read blocked`,
+          `Failed to read agent studio context storage key "${toContextStorageKey("workspace-repo")}": read blocked`,
       );
 
       expect(harness.getLatest().persistenceError?.message).toBe(
-        `Failed to read agent studio context storage key "${toContextStorageKey("/repo")}": read blocked`,
+        `Failed to read agent studio context storage key "${toContextStorageKey("workspace-repo")}": read blocked`,
       );
       await harness.unmount();
     } finally {
@@ -385,9 +411,9 @@ describe("useRepoNavigationPersistence", () => {
     });
 
     try {
-      memoryStorage.setItem(toContextStorageKey("/repo-a"), "{not-json");
+      memoryStorage.setItem(toContextStorageKey("workspace-repo-a"), "{not-json");
       memoryStorage.setItem(
-        toContextStorageKey("/repo-b"),
+        toContextStorageKey("workspace-repo-b"),
         JSON.stringify({
           taskId: "task-from-repo-b",
           role: "planner",
@@ -397,6 +423,7 @@ describe("useRepoNavigationPersistence", () => {
 
       const harness = createHookHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
       });
 
       await harness.mount();
@@ -409,6 +436,7 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.update({
         activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
       });
       await harness.waitFor((state) => state.navigation.taskId === "task-from-repo-b");
 
@@ -426,7 +454,7 @@ describe("useRepoNavigationPersistence", () => {
     const { storage, writes } = createRecordingStorage();
     await withMockedLocalStorage(storage, async () => {
       storage.setItem(
-        toContextStorageKey("/repo-b"),
+        toContextStorageKey("workspace-repo-b"),
         JSON.stringify({
           taskId: "task-b",
           role: "planner",
@@ -436,6 +464,7 @@ describe("useRepoNavigationPersistence", () => {
 
       const harness = createHookHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
         initialNavigation: {
           taskId: "task-a",
           sessionId: "session-a",
@@ -448,6 +477,7 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.update({
         activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
       });
 
       await harness.waitFor((state) => state.navigation.taskId === "task-b");
@@ -460,7 +490,9 @@ describe("useRepoNavigationPersistence", () => {
         scenario: null,
       });
 
-      const repoBWrites = writes.filter((entry) => entry.key === toContextStorageKey("/repo-b"));
+      const repoBWrites = writes.filter(
+        (entry) => entry.key === toContextStorageKey("workspace-repo-b"),
+      );
       expect(repoBWrites.some((entry) => entry.value.includes("task-a"))).toBeFalse();
       expect(repoBWrites.some((entry) => entry.value.includes("session-a"))).toBeFalse();
 
@@ -471,13 +503,14 @@ describe("useRepoNavigationPersistence", () => {
   test("restores repo-scoped context when switching back to a previous repository", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
-      seedRepoNavigationContexts(memoryStorage, {
-        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
-        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      seedWorkspaceNavigationContexts(memoryStorage, {
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
       });
 
       const harness = createHookHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
       });
 
       await harness.mount();
@@ -485,11 +518,13 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.update({
         activeRepo: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
       });
       await harness.waitFor((state) => state.navigation.taskId === "task-b");
 
       await harness.update({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
       });
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
 
@@ -507,20 +542,21 @@ describe("useRepoNavigationPersistence", () => {
   test("rapid repo changes leave the final repository context restored", async () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
-      seedRepoNavigationContexts(memoryStorage, {
-        "/repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
-        "/repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+      seedWorkspaceNavigationContexts(memoryStorage, {
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
       });
 
       const harness = createHookHarness({
         activeRepo: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
       });
 
       await harness.mount();
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
 
-      await harness.update({ activeRepo: "/repo-b" });
-      await harness.update({ activeRepo: "/repo-a" });
+      await harness.update({ activeRepo: "/repo-b", persistenceWorkspaceId: "workspace-repo-b" });
+      await harness.update({ activeRepo: "/repo-a", persistenceWorkspaceId: "workspace-repo-a" });
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
 
       expect(harness.getLatest().navigation).toEqual({
@@ -561,9 +597,11 @@ describe("useRepoNavigationPersistence", () => {
     }) as unknown as typeof globalThis.clearTimeout;
 
     try {
-      const harness = createHookHarness({
-        activeRepo: "/repo",
-      });
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
 
       await harness.mount();
       const initialFlush = scheduledCallbacks.get(1);
@@ -603,11 +641,11 @@ describe("useRepoNavigationPersistence", () => {
       await harness.waitFor(
         (state) =>
           state.persistenceError?.message ===
-          `Failed to persist agent studio context storage key "${toContextStorageKey("/repo")}": write blocked`,
+          `Failed to persist agent studio context storage key "${toContextStorageKey("workspace-repo")}": write blocked`,
       );
 
       expect(harness.getLatest().persistenceError?.message).toBe(
-        `Failed to persist agent studio context storage key "${toContextStorageKey("/repo")}": write blocked`,
+        `Failed to persist agent studio context storage key "${toContextStorageKey("workspace-repo")}": write blocked`,
       );
 
       Object.defineProperty(globalThis, "localStorage", {
@@ -619,17 +657,20 @@ describe("useRepoNavigationPersistence", () => {
         latest.retryPersistenceRestore();
       });
 
-      const retryFlush = scheduledCallbacks.get(3);
-      if (!retryFlush) {
+      const retryFlushEntry = [...scheduledCallbacks.entries()].at(-1);
+      if (!retryFlushEntry) {
         throw new Error("Expected retry persistence callback to be scheduled");
       }
 
+      const [retryFlushId, retryFlush] = retryFlushEntry;
       await harness.run(() => {
         retryFlush();
       });
-      scheduledCallbacks.delete(3);
+      scheduledCallbacks.delete(retryFlushId);
 
-      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      await harness.waitFor((state) => state.persistenceError === null);
+
+      const stored = memoryStorage.getItem(toContextStorageKey("workspace-repo"));
       if (!stored) {
         throw new Error("Expected persisted context payload after retry");
       }
@@ -650,5 +691,32 @@ describe("useRepoNavigationPersistence", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("migrates a legacy repo-path context into workspace storage on first restore", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedLegacyRepoNavigationContexts(memoryStorage, {
+        "/repo": {
+          taskId: "task-from-legacy-context",
+          role: "planner",
+          sessionId: "session-from-legacy-context",
+        },
+      });
+
+      const harness = createHookHarness(
+        withPersistenceWorkspaceId({
+          activeRepo: "/repo",
+        }),
+      );
+
+      await harness.mount();
+      await harness.waitFor((state) => state.navigation.taskId === "task-from-legacy-context");
+
+      expect(memoryStorage.getItem(toLegacyRepoPathContextStorageKey("/repo"))).toBeNull();
+      expect(memoryStorage.getItem(toContextStorageKey("workspace-repo"))).not.toBeNull();
+
+      await harness.unmount();
+    });
   });
 });

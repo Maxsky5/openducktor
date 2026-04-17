@@ -447,6 +447,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSession(
       toStartSessionDependencies({
         activeRepo: "/tmp/repo",
+        activeWorkspaceId: "workspace-1",
         repoEpochRef: { current: 1 },
         previousRepoRef: { current: "/tmp/repo" },
         setSessionsById: () => {},

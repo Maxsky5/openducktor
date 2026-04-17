@@ -583,7 +583,9 @@ describe("TauriHostClient", () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_save_repo_settings") {
         return {
-          path: "/repo",
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
           isActive: true,
           hasConfig: true,
           configuredWorktreeBasePath: "/tmp/worktrees",
@@ -594,7 +596,7 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const result = await client.workspaceSaveRepoSettings("/repo", {
+    const result = await client.workspaceSaveRepoSettings("repo", {
       worktreeBasePath: "/tmp/worktrees",
       branchPrefix: "codex",
       trustedHooks: true,
@@ -615,7 +617,7 @@ describe("TauriHostClient", () => {
       {
         command: "workspace_save_repo_settings",
         args: {
-          repoPath: "/repo",
+          workspaceId: "repo",
           settings: {
             worktreeBasePath: "/tmp/worktrees",
             branchPrefix: "codex",
@@ -650,8 +652,11 @@ describe("TauriHostClient", () => {
           kanban: {
             doneVisibleDays: 1,
           },
-          repos: {
-            "/repo": {
+          workspaces: {
+            repo: {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
               defaultRuntimeKind: "opencode",
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -674,7 +679,7 @@ describe("TauriHostClient", () => {
     const snapshot = await client.workspaceGetSettingsSnapshot();
 
     expect(snapshot.theme).toBe("light");
-    expect(Object.keys(snapshot.repos)).toEqual(["/repo"]);
+    expect(Object.keys(snapshot.workspaces)).toEqual(["repo"]);
     expect(calls).toEqual([
       {
         command: "workspace_get_settings_snapshot",
@@ -688,7 +693,9 @@ describe("TauriHostClient", () => {
       if (command === "workspace_save_settings_snapshot") {
         return [
           {
-            path: "/repo",
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
             isActive: true,
             hasConfig: true,
             configuredWorktreeBasePath: "/tmp/worktrees",
@@ -714,8 +721,11 @@ describe("TauriHostClient", () => {
       autopilot: {
         rules: [],
       },
-      repos: {
-        "/repo": {
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
           defaultRuntimeKind: "opencode",
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -752,8 +762,11 @@ describe("TauriHostClient", () => {
             autopilot: {
               rules: [],
             },
-            repos: {
-              "/repo": {
+            workspaces: {
+              repo: {
+                workspaceId: "repo",
+                workspaceName: "Repo",
+                repoPath: "/repo",
                 defaultRuntimeKind: "opencode",
                 branchPrefix: "obp",
                 defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -2196,7 +2209,7 @@ describe("TauriHostClient", () => {
       if (command === "workspace_prepare_trusted_hooks_challenge") {
         return {
           nonce: "nonce-1",
-          repoPath: "/repo",
+          workspaceId: "repo",
           fingerprint: "fp-1",
           expiresAt: "2026-03-15T01:00:00Z",
           preStartCount: 1,
@@ -2206,9 +2219,9 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.workspacePrepareTrustedHooksChallenge("/repo")).toEqual({
+    expect(await client.workspacePrepareTrustedHooksChallenge("repo")).toEqual({
       nonce: "nonce-1",
-      repoPath: "/repo",
+      workspaceId: "repo",
       fingerprint: "fp-1",
       expiresAt: "2026-03-15T01:00:00Z",
       preStartCount: 1,
@@ -2218,7 +2231,7 @@ describe("TauriHostClient", () => {
       {
         command: "workspace_prepare_trusted_hooks_challenge",
         args: {
-          repoPath: "/repo",
+          workspaceId: "repo",
         },
       },
     ]);
@@ -2229,7 +2242,7 @@ describe("TauriHostClient", () => {
       if (command === "workspace_prepare_trusted_hooks_challenge") {
         return {
           nonce: "nonce-1",
-          repoPath: "/repo",
+          workspaceId: "repo",
           fingerprint: "fp-1",
           expiresAt: "2026-03-15T01:00:00Z",
           preStartCount: "1",
@@ -2239,7 +2252,7 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.workspacePrepareTrustedHooksChallenge("/repo")).rejects.toThrow(
+    await expect(client.workspacePrepareTrustedHooksChallenge("repo")).rejects.toThrow(
       "Expected non-negative integer field 'preStartCount' in trusted hooks challenge payload",
     );
   });

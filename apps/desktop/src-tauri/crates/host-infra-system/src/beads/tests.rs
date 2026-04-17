@@ -2,8 +2,9 @@ use super::{
     compute_beads_database_name, compute_repo_id, compute_repo_slug,
     deterministic_shared_dolt_port_candidate, ensure_shared_dolt_server_running, is_process_alive,
     process_matches_expected_dolt_server, read_shared_dolt_server_state, resolve_beads_root,
-    resolve_default_worktree_base_dir, resolve_dolt_config_dir, resolve_dolt_config_file,
-    resolve_effective_worktree_base_dir, resolve_repo_beads_attachment_dir,
+    resolve_default_worktree_base_dir, resolve_default_worktree_base_dir_for_workspace,
+    resolve_dolt_config_dir, resolve_dolt_config_file, resolve_effective_worktree_base_dir,
+    resolve_effective_worktree_base_dir_for_workspace, resolve_repo_beads_attachment_dir,
     resolve_repo_beads_attachment_root, resolve_repo_beads_paths, resolve_repo_live_database_dir,
     resolve_server_lock_file, resolve_server_state_file, resolve_shared_dolt_root,
     resolve_shared_server_root, restore_shared_dolt_database_from_backup,
@@ -296,6 +297,16 @@ fn effective_worktree_base_dir_uses_default_when_override_missing() {
             .expect("effective worktree base dir");
     let expected = resolve_default_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"))
         .expect("default worktree base dir");
+    assert_eq!(resolved, expected);
+}
+
+#[test]
+fn effective_worktree_base_dir_for_workspace_uses_workspace_default_when_override_missing() {
+    let _env_lock = lock_env();
+    let resolved = resolve_effective_worktree_base_dir_for_workspace("repo", None)
+        .expect("workspace effective worktree base dir");
+    let expected = resolve_default_worktree_base_dir_for_workspace("repo")
+        .expect("workspace default worktree base dir");
     assert_eq!(resolved, expected);
 }
 

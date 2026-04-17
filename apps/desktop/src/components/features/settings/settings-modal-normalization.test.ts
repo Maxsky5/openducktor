@@ -14,7 +14,10 @@ import {
   resolveInheritedPromptPreview,
 } from "./settings-modal-normalization";
 
-const createRepoConfig = (): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+  workspaceId: "repo-a",
+  workspaceName: "Repo A",
+  repoPath: "/repo-a",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  ",
@@ -66,6 +69,7 @@ const createRepoConfig = (): RepoConfig => ({
     build: undefined,
     qa: undefined,
   },
+  ...overrides,
 });
 
 describe("settings-modal-normalization", () => {
@@ -337,7 +341,7 @@ describe("settings-modal-normalization", () => {
     expect(normalized.trustedHooks).toBe(false);
   });
 
-  test("normalizes snapshot repo map and global prompt overrides", () => {
+  test("normalizes snapshot workspace map and global prompt overrides", () => {
     const snapshot = normalizeSnapshotForSave({
       theme: "light",
       git: {
@@ -352,8 +356,8 @@ describe("settings-modal-normalization", () => {
       autopilot: {
         rules: [],
       },
-      repos: {
-        "/repo-a": createRepoConfig(),
+      workspaces: {
+        "repo-a": createRepoConfig(),
       },
       globalPromptOverrides: {
         "kickoff.spec_initial": {
@@ -364,8 +368,8 @@ describe("settings-modal-normalization", () => {
       },
     });
 
-    expect(snapshot.repos["/repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
-    expect(snapshot.repos["/repo-a"]?.devServers).toEqual([
+    expect(snapshot.workspaces["repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
+    expect(snapshot.workspaces["repo-a"]?.devServers).toEqual([
       {
         id: "frontend",
         name: "Frontend",
@@ -399,15 +403,19 @@ describe("settings-modal-normalization", () => {
       autopilot: {
         rules: [],
       },
-      repos: {
-        "/repo-b": createRepoConfig(),
-        "/repo-a": createRepoConfig(),
+      workspaces: {
+        "repo-b": createRepoConfig({
+          workspaceId: "repo-b",
+          workspaceName: "Repo B",
+          repoPath: "/repo-b",
+        }),
+        "repo-a": createRepoConfig(),
       },
       globalPromptOverrides: {},
     };
 
-    expect(pickInitialRepoPath(snapshot, "/repo-b")).toBe("/repo-b");
-    expect(pickInitialRepoPath(snapshot, "/missing")).toBe("/repo-a");
+    expect(pickInitialRepoPath(snapshot, "/repo-b")).toBe("repo-b");
+    expect(pickInitialRepoPath(snapshot, "/missing")).toBe("repo-a");
     expect(
       pickInitialRepoPath(
         {
@@ -424,7 +432,7 @@ describe("settings-modal-normalization", () => {
           autopilot: {
             rules: [],
           },
-          repos: {},
+          workspaces: {},
           globalPromptOverrides: {},
         },
         null,

@@ -69,6 +69,7 @@ export type SettingsModalController = {
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
+  workspaces: WorkspaceRecord[];
   repoPaths: string[];
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
@@ -166,6 +167,15 @@ export const useSettingsModalController = ({
     loadSettingsSnapshot,
   });
 
+  const selectedRepoWorkspace = useMemo(
+    () =>
+      selectedRepoPath
+        ? (workspaces.find((workspace) => workspace.workspaceId === selectedRepoPath) ?? null)
+        : null,
+    [selectedRepoPath, workspaces],
+  );
+  const selectedRepoPathOnDisk = selectedRepoWorkspace?.repoPath ?? null;
+
   const {
     selectedRepoBranches,
     isLoadingSelectedRepoBranches,
@@ -173,7 +183,7 @@ export const useSettingsModalController = ({
     retrySelectedRepoBranchesLoad,
   } = useSettingsModalBranchesState({
     open,
-    selectedRepoPath,
+    selectedRepoPath: selectedRepoPathOnDisk,
   });
 
   const catalogRuntimeKinds = useMemo(
@@ -188,7 +198,7 @@ export const useSettingsModalController = ({
     isLoadingCatalog,
   } = useSettingsModalCatalogState({
     enabled: shouldLoadCatalog,
-    selectedRepoPath,
+    selectedRepoPath: selectedRepoPathOnDisk,
     runtimeKinds: catalogRuntimeKinds,
   });
 
@@ -220,13 +230,6 @@ export const useSettingsModalController = ({
     setSnapshotDraft,
   });
 
-  const selectedRepoWorkspace = useMemo(
-    () =>
-      selectedRepoPath
-        ? (workspaces.find((workspace) => workspace.path === selectedRepoPath) ?? null)
-        : null,
-    [selectedRepoPath, workspaces],
-  );
   const selectedRepoDefaultWorktreeBasePath =
     selectedRepoWorkspace?.defaultWorktreeBasePath ?? null;
   const selectedRepoEffectiveWorktreeBasePath = useMemo(() => {
@@ -255,10 +258,10 @@ export const useSettingsModalController = ({
     const invalidRepoPathsWithDevServerErrors: string[] = [];
     let repoScriptValidationErrorCount = 0;
 
-    for (const [repoPath, repoConfig] of Object.entries(snapshotDraft.repos)) {
+    for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
       const errorCount = countDevServerDraftValidationErrors(repoConfig.devServers ?? []);
       if (errorCount > 0) {
-        invalidRepoPathsWithDevServerErrors.push(repoPath);
+        invalidRepoPathsWithDevServerErrors.push(workspaceId);
         repoScriptValidationErrorCount += errorCount;
       }
     }
@@ -393,11 +396,11 @@ export const useSettingsModalController = ({
   }, [hasRepoScriptValidationErrors]);
 
   const detectSelectedRepoGithubRepository = useCallback(async () => {
-    if (!selectedRepoPath) {
+    if (!selectedRepoPathOnDisk) {
       return null;
     }
 
-    const detected = await detectGithubRepository(selectedRepoPath);
+    const detected = await detectGithubRepository(selectedRepoPathOnDisk);
     if (!detected) {
       return null;
     }
@@ -426,7 +429,7 @@ export const useSettingsModalController = ({
     });
 
     return detected;
-  }, [detectGithubRepository, selectedRepoPath, updateSelectedRepoConfig]);
+  }, [detectGithubRepository, selectedRepoPathOnDisk, updateSelectedRepoConfig]);
 
   const submit = useCallback(async (): Promise<boolean> => {
     if (!snapshotDraft) {
@@ -447,8 +450,8 @@ export const useSettingsModalController = ({
       setHasAttemptedRepoScriptSubmit(true);
       const suffix = repoScriptValidationErrorCount > 1 ? "s" : "";
       const invalidRepoSummary = invalidRepoPathsWithDevServerErrors
-        .map((repoPath) =>
-          repoPath === selectedRepoPath ? "the selected repository" : `\`${repoPath}\``,
+        .map((workspaceId) =>
+          workspaceId === selectedRepoPath ? "the selected repository" : `\`${workspaceId}\``,
         )
         .join(", ");
       const reason = `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
@@ -541,6 +544,7 @@ export const useSettingsModalController = ({
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
+    workspaces,
     repoPaths,
     selectedRepoPath,
     selectedRepoConfig,

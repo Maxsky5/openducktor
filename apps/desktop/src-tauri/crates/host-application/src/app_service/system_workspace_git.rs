@@ -14,9 +14,14 @@ use host_domain::{
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, discover_open_in_tools,
     open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
-    remove_worktree_path_if_present, repo_script_fingerprint, resolve_effective_worktree_base_dir,
-    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
-    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    remove_worktree_path_if_present, repo_script_fingerprint,
+    resolve_effective_worktree_base_dir_for_workspace, run_command,
+    run_command_allow_failure_with_env, version_command, AutopilotSettings, ChatSettings,
+    GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+};
+#[cfg(test)]
+use host_infra_system::{
+    derive_workspace_name_from_repo_path, propose_workspace_id, uniquify_workspace_id,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -63,6 +68,19 @@ type SettingsSnapshotTuple = (
     HashMap<String, RepoConfig>,
     PromptOverrides,
 );
+
+#[cfg(test)]
+fn build_initial_workspace_identity(
+    existing_workspaces: &HashMap<String, RepoConfig>,
+    repo_path: &str,
+) -> (String, String) {
+    let workspace_name = derive_workspace_name_from_repo_path(repo_path);
+    let workspace_id = uniquify_workspace_id(
+        propose_workspace_id(&workspace_name).as_str(),
+        existing_workspaces,
+    );
+    (workspace_id, workspace_name)
+}
 
 fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String {
     working_dir
@@ -114,6 +132,26 @@ fn missing_bd_repo_store_health() -> RepoStoreHealth {
 }
 
 impl AppService {
+    fn best_effort_auto_detect_git_provider_for_repo(&self, repo_path: &str, operation: &str) {
+        if let Err(error) = self.auto_detect_git_provider_for_repo(repo_path) {
+            tracing::warn!(
+                "OpenDucktor warning: {operation} completed but GitHub repository auto-detect failed for {repo_path}: {error:#}"
+            );
+        }
+    }
+
+    pub fn workspace_repo_path(&self, workspace_id: &str) -> Result<String> {
+        Ok(self.workspace_get_repo_config(workspace_id)?.repo_path)
+    }
+
+    pub(crate) fn workspace_id_for_repo_path(&self, repo_path: &str) -> Result<String> {
+        Ok(self
+            .config_store
+            .find_workspace_by_repo_path(repo_path)?
+            .ok_or_else(|| anyhow!("Workspace is not configured in {repo_path}"))?
+            .workspace_id)
+    }
+
     fn is_allowed_force_worktree_cleanup_path(
         &self,
         repo_path: &str,
@@ -124,16 +162,37 @@ impl AppService {
             return Ok(true);
         }
 
-        let repo_config = self.config_store.repo_config(repo_path)?;
-        let managed_worktree_base = resolve_effective_worktree_base_dir(
-            repo_path_ref,
+        let repo_config = self.config_store.repo_config_by_repo_path(repo_path)?;
+        let managed_worktree_base = resolve_effective_worktree_base_dir_for_workspace(
+            repo_config.workspace_id.as_str(),
             repo_config.worktree_base_path.as_deref(),
         )?;
 
-        Ok(path_is_within_root(
-            managed_worktree_base.as_path(),
-            candidate_path,
-        ))
+        Ok(
+            path_is_within_root(managed_worktree_base.as_path(), candidate_path)
+                || self.is_recorded_task_worktree_path(repo_path, candidate_path)?,
+        )
+    }
+
+    fn is_recorded_task_worktree_path(
+        &self,
+        repo_path: &str,
+        candidate_path: &Path,
+    ) -> Result<bool> {
+        let normalized_candidate =
+            normalize_path_for_comparison(candidate_path.to_string_lossy().as_ref());
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        if normalized_candidate == normalized_repo {
+            return Ok(false);
+        }
+
+        Ok(self
+            .task_store
+            .list_tasks(Path::new(repo_path))?
+            .into_iter()
+            .flat_map(|task| task.agent_sessions.into_iter())
+            .map(|session| normalize_path_for_comparison(session.working_directory.as_str()))
+            .any(|recorded_path| recorded_path == normalized_candidate))
     }
 
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {
@@ -366,43 +425,87 @@ impl AppService {
         self.config_store.list_workspaces()
     }
 
-    pub fn workspace_add(&self, repo_path: &str) -> Result<WorkspaceRecord> {
-        let workspace = self.config_store.add_workspace(repo_path)?;
-        self.auto_detect_git_provider_for_repo(repo_path)?;
+    pub fn workspace_create(
+        &self,
+        workspace_id: &str,
+        workspace_name: &str,
+        repo_path: &str,
+    ) -> Result<WorkspaceRecord> {
+        let workspace = self
+            .config_store
+            .add_workspace(workspace_id, workspace_name, repo_path)?;
+        // Git provider discovery is advisory; opening a workspace must still succeed when
+        // remote inspection is unavailable, especially after a repo move.
+        self.best_effort_auto_detect_git_provider_for_repo(repo_path, "workspace create");
         Ok(workspace)
     }
 
-    pub fn workspace_select(&self, repo_path: &str) -> Result<WorkspaceRecord> {
-        let workspace = self.config_store.select_workspace(repo_path)?;
-        self.auto_detect_git_provider_for_repo(repo_path)?;
+    #[cfg(test)]
+    pub fn workspace_add(&self, repo_path: &str) -> Result<WorkspaceRecord> {
+        let config = self.config_store.load()?;
+        let (workspace_id, workspace_name) =
+            build_initial_workspace_identity(&config.workspaces, repo_path);
+        self.workspace_create(&workspace_id, &workspace_name, repo_path)
+    }
+
+    pub fn workspace_select(&self, workspace_id: &str) -> Result<WorkspaceRecord> {
+        let workspace = self.config_store.select_workspace(workspace_id)?;
+        self.best_effort_auto_detect_git_provider_for_repo(
+            workspace.repo_path.as_str(),
+            "workspace select",
+        );
         Ok(workspace)
     }
 
     pub fn workspace_update_repo_config(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         config: RepoConfig,
     ) -> Result<WorkspaceRecord> {
-        self.config_store.update_repo_config(repo_path, config)
+        self.config_store.update_repo_config(workspace_id, config)
     }
 
     pub fn workspace_update_repo_hooks(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         hooks: HookSet,
     ) -> Result<WorkspaceRecord> {
-        self.config_store.update_repo_hooks(repo_path, hooks)
+        self.config_store.update_repo_hooks(workspace_id, hooks)
     }
 
-    pub fn workspace_get_repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
-        self.config_store.repo_config(repo_path)
+    pub fn workspace_get_repo_config(&self, workspace_id: &str) -> Result<RepoConfig> {
+        self.config_store.repo_config(workspace_id)
+    }
+
+    pub(crate) fn workspace_get_repo_config_by_repo_path(
+        &self,
+        repo_path: &str,
+    ) -> Result<RepoConfig> {
+        self.config_store.repo_config_by_repo_path(repo_path)
     }
 
     pub fn workspace_get_repo_config_optional(
         &self,
+        workspace_id: &str,
+    ) -> Result<Option<RepoConfig>> {
+        self.config_store.repo_config_optional(workspace_id)
+    }
+
+    pub(crate) fn workspace_get_repo_config_optional_by_repo_path(
+        &self,
         repo_path: &str,
     ) -> Result<Option<RepoConfig>> {
-        self.config_store.repo_config_optional(repo_path)
+        self.config_store
+            .repo_config_optional_by_repo_path(repo_path)
+    }
+
+    pub(crate) fn workspace_update_repo_config_by_repo_path(
+        &self,
+        repo_path: &str,
+        config: RepoConfig,
+    ) -> Result<WorkspaceRecord> {
+        let workspace_id = self.workspace_id_for_repo_path(repo_path)?;
+        self.workspace_update_repo_config(workspace_id.as_str(), config)
     }
 
     pub fn workspace_get_settings_snapshot(&self) -> Result<SettingsSnapshotTuple> {
@@ -413,7 +516,7 @@ impl AppService {
             config.chat,
             config.kanban,
             config.autopilot,
-            config.repos,
+            config.workspaces,
             config.global_prompt_overrides,
         ))
     }
@@ -427,13 +530,9 @@ impl AppService {
         snapshot: WorkspaceSettingsSnapshotUpdate,
     ) -> Result<()> {
         let mut config = self.config_store.load()?;
-        for repo_path in snapshot.repos.keys() {
-            if !config.repos.contains_key(repo_path) {
-                return Err(anyhow!(
-                    "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
-                ));
-            }
-        }
+        let next_workspaces = self
+            .config_store
+            .normalize_settings_snapshot_workspaces(&config, snapshot.workspaces)?;
 
         config.theme = snapshot.theme;
         config.git = snapshot.git;
@@ -443,25 +542,23 @@ impl AppService {
         };
         config.autopilot = snapshot.autopilot;
         config.global_prompt_overrides = snapshot.global_prompt_overrides;
-        for (repo_path, repo_config) in snapshot.repos {
-            config.repos.insert(repo_path, repo_config);
-        }
+        config.workspaces = next_workspaces;
         self.config_store.save(&config)
     }
 
     pub(super) fn workspace_persist_trusted_hooks(
         &self,
-        repo_path: &str,
+        workspace_id: &str,
         trusted: bool,
         expected_fingerprint: Option<&str>,
     ) -> Result<WorkspaceRecord> {
         if trusted {
-            let config = self.config_store.repo_config(repo_path)?;
+            let config = self.config_store.repo_config(workspace_id)?;
             let current_fingerprint = repo_script_fingerprint(&config.hooks, &config.dev_servers);
             if let Some(expected) = expected_fingerprint {
                 if expected != current_fingerprint {
                     return Err(anyhow!(
-                        "Hook trust challenge is stale for {repo_path}; hooks changed before confirmation."
+                        "Hook trust challenge is stale for workspace {workspace_id}; hooks changed before confirmation."
                     ));
                 }
             } else {
@@ -471,14 +568,14 @@ impl AppService {
             }
 
             return self.config_store.set_repo_trust_hooks(
-                repo_path,
+                workspace_id,
                 true,
                 Some(current_fingerprint),
             );
         }
 
         self.config_store
-            .set_repo_trust_hooks(repo_path, false, None)
+            .set_repo_trust_hooks(workspace_id, false, None)
     }
 
     pub fn set_theme(&self, theme: &str) -> Result<()> {
@@ -518,7 +615,9 @@ impl AppService {
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
         }
-        let repo_config = self.config_store.repo_config(repo_path.as_str())?;
+        let repo_config = self
+            .config_store
+            .repo_config_by_repo_path(repo_path.as_str())?;
 
         self.git_port.create_worktree(
             Path::new(&repo_path),
@@ -882,7 +981,8 @@ mod tests {
     use super::super::CachedRuntimeCheck;
     use super::RUNTIME_CHECK_CACHE_TTL;
     use crate::app_service::test_support::{
-        build_service_with_state, init_git_repo, unique_temp_path,
+        add_workspace_with_repo_config, build_service_with_state, init_git_repo, unique_temp_path,
+        workspace_select_by_repo_path,
     };
     use host_domain::{
         GitConflictAbortRequest, GitConflictOperation, GitPushResult, RuntimeCheck, RuntimeHealth,
@@ -931,18 +1031,15 @@ mod tests {
         fs::create_dir_all(worktree.join("nested")).expect("worktree directory should exist");
 
         let (service, _task_state, git_state) = build_service_with_state(vec![]);
-        service
-            .workspace_add(repo.to_string_lossy().as_ref())
-            .expect("repo should be registered");
-        service
-            .workspace_update_repo_config(
-                repo.to_string_lossy().as_ref(),
-                host_infra_system::RepoConfig {
-                    worktree_base_path: Some(root.to_string_lossy().to_string()),
-                    ..Default::default()
-                },
-            )
-            .expect("worktree base should be configured");
+        add_workspace_with_repo_config(
+            &service,
+            repo.to_string_lossy().as_ref(),
+            host_infra_system::RepoConfig {
+                worktree_base_path: Some(root.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("worktree base should be configured");
         git_state
             .lock()
             .expect("git state lock poisoned")
@@ -1232,7 +1329,7 @@ mod tests {
 
         assert!(workspace.is_active);
         assert_eq!(
-            workspace.path,
+            workspace.repo_path,
             repo_path
                 .canonicalize()
                 .expect("canonical repo path")
@@ -1262,9 +1359,9 @@ mod tests {
             state.ensure_calls.clear();
         }
 
-        let workspace = service
-            .workspace_select(repo_path.to_string_lossy().as_ref())
-            .expect("workspace select should not fail on beads init");
+        let workspace =
+            workspace_select_by_repo_path(&service, repo_path.to_string_lossy().as_ref())
+                .expect("workspace select should not fail on beads init");
 
         assert!(workspace.is_active);
 
@@ -1273,5 +1370,57 @@ mod tests {
             state.ensure_calls.is_empty(),
             "workspace select should not initialize beads"
         );
+    }
+
+    #[test]
+    fn workspace_select_succeeds_when_git_provider_auto_detect_fails() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = unique_temp_path("workspace-select-autodetect-best-effort");
+        init_git_repo(&repo_path).expect("git repo should initialize");
+
+        let workspace = service
+            .workspace_add(repo_path.to_string_lossy().as_ref())
+            .expect("workspace add should succeed");
+
+        fs::remove_dir_all(&repo_path).expect("repo path should be removed to break auto-detect");
+
+        let selected = service
+            .workspace_select(workspace.workspace_id.as_str())
+            .expect("workspace select should succeed when auto-detect fails");
+
+        assert!(selected.is_active);
+        assert_eq!(selected.workspace_id, workspace.workspace_id);
+    }
+
+    #[test]
+    fn resolve_initialized_repo_path_reinitializes_after_workspace_rebind() {
+        let (service, task_state, _git_state) = build_service_with_state(vec![]);
+        let original_repo = unique_temp_path("workspace-rebind-init-original");
+        let rebound_repo = unique_temp_path("workspace-rebind-init-rebound");
+        init_git_repo(&original_repo).expect("original repo should initialize");
+        init_git_repo(&rebound_repo).expect("rebound repo should initialize");
+
+        let workspace = service
+            .workspace_add(original_repo.to_string_lossy().as_ref())
+            .expect("workspace add should succeed");
+        let original_resolved = service
+            .resolve_initialized_repo_path(original_repo.to_string_lossy().as_ref())
+            .expect("original repo should initialize");
+
+        let mut repo_config = service
+            .workspace_get_repo_config(workspace.workspace_id.as_str())
+            .expect("repo config should load");
+        repo_config.repo_path = rebound_repo.to_string_lossy().to_string();
+        service
+            .workspace_update_repo_config(workspace.workspace_id.as_str(), repo_config)
+            .expect("workspace rebind should succeed");
+        let rebound_resolved = service
+            .resolve_initialized_repo_path(rebound_repo.to_string_lossy().as_ref())
+            .expect("rebound repo should initialize");
+
+        let state = task_state.lock().expect("task state lock poisoned");
+        assert_eq!(state.ensure_calls.len(), 2);
+        assert!(state.ensure_calls.contains(&original_resolved));
+        assert!(state.ensure_calls.contains(&rebound_resolved));
     }
 }

@@ -44,7 +44,7 @@ describe("OdtHostBridgeClient", () => {
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
-          repoPath: "/repo",
+          workspaceId: "repo",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
@@ -52,13 +52,13 @@ describe("OdtHostBridgeClient", () => {
     };
 
     const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", repoPath: "/repo" },
+      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
       { fetchImpl },
     );
 
     await expect(client.ready()).resolves.toEqual({
       bridgeVersion: 1,
-      repoPath: "/repo",
+      workspaceId: "repo",
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
     });
   });
@@ -76,14 +76,14 @@ describe("OdtHostBridgeClient", () => {
     };
 
     const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", repoPath: "/repo" },
+      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
       { fetchImpl },
     );
 
     await expect(client.ready()).rejects.toThrow("bridge unavailable");
   });
 
-  test("call forwards repo-scoped payloads and validates the response", async () => {
+  test("call forwards workspace-scoped payloads and validates the response", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
@@ -95,7 +95,7 @@ describe("OdtHostBridgeClient", () => {
     };
 
     const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", repoPath: "/repo" },
+      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
       { fetchImpl },
     );
 
@@ -105,7 +105,7 @@ describe("OdtHostBridgeClient", () => {
       {
         url: "http://127.0.0.1:14327/invoke/odt_read_task",
         body: {
-          repoPath: "/repo",
+          workspaceId: "repo",
           taskId: "task-1",
         },
       },
@@ -136,7 +136,7 @@ describe("OdtHostBridgeClient", () => {
     };
 
     const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", repoPath: "/repo" },
+      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
       { fetchImpl },
     );
 
@@ -169,7 +169,7 @@ describe("OdtHostBridgeClient", () => {
       {
         url: "http://127.0.0.1:14327/invoke/odt_create_task",
         body: {
-          repoPath: "/repo",
+          workspaceId: "repo",
           title: "Bridge task",
           issueType: "task",
           priority: 2,
@@ -181,7 +181,7 @@ describe("OdtHostBridgeClient", () => {
       {
         url: "http://127.0.0.1:14327/invoke/odt_search_tasks",
         body: {
-          repoPath: "/repo",
+          workspaceId: "repo",
           status: "open",
           title: "Bridge",
           tags: ["mcp"],

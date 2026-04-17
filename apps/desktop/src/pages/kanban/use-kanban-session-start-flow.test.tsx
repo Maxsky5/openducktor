@@ -132,7 +132,11 @@ const createDefaultRepoSettings = (): RepoSettingsInput => ({
 });
 
 const createBaseArgs = (): HookArgs => ({
-  activeRepo: "/repo",
+  activeWorkspace: {
+    repoPath: "/repo",
+    workspaceId: "workspace-1",
+    workspaceName: "Active Workspace",
+  },
   branches: [
     { name: "main", isCurrent: true, isRemote: false },
     { name: "origin/main", isCurrent: false, isRemote: true },

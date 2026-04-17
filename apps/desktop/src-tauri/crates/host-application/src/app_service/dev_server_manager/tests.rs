@@ -8,8 +8,8 @@ use super::terminal::{
 };
 use crate::app_service::test_support::{
     build_service_with_state, build_service_with_store, init_git_repo, lock_env, make_task,
-    set_env_var, spawn_sleep_process_group, unique_temp_path, wait_for_path_exists,
-    wait_for_process_exit, write_executable_script,
+    repo_config_for_workspace, set_env_var, spawn_sleep_process_group, unique_temp_path,
+    wait_for_path_exists, wait_for_process_exit, write_executable_script,
 };
 use crate::app_service::{
     DevServerEmitter, DevServerGroupRuntime, HookTrustConfirmationPort,
@@ -448,22 +448,25 @@ fn dev_server_start_requires_builder_worktree_before_hook_trust() {
         config_store,
     );
     let repo_path = repo.to_string_lossy().to_string();
-    service
+    let workspace = service
         .workspace_add(repo_path.as_str())
         .expect("workspace should add");
     service
         .workspace_update_repo_config(
-            repo_path.as_str(),
-            RepoConfig {
-                dev_servers: vec![RepoDevServerScript {
-                    id: "frontend".to_string(),
-                    name: "Frontend".to_string(),
-                    command: "bun run dev".to_string(),
-                }],
-                trusted_hooks: false,
-                trusted_hooks_fingerprint: None,
-                ..Default::default()
-            },
+            workspace.workspace_id.as_str(),
+            repo_config_for_workspace(
+                &workspace,
+                RepoConfig {
+                    dev_servers: vec![RepoDevServerScript {
+                        id: "frontend".to_string(),
+                        name: "Frontend".to_string(),
+                        command: "bun run dev".to_string(),
+                    }],
+                    trusted_hooks: false,
+                    trusted_hooks_fingerprint: None,
+                    ..Default::default()
+                },
+            ),
         )
         .expect("repo config should persist");
 
@@ -571,33 +574,41 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
     service
         .workspace_add(repo_path.as_str())
         .expect("workspace should add");
+    let workspace = service
+        .workspace_id_for_repo_path(repo_path.as_str())
+        .expect("workspace id should resolve");
     service
         .workspace_update_repo_config(
-            repo_path.as_str(),
-            RepoConfig {
-                trusted_hooks: true,
-                dev_servers: vec![
-                    RepoDevServerScript {
-                        id: "frontend".to_string(),
-                        name: "Frontend".to_string(),
-                        command: "sleep 20".to_string(),
-                    },
-                    RepoDevServerScript {
-                        id: "backend".to_string(),
-                        name: "Backend".to_string(),
-                        command: "__odt_missing_executable__ --port 3000".to_string(),
-                    },
-                ],
-                ..Default::default()
-            },
+            workspace.as_str(),
+            repo_config_for_workspace(
+                &service
+                    .workspace_select(workspace.as_str())
+                    .expect("workspace should load"),
+                RepoConfig {
+                    trusted_hooks: true,
+                    dev_servers: vec![
+                        RepoDevServerScript {
+                            id: "frontend".to_string(),
+                            name: "Frontend".to_string(),
+                            command: "sleep 20".to_string(),
+                        },
+                        RepoDevServerScript {
+                            id: "backend".to_string(),
+                            name: "Backend".to_string(),
+                            command: "__odt_missing_executable__ --port 3000".to_string(),
+                        },
+                    ],
+                    ..Default::default()
+                },
+            ),
         )
         .expect("repo config should persist");
     let challenge = service
-        .workspace_prepare_trusted_hooks_challenge(repo_path.as_str())
+        .workspace_prepare_trusted_hooks_challenge(workspace.as_str())
         .expect("trust challenge should prepare");
     service
         .workspace_set_trusted_hooks(
-            repo_path.as_str(),
+            workspace.as_str(),
             true,
             Some(challenge.nonce.as_str()),
             Some(challenge.fingerprint.as_str()),

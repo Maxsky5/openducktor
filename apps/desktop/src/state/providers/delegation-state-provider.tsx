@@ -1,18 +1,18 @@
 import type { RunEvent } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useCallback, useMemo, useState } from "react";
+import { useWorkspaceState } from "@/state";
 import { buildDelegationStateValue } from "../app-state-context-values";
 import {
   DelegationEventsContext,
   type DelegationEventsContextValue,
   DelegationStateContext,
   type RunCompletionSignal,
-  useActiveRepoContext,
   useTaskControlContext,
 } from "../app-state-contexts";
 import { useDelegationOperations } from "../operations";
 
 export function DelegationStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useWorkspaceState();
   const { refreshTaskData } = useTaskControlContext();
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [runCompletionSignal, setRunCompletionSignalState] = useState<RunCompletionSignal | null>(
@@ -27,7 +27,7 @@ export function DelegationStateProvider({ children }: PropsWithChildren): ReactE
   }, []);
 
   const { delegateTask, delegateRespond, delegateStop, delegateCleanup } = useDelegationOperations({
-    activeRepo,
+    activeWorkspace,
     refreshTaskData,
   });
 

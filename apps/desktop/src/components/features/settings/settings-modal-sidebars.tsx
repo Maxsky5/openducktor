@@ -1,3 +1,4 @@
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import { CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { RepositorySelector } from "@/components/features/repository/repository-selector";
@@ -57,7 +58,7 @@ export function SettingsSidebar({
 }
 
 type RepositorySidebarProps = {
-  repoPaths: string[];
+  workspaces: WorkspaceRecord[];
   selectedRepoPath: string | null;
   selectedRepositorySection: RepositorySectionId;
   disabled: boolean;
@@ -68,7 +69,7 @@ type RepositorySidebarProps = {
 };
 
 export function RepositorySidebar({
-  repoPaths,
+  workspaces,
   selectedRepoPath,
   selectedRepositorySection,
   disabled,
@@ -82,11 +83,11 @@ export function RepositorySidebar({
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Repository</Label>
         <RepositorySelector
-          repoPaths={repoPaths}
+          workspaces={workspaces}
           value={selectedRepoPath ?? ""}
-          placeholder={repoPaths.length > 0 ? "Select repository" : "No repository configured"}
+          placeholder={workspaces.length > 0 ? "Select repository" : "No repository configured"}
           searchPlaceholder="Search repository..."
-          disabled={disabled || repoPaths.length === 0}
+          disabled={disabled || workspaces.length === 0}
           errorCountByPath={repoPromptErrorCountByPath}
           onValueChange={onSelectRepoPath}
         />

@@ -4,6 +4,9 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const createRepoConfig = (): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   branchPrefix: "odt/",
   defaultTargetBranch: {
@@ -32,7 +35,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
-  repos: {},
+  workspaces: {},
   chat: { showThinkingMessages: false },
   kanban: { doneVisibleDays: 1 },
   autopilot: { rules: [] },
@@ -46,8 +49,21 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
 });
 
 const workspaceGetRepoConfigMock = mock(
-  async (_repoPath: string): Promise<RepoConfig> => createRepoConfig(),
+  async (_workspaceId: string): Promise<RepoConfig> => createRepoConfig(),
 );
+
+const workspaceListMock = mock(async () => [
+  {
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/worktrees/repo",
+    effectiveWorktreeBasePath: "/worktrees/repo",
+  },
+]);
 
 const workspaceGetSettingsSnapshotMock = mock(
   async (): Promise<SettingsSnapshot> => createSettingsSnapshot(),
@@ -56,6 +72,7 @@ const workspaceGetSettingsSnapshotMock = mock(
 mock.module("../host", () => ({
   host: {
     workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+    workspaceList: workspaceListMock,
     workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
   },
 }));
@@ -72,20 +89,21 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   workspaceGetRepoConfigMock.mockClear();
+  workspaceListMock.mockClear();
   workspaceGetSettingsSnapshotMock.mockClear();
   await clearAppQueryClient();
 });
 
 describe("loadEffectivePromptOverrides", () => {
-  test("deduplicates concurrent loads for the same repo", async () => {
+  test("deduplicates concurrent loads for the same workspace", async () => {
     const repoDeferred = Promise.withResolvers<RepoConfig>();
     const settingsDeferred = Promise.withResolvers<SettingsSnapshot>();
 
     workspaceGetRepoConfigMock.mockImplementationOnce(async () => repoDeferred.promise);
     workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => settingsDeferred.promise);
 
-    const firstLoad = loadEffectivePromptOverrides("/repo");
-    const secondLoad = loadEffectivePromptOverrides("/repo");
+    const firstLoad = loadEffectivePromptOverrides("repo");
+    const secondLoad = loadEffectivePromptOverrides("repo");
 
     repoDeferred.resolve(createRepoConfig());
     settingsDeferred.resolve(createSettingsSnapshot());
@@ -93,19 +111,21 @@ describe("loadEffectivePromptOverrides", () => {
     const [firstResult, secondResult] = await Promise.all([firstLoad, secondLoad]);
 
     expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);
+    expect(workspaceListMock).not.toHaveBeenCalled();
     expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual(secondResult);
     expect(firstResult["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
     expect(firstResult["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
   });
 
-  test("normalizes repo paths before deduplicating concurrent loads", async () => {
+  test("normalizes workspace ids before deduplicating concurrent loads", async () => {
     const [firstResult, secondResult] = await Promise.all([
-      loadEffectivePromptOverrides("/repo"),
-      loadEffectivePromptOverrides(" /repo "),
+      loadEffectivePromptOverrides("repo"),
+      loadEffectivePromptOverrides(" repo "),
     ]);
 
     expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);
+    expect(workspaceListMock).not.toHaveBeenCalled();
     expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual(secondResult);
   });

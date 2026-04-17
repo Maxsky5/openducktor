@@ -13,6 +13,7 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 
 export type StartAgentSessionInput =
@@ -72,6 +73,7 @@ export type RuntimeDependencies = {
     taskId: string,
     role: AgentRole,
     options?: {
+      workspaceId?: string | null;
       targetWorkingDirectory?: string | null;
       runtimeKind?: AgentModelSelection["runtimeKind"] | null;
     },
@@ -86,12 +88,12 @@ export type TaskDependencies = {
 };
 
 export type ModelDependencies = {
-  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
-  loadRepoDefaultTargetBranch?: (repoPath: string) => Promise<GitTargetBranch | null>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
 };
 
 export type RepoDependencies = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   repoEpochRef: { current: number };
   activeRepoRef?: { current: string | null };
   previousRepoRef: { current: string | null };
@@ -118,6 +120,7 @@ export type SessionStartTags = {
 
 export type StartSessionContext = {
   repoPath: string;
+  workspaceId: string;
   taskId: string;
   role: AgentRole;
   isStaleRepoOperation: RepoStaleGuard;

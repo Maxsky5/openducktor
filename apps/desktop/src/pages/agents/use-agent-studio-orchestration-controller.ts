@@ -1,4 +1,4 @@
-import type { GitBranch, GitTargetBranch } from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch, WorkspaceRecord } from "@openducktor/contracts";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -52,6 +52,7 @@ type AgentStudioOrchestrationActionsContext = {
 };
 type UseAgentStudioOrchestrationControllerArgs = {
   activeRepo: string | null;
+  activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
@@ -206,6 +207,7 @@ export const buildAgentStudioPageModelsArgs = ({
 
 export function useAgentStudioOrchestrationController({
   activeRepo,
+  activeWorkspace,
   branches,
   selection,
   readiness,
@@ -246,7 +248,9 @@ export function useAgentStudioOrchestrationController({
     answerAgentQuestion,
   } = actions;
 
-  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
+  const { repoSettings } = useAgentStudioRepoSettings({
+    activeWorkspace,
+  });
   const { showThinkingMessages, chatSettingsLoadError, retryChatSettingsLoad } =
     useAgentStudioChatSettings({ activeRepo });
 
@@ -308,7 +312,7 @@ export function useAgentStudioOrchestrationController({
     handleSessionSelectionChange,
     handleCreateSession,
   } = useAgentStudioSessionActions({
-    activeRepo,
+    activeWorkspace,
     branches,
     taskId: viewTaskId,
     role: viewRole,

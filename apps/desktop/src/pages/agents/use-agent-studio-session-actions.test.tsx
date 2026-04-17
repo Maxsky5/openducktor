@@ -202,7 +202,11 @@ const confirmSessionStartModal = async (
 
 const createBaseArgs = (): HookArgs => {
   return {
-    activeRepo: "/repo",
+    activeWorkspace: {
+      repoPath: "/repo",
+      workspaceId: "workspace-1",
+      workspaceName: "Active Workspace",
+    },
     taskId: "task-1",
     role: "spec",
     scenario: "spec_initial",
@@ -239,6 +243,9 @@ describe("useAgentStudioSessionActions", () => {
     await clearAppQueryClient();
     host.workspaceGetRepoConfig = async () =>
       ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
@@ -255,7 +262,7 @@ describe("useAgentStudioSessionActions", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
   });

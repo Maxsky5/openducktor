@@ -34,7 +34,7 @@ Example MCP config:
       "command": "bunx",
       "args": [
         "@openducktor/mcp",
-        "--repo", "/absolute/path/to/repo"
+        "--workspace-id", "my-workspace"
       ]
     }
   }
@@ -47,7 +47,7 @@ Optional arguments:
 
 Equivalent environment variables:
 
-- `ODT_REPO_PATH`
+- `ODT_WORKSPACE_ID`
 - `ODT_HOST_URL` optional override
 
 Automatic discovery:
@@ -58,7 +58,7 @@ Automatic discovery:
 
 Startup contract:
 
-1. Normalize and validate the repo path.
+1. Resolve the requested workspace ID.
 2. Use `ODT_HOST_URL` or `--host-url` first when provided.
 3. Otherwise read the local discovery registry and try discovered bridge ports in registry order.
 4. The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
@@ -66,7 +66,7 @@ Startup contract:
 6. Call `odt_mcp_ready` through the loopback host API.
 7. Refuse startup if any required ODT tool name is missing.
 
-Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it.
+Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it. In both cases the MCP identifies the workspace with `workspaceId`, and the Rust host resolves that to the current repo path.
 
 ## Public Tools
 

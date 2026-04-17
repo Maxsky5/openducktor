@@ -352,6 +352,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "pullRequestSchema",
   "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",
+  "WORKSPACE_ID_PATTERN",
+  "workspaceIdSchema",
+  "workspaceNameSchema",
   "workspaceRecordSchema",
 ] as const;
 
@@ -493,7 +496,7 @@ describe("contracts exports contract", () => {
       git: {
         defaultMergeMethod: "merge_commit",
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
 
@@ -507,7 +510,7 @@ describe("contracts exports contract", () => {
         git: {
           defaultMergeMethod: "merge_commit",
         },
-        repos: {},
+        workspaces: {},
         globalPromptOverrides: {},
       }),
     ).toThrow();

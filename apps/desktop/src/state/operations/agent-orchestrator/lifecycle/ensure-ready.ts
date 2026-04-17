@@ -2,6 +2,7 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import {
   type RuntimeInfo,
@@ -18,7 +19,7 @@ import {
 import { loadSessionPromptContext } from "../support/session-prompt";
 
 type EnsureSessionReadyDependencies = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
   activeRepoRef?: { current: string | null };
@@ -37,6 +38,7 @@ type EnsureSessionReadyDependencies = {
     taskId: string,
     role: AgentSessionState["role"],
     options?: {
+      workspaceId?: string | null;
       targetWorkingDirectory?: string | null;
       runtimeKind?: AgentSessionState["selectedModel"] extends infer T
         ? T extends { runtimeKind?: infer K }
@@ -45,7 +47,7 @@ type EnsureSessionReadyDependencies = {
         : never;
     },
   ) => Promise<RuntimeInfo>;
-  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
@@ -67,7 +69,7 @@ const hasPendingInput = (
 };
 
 export const createEnsureSessionReady = ({
-  activeRepo,
+  activeWorkspace,
   adapter,
   repoEpochRef,
   activeRepoRef,
@@ -87,7 +89,11 @@ export const createEnsureSessionReady = ({
     },
   ): Promise<void> => {
     const allowPendingInput = options?.allowPendingInput === true;
-    const repoPath = requireActiveRepo(activeRepo);
+    const repoPath = requireActiveRepo(activeWorkspace?.repoPath ?? null);
+    const workspaceId = activeWorkspace?.workspaceId;
+    if (!workspaceId) {
+      throw new Error("Active workspace is required.");
+    }
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,
@@ -169,6 +175,7 @@ export const createEnsureSessionReady = ({
             throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
           }
           const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+            workspaceId,
             targetWorkingDirectory: session.workingDirectory,
             ...(session.selectedModel?.runtimeKind
               ? { runtimeKind: session.selectedModel.runtimeKind }
@@ -249,7 +256,7 @@ export const createEnsureSessionReady = ({
     }
 
     const promptContext = await loadSessionPromptContext({
-      repoPath,
+      workspaceId,
       role: session.role,
       scenario: session.scenario,
       task,
@@ -257,6 +264,7 @@ export const createEnsureSessionReady = ({
     });
     assertNotStale();
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+      workspaceId,
       targetWorkingDirectory: session.workingDirectory,
       ...(session.selectedModel?.runtimeKind
         ? { runtimeKind: session.selectedModel.runtimeKind }
@@ -264,10 +272,13 @@ export const createEnsureSessionReady = ({
     });
     assertNotStale();
     const requestedRuntimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
-    if (!requestedRuntimeKind && !runtime.runtimeKind) {
-      throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+    let resolvedRuntimeKind = runtime.runtimeKind;
+    if (!resolvedRuntimeKind) {
+      if (!requestedRuntimeKind) {
+        throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
+      }
+      resolvedRuntimeKind = requestedRuntimeKind;
     }
-    const resolvedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind!;
     const runtimeConnection = requireRuntimeConnectionSupport(
       resolvedRuntimeKind,
       resolveRuntimeConnection(runtime),

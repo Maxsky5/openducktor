@@ -27,7 +27,7 @@ export const resolveRuntimeAndModel = async ({
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
   const { promptOverrides } = await loadSessionPromptInputs({
-    repoPath: ctx.repoPath,
+    workspaceId: ctx.workspaceId,
     loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
@@ -36,6 +36,7 @@ export const resolveRuntimeAndModel = async ({
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
   });

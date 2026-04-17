@@ -55,12 +55,64 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 const createWorkspaceRecord = (path = "/repo-a") => ({
-  path,
+  workspaceId: path.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: path.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath: path,
   isActive: true,
   hasConfig: true,
   configuredWorktreeBasePath: "/tmp/worktrees",
   defaultWorktreeBasePath: "/tmp/default-worktrees",
   effectiveWorktreeBasePath: "/tmp/worktrees",
+});
+
+const createSettingsSnapshot = (): SettingsSnapshot => ({
+  theme: "light",
+  git: {
+    defaultMergeMethod: "merge_commit",
+  },
+  chat: {
+    showThinkingMessages: false,
+  },
+  kanban: {
+    doneVisibleDays: 1,
+  },
+  autopilot: {
+    rules: [],
+  },
+  workspaces: {},
+  globalPromptOverrides: {},
+});
+
+const createRepoConfig = () => ({
+  workspaceId: "repo-a",
+  workspaceName: "repo-a",
+  repoPath: "/repo-a",
+  defaultRuntimeKind: "opencode" as const,
+  worktreeBasePath: undefined,
+  branchPrefix: "codex/",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: { providers: {} },
+  trustedHooks: false,
+  hooks: { preStart: ["a"], postComplete: ["b"] },
+  devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
+  worktreeFileCopies: [],
+  promptOverrides: {},
+  agentDefaults: {
+    spec: { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
+    planner: undefined,
+    build: {
+      runtimeKind: "opencode" as const,
+      providerId: "anthropic",
+      modelId: "claude-4",
+      variant: "v1",
+    },
+    qa: {
+      runtimeKind: "opencode" as const,
+      providerId: "xai",
+      modelId: "grok",
+      profileId: "qa",
+    },
+  },
 });
 
 const inputFixture: RepoSettingsInput = {
@@ -97,23 +149,7 @@ describe("use-repo-settings-operations", () => {
   test("caches settings snapshot reads across repeated calls", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const workspaceGetSettingsSnapshot = mock(async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        rules: [],
-      },
-      repos: {},
-      globalPromptOverrides: {},
-    }));
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
       workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
@@ -122,46 +158,19 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
 
     try {
       await harness.mount();
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
-        theme: "light",
-        git: {
-          defaultMergeMethod: "merge_commit",
-        },
-        chat: {
-          showThinkingMessages: false,
-        },
-        kanban: {
-          doneVisibleDays: 1,
-        },
-        autopilot: {
-          rules: [],
-        },
-        repos: {},
-        globalPromptOverrides: {},
-      });
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
-        theme: "light",
-        git: {
-          defaultMergeMethod: "merge_commit",
-        },
-        chat: {
-          showThinkingMessages: false,
-        },
-        kanban: {
-          doneVisibleDays: 1,
-        },
-        autopilot: {
-          rules: [],
-        },
-        repos: {},
-        globalPromptOverrides: {},
-      });
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
+        createSettingsSnapshot(),
+      );
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
+        createSettingsSnapshot(),
+      );
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
@@ -174,6 +183,7 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecord = mock(() => {});
     const harness = createHookHarness({
       activeRepo: null,
+      activeWorkspace: null,
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -193,6 +203,7 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecord = mock(() => {});
     const harness = createHookHarness({
       activeRepo: null,
+      activeWorkspace: null,
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -211,22 +222,7 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceGetRepoConfig = mock(
-      async () =>
-        ({
-          defaultRuntimeKind: "opencode" as const,
-          worktreeBasePath: undefined,
-          branchPrefix: "codex/",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          trustedHooks: false,
-          hooks: { preStart: ["a"], postComplete: ["b"] },
-          devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-          agentDefaults: {
-            spec: { providerId: "openai", modelId: "gpt-5" },
-            planner: undefined,
-            build: { providerId: "anthropic", modelId: "claude-4", variant: "v1" },
-            qa: { providerId: "xai", modelId: "grok", profileId: "qa" },
-          },
-        }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>,
+      async () => createRepoConfig() as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>,
     );
 
     const original = {
@@ -236,6 +232,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -244,7 +241,7 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       const loaded = await harness.getLatest().loadRepoSettings();
 
-      expect(workspaceGetRepoConfig).toHaveBeenCalledWith("/repo-a");
+      expect(workspaceGetRepoConfig).toHaveBeenCalledWith("repo-a");
       expect(loaded).toEqual({
         defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "",
@@ -298,6 +295,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -320,7 +318,7 @@ describe("use-repo-settings-operations", () => {
       };
       await harness.getLatest().saveRepoSettings(input);
 
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
         defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
@@ -359,23 +357,7 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-    const workspaceGetSettingsSnapshot = mock(async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        rules: [],
-      },
-      repos: {},
-      globalPromptOverrides: {},
-    }));
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
       workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
@@ -386,6 +368,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -416,6 +399,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -427,7 +411,7 @@ describe("use-repo-settings-operations", () => {
         trustedHooks: false,
       });
 
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
         defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
@@ -479,6 +463,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -511,6 +496,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -542,6 +528,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -586,6 +573,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -608,23 +596,7 @@ describe("use-repo-settings-operations", () => {
   test("loads settings snapshot through atomic IPC route", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const workspaceGetSettingsSnapshot = mock(async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        rules: [],
-      },
-      repos: {},
-      globalPromptOverrides: {},
-    }));
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
       workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
@@ -633,29 +605,16 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
 
     try {
       await harness.mount();
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
-        theme: "light",
-        git: {
-          defaultMergeMethod: "merge_commit",
-        },
-        chat: {
-          showThinkingMessages: false,
-        },
-        kanban: {
-          doneVisibleDays: 1,
-        },
-        autopilot: {
-          rules: [],
-        },
-        repos: {},
-        globalPromptOverrides: {},
-      });
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
+        createSettingsSnapshot(),
+      );
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
@@ -663,26 +622,21 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saves settings snapshot atomically and applies returned workspaces", async () => {
+  test("saves settings snapshot atomically and refreshes normalized snapshot from the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const normalizedSnapshot: SettingsSnapshot = {
+      ...createSettingsSnapshot(),
+      workspaces: {
+        "repo-a": {
+          ...createRepoConfig(),
+          repoPath: "/canonical-repo-a",
+        },
+      },
+    };
     const workspaceGetSettingsSnapshot = mock(async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        rules: [],
-      },
-      repos: {},
-      globalPromptOverrides: {},
+      ...normalizedSnapshot,
     }));
 
     const original = {
@@ -694,25 +648,18 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
     const snapshot: SettingsSnapshot = {
-      theme: "light",
-      git: {
-        defaultMergeMethod: "merge_commit",
+      ...createSettingsSnapshot(),
+      workspaces: {
+        "repo-a": {
+          ...createRepoConfig(),
+          repoPath: "/repo-a-link",
+        },
       },
-      chat: {
-        showThinkingMessages: false,
-      },
-      kanban: {
-        doneVisibleDays: 1,
-      },
-      autopilot: {
-        rules: [],
-      },
-      repos: {},
-      globalPromptOverrides: {},
     };
 
     try {
@@ -720,8 +667,8 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(snapshot);
-      expect(workspaceGetSettingsSnapshot).not.toHaveBeenCalled();
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
@@ -737,14 +684,18 @@ describe("use-repo-settings-operations", () => {
       forwardedSnapshot = snapshotArg;
       return [];
     });
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
       workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
     };
     host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -782,8 +733,11 @@ describe("use-repo-settings-operations", () => {
       autopilot: {
         rules: [],
       },
-      repos: {
-        "/repo-a": {
+      workspaces: {
+        "repo-a": {
+          workspaceId: "repo-a",
+          workspaceName: "repo-a",
+          repoPath: "/repo-a",
           defaultRuntimeKind: "opencode" as const,
           worktreeBasePath: "/tmp/worktrees",
           branchPrefix: "odt",
@@ -809,17 +763,18 @@ describe("use-repo-settings-operations", () => {
       expect(forwardedSnapshot).toBeDefined();
       const parsedForwarded = forwardedSnapshot as {
         globalPromptOverrides: Record<string, unknown>;
-        repos: Record<string, { promptOverrides: Record<string, unknown> }>;
+        workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
       };
       expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
         [...agentPromptTemplateIdValues].sort(),
       );
-      expect(Object.keys(parsedForwarded.repos["/repo-a"]?.promptOverrides ?? {}).sort()).toEqual(
-        [...agentPromptTemplateIdValues].sort(),
-      );
+      expect(
+        Object.keys(parsedForwarded.workspaces["repo-a"]?.promptOverrides ?? {}).sort(),
+      ).toEqual([...agentPromptTemplateIdValues].sort());
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
     }
   });
 
@@ -835,6 +790,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
@@ -871,6 +827,7 @@ describe("use-repo-settings-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
+      activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });

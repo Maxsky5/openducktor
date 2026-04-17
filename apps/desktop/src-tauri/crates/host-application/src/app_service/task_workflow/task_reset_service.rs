@@ -70,8 +70,7 @@ impl<'a> TaskResetService<'a> {
         )?;
         let branch_prefix = self
             .service
-            .config_store
-            .repo_config(&context.repo.repo_path)?
+            .workspace_get_repo_config_by_repo_path(&context.repo.repo_path)?
             .branch_prefix;
         let branch_plan = BranchCleanupPlan::for_task(
             self.service,

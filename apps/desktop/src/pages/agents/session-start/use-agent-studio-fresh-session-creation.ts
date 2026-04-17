@@ -12,7 +12,7 @@ import {
 import { errorMessage } from "@/lib/errors";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
+import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "../agents-page-session-tabs";
 import {
   buildAgentStudioAsyncActivityContextKey,
@@ -27,7 +27,7 @@ import {
 type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
 type UseAgentStudioFreshSessionCreationArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   role: AgentRole;
   activeSession: AgentSessionState | null;
@@ -49,7 +49,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
 };
 
 export function useAgentStudioFreshSessionCreation({
-  activeRepo,
+  activeWorkspace,
   taskId,
   role,
   activeSession,
@@ -69,6 +69,7 @@ export function useAgentStudioFreshSessionCreation({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const applyFreshSessionSelectionQuery = useCallback(
     (sessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
       updateQuery(
@@ -105,7 +106,7 @@ export function useAgentStudioFreshSessionCreation({
             let workflow: SessionStartWorkflowResult;
             try {
               workflow = await startSessionWorkflow({
-                activeRepo,
+                activeWorkspace,
                 queryClient,
                 intent: {
                   taskId,
@@ -163,7 +164,7 @@ export function useAgentStudioFreshSessionCreation({
           let workflow: SessionStartWorkflowResult | undefined;
           try {
             workflow = await startSessionWorkflow({
-              activeRepo,
+              activeWorkspace,
               queryClient,
               intent: {
                 taskId,
@@ -221,6 +222,7 @@ export function useAgentStudioFreshSessionCreation({
     [
       activeSession,
       activeRepo,
+      activeWorkspace,
       applyFreshSessionSelectionQuery,
       onContextSwitchIntent,
       onPostStartActionError,

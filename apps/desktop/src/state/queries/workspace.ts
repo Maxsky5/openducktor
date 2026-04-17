@@ -16,7 +16,8 @@ const WORKSPACE_LIST_STALE_TIME_MS = 5 * 60_000;
 export const workspaceQueryKeys = {
   all: ["workspace"] as const,
   settingsSnapshot: () => [...workspaceQueryKeys.all, "settings-snapshot"] as const,
-  repoConfig: (repoPath: string) => [...workspaceQueryKeys.all, "repo-config", repoPath] as const,
+  repoConfig: (workspaceId: string) =>
+    [...workspaceQueryKeys.all, "repo-config", workspaceId] as const,
   list: () => [...workspaceQueryKeys.all, "list"] as const,
 };
 
@@ -77,10 +78,13 @@ export const settingsSnapshotQueryOptions = (hostClient: SettingsSnapshotQueryHo
     staleTime: SETTINGS_SNAPSHOT_STALE_TIME_MS,
   });
 
-export const repoConfigQueryOptions = (repoPath: string, hostClient: RepoConfigQueryHost = host) =>
+export const repoConfigQueryOptions = (
+  workspaceId: string,
+  hostClient: RepoConfigQueryHost = host,
+) =>
   queryOptions({
-    queryKey: workspaceQueryKeys.repoConfig(repoPath),
-    queryFn: () => hostClient.workspaceGetRepoConfig(repoPath),
+    queryKey: workspaceQueryKeys.repoConfig(workspaceId),
+    queryFn: () => hostClient.workspaceGetRepoConfig(workspaceId),
     staleTime: REPO_CONFIG_STALE_TIME_MS,
   });
 
@@ -99,9 +103,10 @@ export const loadSettingsSnapshotFromQuery = (
 
 export const loadRepoConfigFromQuery = (
   queryClient: QueryClient,
-  repoPath: string,
+  workspaceId: string,
   hostClient?: RepoConfigQueryHost,
-): Promise<RepoConfig> => queryClient.ensureQueryData(repoConfigQueryOptions(repoPath, hostClient));
+): Promise<RepoConfig> =>
+  queryClient.ensureQueryData(repoConfigQueryOptions(workspaceId, hostClient));
 
 export const loadWorkspaceListFromQuery = (
   queryClient: QueryClient,

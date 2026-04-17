@@ -20,7 +20,7 @@ export type OdtHostBridgeClientPort = {
 
 export type OdtHostBridgeClientOptions = {
   baseUrl: string;
-  repoPath: string;
+  workspaceId: string;
 };
 
 export type OdtHostBridgeClientDeps = {
@@ -54,18 +54,18 @@ const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
 
 export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   private readonly baseUrl: string;
-  private readonly repoPath: string;
+  private readonly workspaceId: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OdtHostBridgeClientOptions, deps: OdtHostBridgeClientDeps = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
-    this.repoPath = options.repoPath;
+    this.workspaceId = options.workspaceId;
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
   async ready(): Promise<OdtHostBridgeReady> {
     await this.checkHealth();
-    const payload = await this.invokeJson(READY_TOOL_NAME, { repoPath: this.repoPath });
+    const payload = await this.invokeJson(READY_TOOL_NAME, { workspaceId: this.workspaceId });
     const ready = odtHostBridgeReadySchema.parse(payload);
     assertToolCoverage(ready);
     return ready;
@@ -76,7 +76,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     input: ToolInput<Name>,
   ): Promise<ToolOutput<Name>> {
     const payload = await this.invokeJson(toolName, {
-      repoPath: this.repoPath,
+      workspaceId: this.workspaceId,
       ...input,
     });
     return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName].parse(payload) as ToolOutput<Name>;

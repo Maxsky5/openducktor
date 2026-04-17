@@ -8,6 +8,35 @@ use anyhow::{anyhow, Result};
 use host_domain::RuntimeRegistry;
 use std::collections::HashSet;
 
+fn normalize_required_string(value: &mut String, field_name: &str) -> Result<()> {
+    *value = value.trim().to_string();
+    if value.is_empty() {
+        return Err(anyhow!("{field_name} cannot be blank."));
+    }
+    Ok(())
+}
+
+fn is_valid_workspace_id(value: &str) -> bool {
+    let mut segments = value.split('-');
+    let Some(first_segment) = segments.next() else {
+        return false;
+    };
+    if first_segment.is_empty()
+        || !first_segment
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
+    {
+        return false;
+    }
+
+    segments.all(|segment| {
+        !segment.is_empty()
+            && segment
+                .chars()
+                .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
+    })
+}
+
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
     value.and_then(|entry| {
         let trimmed = entry.trim();
@@ -159,6 +188,14 @@ pub fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
 }
 
 pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
+    normalize_required_string(&mut repo.workspace_id, "Workspace ID")?;
+    if !is_valid_workspace_id(&repo.workspace_id) {
+        return Err(anyhow!(
+            "Workspace ID must contain only lowercase letters, digits, and single dashes."
+        ));
+    }
+    normalize_required_string(&mut repo.workspace_name, "Workspace name")?;
+    normalize_required_string(&mut repo.repo_path, "Repository path")?;
     repo.default_runtime_kind = repo.default_runtime_kind.trim().to_string();
     if repo.default_runtime_kind.is_empty() {
         return Err(anyhow!("Default runtime kind cannot be blank."));
@@ -223,9 +260,32 @@ pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);
     normalize_prompt_overrides(&mut config.global_prompt_overrides);
-    for repo in config.repos.values_mut() {
+    config.active_workspace = normalize_optional_non_empty(config.active_workspace.take());
+    let mut normalized_recent = Vec::new();
+    for workspace_id in std::mem::take(&mut config.recent_workspaces) {
+        let trimmed = workspace_id.trim();
+        if trimmed.is_empty()
+            || normalized_recent
+                .iter()
+                .any(|entry: &String| entry == trimmed)
+        {
+            continue;
+        }
+        normalized_recent.push(trimmed.to_string());
+    }
+    config.recent_workspaces = normalized_recent;
+    for (workspace_id, repo) in &mut config.workspaces {
+        repo.workspace_id = workspace_id.clone();
         normalize_repo_config(repo)?;
     }
+    if let Some(active_workspace) = config.active_workspace.as_ref() {
+        if !config.workspaces.contains_key(active_workspace) {
+            config.active_workspace = None;
+        }
+    }
+    config
+        .recent_workspaces
+        .retain(|workspace_id| config.workspaces.contains_key(workspace_id));
     Ok(())
 }
 

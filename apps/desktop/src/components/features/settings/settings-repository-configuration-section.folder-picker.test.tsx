@@ -14,6 +14,9 @@ import {
 enableReactActEnvironment();
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
   defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
@@ -32,18 +35,27 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 
-function SeedFilesystemDirectory({ path }: { path: string }): ReactNode {
+function SeedFilesystemDirectory({
+  path,
+  currentPathIsGitRepo = false,
+}: {
+  path: string;
+  currentPathIsGitRepo?: boolean;
+}): ReactNode {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    queryClient.setQueryData(filesystemQueryKeys.directory(), {
+    const listing = {
       currentPath: path,
-      currentPathIsGitRepo: false,
+      currentPathIsGitRepo,
       parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
       homePath: path,
       entries: [],
-    });
-  }, [path, queryClient]);
+    };
+
+    queryClient.setQueryData(filesystemQueryKeys.directory(), listing);
+    queryClient.setQueryData(filesystemQueryKeys.directory(path), listing);
+  }, [currentPathIsGitRepo, path, queryClient]);
 
   return null;
 }
@@ -82,6 +94,51 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("/tmp/worktrees")).toBeTruthy();
+    });
+  } finally {
+    rendered.unmount();
+  }
+});
+
+test("RepositoryConfigurationSection applies the confirmed repository rebind path", async () => {
+  const Wrapper = () => {
+    const [selectedRepoConfig, setSelectedRepoConfig] = useState(createRepoConfig());
+
+    return (
+      <QueryProvider useIsolatedClient>
+        <SeedFilesystemDirectory path="/tmp/rebound-repo" currentPathIsGitRepo />
+        <RepositoryConfigurationSection
+          selectedRepoConfig={selectedRepoConfig}
+          selectedRepoEffectiveWorktreeBasePath={null}
+          selectedRepoBranches={[]}
+          selectedRepoBranchesError={null}
+          isLoadingSettings={false}
+          isSaving={false}
+          isLoadingSelectedRepoBranches={false}
+          onRetrySelectedRepoBranchesLoad={() => {}}
+          onUpdateSelectedRepoConfig={(updater) => {
+            setSelectedRepoConfig((current) => updater(current));
+          }}
+        />
+      </QueryProvider>
+    );
+  };
+
+  const rendered = render(createElement(Wrapper));
+
+  try {
+    fireEvent.click(screen.getByRole("button", { name: /rebind/i }));
+
+    const manualPathInput = await screen.findByLabelText("Open path");
+    fireEvent.change(manualPathInput, { target: { value: "/tmp/rebound-repo" } });
+    fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+    await screen.findByText("Git repo");
+
+    fireEvent.click(screen.getByRole("button", { name: /use this repository/i }));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("/tmp/rebound-repo")).toBeTruthy();
     });
   } finally {
     rendered.unmount();

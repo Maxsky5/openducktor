@@ -95,7 +95,7 @@ const createHookHarness = (initialProps: HookArgs) => {
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: null,
+  activeWorkspace: null,
   taskId: "task-1",
   role: "spec",
   scenario: "spec_initial",

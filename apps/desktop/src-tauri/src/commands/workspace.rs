@@ -206,18 +206,24 @@ pub async fn workspace_list(
 #[tauri::command]
 pub async fn workspace_add(
     state: State<'_, AppState>,
+    workspace_id: String,
+    workspace_name: String,
     repo_path: String,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    as_error(state.service.workspace_add(&repo_path))
+    as_error(
+        state
+            .service
+            .workspace_create(&workspace_id, &workspace_name, &repo_path),
+    )
 }
 
 #[tauri::command]
 pub async fn workspace_select(
     state: State<'_, AppState>,
-    repo_path: String,
+    workspace_id: String,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    let selected = as_error(state.service.workspace_select(&repo_path))?;
-    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
+    let selected = as_error(state.service.workspace_select(&workspace_id))?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&selected.repo_path)?;
     Ok(selected)
 }
 
@@ -263,11 +269,11 @@ pub async fn workspace_resolve_local_attachment_path(
 #[tauri::command]
 pub async fn workspace_update_repo_config(
     state: State<'_, AppState>,
-    repo_path: String,
+    workspace_id: String,
     config: RepoConfigPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
     let updated = as_error(state.service.workspace_merge_repo_config(
-        &repo_path,
+        &workspace_id,
         RepoConfigUpdate {
             default_runtime_kind: config.default_runtime_kind,
             worktree_base_path: config.worktree_base_path,
@@ -280,7 +286,7 @@ pub async fn workspace_update_repo_config(
             agent_defaults: config.agent_defaults,
         },
     ))?;
-    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&updated.repo_path)?;
     Ok(updated)
 }
 
@@ -290,11 +296,11 @@ pub async fn workspace_update_repo_config(
 pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     state: State<'_, AppState>,
     app: AppHandle<R>,
-    repo_path: String,
+    workspace_id: String,
     settings: RepoSettingsPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
     let service = state.service.clone();
-    let repo_path_for_worker = repo_path.clone();
+    let workspace_id_for_worker = workspace_id.clone();
     let confirmation_port = TauriHookTrustConfirmationPort::new(app);
     let update = RepoSettingsUpdate {
         default_runtime_kind: settings.default_runtime_kind,
@@ -312,41 +318,45 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
 
     let updated = as_error(
         run_service_blocking("workspace_save_repo_settings", move || {
-            service.workspace_save_repo_settings(&repo_path_for_worker, update, &confirmation_port)
+            service.workspace_save_repo_settings(
+                &workspace_id_for_worker,
+                update,
+                &confirmation_port,
+            )
         })
         .await,
     )?;
-    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&updated.repo_path)?;
     Ok(updated)
 }
 
 #[tauri::command]
 pub async fn workspace_update_repo_hooks(
     state: State<'_, AppState>,
-    repo_path: String,
+    workspace_id: String,
     hooks: HookSet,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    as_error(state.service.workspace_update_repo_hooks(&repo_path, hooks))
+    as_error(state.service.workspace_update_repo_hooks(&workspace_id, hooks))
 }
 
 #[tauri::command]
 pub async fn workspace_prepare_trusted_hooks_challenge(
     state: State<'_, AppState>,
-    repo_path: String,
+    workspace_id: String,
 ) -> Result<PreparedHookTrustChallenge, String> {
     as_error(
         state
             .service
-            .workspace_prepare_trusted_hooks_challenge(&repo_path),
+            .workspace_prepare_trusted_hooks_challenge(&workspace_id),
     )
 }
 
 #[tauri::command]
 pub async fn workspace_get_repo_config(
     state: State<'_, AppState>,
-    repo_path: String,
+    workspace_id: String,
 ) -> Result<host_infra_system::RepoConfig, String> {
-    as_error(state.service.workspace_get_repo_config(&repo_path))
+    as_error(state.service.workspace_get_repo_config(&workspace_id))
 }
 
 #[tauri::command]
@@ -361,7 +371,7 @@ pub async fn workspace_detect_github_repository(
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SettingsSnapshotResponsePayload, String> {
-    let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) =
+    let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) =
         as_error(state.service.workspace_get_settings_snapshot())?;
     Ok(SettingsSnapshotResponsePayload {
         theme,
@@ -369,7 +379,7 @@ pub async fn workspace_get_settings_snapshot(
         chat,
         kanban,
         autopilot,
-        repos,
+        workspaces,
         global_prompt_overrides,
     })
 }
@@ -401,12 +411,15 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
         chat,
         kanban,
         autopilot,
-        repos,
+        workspaces,
         global_prompt_overrides,
     } = snapshot;
     let service = state.service.clone();
     let confirmation_port = TauriHookTrustConfirmationPort::new(app);
-    let repo_paths_to_invalidate = repos.keys().cloned().collect::<Vec<_>>();
+    let repo_paths_to_invalidate = workspaces
+        .values()
+        .map(|workspace| workspace.repo_path.clone())
+        .collect::<Vec<_>>();
 
     let updated = as_error(
         run_service_blocking("workspace_save_settings_snapshot", move || {
@@ -417,7 +430,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
                     chat,
                     kanban,
                     autopilot,
-                    repos,
+                    workspaces,
                     global_prompt_overrides,
                 },
                 &confirmation_port,
@@ -437,7 +450,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
 pub async fn workspace_set_trusted_hooks<R: tauri::Runtime>(
     state: State<'_, AppState>,
     app: AppHandle<R>,
-    repo_path: String,
+    workspace_id: String,
     trusted: bool,
     challenge_nonce: Option<String>,
     challenge_fingerprint: Option<String>,
@@ -448,7 +461,7 @@ pub async fn workspace_set_trusted_hooks<R: tauri::Runtime>(
     as_error(
         run_service_blocking("workspace_set_trusted_hooks", move || {
             service.workspace_set_trusted_hooks(
-                &repo_path,
+                &workspace_id,
                 trusted,
                 challenge_nonce.as_deref(),
                 challenge_fingerprint.as_deref(),
@@ -559,8 +572,8 @@ impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmation
         }
 
         let dialog_message = format!(
-            "Approve trusted scripts for this workspace?\n\nRepository:\n{repo}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nBuilder dev server commands:\n{dev_servers}\n\nTrusted scripts can execute shell commands on this machine.",
-            repo = request.repo_path,
+            "Approve trusted scripts for this workspace?\n\nWorkspace ID:\n{workspace_id}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nBuilder dev server commands:\n{dev_servers}\n\nTrusted scripts can execute shell commands on this machine.",
+            workspace_id = request.workspace_id,
             pre = format_hook_list(&request.hooks.pre_start),
             post = format_hook_list(&request.hooks.post_complete),
             dev_servers = format_dev_server_list(&request.dev_servers),
@@ -627,6 +640,7 @@ mod tests {
     struct WorkspaceCommandFixture {
         app: App<MockRuntime>,
         service: Arc<AppService>,
+        workspace_id: String,
         repo_path: String,
         root: PathBuf,
     }
@@ -771,18 +785,23 @@ mod tests {
             .status()
             .expect("git init should succeed");
         let repo_path = repo.to_string_lossy().to_string();
+        let workspace_id = "repo".to_string();
+        let workspace_name = "repo".to_string();
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         config_store
-            .add_workspace(repo_path.as_str())
+            .add_workspace(&workspace_id, &workspace_name, repo_path.as_str())
             .expect("workspace should be allowlisted");
         config_store
-            .update_repo_hooks(repo_path.as_str(), hooks)
+            .update_repo_hooks(&workspace_id, hooks)
             .expect("hooks should be persisted");
 
-        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
-            TASK_METADATA_NAMESPACE,
-        ));
+        let task_store: Arc<dyn TaskStore> = Arc::new(
+            BeadsTaskStore::with_metadata_namespace_and_config(
+                TASK_METADATA_NAMESPACE,
+                config_store.clone(),
+            ),
+        );
         let service = Arc::new(AppService::with_git_port(
             task_store,
             config_store,
@@ -807,6 +826,7 @@ mod tests {
         WorkspaceCommandFixture {
             app,
             service,
+            workspace_id,
             repo_path,
             root,
         }
@@ -830,7 +850,7 @@ mod tests {
         tauri::async_runtime::block_on(workspace_set_trusted_hooks(
             state,
             app_handle,
-            fixture.repo_path.clone(),
+            fixture.workspace_id.clone(),
             trusted,
             challenge_nonce,
             challenge_fingerprint,
@@ -866,7 +886,7 @@ mod tests {
         tauri::async_runtime::block_on(workspace_save_repo_settings(
             state,
             app_handle,
-            fixture.repo_path.clone(),
+            fixture.workspace_id.clone(),
             settings,
         ))
     }
@@ -878,7 +898,7 @@ mod tests {
         let state = fixture.app.state::<AppState>();
         tauri::async_runtime::block_on(workspace_update_repo_config(
             state,
-            fixture.repo_path.clone(),
+            fixture.workspace_id.clone(),
             config,
         ))
     }
@@ -889,7 +909,7 @@ mod tests {
         let state = fixture.app.state::<AppState>();
         tauri::async_runtime::block_on(workspace_prepare_trusted_hooks_challenge(
             state,
-            fixture.repo_path.clone(),
+            fixture.workspace_id.clone(),
         ))
     }
 
@@ -991,7 +1011,7 @@ mod tests {
         let error = invoke_workspace_set_trusted_hooks_ipc(
             &fixture,
             json!({
-                "repoPath": fixture.repo_path.as_str(),
+                "workspaceId": fixture.workspace_id.as_str(),
                 "trusted": true,
                 "challengeFingerprint": "abc",
             }),
@@ -1048,11 +1068,12 @@ mod tests {
             Some(challenge.fingerprint.clone()),
         )
         .expect("valid challenge should trust hooks");
-        assert_eq!(updated.path, canonical_repo_path(&fixture));
+        assert_eq!(updated.workspace_id, fixture.workspace_id);
+        assert_eq!(updated.repo_path, canonical_repo_path(&fixture));
 
         let repo_config = fixture
             .service
-            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .workspace_get_repo_config(fixture.workspace_id.as_str())
             .map_err(|error| error.to_string())?;
         assert!(repo_config.trusted_hooks);
         assert_eq!(
@@ -1072,22 +1093,23 @@ mod tests {
         let fingerprint = hook_set_fingerprint(&hooks);
         let mut repo_config = fixture
             .service
-            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .workspace_get_repo_config(fixture.workspace_id.as_str())
             .map_err(|error| error.to_string())?;
         repo_config.trusted_hooks = true;
         repo_config.trusted_hooks_fingerprint = Some(fingerprint);
         fixture
             .service
-            .workspace_update_repo_config(fixture.repo_path.as_str(), repo_config)
+            .workspace_update_repo_config(fixture.workspace_id.as_str(), repo_config)
             .map_err(|error| error.to_string())?;
 
         let updated = run_workspace_set_trusted_hooks(&fixture, false, None, None)
             .expect("disabling trust should succeed");
-        assert_eq!(updated.path, canonical_repo_path(&fixture));
+        assert_eq!(updated.workspace_id, fixture.workspace_id);
+        assert_eq!(updated.repo_path, canonical_repo_path(&fixture));
 
         let repo_config = fixture
             .service
-            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .workspace_get_repo_config(fixture.workspace_id.as_str())
             .map_err(|error| error.to_string())?;
         assert!(!repo_config.trusted_hooks);
         assert!(repo_config.trusted_hooks_fingerprint.is_none());
@@ -1107,7 +1129,7 @@ mod tests {
             Some(false),
         );
 
-        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1117,14 +1139,13 @@ mod tests {
             chat,
             kanban,
             autopilot,
-            repos,
+            workspaces,
             global_prompt_overrides,
         };
-        let repo_key = canonical_repo_path(&fixture);
         let repo_config = snapshot
-            .repos
-            .get_mut(repo_key.as_str())
-            .ok_or_else(|| "repo config missing from snapshot".to_string())?;
+            .workspaces
+            .get_mut(fixture.workspace_id.as_str())
+            .ok_or_else(|| "workspace config missing from snapshot".to_string())?;
         repo_config.trusted_hooks = true;
 
         let error = run_workspace_save_settings_snapshot(&fixture, snapshot)
@@ -1136,7 +1157,7 @@ mod tests {
 
         let persisted = fixture
             .service
-            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .workspace_get_repo_config(fixture.workspace_id.as_str())
             .map_err(|error| error.to_string())?;
         assert!(
             !persisted.trusted_hooks,
@@ -1159,7 +1180,7 @@ mod tests {
             Some(true),
         );
 
-        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1169,14 +1190,13 @@ mod tests {
             chat,
             kanban,
             autopilot,
-            repos,
+            workspaces,
             global_prompt_overrides,
         };
-        let repo_key = canonical_repo_path(&fixture);
         let repo_config = snapshot
-            .repos
-            .get_mut(repo_key.as_str())
-            .ok_or_else(|| "repo config missing from snapshot".to_string())?;
+            .workspaces
+            .get_mut(fixture.workspace_id.as_str())
+            .ok_or_else(|| "workspace config missing from snapshot".to_string())?;
         repo_config.trusted_hooks = true;
         repo_config.hooks = HookSet {
             pre_start: vec!["  echo pre  ".to_string()],
@@ -1189,7 +1209,7 @@ mod tests {
 
         let persisted = fixture
             .service
-            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .workspace_get_repo_config(fixture.workspace_id.as_str())
             .map_err(|error| error.to_string())?;
         let normalized_hooks = HookSet {
             pre_start: vec!["echo pre".to_string()],
@@ -1281,7 +1301,7 @@ mod tests {
 
         let persisted = fixture
             .service
-            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .workspace_get_repo_config(fixture.workspace_id.as_str())
             .map_err(|error| error.to_string())?;
         assert_eq!(persisted.default_runtime_kind, "claude-code");
         Ok(())
@@ -1481,7 +1501,7 @@ mod tests {
                 .expect_err("seeded cache should reject worktree omitted from subset");
         assert!(stale_error.contains("not within authorized repository or linked worktrees"));
 
-        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1493,7 +1513,7 @@ mod tests {
                 chat,
                 kanban,
                 autopilot,
-                repos,
+                workspaces,
                 global_prompt_overrides,
             },
         )?;
@@ -1517,7 +1537,7 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
 
-        let (theme, git, chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1527,7 +1547,7 @@ mod tests {
             chat,
             kanban,
             autopilot,
-            repos,
+            workspaces,
             global_prompt_overrides,
         };
 
@@ -1549,11 +1569,10 @@ mod tests {
             },
         );
 
-        let repo_key = canonical_repo_path(&fixture);
         let repo_config = snapshot
-            .repos
-            .get_mut(repo_key.as_str())
-            .ok_or_else(|| "repo config missing from snapshot".to_string())?;
+            .workspaces
+            .get_mut(fixture.workspace_id.as_str())
+            .ok_or_else(|| "workspace config missing from snapshot".to_string())?;
         repo_config.prompt_overrides.insert(
             "system.shared.workflow_guards".to_string(),
             PromptOverride {
@@ -1578,7 +1597,7 @@ mod tests {
                 "chat": snapshot.chat,
                 "kanban": snapshot.kanban,
                 "autopilot": snapshot.autopilot,
-                "repos": snapshot.repos,
+                "workspaces": snapshot.workspaces,
                 "globalPromptOverrides": snapshot.global_prompt_overrides,
             }
         });
@@ -1599,15 +1618,15 @@ mod tests {
             persisted_chat,
             _persisted_kanban,
             _persisted_autopilot,
-            persisted_repos,
+            persisted_workspaces,
             persisted_global,
         ) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
-        let persisted_repo = persisted_repos
-            .get(repo_key.as_str())
-            .ok_or_else(|| "persisted repo config missing".to_string())?;
+        let persisted_workspace = persisted_workspaces
+            .get(fixture.workspace_id.as_str())
+            .ok_or_else(|| "persisted workspace config missing".to_string())?;
 
         assert!(persisted_chat.show_thinking_messages);
         assert_eq!(
@@ -1623,14 +1642,14 @@ mod tests {
             Some("global tool protocol")
         );
         assert_eq!(
-            persisted_repo
+            persisted_workspace
                 .prompt_overrides
                 .get("system.shared.workflow_guards")
                 .map(|entry| entry.template.as_str()),
             Some("repo workflow guards")
         );
         assert_eq!(
-            persisted_repo
+            persisted_workspace
                 .prompt_overrides
                 .get("system.shared.tool_protocol")
                 .map(|entry| entry.enabled),
@@ -1644,7 +1663,7 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() -> Result<(), String> {
         let fixture = setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
-        let (_theme, _git, chat, kanban, _autopilot, _repos, _global_prompt_overrides) = fixture
+        let (_theme, _git, chat, kanban, _autopilot, _workspaces, _global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1660,7 +1679,7 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-chat-roundtrip", HookSet::default());
 
-        let (theme, git, _chat, kanban, autopilot, repos, global_prompt_overrides) = fixture
+        let (theme, git, _chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1671,7 +1690,7 @@ mod tests {
                 "git": git.clone(),
                 "kanban": kanban.clone(),
                 "autopilot": autopilot.clone(),
-                "repos": repos.clone(),
+                "workspaces": workspaces.clone(),
                 "globalPromptOverrides": global_prompt_overrides.clone(),
             }
         });
@@ -1691,7 +1710,7 @@ mod tests {
                 },
                 "kanban": kanban,
                 "autopilot": autopilot,
-                "repos": repos,
+                "workspaces": workspaces,
                 "globalPromptOverrides": global_prompt_overrides,
             }
         });
@@ -1704,7 +1723,7 @@ mod tests {
             reloaded_chat,
             _reloaded_kanban,
             _reloaded_autopilot,
-            _reloaded_repos,
+            _reloaded_workspaces,
             _reloaded_global,
         ) = fixture
             .service

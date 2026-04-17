@@ -135,7 +135,11 @@ const MODEL_SELECTION = {
 };
 
 const createBaseArgs = (): HookArgs => ({
-  activeRepo: "/repo",
+  activeWorkspace: {
+    repoPath: "/repo",
+    workspaceId: "workspace-1",
+    workspaceName: "Active Workspace",
+  },
   taskId: "task-1",
   role: "spec",
   scenario: "spec_initial",
@@ -225,13 +229,29 @@ const confirmSessionStartModal = async ({
 };
 
 describe("useAgentStudioSessionStartFlow", () => {
+  const originalWorkspaceList = host.workspaceList;
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
   const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
 
   beforeEach(() => {
+    host.workspaceList = async () => [
+      {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/repo/worktrees",
+        effectiveWorktreeBasePath: "/repo/worktrees",
+      },
+    ];
     host.workspaceGetRepoConfig = async () =>
       ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
@@ -248,7 +268,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       autopilot: {
         rules: [],
       },
-      repos: {},
+      workspaces: {},
       globalPromptOverrides: {},
     });
     host.buildContinuationTargetGet = async () => ({
@@ -258,6 +278,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   afterEach(() => {
+    host.workspaceList = originalWorkspaceList;
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;

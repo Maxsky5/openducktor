@@ -52,7 +52,7 @@ pub(crate) trait AppRuntime: Send + Sync {
         &self,
         service: &AppService,
         working_directory: &Path,
-        repo_path_for_mcp: &Path,
+        workspace_id_for_mcp: &str,
         port: u16,
     ) -> Result<Child>;
 

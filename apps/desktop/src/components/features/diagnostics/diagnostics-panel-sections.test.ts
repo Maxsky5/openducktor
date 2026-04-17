@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type BeadsCheck, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  type BeadsCheck,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -62,6 +66,21 @@ const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
   ...overrides,
 });
 
+const makeWorkspace = (
+  repoPath: string,
+  overrides: Partial<WorkspaceRecord> = {},
+): WorkspaceRecord => ({
+  workspaceId: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+  isActive: true,
+  hasConfig: true,
+  configuredWorktreeBasePath: "/Users/dev/worktrees",
+  defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
+  effectiveWorktreeBasePath: "/Users/dev/worktrees",
+  ...overrides,
+});
+
 describe("DiagnosticsPanelSections", () => {
   test("renders repository-first empty messages when no repository is selected", () => {
     const model = buildDiagnosticsPanelModel({
@@ -87,14 +106,7 @@ describe("DiagnosticsPanelSections", () => {
   test("renders key-value labels consistently across sections", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/Users/dev/fairnest",
-      activeWorkspace: {
-        path: "/Users/dev/fairnest",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: "/Users/dev/worktrees",
-        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
-        effectiveWorktreeBasePath: "/Users/dev/worktrees",
-      },
+      activeWorkspace: makeWorkspace("/Users/dev/fairnest"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
@@ -169,14 +181,12 @@ describe("DiagnosticsPanelSections", () => {
   test("renders error rows when section errors are present", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/Users/dev/fairnest",
-      activeWorkspace: {
-        path: "/Users/dev/fairnest",
-        isActive: true,
+      activeWorkspace: makeWorkspace("/Users/dev/fairnest", {
         hasConfig: false,
         configuredWorktreeBasePath: null,
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
-      },
+      }),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,

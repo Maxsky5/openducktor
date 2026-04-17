@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use host_infra_system::resolve_repo_beads_attachment_dir;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -112,32 +111,37 @@ impl BeadsLifecycle {
         Ok(())
     }
 
-    pub(crate) fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {
-        let repo_key = Self::repo_key(repo_path);
-        let lock = self.repo_lock(&repo_key)?;
+    pub(crate) fn ensure_repo_initialized_for_identity(
+        &self,
+        repo_path: &Path,
+        repo_key: &str,
+        workspace_id: Option<&str>,
+    ) -> Result<()> {
+        let lock = self.repo_lock(repo_key)?;
         let _guard = lock
             .lock()
             .map_err(|_| anyhow!("Beads repo lock poisoned"))?;
-        let cached_initialized = self.is_repo_cached_initialized(&repo_key)?;
+        let cached_initialized = self.is_repo_cached_initialized(repo_key)?;
         let initializing_guard = if cached_initialized {
             None
         } else {
-            Some(RepoInitializingGuard::new(self, &repo_key)?)
+            Some(RepoInitializingGuard::new(self, repo_key)?)
         };
 
         (|| {
-            let beads_dir = resolve_repo_beads_attachment_dir(repo_path)?;
+            let beads_dir = self.beads_attachment_dir_for_identity(repo_path, workspace_id)?;
 
             self.ensure_dolt_server_running(repo_path)?;
 
-            let readiness = self.verify_repo_initialized(repo_path, &beads_dir)?;
+            let readiness =
+                self.verify_repo_initialized_for_identity(repo_path, &beads_dir, workspace_id)?;
 
             if cached_initialized && matches!(readiness, RepoReadiness::Ready) {
                 return Ok(());
             }
 
             let _initializing_guard = if cached_initialized {
-                Some(RepoInitializingGuard::new(self, &repo_key)?)
+                Some(RepoInitializingGuard::new(self, repo_key)?)
             } else {
                 initializing_guard
             };
@@ -145,19 +149,33 @@ impl BeadsLifecycle {
             match readiness {
                 RepoReadiness::Ready => {}
                 RepoReadiness::MissingAttachment => {
-                    self.ensure_new_store_is_ready(repo_path, &beads_dir)?;
+                    self.ensure_new_store_is_ready_for_identity(
+                        repo_path,
+                        &beads_dir,
+                        workspace_id,
+                    )?;
                 }
                 RepoReadiness::MissingSharedDatabase { .. } => {
-                    self.materialize_shared_database_from_attachment(repo_path, &beads_dir)?;
+                    self.materialize_shared_database_from_attachment_for_identity(
+                        repo_path,
+                        &beads_dir,
+                        workspace_id,
+                    )?;
                     self.ensure_repo_ready_after_recovery(
                         repo_path,
                         &beads_dir,
                         "shared database restore",
+                        workspace_id,
                     )?;
                 }
                 RepoReadiness::AttachmentVerificationFailed { .. } => {
-                    self.repair_repo_store(repo_path)?;
-                    self.ensure_repo_ready_after_recovery(repo_path, &beads_dir, "repair")?;
+                    self.repair_repo_store_for_identity(repo_path, workspace_id)?;
+                    self.ensure_repo_ready_after_recovery(
+                        repo_path,
+                        &beads_dir,
+                        "repair",
+                        workspace_id,
+                    )?;
                 }
                 RepoReadiness::BrokenAttachmentContract { reason } => {
                     return Err(LifecycleError::AttachmentContractInvalid {
@@ -175,8 +193,8 @@ impl BeadsLifecycle {
                 }
             }
 
-            self.ensure_custom_statuses(repo_path)?;
-            self.mark_repo_initialized(&repo_key)?;
+            self.ensure_custom_statuses_for_identity(repo_path, workspace_id)?;
+            self.mark_repo_initialized(repo_key)?;
             Ok(())
         })()
     }

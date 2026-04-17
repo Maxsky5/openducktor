@@ -61,6 +61,7 @@ const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSession
 
 const createIntent = (overrides: Partial<SessionLoadIntent> = {}): SessionLoadIntent => ({
   repoPath: "/tmp/repo",
+  workspaceId: "workspace-1",
   taskId: "task-1",
   mode: "bootstrap",
   requestedSessionId: null,

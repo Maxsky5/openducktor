@@ -29,8 +29,11 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
     rules: [],
   },
   globalPromptOverrides: {},
-  repos: {
-    "/repo-a": {
+  workspaces: {
+    "repo-a": {
+      workspaceId: "repo-a",
+      workspaceName: "Repo A",
+      repoPath: "/repo-a",
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/a",
       branchPrefix: "obp",
@@ -66,7 +69,7 @@ const createHookHarness = (initialProps: HarnessArgs) =>
 describe("useSettingsModalDraftActions", () => {
   test("updates selected repo config and prompt overrides", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedRepoPath: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -95,8 +98,8 @@ describe("useSettingsModalDraftActions", () => {
     });
 
     const snapshot = harness.getLatest().snapshotDraft;
-    expect(snapshot?.repos["/repo-a"]?.branchPrefix).toBe("feature/");
-    expect(snapshot?.repos["/repo-a"]?.promptOverrides["kickoff.spec_initial"]?.template).toBe(
+    expect(snapshot?.workspaces["repo-a"]?.branchPrefix).toBe("feature/");
+    expect(snapshot?.workspaces["repo-a"]?.promptOverrides["kickoff.spec_initial"]?.template).toBe(
       "custom",
     );
     expect(snapshot?.globalPromptOverrides["system.role.spec.base"]?.template).toBe(
@@ -108,7 +111,7 @@ describe("useSettingsModalDraftActions", () => {
 
   test("updates global chat settings without touching unrelated sections", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedRepoPath: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -123,14 +126,14 @@ describe("useSettingsModalDraftActions", () => {
     const snapshot = harness.getLatest().snapshotDraft;
     expect(snapshot?.chat.showThinkingMessages).toBe(true);
     expect(snapshot?.git.defaultMergeMethod).toBe("merge_commit");
-    expect(snapshot?.repos["/repo-a"]?.branchPrefix).toBe("obp");
+    expect(snapshot?.workspaces["repo-a"]?.branchPrefix).toBe("obp");
 
     await harness.unmount();
   });
 
   test("updates global kanban settings without touching unrelated sections", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedRepoPath: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -151,7 +154,7 @@ describe("useSettingsModalDraftActions", () => {
 
   test("updates and clears selected role agent defaults", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedRepoPath: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -163,7 +166,8 @@ describe("useSettingsModalDraftActions", () => {
       state.clearSelectedRepoAgentDefault("build");
     });
 
-    const buildDefault = harness.getLatest().snapshotDraft?.repos["/repo-a"]?.agentDefaults.build;
+    const buildDefault =
+      harness.getLatest().snapshotDraft?.workspaces["repo-a"]?.agentDefaults.build;
     expect(buildDefault).toBeUndefined();
 
     await harness.unmount();
@@ -171,18 +175,18 @@ describe("useSettingsModalDraftActions", () => {
 
   test("preserves the inherited repo default runtime when editing role fields", async () => {
     const initialSnapshot = createInitialSnapshot();
-    const selectedRepo = initialSnapshot.repos["/repo-a"];
+    const selectedRepo = initialSnapshot.workspaces["repo-a"];
     if (!selectedRepo) {
-      throw new Error("Expected /repo-a snapshot fixture");
+      throw new Error("Expected repo-a snapshot fixture");
     }
 
-    initialSnapshot.repos["/repo-a"] = {
+    initialSnapshot.workspaces["repo-a"] = {
       ...selectedRepo,
       defaultRuntimeKind: "codex",
     };
 
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedRepoPath: "repo-a",
       initialSnapshot,
     });
     await harness.mount();
@@ -191,7 +195,7 @@ describe("useSettingsModalDraftActions", () => {
       state.updateSelectedRepoAgentDefault("planner", "profileId", "planner-agent");
     });
 
-    expect(harness.getLatest().snapshotDraft?.repos["/repo-a"]?.agentDefaults.planner).toEqual({
+    expect(harness.getLatest().snapshotDraft?.workspaces["repo-a"]?.agentDefaults.planner).toEqual({
       runtimeKind: "codex",
       providerId: "",
       modelId: "",

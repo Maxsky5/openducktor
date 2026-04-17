@@ -184,22 +184,22 @@ export const loadTaskDocuments = async (
   };
 };
 
-const loadRepoConfig = (repoPath: string): Promise<RepoConfig> => {
-  return loadRepoConfigFromQuery(appQueryClient, repoPath);
+const loadRepoConfig = (workspaceId: string): Promise<RepoConfig> => {
+  return loadRepoConfigFromQuery(appQueryClient, workspaceId);
 };
 
 export const loadRepoDefaultTargetBranch = async (
-  repoPath: string,
+  workspaceId: string,
 ): Promise<GitTargetBranch | null> => {
-  const config = await loadRepoConfig(repoPath);
+  const config = await loadRepoConfig(workspaceId);
   return config.defaultTargetBranch ?? null;
 };
 
 export const loadRepoDefaultModel = async (
-  repoPath: string,
+  workspaceId: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await loadRepoConfig(repoPath);
+  const config = await loadRepoConfig(workspaceId);
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -214,9 +214,11 @@ export const loadRepoDefaultModel = async (
   };
 };
 
-export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPromptOverrides> => {
+export const loadRepoPromptOverrides = async (
+  workspaceId: string,
+): Promise<RepoPromptOverrides> => {
   const [repoConfig, snapshot] = await Promise.all([
-    loadRepoConfig(repoPath),
+    loadRepoConfig(workspaceId),
     loadSettingsSnapshotFromQuery(appQueryClient),
   ]);
 
@@ -234,10 +236,10 @@ export const loadBuildContinuationTarget = async (
 };
 
 export const loadRepoDefaultRuntimeKind = async (
-  repoPath: string,
+  workspaceId: string,
   role: AgentRole,
 ): Promise<RuntimeKind> => {
-  const config = await loadRepoConfig(repoPath);
+  const config = await loadRepoConfig(workspaceId);
   const roleDefault = config?.agentDefaults?.[role];
   return roleDefault?.runtimeKind ?? config?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND;
 };
@@ -248,15 +250,21 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     taskId: string,
     role: AgentRole,
     options?: {
+      workspaceId?: string | null;
       targetWorkingDirectory?: string | null;
       runtimeKind?: RuntimeKind | null;
     },
   ): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
     const normalizedTargetWorkingDirectory = normalizeWorkingDirectory(targetWorkingDirectory);
+    const workspaceId = options?.workspaceId?.trim() ?? "";
     const runtimeKind = options?.runtimeKind?.trim()
       ? options.runtimeKind
-      : await loadRepoDefaultRuntimeKind(repoPath, role);
+      : workspaceId
+        ? await loadRepoDefaultRuntimeKind(workspaceId, role)
+        : (() => {
+            throw new Error("Active workspace is required to resolve the default runtime.");
+          })();
     const toRuntimeInfo = (input: {
       runtimeId: string | null;
       runId: string | null;

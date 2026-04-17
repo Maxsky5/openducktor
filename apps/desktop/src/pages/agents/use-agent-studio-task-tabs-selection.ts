@@ -6,12 +6,13 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseTaskTabSelectionArgs = {
   activeRepo: string | null;
+  persistenceWorkspaceId: string | null;
   isRepoNavigationBoundaryPending: boolean;
   taskId: string;
   openTaskTabs: string[];
   persistedActiveTaskId: string | null;
   intentActiveTaskId: string | null;
-  tabsStorageHydratedRepo: string | null;
+  tabsStorageHydratedWorkspaceId: string | null;
   clearComposerInput: () => void;
   onContextSwitchIntent: (() => void) | undefined;
   navigateToTaskIntent: NavigateToTaskIntent;
@@ -29,12 +30,13 @@ type UseTaskTabSelectionResult = {
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId,
     openTaskTabs,
     persistedActiveTaskId,
     intentActiveTaskId,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
     clearComposerInput,
     onContextSwitchIntent,
     navigateToTaskIntent,
@@ -72,7 +74,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   }, [intentActiveTaskId, setIntentActiveTaskId, tabTaskIds, taskId]);
 
   useEffect(() => {
-    if (!activeRepo || tabsStorageHydratedRepo !== activeRepo || isRepoNavigationBoundaryPending) {
+    if (
+      !activeRepo ||
+      !persistenceWorkspaceId ||
+      tabsStorageHydratedWorkspaceId !== persistenceWorkspaceId ||
+      isRepoNavigationBoundaryPending
+    ) {
       return;
     }
     if (taskId || tabTaskIds.length === 0) {
@@ -85,7 +92,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     if (!fallbackTaskId) {
       return;
     }
-    const fallbackKey = `${activeRepo}:${fallbackTaskId}`;
+    const fallbackKey = `${persistenceWorkspaceId}:${fallbackTaskId}`;
     if (appliedFallbackKeyRef.current === fallbackKey) {
       return;
     }
@@ -93,11 +100,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     navigateToTaskIntent(fallbackTaskId);
   }, [
     activeRepo,
+    persistenceWorkspaceId,
     isRepoNavigationBoundaryPending,
     navigateToTaskIntent,
     persistedActiveTaskId,
     tabTaskIds,
-    tabsStorageHydratedRepo,
+    tabsStorageHydratedWorkspaceId,
     taskId,
   ]);
 

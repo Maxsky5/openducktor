@@ -111,7 +111,9 @@ pub struct BeadsCheck {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceRecord {
-    pub path: String,
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub repo_path: String,
     pub is_active: bool,
     pub has_config: bool,
     pub configured_worktree_base_path: Option<String>,

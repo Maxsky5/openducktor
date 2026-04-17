@@ -8,25 +8,29 @@ mod user_paths;
 mod worktree;
 
 pub use beads::{
-    compute_beads_database_name, compute_repo_id, compute_repo_slug,
-    ensure_shared_dolt_server_running, is_process_alive, read_shared_dolt_server_state,
-    resolve_beads_root, resolve_default_worktree_base_dir, resolve_dolt_config_dir,
-    resolve_dolt_config_file, resolve_effective_worktree_base_dir,
-    resolve_repo_beads_attachment_dir, resolve_repo_beads_attachment_root,
-    resolve_repo_beads_paths, resolve_repo_live_database_dir, resolve_server_lock_file,
-    resolve_server_state_file, resolve_shared_dolt_root, resolve_shared_server_root,
-    restore_shared_dolt_database_from_backup, stop_shared_dolt_server_for_current_owner,
-    RepoBeadsPaths, SharedDoltServerAcquisition, SharedDoltServerState, SHARED_DOLT_SERVER_HOST,
-    SHARED_DOLT_SERVER_USER,
+    compute_beads_database_name, compute_beads_database_name_for_workspace, compute_repo_id,
+    compute_repo_slug, compute_workspace_repo_id, ensure_shared_dolt_server_running,
+    is_process_alive, read_shared_dolt_server_state, resolve_beads_root,
+    resolve_default_worktree_base_dir, resolve_default_worktree_base_dir_for_workspace,
+    resolve_dolt_config_dir, resolve_dolt_config_file, resolve_effective_worktree_base_dir,
+    resolve_effective_worktree_base_dir_for_workspace, resolve_repo_beads_attachment_dir,
+    resolve_repo_beads_attachment_root, resolve_repo_beads_paths, resolve_repo_live_database_dir,
+    resolve_server_lock_file, resolve_server_state_file, resolve_shared_dolt_root,
+    resolve_shared_server_root, resolve_workspace_beads_attachment_dir,
+    resolve_workspace_beads_attachment_root, resolve_workspace_beads_paths,
+    resolve_workspace_live_database_dir, restore_shared_dolt_database_from_backup,
+    stop_shared_dolt_server_for_current_owner, RepoBeadsPaths, SharedDoltServerAcquisition,
+    SharedDoltServerState, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 pub use config::{
-    hook_set_fingerprint, normalize_hook_set, normalize_repo_dev_servers, repo_script_fingerprint,
-    AgentDefaults, AgentModelDefault, AppConfigStore, AutopilotActionId, AutopilotEventId,
-    AutopilotRule, AutopilotSettings, ChatSettings, GitMergeMethod, GitProviderConfig,
-    GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig, HookSet, KanbanSettings,
-    OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig,
-    SoftGuardrails,
+    derive_workspace_name_from_repo_path, hook_set_fingerprint, normalize_hook_set,
+    normalize_repo_dev_servers, propose_workspace_id, repo_script_fingerprint,
+    uniquify_workspace_id, AgentDefaults, AgentModelDefault, AppConfigStore, AutopilotActionId,
+    AutopilotEventId, AutopilotRule, AutopilotSettings, ChatSettings, GitMergeMethod,
+    GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig,
+    HookSet, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides,
+    RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore,
+    SchedulerConfig, SoftGuardrails,
 };
 pub use filesystem::{list_directory, FilesystemListDirectoryError};
 pub use git::GitCliPort;

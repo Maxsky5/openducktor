@@ -37,6 +37,7 @@ impl AppService {
     ) -> Result<RuntimeInstanceSummary> {
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
+        let workspace_id_for_mcp = self.workspace_id_for_repo_path(repo_path)?;
 
         if let Some(existing) =
             self.find_existing_workspace_runtime(&runtime_kind, repo_key.as_str())?
@@ -78,6 +79,7 @@ impl AppService {
                 runtime_kind: runtime_kind.clone(),
                 startup_scope: "workspace_runtime",
                 repo_path,
+                workspace_id_for_mcp: workspace_id_for_mcp.as_str(),
                 repo_key: repo_key.clone(),
                 startup_started_at_instant,
                 startup_started_at: startup_started_at.clone(),
@@ -225,6 +227,7 @@ exit 1
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let (first, second) = thread::scope(
             |scope| -> Result<(RuntimeInstanceSummary, RuntimeInstanceSummary)> {
                 let first_handle = scope.spawn(|| {
@@ -295,6 +298,7 @@ exit 1
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let error = service
             .ensure_workspace_runtime(AgentRuntimeKind::opencode(), repo_path.as_str())
             .expect_err("workspace runtime should fail when the startup process exits early");
@@ -356,6 +360,7 @@ exit 1
         );
 
         let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+        service.workspace_add(repo_path.as_str())?;
         let (leader_error, follower_error) =
             thread::scope(|scope| -> Result<(anyhow::Error, anyhow::Error)> {
                 let leader_handle = scope.spawn(|| {

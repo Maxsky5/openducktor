@@ -18,6 +18,7 @@ import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { now } from "../support/core";
@@ -27,7 +28,7 @@ import { annotateQuestionToolMessage } from "../support/question-messages";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   adapter: AgentEnginePort;
   setSessionsById: (
     updater:
@@ -55,9 +56,12 @@ type SessionActionsDependencies = {
   ) => Promise<BuildContinuationTarget | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
-  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
-  loadRepoDefaultTargetBranch?: (repoPath: string) => Promise<GitTargetBranch | null>;
+  loadRepoDefaultModel: (
+    workspaceId: string,
+    role: AgentRole,
+  ) => Promise<AgentModelSelection | null>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
@@ -119,7 +123,7 @@ const applyQuestionAnswerToSession = (
 };
 
 export const createAgentSessionActions = ({
-  activeRepo,
+  activeWorkspace,
   adapter,
   setSessionsById,
   sessionsRef,
@@ -147,8 +151,9 @@ export const createAgentSessionActions = ({
   },
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const ensureSessionReady = createEnsureSessionReady({
-    activeRepo,
+    activeWorkspace,
     adapter,
     repoEpochRef,
     previousRepoRef,
@@ -257,7 +262,7 @@ export const createAgentSessionActions = ({
 
   const startAgentSession = createStartAgentSession({
     repo: {
-      activeRepo,
+      activeWorkspace,
       repoEpochRef,
       previousRepoRef,
       ...(activeRepoRef ? { activeRepoRef } : {}),

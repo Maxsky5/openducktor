@@ -81,6 +81,7 @@ fn opencode_workspace_runtime_ensure_list_and_stop_flow() -> Result<()> {
     );
 
     let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
     let first = service.runtime_ensure("opencode", repo_path.as_str())?;
     let second = service.runtime_ensure("opencode", repo_path.as_str())?;
     assert_eq!(first.runtime_id, second.runtime_id);
@@ -127,6 +128,7 @@ fn opencode_workspace_runtime_ensure_deduplicates_parallel_startup() -> Result<(
     );
 
     let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
     let (first, second) = thread::scope(
         |scope| -> Result<(RuntimeInstanceSummary, RuntimeInstanceSummary)> {
             let first_handle =
@@ -228,6 +230,7 @@ fn opencode_workspace_runtime_ensure_cleans_up_spawned_child_when_runtime_lock_i
     );
 
     let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
     let ensure_error = thread::scope(|scope| -> Result<anyhow::Error> {
         let ensure_handle = scope.spawn(|| service.runtime_ensure("opencode", repo_path.as_str()));
 
@@ -373,6 +376,7 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
+                ..Default::default()
             },
         },
     );
