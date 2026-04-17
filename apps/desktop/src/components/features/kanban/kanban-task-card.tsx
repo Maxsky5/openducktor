@@ -1,7 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
-import { memo, type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, type ReactElement, useId, useLayoutEffect, useState } from "react";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
@@ -263,27 +263,41 @@ const isWrappedBelowFirstRow = ({
   return elementTop - containerTop > LABEL_ROW_EPSILON_PX;
 };
 
-function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const taskIdWrapperRef = useRef<HTMLDivElement | null>(null);
-  const [isTaskIdWrapped, setIsTaskIdWrapped] = useState(false);
-  const taskPrimaryMetaSignature = `${task.id}:${task.issueType}:${task.priority}`;
+const measureOverflowIndicatorWidth = ({
+  overflowMeasure,
+  hiddenCount,
+}: {
+  overflowMeasure: HTMLSpanElement;
+  hiddenCount: number;
+}): number => {
+  if (hiddenCount <= 0) {
+    return 0;
+  }
+
+  const previousText = overflowMeasure.textContent;
+  overflowMeasure.textContent = `+${hiddenCount}`;
+  const width = overflowMeasure.getBoundingClientRect().width;
+  overflowMeasure.textContent = previousText;
+  return width;
+};
+
+function useWrappedBelowFirstRow({
+  container,
+  element,
+}: {
+  container: HTMLElement | null;
+  element: HTMLElement | null;
+}): boolean {
+  const [isWrapped, setIsWrapped] = useState(false);
 
   useLayoutEffect(() => {
-    void taskPrimaryMetaSignature;
-    const container = containerRef.current;
-    const taskIdWrapper = taskIdWrapperRef.current;
-
-    if (!container || !taskIdWrapper) {
+    if (!container || !element) {
       return undefined;
     }
 
     const updateWrapState = (): void => {
-      const nextWrapped = isWrappedBelowFirstRow({
-        container,
-        element: taskIdWrapper,
-      });
-      setIsTaskIdWrapped((currentWrapped) =>
+      const nextWrapped = isWrappedBelowFirstRow({ container, element });
+      setIsWrapped((currentWrapped) =>
         currentWrapped === nextWrapped ? currentWrapped : nextWrapped,
       );
     };
@@ -299,22 +313,129 @@ function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
     });
 
     observer.observe(container);
-    observer.observe(taskIdWrapper);
+    observer.observe(element);
 
     return () => {
       observer.disconnect();
     };
-  }, [taskPrimaryMetaSignature]);
+  }, [container, element]);
+
+  return isWrapped;
+}
+
+function useSingleRowChipOverflow(labels: string[]): {
+  containerRef: (element: HTMLDivElement | null) => void;
+  measureRowRef: (element: HTMLDivElement | null) => void;
+  overflowMeasureRef: (element: HTMLSpanElement | null) => void;
+  visibleLabels: string[];
+  hiddenLabels: string[];
+} {
+  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
+  const [measureRowElement, setMeasureRowElement] = useState<HTMLDivElement | null>(null);
+  const [overflowMeasureElement, setOverflowMeasureElement] = useState<HTMLSpanElement | null>(
+    null,
+  );
+  const [visibleCount, setVisibleCount] = useState(labels.length);
+
+  useLayoutEffect(() => {
+    if (!containerElement || !measureRowElement || !overflowMeasureElement) {
+      return undefined;
+    }
+
+    const updateVisibleCount = (): void => {
+      const availableWidth = containerElement.clientWidth;
+      if (availableWidth <= 0) {
+        setVisibleCount(labels.length);
+        return;
+      }
+
+      const chipElements = Array.from(measureRowElement.children) as HTMLElement[];
+      const gap = getFlexGap(measureRowElement);
+      let nextVisibleCount = labels.length;
+      let usedWidth = 0;
+
+      for (let index = 0; index < chipElements.length; index += 1) {
+        const chipElement = chipElements[index];
+        const chipWidth = chipElement?.getBoundingClientRect().width ?? 0;
+        const nextWidth = usedWidth + (index > 0 ? gap : 0) + chipWidth;
+        const hiddenCount = labels.length - (index + 1);
+        const reservedOverflowWidth =
+          hiddenCount > 0
+            ? gap +
+              measureOverflowIndicatorWidth({
+                overflowMeasure: overflowMeasureElement,
+                hiddenCount,
+              })
+            : 0;
+
+        if (nextWidth + reservedOverflowWidth <= availableWidth + LABEL_ROW_EPSILON_PX) {
+          usedWidth = nextWidth;
+          continue;
+        }
+
+        nextVisibleCount = index;
+        break;
+      }
+
+      const finalHiddenCount = labels.length - nextVisibleCount;
+      overflowMeasureElement.textContent = `+${Math.max(finalHiddenCount, 1)}`;
+      setVisibleCount((currentVisibleCount) =>
+        currentVisibleCount === nextVisibleCount ? currentVisibleCount : nextVisibleCount,
+      );
+    };
+
+    updateVisibleCount();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateVisibleCount();
+    });
+
+    observer.observe(containerElement);
+    observer.observe(measureRowElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [containerElement, measureRowElement, overflowMeasureElement, labels]);
+
+  return {
+    containerRef: setContainerElement,
+    measureRowRef: setMeasureRowElement,
+    overflowMeasureRef: setOverflowMeasureElement,
+    visibleLabels: labels.slice(0, visibleCount),
+    hiddenLabels: labels.slice(visibleCount),
+  };
+}
+
+function TaskPrimaryMeta({
+  taskId,
+  issueType,
+  priority,
+}: {
+  taskId: string;
+  issueType: TaskCard["issueType"];
+  priority: TaskCard["priority"];
+}): ReactElement {
+  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
+  const [taskIdWrapperElement, setTaskIdWrapperElement] = useState<HTMLDivElement | null>(null);
+  const isTaskIdWrapped = useWrappedBelowFirstRow({
+    container: containerElement,
+    element: taskIdWrapperElement,
+  });
 
   return (
-    <div ref={containerRef} className="flex flex-wrap items-center gap-1.5">
-      <IssueTypeBadge issueType={task.issueType} />
-      <PriorityBadge priority={task.priority} />
+    <div ref={setContainerElement} className="flex flex-wrap items-center gap-1.5">
+      <IssueTypeBadge issueType={issueType} />
+      <PriorityBadge priority={priority} />
       <div
-        ref={taskIdWrapperRef}
+        ref={setTaskIdWrapperElement}
         className={cn("min-w-0", isTaskIdWrapped ? "basis-full" : "ml-auto")}
       >
-        <TaskIdBadge taskId={task.id} />
+        <TaskIdBadge taskId={taskId} />
       </div>
     </div>
   );
@@ -394,74 +515,8 @@ function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }
 }
 
 function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const measureRowRef = useRef<HTMLDivElement | null>(null);
-  const overflowMeasureRef = useRef<HTMLDivElement | null>(null);
-  const [visibleCount, setVisibleCount] = useState(labels.length);
-
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    const measureRow = measureRowRef.current;
-    const overflowMeasure = overflowMeasureRef.current;
-
-    if (!container || !measureRow || !overflowMeasure) {
-      return undefined;
-    }
-
-    const updateVisibleCount = (): void => {
-      const availableWidth = container.clientWidth;
-      if (availableWidth <= 0) {
-        setVisibleCount(labels.length);
-        return;
-      }
-
-      const chipElements = Array.from(measureRow.children) as HTMLElement[];
-      const overflowWidth = overflowMeasure.getBoundingClientRect().width;
-      const gap = getFlexGap(measureRow);
-      let nextVisibleCount = labels.length;
-      let usedWidth = 0;
-
-      for (let index = 0; index < chipElements.length; index += 1) {
-        const chipElement = chipElements[index];
-        const chipWidth = chipElement?.getBoundingClientRect().width ?? 0;
-        const nextWidth = usedWidth + (index > 0 ? gap : 0) + chipWidth;
-        const hiddenCount = labels.length - (index + 1);
-        const reservedOverflowWidth = hiddenCount > 0 ? gap + overflowWidth : 0;
-
-        if (nextWidth + reservedOverflowWidth <= availableWidth + LABEL_ROW_EPSILON_PX) {
-          usedWidth = nextWidth;
-          continue;
-        }
-
-        nextVisibleCount = index;
-        break;
-      }
-
-      setVisibleCount((currentVisibleCount) =>
-        currentVisibleCount === nextVisibleCount ? currentVisibleCount : nextVisibleCount,
-      );
-    };
-
-    updateVisibleCount();
-
-    if (typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateVisibleCount();
-    });
-
-    observer.observe(container);
-    observer.observe(measureRow);
-    observer.observe(overflowMeasure);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [labels]);
-
-  const hiddenLabels = labels.slice(visibleCount);
+  const { containerRef, measureRowRef, overflowMeasureRef, visibleLabels, hiddenLabels } =
+    useSingleRowChipOverflow(labels);
 
   return (
     <div className="relative min-w-0">
@@ -470,7 +525,7 @@ function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
         className="flex min-w-0 items-center gap-1.5 overflow-hidden"
         data-testid="kanban-task-label-row"
       >
-        {labels.slice(0, visibleCount).map((label) => (
+        {visibleLabels.map((label) => (
           <TaskLabelChip key={label} label={label} className="min-w-0 max-w-full shrink" />
         ))}
         {hiddenLabels.length > 0 ? (
@@ -489,11 +544,12 @@ function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
             </div>
           ))}
         </div>
-        <div ref={overflowMeasureRef}>
-          <span className="inline-flex h-6 items-center rounded-md border border-input bg-muted px-2 py-0.5 text-xs font-medium">
-            +{labels.length}
-          </span>
-        </div>
+        <span
+          ref={overflowMeasureRef}
+          className="inline-flex h-6 items-center rounded-md border border-input bg-muted px-2 py-0.5 text-xs font-medium"
+        >
+          +1
+        </span>
       </div>
     </div>
   );
@@ -510,7 +566,7 @@ function TaskMeta({
 
   return (
     <div className="flex flex-col gap-2">
-      <TaskPrimaryMeta task={task} />
+      <TaskPrimaryMeta taskId={task.id} issueType={task.issueType} priority={task.priority} />
       {displayLabels.length > 0 ? <TaskLabelRow labels={displayLabels} /> : null}
       <TaskSecondaryMeta task={task} runState={runState} />
     </div>
