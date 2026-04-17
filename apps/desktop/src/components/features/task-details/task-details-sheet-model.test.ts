@@ -6,7 +6,6 @@ import {
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
-  toTaskLabels,
 } from "./task-details-sheet-model";
 
 const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
@@ -40,10 +39,6 @@ const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
 });
 
 describe("task-details-sheet-model", () => {
-  test("filters phase labels from display labels", () => {
-    expect(toTaskLabels(["phase:open", "backend", "phase:ready_for_dev"])).toEqual(["backend"]);
-  });
-
   test("derives subtasks only for existing ids", () => {
     const subtask = makeTask("T-2");
     const parent = makeTask("T-1", { subtaskIds: ["T-2", "T-999"] });

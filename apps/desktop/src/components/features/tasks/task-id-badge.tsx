@@ -42,7 +42,7 @@ function TaskIdBadgeComponent({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="size-4 text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={handleCopy}
               data-testid="copy-task-id"
               aria-label="Copy task ID"

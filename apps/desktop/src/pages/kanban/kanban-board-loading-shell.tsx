@@ -1,5 +1,6 @@
 import type { KanbanColumnId } from "@openducktor/core";
 import type { ReactElement } from "react";
+import { KANBAN_LANE_WIDTH_CLASS } from "@/components/features/kanban/kanban-layout";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,8 @@ export function KanbanBoardLoadingShell({
               key={preview.id}
               data-testid="kanban-loading-lane"
               className={cn(
-                "flex w-[328px] min-w-[328px] flex-col overflow-hidden rounded-2xl shadow-sm",
+                "flex flex-col overflow-hidden rounded-2xl shadow-sm",
+                KANBAN_LANE_WIDTH_CLASS,
                 preview.surfaceClass,
               )}
             >

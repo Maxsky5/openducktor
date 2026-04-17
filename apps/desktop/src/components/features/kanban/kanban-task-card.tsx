@@ -1,7 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { ExternalLink, PlayCircle } from "lucide-react";
-import { memo, type ReactElement } from "react";
+import { ExternalLink, PlayCircle, Tag } from "lucide-react";
+import { memo, type ReactElement, useId, useMemo } from "react";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
@@ -13,6 +13,7 @@ import {
   RunStateBadge,
   type VisibleKanbanRunState,
 } from "@/components/features/kanban/kanban-task-badges";
+import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
 import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
@@ -27,6 +28,9 @@ import { TaskPullRequestLink } from "@/components/features/task-pull-request-lin
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
+import { TaskLabelChip } from "@/components/ui/task-label-chip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
 
@@ -95,6 +99,7 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   left.status === right.status &&
   left.issueType === right.issueType &&
   left.priority === right.priority &&
+  areStringArraysEqual(left.labels, right.labels) &&
   areStringArraysEqual(left.subtaskIds, right.subtaskIds) &&
   left.pullRequest?.number === right.pullRequest?.number &&
   left.pullRequest?.url === right.pullRequest?.url &&
@@ -237,7 +242,7 @@ const getCardActivityClassName = ({
   return "kanban-active-session-card border-info-border shadow-info-border";
 };
 
-function TaskMeta({
+function TaskPrimaryMeta({
   task,
   runState,
 }: {
@@ -259,6 +264,79 @@ function TaskMeta({
       ) : null}
       {runState ? <RunStateBadge runState={runState} /> : null}
       {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
+    </div>
+  );
+}
+
+function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }): ReactElement {
+  const hiddenLabelsDescriptionId = useId();
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-6 shrink-0 items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            aria-label={`Show ${hiddenLabels.length} more labels`}
+            aria-describedby={hiddenLabelsDescriptionId}
+            data-testid="kanban-task-label-overflow"
+          >
+            +{hiddenLabels.length}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-64 px-2.5 py-2">
+          <div className="flex flex-col gap-1">
+            {hiddenLabels.map((label) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <Tag className="size-3 shrink-0" />
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+      <span
+        id={hiddenLabelsDescriptionId}
+        className="sr-only"
+        data-testid="kanban-task-label-tooltip"
+      >
+        {hiddenLabels.join(", ")}
+      </span>
+    </>
+  );
+}
+
+function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
+  const { visibleLabels, hiddenLabels } = useMemo(() => resolveTaskLabelOverflow(labels), [labels]);
+
+  return (
+    <div className="relative min-w-0">
+      <div className="flex min-w-0 items-center gap-1.5" data-testid="kanban-task-label-row">
+        {visibleLabels.map((label) => (
+          <TaskLabelChip key={label} label={label} className="shrink-0" />
+        ))}
+        {hiddenLabels.length > 0 ? (
+          <TaskLabelOverflowIndicator hiddenLabels={hiddenLabels} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TaskMeta({
+  task,
+  runState,
+}: {
+  task: TaskCard;
+  runState: VisibleKanbanRunState | undefined;
+}): ReactElement {
+  const displayLabels = toDisplayTaskLabels(task.labels);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TaskPrimaryMeta task={task} runState={runState} />
+      {displayLabels.length > 0 ? <TaskLabelRow labels={displayLabels} /> : null}
     </div>
   );
 }
@@ -391,7 +469,7 @@ function TaskActions({
   };
 
   return (
-    <div className="mt-3 cursor-default border-t border-border pt-2.5">
+    <div className="mt-2 cursor-default border-t border-border pt-2.5">
       <TaskWorkflowActionGroup
         task={task}
         includeActions={includeActions}
@@ -471,13 +549,13 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
-      <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
+      <div className="kanban-active-session-content flex min-w-0 flex-col space-y-1 p-3.5">
         {/* biome-ignore lint/a11y/useSemanticElements: TaskIdBadge contains a button element */}
         <div
           role="button"
           tabIndex={0}
           aria-label={`Open details for ${task.title}`}
-          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
           onKeyDown={(e) => {
             if (e.target !== e.currentTarget) return;
@@ -487,19 +565,21 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             }
           }}
         >
-          <div className="min-w-0 space-y-1">
+          <div className="min-w-0 flex-1 mb-1">
             <p
-              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
+              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground mb-1"
               title={task.title}
             >
               {task.title}
             </p>
-            <TaskIdBadge taskId={task.id} />
+            <div className="flex justify-between items-center gap-1.5">
+              <TaskIdBadge taskId={task.id} />
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
+                <ExternalLink className="size-3" />
+                Open
+              </span>
+            </div>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
-            <ExternalLink className="size-3" />
-            Open
-          </span>
         </div>
         <TaskMeta task={task} runState={visibleRunState} />
         <TaskActions

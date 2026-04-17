@@ -206,6 +206,68 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("QA Rejected");
   });
 
+  test("renders task labels alongside the current task header layout", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-8",
+      title: "Polish Kanban metadata",
+      issueType: "feature",
+      priority: 1,
+      labels: ["frontend", "phase:open", "ux"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          taskSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("frontend");
+    expect(html).toContain("ux");
+    expect(html).toContain("phase:open");
+    expect(html).toContain("TASK-8");
+    expect(html).toContain("Feature");
+    expect(html).toContain("P1");
+    expect(html).toContain(">Open<");
+    expect(html).toContain("lucide-tag");
+  });
+
+  test("renders the label row even when labels use phase prefixes", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-9",
+      labels: ["phase:open", "phase:ready_for_dev"],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "idle",
+          taskSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain('data-testid="kanban-task-label-row"');
+    expect(html).toContain("phase:open");
+    expect(html).toContain("phase:ready_for_dev");
+  });
+
   test("renders a pull request link badge when the task is linked to a PR", () => {
     const task = createTaskCardFixture({
       id: "TASK-4",

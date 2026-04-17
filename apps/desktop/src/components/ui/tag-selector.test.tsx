@@ -105,4 +105,24 @@ describe("TagSelector", () => {
 
     expect(prevented).toBe(true);
   });
+
+  test("renders selected labels with the shared chip and preserves removal behavior", async () => {
+    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+
+    function Harness() {
+      const [value, setValue] = useState(["backend", "frontend"]);
+      return <TagSelector value={value} suggestions={[]} onChange={setValue} />;
+    }
+
+    const rendered = render(<Harness />);
+
+    expect(rendered.container.querySelectorAll("svg.lucide-tag")).toHaveLength(2);
+
+    await act(async () => {
+      fireEvent.click(rendered.getByLabelText("Remove label backend"));
+    });
+
+    expect(rendered.queryByText("backend")).toBeNull();
+    expect(rendered.getByText("frontend")).toBeTruthy();
+  });
 });
