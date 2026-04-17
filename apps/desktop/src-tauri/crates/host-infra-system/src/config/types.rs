@@ -1,8 +1,4 @@
-use super::migrate::{
-    canonicalize_repo_path, current_global_config_version, default_theme,
-    derive_workspace_name_from_repo_path, migrate_legacy_repos_to_canonical_paths,
-    propose_workspace_id, uniquify_workspace_id, LegacyGlobalConfigV1, LegacyRepoConfigV1,
-};
+use super::migrate::{current_global_config_version, default_theme};
 use host_domain::{
     default_runtime_kind as registry_default_runtime_kind, RuntimeRegistry,
     RuntimeStartupReadinessConfig, DEFAULT_BRANCH_PREFIX,
@@ -465,7 +461,7 @@ struct PersistedGlobalConfigV2 {
     pub recent_workspaces: Vec<String>,
 }
 
-pub(super) fn deserialize_global_config(data: &str) -> Result<(GlobalConfig, bool), String> {
+pub(super) fn deserialize_global_config(data: &str) -> Result<GlobalConfig, String> {
     let payload: serde_json::Value =
         serde_json::from_str(data).map_err(|error| error.to_string())?;
     let version = payload
@@ -473,25 +469,14 @@ pub(super) fn deserialize_global_config(data: &str) -> Result<(GlobalConfig, boo
         .and_then(|value| value.as_u64())
         .ok_or_else(|| "Missing config version.".to_string())?;
 
-    match version {
-        1 => {
-            let legacy: LegacyGlobalConfigV1 =
-                serde_json::from_value(payload).map_err(|error| error.to_string())?;
-            Ok((migrate_legacy_global_config(legacy)?, true))
-        }
-        2 => {
-            let config: PersistedGlobalConfigV2 =
-                serde_json::from_value(payload).map_err(|error| error.to_string())?;
-            Ok((
-                GlobalConfig::try_from(config).map_err(|error| error.to_string())?,
-                false,
-            ))
-        }
-        other => Err(format!(
-            "Unsupported config version {other}. Expected {} or 1.",
+    if version != u64::from(current_global_config_version()) {
+        return Err(format!(
+            "Unsupported config version {version}. Expected {}.",
             current_global_config_version()
-        )),
+        ));
     }
+
+    serde_json::from_value::<GlobalConfig>(payload).map_err(|error| error.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -522,14 +507,6 @@ impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
     type Error = String;
 
     fn try_from(config: PersistedGlobalConfigV2) -> Result<Self, Self::Error> {
-        if config.version != current_global_config_version() {
-            return Err(format!(
-                "Unsupported config version {}. Expected {}.",
-                config.version,
-                current_global_config_version()
-            ));
-        }
-
         Ok(Self {
             version: config.version,
             active_workspace: config.active_workspace,
@@ -577,70 +554,6 @@ impl Default for GlobalConfig {
             recent_workspaces: Vec::new(),
         }
     }
-}
-
-fn migrate_legacy_global_config(legacy: LegacyGlobalConfigV1) -> Result<GlobalConfig, String> {
-    if legacy.version != 1 {
-        return Err(format!(
-            "Unsupported legacy config version {}. Expected 1.",
-            legacy.version
-        ));
-    }
-
-    let active_repo = legacy.active_repo.as_ref().and_then(|value| {
-        canonicalize_repo_path(value)
-            .ok()
-            .or_else(|| Some(value.clone()))
-    });
-
-    let mut repos = legacy.repos;
-    let canonical_repos =
-        migrate_legacy_repos_to_canonical_paths(&mut repos, legacy.active_repo.as_ref());
-    let mut workspaces = HashMap::new();
-    let mut repo_path_to_workspace_id = HashMap::new();
-
-    let mut entries: Vec<(String, LegacyRepoConfigV1)> = canonical_repos.into_iter().collect();
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
-
-    for (repo_path, legacy_repo) in entries {
-        let workspace_name = derive_workspace_name_from_repo_path(&repo_path);
-        let workspace_id =
-            uniquify_workspace_id(&propose_workspace_id(&workspace_name), &workspaces);
-        let mut repo = RepoConfig::from(legacy_repo);
-        repo.workspace_id = workspace_id.clone();
-        repo.workspace_name = workspace_name;
-        repo.repo_path = repo_path.clone();
-        repo_path_to_workspace_id.insert(repo_path, workspace_id.clone());
-        workspaces.insert(workspace_id, repo);
-    }
-
-    let active_workspace = active_repo
-        .as_ref()
-        .and_then(|repo_path| repo_path_to_workspace_id.get(repo_path))
-        .cloned();
-    let mut recent_workspaces = Vec::new();
-    for recent_repo in legacy.recent_repos {
-        let canonical_recent = canonicalize_repo_path(&recent_repo).unwrap_or(recent_repo);
-        let Some(workspace_id) = repo_path_to_workspace_id.get(&canonical_recent) else {
-            continue;
-        };
-        if !recent_workspaces.contains(workspace_id) {
-            recent_workspaces.push(workspace_id.clone());
-        }
-    }
-
-    Ok(GlobalConfig {
-        version: current_global_config_version(),
-        active_workspace,
-        theme: legacy.theme,
-        git: legacy.git,
-        chat: legacy.chat,
-        kanban: legacy.kanban,
-        autopilot: legacy.autopilot,
-        global_prompt_overrides: legacy.global_prompt_overrides,
-        workspaces,
-        recent_workspaces,
-    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

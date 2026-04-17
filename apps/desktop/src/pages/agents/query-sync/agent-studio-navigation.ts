@@ -268,17 +268,11 @@ export const serializePersistedContext = (navigation: AgentStudioNavigationState
   return JSON.stringify(payload);
 };
 
-export const toContextStorageKey = (repoPath: string): string =>
-  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${repoPath}`;
+export const toContextStorageKey = (workspaceId: string): string =>
+  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${workspaceId}`;
 
-export const toTabsStorageKey = (repoPath: string): string =>
-  `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
-
-export const toLegacyRepoPathContextStorageKey = (repoPath: string): string =>
-  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${repoPath}`;
-
-export const toLegacyRepoPathTabsStorageKey = (repoPath: string): string =>
-  `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
+export const toTabsStorageKey = (workspaceId: string): string =>
+  `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${workspaceId}`;
 
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
 

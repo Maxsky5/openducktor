@@ -2584,12 +2584,12 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
 #[test]
 fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_effective_base(
 ) -> Result<()> {
-    let repo_path = unique_temp_path("reset-implementation-legacy-builder-worktree-repo");
+    let repo_path = unique_temp_path("reset-implementation-recorded-builder-worktree-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
     let current_worktree_base = repo_path.join("worktrees");
-    let legacy_worktree = unique_temp_path("reset-implementation-legacy-builder-worktree");
-    fs::create_dir_all(&legacy_worktree)?;
+    let recorded_worktree = unique_temp_path("reset-implementation-recorded-builder-worktree");
+    fs::create_dir_all(&recorded_worktree)?;
 
     let task = make_task("task-1", "task", TaskStatus::AiReview);
     let (service, task_state, git_state) = build_service_with_git_state(
@@ -2620,7 +2620,7 @@ fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_e
         .expect("git state lock poisoned")
         .current_branches_by_path
         .insert(
-            legacy_worktree.to_string_lossy().to_string(),
+            recorded_worktree.to_string_lossy().to_string(),
             host_domain::GitCurrentBranch {
                 name: Some("odt/task-1".to_string()),
                 detached: false,
@@ -2637,7 +2637,7 @@ fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_e
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
-        working_directory: legacy_worktree.to_string_lossy().to_string(),
+        working_directory: recorded_worktree.to_string_lossy().to_string(),
         selected_model: None,
     }];
 
@@ -2647,7 +2647,7 @@ fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_e
     assert!(git_calls.iter().any(|call| matches!(
         call,
         crate::app_service::test_support::GitCall::RemoveWorktree { worktree_path, force, .. }
-            if worktree_path == &legacy_worktree.to_string_lossy() && *force
+            if worktree_path == &recorded_worktree.to_string_lossy() && *force
     )));
     assert!(git_calls.iter().any(|call| matches!(
         call,

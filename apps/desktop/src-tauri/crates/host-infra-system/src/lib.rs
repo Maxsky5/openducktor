@@ -14,13 +14,12 @@ pub use beads::{
     resolve_default_worktree_base_dir, resolve_default_worktree_base_dir_for_workspace,
     resolve_dolt_config_dir, resolve_dolt_config_file, resolve_effective_worktree_base_dir,
     resolve_effective_worktree_base_dir_for_workspace, resolve_repo_beads_attachment_dir,
-    resolve_repo_beads_attachment_root, resolve_repo_beads_paths, resolve_repo_live_database_dir,
-    resolve_server_lock_file, resolve_server_state_file, resolve_shared_dolt_root,
-    resolve_shared_server_root, resolve_workspace_beads_attachment_dir,
-    resolve_workspace_beads_attachment_root, resolve_workspace_beads_paths,
+    resolve_repo_beads_attachment_root, resolve_repo_live_database_dir, resolve_server_lock_file,
+    resolve_server_state_file, resolve_shared_dolt_root, resolve_shared_server_root,
+    resolve_workspace_beads_attachment_dir, resolve_workspace_beads_attachment_root,
     resolve_workspace_live_database_dir, restore_shared_dolt_database_from_backup,
-    stop_shared_dolt_server_for_current_owner, RepoBeadsPaths, SharedDoltServerAcquisition,
-    SharedDoltServerState, SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
+    stop_shared_dolt_server_for_current_owner, SharedDoltServerAcquisition, SharedDoltServerState,
+    SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 pub use config::{
     derive_workspace_name_from_repo_path, hook_set_fingerprint, normalize_hook_set,

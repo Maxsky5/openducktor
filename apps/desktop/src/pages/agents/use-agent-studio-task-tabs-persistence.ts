@@ -7,7 +7,6 @@ import {
   parsePersistedTaskTabs,
   toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
-import { toLegacyRepoPathTabsStorageKey } from "./query-sync/agent-studio-navigation";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -28,17 +27,6 @@ const writeTaskTabsStorage = (storageKey: string, payload: string): void => {
   } catch (cause) {
     throw new Error(
       `Failed to persist agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
-      { cause },
-    );
-  }
-};
-
-const removeTaskTabsStorage = (storageKey: string): void => {
-  try {
-    globalThis.localStorage.removeItem(storageKey);
-  } catch (cause) {
-    throw new Error(
-      `Failed to clear legacy agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
       { cause },
     );
   }
@@ -87,17 +75,7 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     }
 
     const tabsStorageKey = toTabsStorageKey(persistenceWorkspaceId);
-    let raw = readTaskTabsStorage(tabsStorageKey);
-    if (!raw) {
-      const legacyTabsStorageKey = toLegacyRepoPathTabsStorageKey(activeRepo);
-      const legacyRaw = readTaskTabsStorage(legacyTabsStorageKey);
-      if (legacyRaw) {
-        writeTaskTabsStorage(tabsStorageKey, legacyRaw);
-        removeTaskTabsStorage(legacyTabsStorageKey);
-        raw = legacyRaw;
-      }
-    }
-
+    const raw = readTaskTabsStorage(tabsStorageKey);
     const persistedTabs = parsePersistedTaskTabs(raw);
     setOpenTaskTabs(persistedTabs.tabs);
     setPersistedActiveTaskId(persistedTabs.activeTaskId);
