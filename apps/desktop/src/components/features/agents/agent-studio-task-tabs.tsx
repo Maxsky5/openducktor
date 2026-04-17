@@ -263,8 +263,10 @@ export function AgentStudioTaskTabs({
                   }}
                 >
                   {tabs.map((tab) => (
+                    // biome-ignore lint/a11y/noStaticElementInteractions: the full visible tab shell must be the draggable surface to match browser-like tab reordering.
                     <div
                       key={tab.taskId}
+                      draggable
                       data-active={tab.isActive ? "true" : "false"}
                       data-dragging={draggedTaskId === tab.taskId ? "true" : "false"}
                       data-drop-position={
@@ -278,6 +280,10 @@ export function AgentStudioTaskTabs({
                           ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
                           : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
                       )}
+                      onDragStart={handleTabDragStart(tab.taskId)}
+                      onDragOver={handleTabDragOver(tab.taskId)}
+                      onDragEnd={clearDragState}
+                      onDrop={handleTabDrop}
                     >
                       {dropTarget?.taskId === tab.taskId && dropTarget.position === "before" ? (
                         <span
@@ -294,16 +300,11 @@ export function AgentStudioTaskTabs({
                       <TabsTrigger
                         id={`agent-studio-tab-${tab.taskId}`}
                         value={tab.taskId}
-                        draggable
                         className={cn(
                           "h-9 max-w-[19rem] cursor-pointer justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
                           "text-inherit data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         )}
-                        onDragStart={handleTabDragStart(tab.taskId)}
-                        onDragOver={handleTabDragOver(tab.taskId)}
-                        onDragEnd={clearDragState}
-                        onDrop={handleTabDrop}
                       >
                         <span
                           role="img"

@@ -29,6 +29,30 @@ const buildModel = () => ({
   agentStudioReady: true,
 });
 
+const createDragEvent = (
+  type: string,
+  dataTransfer: {
+    effectAllowed: string;
+    dropEffect: string;
+    setData: () => void;
+    getData: () => string;
+  },
+  extras: Record<string, number> = {},
+): Event => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    configurable: true,
+    value: dataTransfer,
+  });
+  for (const [key, value] of Object.entries(extras)) {
+    Object.defineProperty(event, key, {
+      configurable: true,
+      value,
+    });
+  }
+  return event;
+};
+
 describe("AgentStudioTaskTabs", () => {
   test("renders browser-style tabs and status icons", () => {
     const html = renderToStaticMarkup(
@@ -204,15 +228,17 @@ describe("AgentStudioTaskTabs", () => {
       ),
     );
 
-    const firstTabTrigger = screen.getByRole("tab", { name: /Add social login/i });
-    const secondTabTrigger = screen.getByRole("tab", { name: /Ship QA checklist/i });
-    const firstTab = firstTabTrigger.closest("[data-task-tab-id]");
-    const secondTab = secondTabTrigger.closest("[data-task-tab-id]");
+    const firstTab = screen
+      .getByRole("tab", { name: /Add social login/i })
+      .closest("[data-task-tab-id]");
+    const secondTab = screen
+      .getByRole("tab", { name: /Ship QA checklist/i })
+      .closest("[data-task-tab-id]");
 
     expect(firstTab).not.toBeNull();
     expect(secondTab).not.toBeNull();
 
-    Object.defineProperty(firstTabTrigger, "getBoundingClientRect", {
+    Object.defineProperty(firstTab as HTMLElement, "getBoundingClientRect", {
       configurable: true,
       value: () => ({
         x: 0,
@@ -226,7 +252,7 @@ describe("AgentStudioTaskTabs", () => {
         toJSON: () => ({}),
       }),
     });
-    Object.defineProperty(secondTabTrigger, "getBoundingClientRect", {
+    Object.defineProperty(secondTab as HTMLElement, "getBoundingClientRect", {
       configurable: true,
       value: () => ({
         x: 100,
@@ -248,32 +274,104 @@ describe("AgentStudioTaskTabs", () => {
       getData: () => "task-2",
     };
 
-    const dragStartEvent = new Event("dragstart", { bubbles: true, cancelable: true });
-    Object.defineProperty(dragStartEvent, "dataTransfer", {
-      configurable: true,
-      value: dataTransfer,
-    });
-
-    const dragOverEvent = new Event("dragover", { bubbles: true, cancelable: true });
-    Object.defineProperty(dragOverEvent, "dataTransfer", {
-      configurable: true,
-      value: dataTransfer,
-    });
-    Object.defineProperty(dragOverEvent, "clientX", {
-      configurable: true,
-      value: 10,
-    });
-
-    const dropEvent = new Event("drop", { bubbles: true, cancelable: true });
-    Object.defineProperty(dropEvent, "dataTransfer", {
-      configurable: true,
-      value: dataTransfer,
-    });
-
-    fireEvent(secondTabTrigger, dragStartEvent);
-    fireEvent(firstTabTrigger, dragOverEvent);
-    fireEvent(firstTabTrigger, dropEvent);
+    fireEvent(secondTab as HTMLElement, createDragEvent("dragstart", dataTransfer));
+    fireEvent(firstTab as HTMLElement, createDragEvent("dragover", dataTransfer, { clientX: 10 }));
+    fireEvent(firstTab as HTMLElement, createDragEvent("drop", dataTransfer));
 
     expect(onReorderTab).toHaveBeenCalledWith("task-2", "task-1", "before");
+  });
+
+  test("auto-scrolls the overflowed strip when dragging near the edge", () => {
+    const requestAnimationFrameCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      requestAnimationFrameCallbacks.push(callback);
+      return requestAnimationFrameCallbacks.length;
+    }) as typeof globalThis.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = (() => 0) as typeof globalThis.cancelAnimationFrame;
+
+    try {
+      render(
+        createElement(
+          Tabs,
+          { value: "task-1" },
+          createElement(AgentStudioTaskTabs, {
+            model: {
+              ...buildModel(),
+              tabs: [
+                { taskId: "task-1", taskTitle: "Tab 1", status: "working", isActive: true },
+                { taskId: "task-2", taskTitle: "Tab 2", status: "idle", isActive: false },
+                { taskId: "task-3", taskTitle: "Tab 3", status: "idle", isActive: false },
+                { taskId: "task-4", taskTitle: "Tab 4", status: "idle", isActive: false },
+                { taskId: "task-5", taskTitle: "Tab 5", status: "idle", isActive: false },
+                { taskId: "task-6", taskTitle: "Tab 6", status: "idle", isActive: false },
+              ],
+            },
+          }),
+        ),
+      );
+
+      const tabList = screen.getByRole("tablist", { name: "Agent Studio task tabs" });
+      const scrollRegion = tabList.parentElement?.parentElement as HTMLDivElement | null;
+      const firstTab = screen.getByRole("tab", { name: /Tab 1/i }).closest("[data-task-tab-id]");
+      const secondTab = screen.getByRole("tab", { name: /Tab 2/i }).closest("[data-task-tab-id]");
+
+      expect(scrollRegion).not.toBeNull();
+      expect(firstTab).not.toBeNull();
+      expect(secondTab).not.toBeNull();
+
+      Object.defineProperty(scrollRegion as HTMLDivElement, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: 200,
+          bottom: 40,
+          width: 200,
+          height: 40,
+          toJSON: () => ({}),
+        }),
+      });
+      Object.defineProperty(secondTab as HTMLElement, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          x: 90,
+          y: 0,
+          left: 90,
+          top: 0,
+          right: 180,
+          bottom: 40,
+          width: 90,
+          height: 40,
+          toJSON: () => ({}),
+        }),
+      });
+      (scrollRegion as HTMLDivElement).scrollLeft = 0;
+
+      const dataTransfer = {
+        effectAllowed: "all",
+        dropEffect: "move",
+        setData: () => {},
+        getData: () => "task-1",
+      };
+
+      fireEvent(firstTab as HTMLElement, createDragEvent("dragstart", dataTransfer));
+      fireEvent(
+        secondTab as HTMLElement,
+        createDragEvent("dragover", dataTransfer, { clientX: 196 }),
+      );
+
+      expect(requestAnimationFrameCallbacks.length).toBeGreaterThan(0);
+      requestAnimationFrameCallbacks.shift()?.(0);
+
+      expect((scrollRegion as HTMLDivElement).scrollLeft).toBeGreaterThan(0);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
   });
 });
