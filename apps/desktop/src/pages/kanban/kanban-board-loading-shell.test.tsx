@@ -15,5 +15,7 @@ describe("KanbanBoardLoadingShell", () => {
     expect(html).toContain('data-testid="kanban-route-loading-overlay"');
     expect(html.match(/data-testid="kanban-loading-lane"/g)?.length).toBe(8);
     expect(html).toContain('data-slot="skeleton"');
+    expect(html).toContain("w-[328px]");
+    expect(html).toContain("min-w-[328px]");
   });
 });

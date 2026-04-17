@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/core";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
+import { KANBAN_LANE_WIDTH_CLASS } from "@/components/features/kanban/kanban-layout";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
@@ -262,7 +263,8 @@ export function KanbanColumn({
   return (
     <section
       className={cn(
-        "flex w-[328px] min-w-[328px] flex-col overflow-hidden rounded-2xl border shadow-sm",
+        "flex flex-col overflow-hidden rounded-2xl border shadow-sm",
+        KANBAN_LANE_WIDTH_CLASS,
         theme.boardSurfaceClass,
       )}
     >

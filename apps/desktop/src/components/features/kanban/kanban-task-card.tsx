@@ -1,7 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
-import { memo, type ReactElement, useId, useLayoutEffect, useState } from "react";
+import { memo, type ReactElement, useId, useMemo } from "react";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
@@ -13,6 +13,7 @@ import {
   RunStateBadge,
   type VisibleKanbanRunState,
 } from "@/components/features/kanban/kanban-task-badges";
+import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
 import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
@@ -32,9 +33,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
-
-const LABEL_ROW_EPSILON_PX = 1;
-const DEFAULT_FLEX_GAP_PX = 6;
 
 const toVisibleKanbanRunState = (
   runState: RunSummary["state"] | undefined,
@@ -244,119 +242,6 @@ const getCardActivityClassName = ({
   return "kanban-active-session-card border-info-border shadow-info-border";
 };
 
-const getFlexGap = (element: HTMLElement): number => {
-  const styles = window.getComputedStyle(element);
-  const rawGap = styles.columnGap === "normal" ? styles.gap : styles.columnGap;
-  const parsedGap = Number.parseFloat(rawGap);
-  return Number.isFinite(parsedGap) ? parsedGap : DEFAULT_FLEX_GAP_PX;
-};
-
-const measureOverflowIndicatorWidth = ({
-  overflowMeasure,
-  hiddenCount,
-}: {
-  overflowMeasure: HTMLSpanElement;
-  hiddenCount: number;
-}): number => {
-  if (hiddenCount <= 0) {
-    return 0;
-  }
-
-  const previousText = overflowMeasure.textContent;
-  overflowMeasure.textContent = `+${hiddenCount}`;
-  const width = overflowMeasure.getBoundingClientRect().width;
-  overflowMeasure.textContent = previousText;
-  return width;
-};
-
-function useSingleRowChipOverflow(labels: string[]): {
-  containerRef: (element: HTMLDivElement | null) => void;
-  measureRowRef: (element: HTMLDivElement | null) => void;
-  overflowMeasureRef: (element: HTMLSpanElement | null) => void;
-  visibleLabels: string[];
-  hiddenLabels: string[];
-} {
-  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
-  const [measureRowElement, setMeasureRowElement] = useState<HTMLDivElement | null>(null);
-  const [overflowMeasureElement, setOverflowMeasureElement] = useState<HTMLSpanElement | null>(
-    null,
-  );
-  const [visibleCount, setVisibleCount] = useState(labels.length);
-
-  useLayoutEffect(() => {
-    if (!containerElement || !measureRowElement || !overflowMeasureElement) {
-      return undefined;
-    }
-
-    const updateVisibleCount = (): void => {
-      const availableWidth = containerElement.clientWidth;
-      if (availableWidth <= 0) {
-        setVisibleCount(labels.length);
-        return;
-      }
-
-      const chipElements = Array.from(measureRowElement.children) as HTMLElement[];
-      const gap = getFlexGap(measureRowElement);
-      let nextVisibleCount = labels.length;
-      let usedWidth = 0;
-
-      for (let index = 0; index < chipElements.length; index += 1) {
-        const chipElement = chipElements[index];
-        const chipWidth = chipElement?.getBoundingClientRect().width ?? 0;
-        const nextWidth = usedWidth + (index > 0 ? gap : 0) + chipWidth;
-        const hiddenCount = labels.length - (index + 1);
-        const reservedOverflowWidth =
-          hiddenCount > 0
-            ? gap +
-              measureOverflowIndicatorWidth({
-                overflowMeasure: overflowMeasureElement,
-                hiddenCount,
-              })
-            : 0;
-
-        if (nextWidth + reservedOverflowWidth <= availableWidth + LABEL_ROW_EPSILON_PX) {
-          usedWidth = nextWidth;
-          continue;
-        }
-
-        nextVisibleCount = index;
-        break;
-      }
-
-      const finalHiddenCount = labels.length - nextVisibleCount;
-      overflowMeasureElement.textContent = `+${Math.max(finalHiddenCount, 1)}`;
-      setVisibleCount((currentVisibleCount) =>
-        currentVisibleCount === nextVisibleCount ? currentVisibleCount : nextVisibleCount,
-      );
-    };
-
-    updateVisibleCount();
-
-    if (typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateVisibleCount();
-    });
-
-    observer.observe(containerElement);
-    observer.observe(measureRowElement);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [containerElement, measureRowElement, overflowMeasureElement, labels]);
-
-  return {
-    containerRef: setContainerElement,
-    measureRowRef: setMeasureRowElement,
-    overflowMeasureRef: setOverflowMeasureElement,
-    visibleLabels: labels.slice(0, visibleCount),
-    hiddenLabels: labels.slice(visibleCount),
-  };
-}
-
 function TaskPrimaryMeta({
   task,
   runState,
@@ -423,41 +308,17 @@ function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }
 }
 
 function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
-  const { containerRef, measureRowRef, overflowMeasureRef, visibleLabels, hiddenLabels } =
-    useSingleRowChipOverflow(labels);
+  const { visibleLabels, hiddenLabels } = useMemo(() => resolveTaskLabelOverflow(labels), [labels]);
 
   return (
     <div className="relative min-w-0">
-      <div
-        ref={containerRef}
-        className="flex min-w-0 items-center gap-1.5"
-        data-testid="kanban-task-label-row"
-      >
+      <div className="flex min-w-0 items-center gap-1.5" data-testid="kanban-task-label-row">
         {visibleLabels.map((label) => (
           <TaskLabelChip key={label} label={label} className="shrink-0" />
         ))}
         {hiddenLabels.length > 0 ? (
           <TaskLabelOverflowIndicator hiddenLabels={hiddenLabels} />
         ) : null}
-      </div>
-
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 invisible flex items-center gap-1.5"
-        aria-hidden="true"
-      >
-        <div ref={measureRowRef} className="flex min-w-0 items-center gap-1.5">
-          {labels.map((label) => (
-            <div key={label} className="shrink-0">
-              <TaskLabelChip label={label} className="shrink-0" />
-            </div>
-          ))}
-        </div>
-        <span
-          ref={overflowMeasureRef}
-          className="inline-flex h-6 items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-semibold"
-        >
-          +1
-        </span>
       </div>
     </div>
   );
