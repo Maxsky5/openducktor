@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { createElement } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TEST_ROLE_OPTIONS } from "./agent-chat/agent-chat-test-fixtures";
 import { AgentStudioHeader } from "./agent-studio-header";
@@ -225,6 +225,61 @@ describe("AgentStudioHeader", () => {
     expect(onValueChange).toHaveBeenCalledWith("build-session");
 
     unmount();
+  });
+
+  test("does not restore focus to the history trigger after selecting a session", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          sessionSelector: {
+            value: "spec-session",
+            groups: [
+              {
+                label: "Spec sessions",
+                options: [
+                  {
+                    value: "spec-session",
+                    label: "Spec Revision · Spec",
+                    description: "Today · idle",
+                  },
+                ],
+              },
+              {
+                label: "Build sessions",
+                options: [
+                  {
+                    value: "build-session",
+                    label: "Builder Draft · Build",
+                    description: "Today · running",
+                  },
+                ],
+              },
+            ],
+            disabled: false,
+            onValueChange,
+          },
+        },
+      }),
+    );
+
+    const sessionHistoryTrigger = screen.getByRole("button", { name: /Session history/i });
+    sessionHistoryTrigger.focus();
+    expect(document.activeElement).toBe(sessionHistoryTrigger);
+
+    await act(async () => {
+      fireEvent.click(sessionHistoryTrigger);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Builder Draft · Build"));
+    });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith("build-session");
+      expect(document.activeElement).not.toBe(sessionHistoryTrigger);
+    });
   });
 
   test("hides the task details button when no task is selected", () => {

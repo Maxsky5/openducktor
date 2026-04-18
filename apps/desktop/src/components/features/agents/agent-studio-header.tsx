@@ -12,7 +12,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
@@ -204,6 +204,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
 
   const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
+  const preventSessionTriggerRefocusRef = useRef(false);
 
   const normalizedTaskTitle = taskTitle?.trim() ?? "";
   const hasTaskTitle = normalizedTaskTitle.length > 0;
@@ -291,7 +292,18 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 <History className="size-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-0">
+            <PopoverContent
+              align="end"
+              className="w-80 p-0"
+              onCloseAutoFocus={(event) => {
+                if (!preventSessionTriggerRefocusRef.current) {
+                  return;
+                }
+
+                preventSessionTriggerRefocusRef.current = false;
+                event.preventDefault();
+              }}
+            >
               <Command>
                 <CommandInput placeholder="Search sessions…" className="h-8 text-sm" />
                 <CommandList>
@@ -303,6 +315,8 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                           key={option.value}
                           value={`${group.label} ${option.label} ${option.description ?? ""}`}
                           onSelect={() => {
+                            preventSessionTriggerRefocusRef.current =
+                              option.value !== sessionSelector.value;
                             sessionSelector.onValueChange(option.value);
                             setIsSessionMenuOpen(false);
                           }}
