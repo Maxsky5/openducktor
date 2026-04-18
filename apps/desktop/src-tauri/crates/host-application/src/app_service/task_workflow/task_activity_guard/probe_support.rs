@@ -1,5 +1,5 @@
 use super::*;
-use crate::app_service::dedupe_runtime_session_probe_targets;
+use host_domain::{AgentRuntimeKind, RuntimeRole, RuntimeRoute};
 
 #[derive(Default)]
 pub(super) struct TaskActiveWorkEvidence {
@@ -29,31 +29,175 @@ impl TaskActiveWorkEvidence {
 pub(super) struct TaskActivityProbePlan {
     pub(super) run_plans: Vec<RunProbePlan>,
     pub(super) session_plans: Vec<SessionProbePlan>,
-    pub(super) primary_probe_targets: Vec<RuntimeSessionStatusProbeTarget>,
+    pub(super) probe_targets: Vec<RuntimeSessionStatusProbeTarget>,
 }
 
-impl TaskActivityProbePlan {
-    pub(super) fn fallback_probe_targets(
+pub(super) struct TaskRuntimeRouteIndex {
+    task_routes: HashMap<SessionRuntimeLookupKey, RuntimeRoute>,
+    shared_routes: HashMap<SharedRuntimeLookupKey, RuntimeRoute>,
+}
+
+impl TaskRuntimeRouteIndex {
+    pub(super) fn collect(service: &AppService, repo_path: &str, task_id: &str) -> Result<Self> {
+        let normalized_repo = normalize_path_for_comparison(repo_path);
+        let mut task_routes = HashMap::new();
+        let mut shared_routes = HashMap::new();
+        let runtimes = service
+            .agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+
+        for runtime in runtimes.values() {
+            if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo
+            {
+                continue;
+            }
+
+            if runtime.summary.role == RuntimeRole::Workspace {
+                if runtime.summary.task_id.is_none() {
+                    shared_routes.insert(
+                        SharedRuntimeLookupKey::new(
+                            runtime.summary.kind.clone(),
+                            runtime.summary.working_directory.as_str(),
+                        ),
+                        runtime.summary.runtime_route.clone(),
+                    );
+                }
+                continue;
+            }
+
+            if runtime.summary.task_id.as_deref() != Some(task_id) {
+                continue;
+            }
+
+            let key = SessionRuntimeLookupKey::new(
+                runtime.summary.kind.clone(),
+                runtime.summary.role,
+                runtime.summary.working_directory.as_str(),
+            );
+
+            task_routes.insert(key, runtime.summary.runtime_route.clone());
+        }
+
+        Ok(Self {
+            task_routes,
+            shared_routes,
+        })
+    }
+
+    fn route_for_session(
         &self,
-        primary_statuses_by_target: &HashMap<
-            RuntimeSessionStatusProbeTarget,
-            RuntimeSessionStatusMap,
-        >,
-    ) -> Vec<RuntimeSessionStatusProbeTarget> {
-        dedupe_probe_targets(
-            self.session_plans
-                .iter()
-                .filter_map(|session_probe_plan| {
-                    let primary_target = session_probe_plan.primary_target.as_ref()?;
-                    let primary_statuses = primary_statuses_by_target.get(primary_target)?;
-                    if primary_statuses.is_empty() {
-                        session_probe_plan.fallback_target.clone()
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        )
+        service: &AppService,
+        session: &AgentSessionDocument,
+    ) -> Result<Option<(AgentRuntimeKind, RuntimeRoute)>> {
+        let runtime_kind = parse_runtime_kind_from_session(service, session)?;
+        let Some(runtime_role) = parse_runtime_role(session.role.as_str()) else {
+            return Ok(None);
+        };
+        let Some(runtime_route) = self.route_for_role(
+            &runtime_kind,
+            runtime_role,
+            session.working_directory.as_str(),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some((runtime_kind, runtime_route)))
+    }
+
+    fn route_for_role(
+        &self,
+        runtime_kind: &AgentRuntimeKind,
+        runtime_role: RuntimeRole,
+        working_directory: &str,
+    ) -> Option<RuntimeRoute> {
+        self.task_routes
+            .get(&SessionRuntimeLookupKey::new(
+                runtime_kind.clone(),
+                runtime_role,
+                working_directory,
+            ))
+            .cloned()
+            .or_else(|| {
+                self.shared_routes
+                    .get(&SharedRuntimeLookupKey::new(
+                        runtime_kind.clone(),
+                        working_directory,
+                    ))
+                    .cloned()
+            })
+    }
+
+    pub(super) fn probe_target_resolution_for_session(
+        &self,
+        service: &AppService,
+        session: &AgentSessionDocument,
+    ) -> Result<Option<RuntimeSessionStatusProbeTargetResolution>> {
+        let Some((runtime_kind, runtime_route)) = self.route_for_session(service, session)? else {
+            return Ok(None);
+        };
+
+        Ok(Some(
+            service
+                .runtime_registry
+                .runtime(&runtime_kind)?
+                .session_status_probe_target(&runtime_route, session.working_directory.as_str())?,
+        ))
+    }
+
+    pub(super) fn probe_target_resolution_for_run(
+        &self,
+        service: &AppService,
+        run_candidate: &RunProbeCandidate,
+        runtime_role: RuntimeRole,
+    ) -> Result<RuntimeSessionStatusProbeTargetResolution> {
+        let runtime_route = self
+            .route_for_role(
+                &run_candidate.runtime_kind,
+                runtime_role,
+                run_candidate.worktree_path.as_str(),
+            )
+            .unwrap_or_else(|| run_candidate.runtime_route.clone());
+
+        service
+            .runtime_registry
+            .runtime(&run_candidate.runtime_kind)?
+            .session_status_probe_target(&runtime_route, run_candidate.worktree_path.as_str())
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct SharedRuntimeLookupKey {
+    runtime_kind: AgentRuntimeKind,
+    working_directory_key: String,
+}
+
+impl SharedRuntimeLookupKey {
+    fn new(runtime_kind: AgentRuntimeKind, working_directory: &str) -> Self {
+        Self {
+            runtime_kind,
+            working_directory_key: normalize_path_key(working_directory),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(super) struct SessionRuntimeLookupKey {
+    runtime_kind: AgentRuntimeKind,
+    role: RuntimeRole,
+    working_directory_key: String,
+}
+
+impl SessionRuntimeLookupKey {
+    pub(super) fn new(
+        runtime_kind: AgentRuntimeKind,
+        role: RuntimeRole,
+        working_directory: &str,
+    ) -> Self {
+        Self {
+            runtime_kind,
+            role,
+            working_directory_key: normalize_path_key(working_directory),
+        }
     }
 }
 
@@ -61,32 +205,29 @@ pub(super) fn build_run_probe_plans(
     service: &AppService,
     candidate_runs: &[RunProbeCandidate],
     sessions: &[AgentSessionDocument],
-    primary_probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
+    runtime_route_index: &TaskRuntimeRouteIndex,
+    probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
 ) -> Result<Vec<RunProbePlan>> {
     let mut run_plans = Vec::with_capacity(candidate_runs.len());
     for run_candidate in candidate_runs {
         let external_session_ids = collect_build_external_session_ids(run_candidate, sessions);
-        let primary_target = if external_session_ids.is_empty() {
+        let probe_target_resolution = if external_session_ids.is_empty() {
             None
         } else {
-            let target = service
-                .runtime_registry
-                .runtime(&run_candidate.runtime_kind)?
-                .session_status_probe_target(
-                    &run_candidate.runtime_route,
-                    run_candidate.worktree_path.as_str(),
-                )?;
-            if let Some(target) = target {
-                primary_probe_targets.push(target.clone());
-                Some(target)
-            } else {
-                None
+            let resolution = runtime_route_index.probe_target_resolution_for_run(
+                service,
+                run_candidate,
+                RuntimeRole::Build,
+            )?;
+            if let RuntimeSessionStatusProbeTargetResolution::Target(target) = &resolution {
+                probe_targets.push(target.clone());
             }
+            Some(resolution)
         };
         run_plans.push(RunProbePlan {
             worktree_path: run_candidate.worktree_path.clone(),
             external_session_ids,
-            primary_target,
+            probe_target_resolution,
         });
     }
     Ok(run_plans)
@@ -96,9 +237,8 @@ pub(super) fn build_session_probe_plans(
     service: &AppService,
     sessions: &[AgentSessionDocument],
     session_roles: &[&str],
-    runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
-    repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
-    primary_probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
+    runtime_route_index: &TaskRuntimeRouteIndex,
+    probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
 ) -> Result<Vec<SessionProbePlan>> {
     let allowed_roles = session_roles
         .iter()
@@ -119,141 +259,61 @@ pub(super) fn build_session_probe_plans(
         };
 
         let worktree_key = normalize_path_key(session.working_directory.as_str());
-        let fallback_runtime_kind = parse_runtime_kind(service, session.runtime_kind.as_str());
-        let worktree_runtime_route = runtime_routes_by_worktree.get(worktree_key.as_str());
-        let repo_runtime_route = fallback_runtime_kind
-            .as_ref()
-            .and_then(|kind| repo_runtime_routes_by_kind.get(kind));
-        let runtime_kind = worktree_runtime_route
-            .and_then(|_| parse_runtime_kind(service, session.runtime_kind.as_str()))
-            .or(fallback_runtime_kind);
-        let runtime_route = worktree_runtime_route.or(repo_runtime_route);
-        let Some(runtime_route) = runtime_route else {
-            continue;
-        };
-
-        let primary_target = runtime_kind
-            .as_ref()
-            .map(|kind| {
-                service
-                    .runtime_registry
-                    .runtime(kind)?
-                    .session_status_probe_target(runtime_route, session.working_directory.as_str())
-            })
-            .transpose()?
-            .flatten();
-        if let Some(target) = primary_target.as_ref() {
-            primary_probe_targets.push(target.clone());
+        let probe_target_resolution =
+            runtime_route_index.probe_target_resolution_for_session(service, session)?;
+        if let Some(RuntimeSessionStatusProbeTargetResolution::Target(target)) =
+            &probe_target_resolution
+        {
+            probe_targets.push(target.clone());
         }
-        let fallback_target = select_fallback_probe_target(
-            service,
-            runtime_kind,
-            worktree_runtime_route,
-            repo_runtime_route,
-            session.working_directory.as_str(),
-        )?;
 
         session_plans.push(SessionProbePlan {
             worktree_key,
             role: session.role.trim().to_string(),
             external_session_id: external_session_id.to_string(),
-            primary_target,
-            fallback_target,
+            probe_target_resolution,
         });
     }
     Ok(session_plans)
 }
 
-pub(super) fn collect_runtime_routes_by_worktree(
-    candidate_runs: &[RunProbeCandidate],
-) -> HashMap<String, RuntimeRoute> {
-    candidate_runs
-        .iter()
-        .map(|run_candidate| {
-            (
-                normalize_path_key(run_candidate.worktree_path.as_str()),
-                run_candidate.runtime_route.clone(),
-            )
-        })
-        .collect()
-}
-
-pub(super) fn resolve_session_statuses<'a>(
-    session_probe_plan: &SessionProbePlan,
-    primary_statuses_by_target: &'a HashMap<
-        RuntimeSessionStatusProbeTarget,
-        RuntimeSessionStatusMap,
-    >,
-    fallback_statuses_by_target: &'a HashMap<
-        RuntimeSessionStatusProbeTarget,
-        RuntimeSessionStatusMap,
-    >,
-) -> Result<Option<&'a RuntimeSessionStatusMap>> {
-    let Some(primary_target) = session_probe_plan.primary_target.as_ref() else {
-        return Ok(None);
-    };
-    let primary_statuses = primary_statuses_by_target
-        .get(primary_target)
-        .ok_or_else(|| {
-            anyhow!(
-                "Missing cached runtime session statuses for {}",
-                session_probe_plan.worktree_key
-            )
-        })?;
-    if !primary_statuses.is_empty() {
-        return Ok(Some(primary_statuses));
-    }
-
-    let Some(fallback_target) = session_probe_plan.fallback_target.as_ref() else {
-        return Ok(Some(primary_statuses));
-    };
-    let fallback_statuses = fallback_statuses_by_target
-        .get(fallback_target)
-        .ok_or_else(|| {
-            anyhow!(
-                "Missing cached runtime session fallback statuses for {}",
-                session_probe_plan.worktree_key
-            )
-        })?;
-    if fallback_statuses.is_empty() {
-        Ok(Some(primary_statuses))
-    } else {
-        Ok(Some(fallback_statuses))
-    }
-}
-
-pub(super) fn select_fallback_probe_target(
+fn parse_runtime_kind_from_session(
     service: &AppService,
-    runtime_kind: Option<AgentRuntimeKind>,
-    worktree_runtime_route: Option<&RuntimeRoute>,
-    repo_runtime_route: Option<&RuntimeRoute>,
-    working_directory: &str,
-) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
-    let Some(runtime_kind) = runtime_kind.as_ref() else {
-        return Ok(None);
-    };
-    let (Some(primary_route), Some(fallback_route)) = (worktree_runtime_route, repo_runtime_route)
-    else {
-        return Ok(None);
-    };
-    if primary_route == fallback_route {
-        return Ok(None);
+    session: &AgentSessionDocument,
+) -> Result<AgentRuntimeKind> {
+    let runtime_kind = session.runtime_kind.trim();
+    if runtime_kind.is_empty() {
+        return Err(anyhow!(
+            "Persisted {} session '{}' is missing runtime kind metadata",
+            session.role.trim(),
+            session.session_id
+        ));
     }
 
+    let runtime_kind = AgentRuntimeKind::from(runtime_kind);
     service
         .runtime_registry
-        .runtime(runtime_kind)?
-        .session_status_probe_target(fallback_route, working_directory)
+        .runtime(&runtime_kind)
+        .with_context(|| {
+            format!(
+                "Persisted {} session '{}' references unsupported runtime kind '{}'",
+                session.role.trim(),
+                session.session_id,
+                session.runtime_kind.trim()
+            )
+        })?;
+
+    Ok(runtime_kind)
 }
 
-pub(super) fn dedupe_probe_targets(
-    targets: Vec<RuntimeSessionStatusProbeTarget>,
-) -> Vec<RuntimeSessionStatusProbeTarget> {
-    dedupe_runtime_session_probe_targets(targets)
-}
-
-pub(super) fn parse_runtime_kind(service: &AppService, value: &str) -> Option<AgentRuntimeKind> {
-    service.runtime_registry.resolve_kind(value).ok()
+pub(super) fn parse_runtime_role(value: &str) -> Option<RuntimeRole> {
+    match value.trim() {
+        "spec" => Some(RuntimeRole::Spec),
+        "planner" => Some(RuntimeRole::Planner),
+        "build" => Some(RuntimeRole::Build),
+        "qa" => Some(RuntimeRole::Qa),
+        _ => None,
+    }
 }
 
 pub(super) fn collect_build_external_session_ids(
@@ -289,13 +349,12 @@ pub(super) struct RunProbeCandidate {
 pub(super) struct RunProbePlan {
     pub(super) worktree_path: String,
     pub(super) external_session_ids: Vec<String>,
-    pub(super) primary_target: Option<RuntimeSessionStatusProbeTarget>,
+    pub(super) probe_target_resolution: Option<RuntimeSessionStatusProbeTargetResolution>,
 }
 
 pub(super) struct SessionProbePlan {
     pub(super) worktree_key: String,
     pub(super) role: String,
     pub(super) external_session_id: String,
-    pub(super) primary_target: Option<RuntimeSessionStatusProbeTarget>,
-    pub(super) fallback_target: Option<RuntimeSessionStatusProbeTarget>,
+    pub(super) probe_target_resolution: Option<RuntimeSessionStatusProbeTargetResolution>,
 }

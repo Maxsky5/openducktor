@@ -35,7 +35,7 @@ impl RunExposureCandidate {
 struct RunExposurePlan {
     summary: RunSummary,
     external_session_ids: Vec<String>,
-    probe_target: Option<super::super::RuntimeSessionStatusProbeTarget>,
+    probe_target_resolution: Option<super::super::RuntimeSessionStatusProbeTargetResolution>,
 }
 
 impl RunExposurePlan {
@@ -43,19 +43,19 @@ impl RunExposurePlan {
         Self {
             summary,
             external_session_ids: Vec::new(),
-            probe_target: None,
+            probe_target_resolution: None,
         }
     }
 
     fn with_probe(
         summary: RunSummary,
         external_session_ids: Vec<String>,
-        probe_target: super::super::RuntimeSessionStatusProbeTarget,
+        probe_target_resolution: super::super::RuntimeSessionStatusProbeTargetResolution,
     ) -> Self {
         Self {
             summary,
             external_session_ids,
-            probe_target: Some(probe_target),
+            probe_target_resolution: Some(probe_target_resolution),
         }
     }
 
@@ -63,22 +63,43 @@ impl RunExposurePlan {
         &self,
         statuses_by_target: &HashMap<
             super::super::RuntimeSessionStatusProbeTarget,
-            super::super::RuntimeSessionStatusMap,
+            super::super::RuntimeSessionStatusProbeOutcome,
         >,
     ) -> Result<bool> {
-        let Some(probe_target) = self.probe_target.as_ref() else {
+        let Some(probe_target_resolution) = self.probe_target_resolution.as_ref() else {
             return Ok(true);
         };
 
-        let statuses = statuses_by_target.get(probe_target).ok_or_else(|| {
+        let super::super::RuntimeSessionStatusProbeTargetResolution::Target(probe_target) =
+            probe_target_resolution
+        else {
+            return Ok(true);
+        };
+
+        let probe_outcome = statuses_by_target.get(probe_target).ok_or_else(|| {
             anyhow!(
-                "Missing cached runtime session statuses for run {}",
+                "Missing cached runtime session status outcome for run {}",
                 self.summary.run_id
             )
         })?;
-        Ok(self.external_session_ids.iter().any(|external_session_id| {
-            super::super::has_live_runtime_session_status(statuses, external_session_id)
-        }))
+
+        match probe_outcome {
+            super::super::RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
+                if snapshot.has_no_live_sessions() {
+                    return Ok(false);
+                }
+
+                Ok(self
+                    .external_session_ids
+                    .iter()
+                    .any(|external_session_id| snapshot.has_live_session(external_session_id)))
+            }
+            super::super::RuntimeSessionStatusProbeOutcome::Unsupported => Ok(true),
+            // Run visibility is best-effort: if probing fails, hide the run rather than
+            // surfacing a stale entry. Task reset/delete guards stay fail-safe and propagate
+            // the same probe failure instead of allowing destructive actions to continue.
+            super::super::RuntimeSessionStatusProbeOutcome::ActionableError(_) => Ok(false),
+        }
     }
 }
 
@@ -153,22 +174,22 @@ impl AppService {
                 continue;
             }
 
-            let probe_target = self
+            let probe_target_resolution = self
                 .runtime_registry
                 .runtime(&run.summary.runtime_kind)?
                 .session_status_probe_target(
                     &run.summary.runtime_route,
                     run.worktree_path.as_str(),
                 )?;
-            let Some(probe_target) = probe_target else {
-                exposure_plans.push(RunExposurePlan::without_probe(run.summary));
-                continue;
-            };
-            probe_targets.push(probe_target.clone());
+            if let super::super::RuntimeSessionStatusProbeTargetResolution::Target(probe_target) =
+                &probe_target_resolution
+            {
+                probe_targets.push(probe_target.clone());
+            }
             exposure_plans.push(RunExposurePlan::with_probe(
                 run.summary,
                 external_session_ids,
-                probe_target,
+                probe_target_resolution,
             ));
         }
 
@@ -198,7 +219,7 @@ impl AppService {
         exposure_plans: Vec<RunExposurePlan>,
         statuses_by_target: &HashMap<
             super::super::RuntimeSessionStatusProbeTarget,
-            super::super::RuntimeSessionStatusMap,
+            super::super::RuntimeSessionStatusProbeOutcome,
         >,
     ) -> Result<Vec<RunSummary>> {
         let mut list = Vec::new();

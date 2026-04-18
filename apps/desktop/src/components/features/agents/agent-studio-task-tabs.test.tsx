@@ -433,8 +433,12 @@ describe("AgentStudioTaskTabs", () => {
       ),
     );
 
+    const inactiveTab = screen.getByRole("tab", { name: /Ship QA checklist/i });
+
     await act(async () => {
-      fireEvent.click(screen.getByRole("tab", { name: /Ship QA checklist/i }));
+      fireEvent.mouseDown(inactiveTab, { button: 0, buttons: 1 });
+      fireEvent.mouseUp(inactiveTab, { button: 0 });
+      fireEvent.click(inactiveTab, { button: 0 });
     });
 
     expect(onSelectTab).toHaveBeenCalledWith("task-2");
