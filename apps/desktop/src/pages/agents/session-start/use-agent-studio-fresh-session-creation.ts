@@ -4,10 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
 import {
-  type NewSessionStartDecision,
-  type NewSessionStartRequest,
-  type SessionStartWorkflowResult,
-  startSessionWorkflow,
+  executeSessionStartFromDecision,
+  type ResolvedSessionStartDecision,
+  type SessionStartFlowRequest,
 } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -23,8 +22,6 @@ import {
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
 } from "../use-agent-studio-session-action-helpers";
-
-type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
 type UseAgentStudioFreshSessionCreationArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -43,7 +40,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
   startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   onPostStartActionError?: (action: "kickoff", error: Error) => void;
   executeRequestedSessionStart: <T>(
-    request: Omit<NewSessionStartRequest, "selectedModel">,
+    request: SessionStartFlowRequest,
     executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
   ) => Promise<T | undefined>;
 };
@@ -101,89 +98,56 @@ export function useAgentStudioFreshSessionCreation({
           incrementActivityCountRecord(current, startContextKey),
         );
         try {
-          if (decision.startMode === "reuse") {
-            let workflow: SessionStartWorkflowResult;
-            try {
-              workflow = await startSessionWorkflow({
-                activeWorkspace,
-                queryClient,
-                intent: {
-                  taskId,
-                  role: params.nextRole,
-                  scenario: params.nextScenario,
-                  startMode: "reuse",
-                  sourceSessionId: decision.sourceSessionId,
-                  postStartAction: "kickoff",
-                },
-                selection: null,
-                task: selectedTask,
-                startAgentSession,
-                sendAgentMessage,
-                postStartExecution: "detached",
-                onDetachedPostStartError: onPostStartActionError
-                  ? (error) => onPostStartActionError("kickoff", error)
-                  : undefined,
-              });
-            } catch (error) {
-              const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
-              toast.error(`Failed to start ${roleLabel} session`, {
-                description: errorMessage(error),
-              });
-              return undefined;
-            }
-            if (
-              shouldTriggerContextSwitchIntent({
-                currentSessionId: activeSession?.sessionId ?? null,
-                currentRole: activeSession?.role ?? role,
-                nextSessionId: decision.sourceSessionId,
-                nextRole: params.nextRole,
-              })
-            ) {
-              onContextSwitchIntent?.();
-            }
-            applyFreshSessionSelectionQuery(
-              workflow.sessionId,
-              params.nextRole,
-              params.nextScenario,
-            );
-            return workflow.sessionId;
-          }
-
           if (
             shouldTriggerContextSwitchIntent({
               currentSessionId: activeSession?.sessionId ?? null,
               currentRole: activeSession?.role ?? role,
-              nextSessionId: null,
+              nextSessionId: decision.startMode === "reuse" ? decision.sourceSessionId : null,
               nextRole: params.nextRole,
             })
           ) {
             onContextSwitchIntent?.();
           }
 
-          let workflow: SessionStartWorkflowResult | undefined;
           try {
-            workflow = await startSessionWorkflow({
+            const workflow = await executeSessionStartFromDecision({
               activeWorkspace,
               queryClient,
-              intent: {
+              request: {
                 taskId,
                 role: params.nextRole,
                 scenario: params.nextScenario,
-                startMode: decision.startMode,
-                ...(decision.startMode === "fork"
-                  ? { sourceSessionId: decision.sourceSessionId }
-                  : {}),
                 postStartAction: "kickoff",
               },
-              selection: decision.selectedModel,
+              decision,
               task: selectedTask,
               startAgentSession,
               sendAgentMessage,
               postStartExecution: "detached",
-              onDetachedPostStartError: onPostStartActionError
-                ? (error) => onPostStartActionError("kickoff", error)
-                : undefined,
+              ...(onPostStartActionError
+                ? {
+                    onPostStartActionError: (
+                      action: "kickoff" | "send_message" | "none",
+                      error: Error,
+                    ) => {
+                      if (action === "kickoff") {
+                        onPostStartActionError(action, error);
+                      }
+                    },
+                  }
+                : {}),
             });
+            if (!workflow) {
+              return undefined;
+            }
+
+            const sessionId = workflow.sessionId;
+            if (!sessionId) {
+              return undefined;
+            }
+
+            applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);
+            return sessionId;
           } catch (error) {
             const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
             toast.error(`Failed to start ${roleLabel} session`, {
@@ -191,16 +155,6 @@ export function useAgentStudioFreshSessionCreation({
             });
             return undefined;
           }
-          if (!workflow) {
-            return undefined;
-          }
-          const sessionId = workflow.sessionId;
-          if (!sessionId) {
-            return undefined;
-          }
-
-          applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);
-          return sessionId;
         } finally {
           setStartingActivityCountByContext((current) =>
             decrementActivityCountRecord(current, startContextKey),
@@ -213,7 +167,7 @@ export function useAgentStudioFreshSessionCreation({
           taskId,
           role: params.nextRole,
           scenario: params.nextScenario,
-          reason: "create_session",
+          postStartAction: "kickoff",
         },
         executeStartedSession,
       );

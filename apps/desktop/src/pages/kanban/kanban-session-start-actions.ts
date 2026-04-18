@@ -1,19 +1,19 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { startSessionWorkflow } from "@/features/session-start";
+import {
+  executeSessionStartFromDecision,
+  type ResolvedSessionStartDecision,
+} from "@/features/session-start";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
-import type {
-  KanbanResolvedSessionStartIntent,
-  KanbanSessionStartIntent,
-} from "./kanban-page-model-types";
+import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
 type StartKanbanSessionFlowInput = {
   activeWorkspace: ActiveWorkspace | null;
-  intent: KanbanResolvedSessionStartIntent;
-  selection: AgentModelSelection | null;
+  request: KanbanSessionStartIntent;
+  decision: ResolvedSessionStartDecision;
   startInBackground: boolean;
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
@@ -30,8 +30,8 @@ type StartKanbanSessionFlowInput = {
 
 export const startKanbanSessionFlow = async ({
   activeWorkspace,
-  intent,
-  selection,
+  request,
+  decision,
   startInBackground,
   tasks,
   roleLabels,
@@ -43,25 +43,24 @@ export const startKanbanSessionFlow = async ({
   sendAgentMessage,
 }: StartKanbanSessionFlowInput): Promise<string> => {
   const effectivePostStartAction =
-    startInBackground && intent.postStartAction === "none" ? "kickoff" : intent.postStartAction;
-  const task = tasks.find((entry) => entry.id === intent.taskId) ?? null;
-  const workflow = await startSessionWorkflow({
+    startInBackground && request.postStartAction === "none" ? "kickoff" : request.postStartAction;
+  const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
+  const workflow = await executeSessionStartFromDecision({
     activeWorkspace,
     queryClient,
-    intent: {
-      ...intent,
+    request: {
+      ...request,
       postStartAction: effectivePostStartAction,
     },
-    selection,
+    decision,
     task,
     ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
     startAgentSession,
     sendAgentMessage,
     humanRequestChangesTask,
-    postStartExecution: effectivePostStartAction === "none" ? "await" : "detached",
-    onDetachedPostStartError: (error) => {
+    onPostStartActionError: (action, error) => {
       const failureMessage =
-        effectivePostStartAction === "kickoff"
+        action === "kickoff"
           ? "Session started, but kickoff message failed."
           : "Session started, but feedback message failed.";
       toast.error(failureMessage, {
@@ -71,17 +70,17 @@ export const startKanbanSessionFlow = async ({
   });
 
   if (startInBackground) {
-    const roleLabel = roleLabels[intent.role] ?? intent.role.toUpperCase();
-    toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {
+    const roleLabel = roleLabels[request.role] ?? request.role.toUpperCase();
+    toast.success(`Started ${roleLabel} session in background for ${request.taskId}.`, {
       duration: 10000,
       description: renderSessionStartedToastAction(
-        intent,
+        request,
         workflow.sessionId,
         openSessionInAgentStudio,
       ),
     });
   } else {
-    openSessionInAgentStudio(intent, workflow.sessionId);
+    openSessionInAgentStudio(request, workflow.sessionId);
   }
 
   if (effectivePostStartAction === "none") {

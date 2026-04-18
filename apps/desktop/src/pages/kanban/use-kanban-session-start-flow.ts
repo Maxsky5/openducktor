@@ -16,6 +16,7 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import {
   buildReusableSessionOptions,
+  buildSessionStartModalRequest,
   firstScenario,
   useSessionStartModalRunner,
 } from "@/features/session-start";
@@ -27,10 +28,7 @@ import type {
   AgentStateContextValue,
   RepoSettingsInput,
 } from "@/types/state-slices";
-import type {
-  KanbanResolvedSessionStartIntent,
-  KanbanSessionStartIntent,
-} from "./kanban-page-model-types";
+import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
@@ -211,57 +209,21 @@ export function useKanbanSessionStartFlow({
     async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
       const selectedTask = tasksRef.current.find((task) => task.id === intent.taskId) ?? null;
       return runSessionStartRequest(
-        {
-          ...(intent.initialTargetBranch === undefined
-            ? {
-                initialTargetBranch: selectedTask?.targetBranch ?? null,
-              }
-            : { initialTargetBranch: intent.initialTargetBranch }),
-          ...(intent.initialTargetBranchError === undefined
-            ? {
-                initialTargetBranchError: selectedTask?.targetBranchError ?? null,
-              }
-            : { initialTargetBranchError: intent.initialTargetBranchError }),
+        buildSessionStartModalRequest({
           source: "kanban",
-          taskId: intent.taskId,
-          role: intent.role,
-          scenario: intent.scenario,
-          ...(intent.initialStartMode ? { initialStartMode: intent.initialStartMode } : {}),
-          ...(intent.targetWorkingDirectory !== undefined
-            ? { targetWorkingDirectory: intent.targetWorkingDirectory }
-            : {}),
-          ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
-          existingSessionOptions:
-            intent.existingSessionOptions ??
-            buildReusableSessionOptions({
-              sessions: sessionsRef.current.filter((session) => session.taskId === intent.taskId),
-              role: intent.role,
-            }),
-          postStartAction: intent.postStartAction,
-          ...(intent.message ? { message: intent.message } : {}),
-        },
+          request: {
+            ...intent,
+            ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
+          },
+          selectedModel: null,
+          taskSessions: sessionsRef.current,
+          selectedTask,
+        }),
         async ({ decision, runInBackground }) => {
-          const resolvedIntent: KanbanResolvedSessionStartIntent = {
-            taskId: intent.taskId,
-            role: intent.role,
-            scenario: intent.scenario,
-            startMode: decision.startMode,
-            ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
-            postStartAction: intent.postStartAction,
-            ...(intent.targetWorkingDirectory !== undefined
-              ? { targetWorkingDirectory: intent.targetWorkingDirectory }
-              : {}),
-            ...(decision.startMode === "reuse" || decision.startMode === "fork"
-              ? { sourceSessionId: decision.sourceSessionId }
-              : {}),
-            ...(intent.message ? { message: intent.message } : {}),
-            ...(intent.beforeStartAction ? { beforeStartAction: intent.beforeStartAction } : {}),
-          };
-
           const sessionId = await startKanbanSessionFlow({
             activeWorkspace,
-            intent: resolvedIntent,
-            selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+            request: intent,
+            decision,
             startInBackground: runInBackground,
             tasks: tasksRef.current,
             roleLabels: ROLE_LABELS,

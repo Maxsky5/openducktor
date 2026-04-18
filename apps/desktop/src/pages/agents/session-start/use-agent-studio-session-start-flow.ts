@@ -1,21 +1,19 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
-import { getAgentScenarioDefinition } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
-  NewSessionStartDecision,
-  NewSessionStartRequest,
+  ResolvedSessionStartDecision,
+  SessionStartFlowRequest,
   SessionStartRequestReason,
 } from "@/features/session-start";
 import {
-  buildReusableSessionOptions,
+  buildSessionStartModalRequest,
+  executeSessionStartFromDecision,
   type SessionStartPostAction,
-  startSessionWorkflow,
-  toSessionStartPostAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -35,12 +33,6 @@ import {
   type QueryUpdate,
 } from "../use-agent-studio-session-action-helpers";
 import { useAgentStudioSessionStartSession } from "./use-agent-studio-session-start-session";
-
-type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
-
-type SessionStartRequestInput = Omit<NewSessionStartRequest, "selectedModel"> & {
-  initialStartMode?: "fresh" | "reuse" | "fork";
-};
 
 type UseAgentStudioSessionStartFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -63,14 +55,9 @@ type UseAgentStudioSessionStartFlowArgs = {
   onContextSwitchIntent?: () => void;
 };
 
-type AgentStudioSessionStartRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
-  initialStartMode?: "fresh" | "reuse" | "fork";
+type AgentStudioSessionStartRequest = SessionStartFlowRequest & {
+  reason: SessionStartRequestReason;
   postStartAction: SessionStartPostAction;
-  message?: string;
-  beforeStartAction?: {
-    action: "human_request_changes";
-    note: string;
-  };
 };
 
 export function useAgentStudioSessionStartFlow({
@@ -136,55 +123,21 @@ export function useAgentStudioSessionStartFlow({
 
   const executeRequestedSessionStart = useCallback(
     async <T>(
-      request: SessionStartRequestInput,
+      request: SessionStartFlowRequest,
       executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
     ): Promise<T | undefined> => {
-      const requestedSelection =
-        request.role === role && request.taskId === taskId
-          ? (selectionForNewSession ?? null)
-          : null;
-      const existingSessionOptions =
-        request.existingSessionOptions ??
-        (getAgentScenarioDefinition(request.scenario).allowedStartModes.some(
-          (mode) => mode === "reuse" || mode === "fork",
-        )
-          ? buildReusableSessionOptions({
-              sessions: sessionsForTask.filter((session) => session.taskId === request.taskId),
-              role: request.role,
-            })
-          : []);
-      const initialSourceSessionId =
-        request.initialSourceSessionId ??
-        (activeSession &&
-        activeSession.taskId === request.taskId &&
-        activeSession.role === request.role &&
-        existingSessionOptions.some((option) => option.value === activeSession.sessionId)
-          ? activeSession.sessionId
-          : (existingSessionOptions[0]?.value ?? null));
-      const initialTargetBranch =
-        request.initialTargetBranch ??
-        (request.taskId === taskId ? (selectedTask?.targetBranch ?? null) : null);
-      const initialTargetBranchError =
-        request.initialTargetBranchError ??
-        (request.taskId === taskId ? (selectedTask?.targetBranchError ?? null) : null);
-
       return runInternalSessionStartRequest(
-        {
+        buildSessionStartModalRequest({
           source: "agent_studio",
-          taskId: request.taskId,
-          role: request.role,
-          scenario: request.scenario,
-          selectedModel: requestedSelection,
-          initialTargetBranch,
-          ...(initialTargetBranchError ? { initialTargetBranchError } : {}),
-          ...(request.targetWorkingDirectory !== undefined
-            ? { targetWorkingDirectory: request.targetWorkingDirectory }
-            : {}),
-          ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
-          ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
-          ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
-          postStartAction: toSessionStartPostAction(request.reason),
-        },
+          request,
+          selectedModel:
+            request.role === role && request.taskId === taskId
+              ? (selectionForNewSession ?? null)
+              : null,
+          taskSessions: sessionsForTask,
+          activeSession,
+          selectedTask: request.taskId === taskId ? selectedTask : null,
+        }),
         async ({ decision }) => executeWithDecision(decision),
       );
     },
@@ -229,43 +182,24 @@ export function useAgentStudioSessionStartFlow({
   const startSessionRequest = useCallback(
     async (request: AgentStudioSessionStartRequest): Promise<string | undefined> => {
       return executeRequestedSessionStart(request, async (decision) => {
-        const workflow = await startSessionWorkflow({
+        const workflow = await executeSessionStartFromDecision({
           activeWorkspace,
           queryClient,
-          intent: {
-            taskId: request.taskId,
-            role: request.role,
-            scenario: request.scenario,
-            startMode: decision.startMode,
-            ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
-            postStartAction: request.postStartAction,
-            ...(request.targetWorkingDirectory !== undefined
-              ? { targetWorkingDirectory: request.targetWorkingDirectory }
-              : {}),
-            ...(request.message ? { message: request.message } : {}),
-            ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : {}),
-            ...(decision.startMode === "reuse" || decision.startMode === "fork"
-              ? { sourceSessionId: decision.sourceSessionId }
-              : {}),
-          },
-          selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+          request,
+          decision,
           task: request.taskId === taskId ? selectedTask : null,
           ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
           startAgentSession,
           sendAgentMessage,
-          postStartExecution: request.postStartAction === "none" ? "await" : "detached",
-          onDetachedPostStartError:
-            request.postStartAction === "none"
-              ? undefined
-              : (error) => {
-                  const message =
-                    request.postStartAction === "kickoff"
-                      ? "Session started, but the kickoff prompt failed to send."
-                      : "Session started, but feedback message failed.";
-                  toast.error(message, {
-                    description: error.message,
-                  });
-                },
+          onPostStartActionError: (action, error) => {
+            const message =
+              action === "kickoff"
+                ? "Session started, but the kickoff prompt failed to send."
+                : "Session started, but feedback message failed.";
+            toast.error(message, {
+              description: error.message,
+            });
+          },
         });
 
         applyAgentStudioSelectionQuery(updateQuery, {
