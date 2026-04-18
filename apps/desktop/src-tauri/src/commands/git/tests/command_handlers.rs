@@ -20,12 +20,12 @@ use std::{fs, path::Path};
 fn git_get_worktree_status_rejects_unauthorized_repo() {
     let fixture = setup_command_git_fixture(
         "git-command-unauthorized",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         false,
     );
 
@@ -59,9 +59,9 @@ fn git_get_worktree_status_rejects_unauthorized_repo() {
 fn git_get_worktree_status_keeps_upstream_error_variant_and_snapshot_metadata() {
     let fixture = setup_command_git_fixture(
         "git-command-upstream-error",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(GitUpstreamAheadBehind::Error {
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(GitUpstreamAheadBehind::Error {
             message: "upstream not configured".to_string(),
-        })),
+        }))),
         true,
     );
 
@@ -146,12 +146,12 @@ fn git_get_worktree_status_propagates_upstream_status_collection_failures() {
 fn git_get_worktree_status_rejects_unrelated_working_dir() {
     let fixture = setup_command_git_fixture(
         "git-command-working-dir-reject",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let external = fixture.root.join("external");
@@ -188,12 +188,12 @@ fn git_get_worktree_status_rejects_unrelated_working_dir() {
 fn git_get_worktree_status_accepts_registered_worktree_working_dir() {
     let fixture = setup_command_git_fixture(
         "git-command-working-dir-accept",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 1,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let worktree = fixture.root.join("repo-wt");
@@ -241,12 +241,12 @@ fn git_get_worktree_status_accepts_registered_worktree_working_dir() {
 fn git_reset_worktree_selection_rejects_unauthorized_repo() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-reset-command-unauthorized",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         false,
     );
 
@@ -289,12 +289,12 @@ fn git_reset_worktree_selection_rejects_unauthorized_repo() {
 fn git_reset_worktree_selection_forwards_trimmed_target_branch_and_effective_working_dir() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-reset-command-success",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let worktree = fixture.root.join("repo-wt-reset");
@@ -361,12 +361,12 @@ fn git_reset_worktree_selection_forwards_trimmed_target_branch_and_effective_wor
 fn git_reset_worktree_selection_propagates_backend_failure() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-reset-command-failure",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     fixture
@@ -405,12 +405,12 @@ fn git_reset_worktree_selection_propagates_backend_failure() {
 fn git_fetch_remote_rejects_unauthorized_repo() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-fetch-command-unauthorized",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         false,
     );
 
@@ -444,12 +444,12 @@ fn git_fetch_remote_rejects_unauthorized_repo() {
 fn git_fetch_remote_forwards_trimmed_target_branch_and_effective_working_dir() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-fetch-command-success",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let worktree = fixture.root.join("repo-wt-fetch");
@@ -503,12 +503,12 @@ fn git_fetch_remote_forwards_trimmed_target_branch_and_effective_working_dir() {
 fn git_get_worktree_status_summary_rejects_unauthorized_repo() {
     let fixture = setup_command_git_fixture(
         "git-command-summary-unauthorized",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         false,
     );
 
@@ -542,17 +542,17 @@ fn git_get_worktree_status_summary_rejects_unauthorized_repo() {
 fn git_get_worktree_status_summary_keeps_upstream_error_variant_and_snapshot_metadata() {
     let fixture = setup_command_git_fixture_with_summary(
         "git-command-summary-upstream-error",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
-        WorktreeStatusSummaryResult::Ok(sample_worktree_status_summary_data(
+        ))),
+        WorktreeStatusSummaryResult::Ok(Box::new(sample_worktree_status_summary_data(
             GitUpstreamAheadBehind::Error {
                 message: "upstream not configured".to_string(),
             },
-        )),
+        ))),
         true,
         false,
     );
@@ -607,12 +607,12 @@ fn git_get_worktree_status_summary_keeps_upstream_error_variant_and_snapshot_met
 fn git_get_worktree_status_summary_propagates_git_port_failures() {
     let fixture = setup_command_git_fixture_with_summary(
         "git-command-summary-status-failure",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         WorktreeStatusSummaryResult::Err("failed collecting summary status".to_string()),
         true,
         false,
@@ -645,12 +645,12 @@ fn git_get_worktree_status_summary_propagates_git_port_failures() {
 fn git_get_worktree_status_summary_rejects_invalid_diff_scope_before_git_port_call() {
     let fixture = setup_command_git_fixture(
         "git-command-summary-invalid-scope",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
 
@@ -685,12 +685,12 @@ fn git_get_worktree_status_summary_rejects_invalid_diff_scope_before_git_port_ca
 fn git_get_worktree_status_summary_rejects_unrelated_working_dir() {
     let fixture = setup_command_git_fixture(
         "git-command-summary-working-dir-reject",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let external = fixture.root.join("external-summary");

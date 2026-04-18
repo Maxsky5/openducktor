@@ -18,13 +18,13 @@ use host_domain::{
 
 #[derive(Clone)]
 pub(crate) enum WorktreeStatusResult {
-    Ok(GitWorktreeStatusData),
+    Ok(Box<GitWorktreeStatusData>),
     Err(String),
 }
 
 #[derive(Clone)]
 pub(crate) enum WorktreeStatusSummaryResult {
-    Ok(GitWorktreeStatusSummaryData),
+    Ok(Box<GitWorktreeStatusSummaryData>),
     Err(String),
 }
 
@@ -293,7 +293,7 @@ impl GitPort for CommandGitPort {
             diff_scope,
         });
         match state.worktree_status_result.clone() {
-            WorktreeStatusResult::Ok(payload) => Ok(payload),
+            WorktreeStatusResult::Ok(payload) => Ok(*payload),
             WorktreeStatusResult::Err(message) => Err(anyhow!(message)),
         }
     }
@@ -316,7 +316,7 @@ impl GitPort for CommandGitPort {
                 diff_scope,
             });
         match state.worktree_status_summary_result.clone() {
-            WorktreeStatusSummaryResult::Ok(payload) => Ok(payload),
+            WorktreeStatusSummaryResult::Ok(payload) => Ok(*payload),
             WorktreeStatusSummaryResult::Err(message) => Err(anyhow!(message)),
         }
     }
