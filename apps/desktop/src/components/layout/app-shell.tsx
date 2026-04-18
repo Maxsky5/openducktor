@@ -86,14 +86,14 @@ export const AppShell = memo(function AppShell(): ReactElement {
                     <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground">
                       Workspace
                     </p>
-                    <div
-                      className="rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2"
+                    <p
+                      className="px-1 text-[1rem] font-semibold leading-tight text-sidebar-foreground"
                       title={activeWorkspace?.workspaceName ?? "No workspace selected"}
                     >
-                      <p className="truncate text-sm font-medium text-sidebar-foreground">
+                      <span className="line-clamp-2 break-words">
                         {activeWorkspace?.workspaceName ?? "No workspace selected"}
-                      </p>
-                    </div>
+                      </span>
+                    </p>
                   </div>
 
                   <BranchSwitcher />
