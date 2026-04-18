@@ -1,9 +1,8 @@
-import { FolderOpen, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import { lazy, memo, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
-import { RepositorySwitcher } from "@/components/features/repository/repository-switcher";
 import {
   AgentActivityCard,
   AppBrand,
@@ -85,20 +84,15 @@ export const AppShell = memo(function AppShell(): ReactElement {
 
                   <div className="space-y-2">
                     <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground">
-                      Repository
+                      Workspace
                     </p>
-                    <div className="flex items-center gap-2">
-                      <RepositorySwitcher className="min-w-0 flex-1" />
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={openRepositoryModal}
-                        aria-label="Open repository"
-                        title="Open repository"
-                      >
-                        <FolderOpen className="size-4" />
-                      </Button>
+                    <div
+                      className="rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2"
+                      title={activeWorkspace?.workspaceName ?? "No workspace selected"}
+                    >
+                      <p className="truncate text-sm font-medium text-sidebar-foreground">
+                        {activeWorkspace?.workspaceName ?? "No workspace selected"}
+                      </p>
                     </div>
                   </div>
 
@@ -149,16 +143,6 @@ export const AppShell = memo(function AppShell(): ReactElement {
                   title="Show sidebar"
                 >
                   <PanelLeftOpen className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon"
-                  className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={openRepositoryModal}
-                  aria-label="Open repository"
-                  title="Open repository"
-                >
-                  <FolderOpen className="size-4" />
                 </Button>
                 <div className="w-full border-t border-sidebar-border pt-2">
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />

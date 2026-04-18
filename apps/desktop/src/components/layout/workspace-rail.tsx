@@ -268,7 +268,7 @@ export function WorkspaceRail({
 
   return (
     <aside className="flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 py-2">
+      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
         {workspaces.length > 0 ? (
           <DndContext
             sensors={sensors}
@@ -323,13 +323,13 @@ export function WorkspaceRail({
         <Button
           type="button"
           size="icon"
-          variant="outline"
-          className="size-10 rounded-lg bg-card text-foreground border-none hover:bg-card shadow-sm"
+          variant="ghost"
+          className="size-10"
           aria-label="Open repository"
           title="Open repository"
           onClick={onOpenRepositoryModal}
         >
-          <Plus className="size-4" />
+          <Plus className="size-5" />
         </Button>
       </div>
     </aside>
