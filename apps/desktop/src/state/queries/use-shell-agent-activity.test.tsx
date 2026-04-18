@@ -11,14 +11,21 @@ import {
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { AgentSessionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { taskQueryKeys } from "./tasks";
 import { useShellAgentActivity } from "./use-shell-agent-activity";
 
 enableReactActEnvironment();
 
 type HookArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
 };
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: `workspace:${repoPath}`,
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 const createRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
   runId: "run-1",
@@ -52,7 +59,7 @@ const createHarness = (initialProps: HookArgs) => {
     (props: HookArgs) => {
       renderCount += 1;
       return {
-        activity: useShellAgentActivity(props.activeRepo),
+        activity: useShellAgentActivity(props.activeWorkspace),
         queryClient: useQueryClient(),
       };
     },
@@ -74,7 +81,7 @@ const createHarness = (initialProps: HookArgs) => {
 
 describe("useShellAgentActivity", () => {
   test("does not rerender for runs-only, unrelated task-title, or non-activity session churn", async () => {
-    const harness = createHarness({ activeRepo: null });
+    const harness = createHarness({ activeWorkspace: null });
     const session = createAgentSessionFixture({
       sessionId: "session-1",
       taskId: "task-1",
@@ -95,7 +102,7 @@ describe("useShellAgentActivity", () => {
         runs: [] satisfies RunSummary[],
       });
     });
-    await harness.update({ activeRepo: "/repo" });
+    await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
     await harness.waitFor(
       ({ activity }) => activity.activeSessions[0]?.taskTitle === "Visible Task",
     );
@@ -147,7 +154,7 @@ describe("useShellAgentActivity", () => {
   });
 
   test("updates for visible task-title changes, repo clearing, and session removal", async () => {
-    const harness = createHarness({ activeRepo: null });
+    const harness = createHarness({ activeWorkspace: null });
     const session = createAgentSessionFixture({
       sessionId: "session-1",
       taskId: "task-1",
@@ -165,7 +172,7 @@ describe("useShellAgentActivity", () => {
         runs: [] satisfies RunSummary[],
       });
     });
-    await harness.update({ activeRepo: "/repo" });
+    await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
     await harness.waitFor(
       ({ activity }) => activity.activeSessions[0]?.taskTitle === "Initial Title",
     );
@@ -184,11 +191,11 @@ describe("useShellAgentActivity", () => {
 
     expect(harness.getRenderCount()).toBeGreaterThan(initialRenderCount);
 
-    await harness.update({ activeRepo: null });
+    await harness.update({ activeWorkspace: null });
     await harness.waitFor(({ activity }) => activity.activeSessionCount === 0);
     expect(harness.getLatest().activity.waitingForInputCount).toBe(0);
 
-    await harness.update({ activeRepo: "/repo" });
+    await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
     await harness.waitFor(
       ({ activity }) => activity.activeSessions[0]?.taskTitle === "Updated Title",
     );
@@ -203,7 +210,7 @@ describe("useShellAgentActivity", () => {
   });
 
   test("does not expose previous repo activity during a direct repo-to-repo switch", async () => {
-    const harness = createHarness({ activeRepo: "/repo-a" });
+    const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo-a") });
     const repoASession = createAgentSessionFixture({
       sessionId: "session-a",
       taskId: "task-a",
@@ -236,7 +243,7 @@ describe("useShellAgentActivity", () => {
       ({ activity }) => activity.activeSessions[0]?.taskTitle === "Repo A Task",
     );
 
-    await harness.update({ activeRepo: "/repo-b" });
+    await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
 
     expect(harness.getLatest().activity.activeSessionCount).toBe(0);
     expect(harness.getLatest().activity.waitingForInputCount).toBe(0);

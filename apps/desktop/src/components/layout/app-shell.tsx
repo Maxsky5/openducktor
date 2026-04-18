@@ -22,19 +22,19 @@ const SettingsModal = lazy(async () => {
 
 export function AppShell(): ReactElement {
   const { activeWorkspace, workspaces } = useWorkspaceState();
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
-  const isRepositoryModalBlocking = !workspaceRepoPath && workspaces.length === 0;
-  const agentActivity = useShellAgentActivity(workspaceRepoPath);
+  const hasActiveWorkspace = activeWorkspace !== null;
+  const isRepositoryModalBlocking = !hasActiveWorkspace && workspaces.length === 0;
+  const agentActivity = useShellAgentActivity(activeWorkspace);
 
   useEffect(() => {
-    if (workspaceRepoPath) {
+    if (hasActiveWorkspace) {
       setRepositoryModalOpen(false);
       return;
     }
     setRepositoryModalOpen(true);
-  }, [workspaceRepoPath]);
+  }, [hasActiveWorkspace]);
 
   const handleRepositoryModalOpenChange = useCallback(
     (open: boolean) => {
@@ -97,7 +97,7 @@ export function AppShell(): ReactElement {
 
                   <DiagnosticsPanel />
 
-                  <SidebarNavigation hasActiveWorkspace={Boolean(workspaceRepoPath)} />
+                  <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} />
                   <AgentActivityCard
                     activeSessionCount={agentActivity.activeSessionCount}
                     waitingForInputCount={agentActivity.waitingForInputCount}
@@ -152,7 +152,7 @@ export function AppShell(): ReactElement {
                   <FolderOpen className="size-4" />
                 </Button>
                 <div className="w-full border-t border-sidebar-border pt-2">
-                  <SidebarNavigation hasActiveWorkspace={Boolean(workspaceRepoPath)} compact />
+                  <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />
                 </div>
               </div>
             )}

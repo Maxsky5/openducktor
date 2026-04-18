@@ -6,6 +6,7 @@ import {
   summarizeAgentActivity,
 } from "@/components/layout/sidebar/agent-activity-model";
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentActivitySessions } from "../app-state-provider";
 import { type RepoTaskData, repoTaskDataQueryOptions } from "./tasks";
 
@@ -28,13 +29,13 @@ const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string
 
 const filterSessionsForRepo = (
   sessions: AgentActivitySessionSummary[],
-  activeRepo: string | null,
+  activeWorkspace: ActiveWorkspace | null,
 ): AgentActivitySessionSummary[] => {
-  if (activeRepo === null) {
+  if (activeWorkspace === null) {
     return [];
   }
 
-  return sessions.filter((session) => session.repoPath === activeRepo);
+  return sessions.filter((session) => session.repoPath === activeWorkspace.repoPath);
 };
 
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
@@ -55,11 +56,14 @@ const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
   };
 };
 
-export const useShellAgentActivity = (activeRepo: string | null): AgentActivitySummary => {
+export const useShellAgentActivity = (
+  activeWorkspace: ActiveWorkspace | null,
+): AgentActivitySummary => {
   const sessions = useAgentActivitySessions();
+  const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const visibleSessions = useMemo(
-    () => filterSessionsForRepo(sessions, activeRepo),
-    [activeRepo, sessions],
+    () => filterSessionsForRepo(sessions, activeWorkspace),
+    [activeWorkspace, sessions],
   );
   const activityTaskIds = useMemo(() => collectActivityTaskIds(visibleSessions), [visibleSessions]);
   const selectTaskTitles = useMemo(
@@ -67,14 +71,14 @@ export const useShellAgentActivity = (activeRepo: string | null): AgentActivityS
     [activityTaskIds],
   );
   const taskTitleQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepo ?? "__shell-activity-disabled__"),
-    enabled: activeRepo !== null && activityTaskIds.length > 0,
+    ...repoTaskDataQueryOptions(activeRepoPath ?? "__shell-activity-disabled__"),
+    enabled: activeRepoPath !== null && activityTaskIds.length > 0,
     select: selectTaskTitles,
   });
   const taskTitleById = taskTitleQuery.data ?? EMPTY_TASK_TITLES;
 
   return useMemo(() => {
-    if (activeRepo === null || visibleSessions.length === 0) {
+    if (activeWorkspace === null || visibleSessions.length === 0) {
       return EMPTY_AGENT_ACTIVITY_SUMMARY;
     }
 
@@ -82,5 +86,5 @@ export const useShellAgentActivity = (activeRepo: string | null): AgentActivityS
       sessions: visibleSessions,
       taskTitleById,
     });
-  }, [activeRepo, taskTitleById, visibleSessions]);
+  }, [activeWorkspace, taskTitleById, visibleSessions]);
 };
