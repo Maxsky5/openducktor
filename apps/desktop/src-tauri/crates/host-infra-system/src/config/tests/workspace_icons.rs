@@ -23,8 +23,11 @@ fn discover_workspace_icon_data_url_returns_svg_data_for_src_assets_logo() {
     let repo = harness.root().join("repo");
     fake_git_workspace(&repo);
     fs::create_dir_all(repo.join("src/assets")).expect("src assets dir");
-    fs::write(repo.join("src/assets/logo.svg"), b"<svg viewBox='0 0 1 1'></svg>")
-        .expect("svg icon");
+    fs::write(
+        repo.join("src/assets/logo.svg"),
+        b"<svg viewBox='0 0 1 1'></svg>",
+    )
+    .expect("svg icon");
 
     let icon_data_url = discover_workspace_icon_data_url(repo.to_string_lossy().as_ref());
 

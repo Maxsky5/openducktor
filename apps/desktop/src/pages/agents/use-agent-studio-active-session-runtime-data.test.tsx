@@ -174,4 +174,47 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps model-catalog loading active while todos fail but catalog hydration is still pending", async () => {
+    const catalogLoad = createDeferred<AgentModelCatalog>();
+    const readSessionModelCatalog = mock(() => catalogLoad.promise);
+    const readSessionTodos = mock(async () => {
+      throw new Error("todos unavailable");
+    });
+    const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
+      session: createAgentSessionFixture({
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        workingDirectory: "/repo",
+        modelCatalog: null,
+        isLoadingModelCatalog: true,
+      }),
+      agentStudioReadinessState: "ready",
+      readSessionModelCatalog,
+      readSessionTodos,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.runtimeDataError === "todos unavailable" &&
+          state.session?.isLoadingModelCatalog === true,
+      );
+
+      expect(harness.getLatest()?.session?.modelCatalog).toBeNull();
+
+      catalogLoad.resolve(CATALOG);
+      await harness.waitFor(
+        (state) =>
+          state.runtimeDataError === "todos unavailable" &&
+          state.session?.isLoadingModelCatalog === false &&
+          state.session?.modelCatalog?.models[0]?.id === CATALOG.models[0]?.id,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

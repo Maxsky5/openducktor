@@ -380,10 +380,9 @@ export function useAgentStudioModelSelection({
   const slashCommands = slashCommandCatalog?.commands ?? [];
   const slashCommandsError = supportsSlashCommands
     ? activeSession
-      ? (activeSessionRuntimeQueryError ??
-        (activeSessionSlashCommandsQuery.error instanceof Error
-          ? activeSessionSlashCommandsQuery.error.message
-          : null))
+      ? activeSessionSlashCommandsQuery.error instanceof Error
+        ? activeSessionSlashCommandsQuery.error.message
+        : null
       : repoSlashCommandsQuery.error instanceof Error
         ? repoSlashCommandsQuery.error.message
         : null

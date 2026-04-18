@@ -439,7 +439,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
       expect(readSessionSlashCommands).not.toHaveBeenCalled();
-      expect(harness.getLatest().slashCommandsError).toContain("local_http is required");
+      expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();
     }

@@ -107,20 +107,19 @@ export const useAgentStudioActiveSessionRuntimeData = ({
       };
     }
 
-    const runtimeDataQueryError =
-      catalogQuery.error instanceof Error
-        ? catalogQuery.error.message
-        : todosQuery.error instanceof Error
-          ? todosQuery.error.message
-          : null;
+    const catalogQueryError =
+      catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
+    const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
+    const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
     const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
     const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
-    const isLoadingModelCatalog = runtimeDataError
-      ? false
-      : shouldHydrateRuntimeData
-        ? resolvedCatalog === null && catalogQuery.isPending
-        : session.isLoadingModelCatalog && resolvedCatalog === null;
+    const isLoadingModelCatalog =
+      runtimeDataSupportError || catalogQueryError
+        ? false
+        : shouldHydrateRuntimeData
+          ? resolvedCatalog === null && catalogQuery.isPending
+          : session.isLoadingModelCatalog && resolvedCatalog === null;
 
     if (
       resolvedCatalog === session.modelCatalog &&

@@ -399,8 +399,8 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         <div className="border border-input border-b-0 border-l-0 bg-card">
           <div
             className={cn(
-              "border-l-4 px-3 py-2 text-sm text-destructive",
-              !sessionAccentColor && "border-l-0",
+              "px-3 py-2 text-sm text-destructive",
+              sessionAccentColor ? "border-l-4" : "border-l border-input",
             )}
             style={sessionAccentColor ? { borderLeftColor: sessionAccentColor } : undefined}
           >
