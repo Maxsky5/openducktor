@@ -292,6 +292,7 @@ describe("agents-page-view-model", () => {
       isLoadingChecks: false,
       onRefreshChecks,
       taskId: "",
+      displayedSessionId: "session-1",
       canKickoffNewSession: true,
       kickoffLabel: "Start Spec",
       onKickoff,

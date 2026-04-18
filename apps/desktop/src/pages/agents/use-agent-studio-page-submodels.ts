@@ -423,6 +423,7 @@ export const useAgentStudioComposerModel = ({
     () =>
       buildAgentChatComposerModel({
         taskId,
+        displayedSessionId: activeSessionId ?? null,
         agentStudioReady,
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
@@ -465,6 +466,7 @@ export const useAgentStudioComposerModel = ({
       }),
     [
       activeSessionAgentColors,
+      activeSessionId,
       agentOptions,
       agentStudioReady,
       canStopSession,

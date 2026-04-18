@@ -249,6 +249,7 @@ export const AgentChatComposer = forwardRef<
 >(function AgentChatComposer({ model }, ref): ReactElement {
   const {
     taskId,
+    displayedSessionId,
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
@@ -379,6 +380,9 @@ export const AgentChatComposer = forwardRef<
       .join("|");
   }, [attachmentErrors, draft.attachments]);
   const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
+  const lastDisplayedSessionIdRef = useRef<string | null>(null);
+  const pendingAutofocusSessionIdRef = useRef<string | null>(null);
+  const autofocusWaitAnchorRef = useRef<HTMLElement | null>(null);
 
   const sendDisabled =
     (isSending && !isSessionWorking) ||
@@ -453,6 +457,63 @@ export const AgentChatComposer = forwardRef<
 
     focusComposerEditor();
   }, [focusComposerEditor]);
+
+  useEffect(() => {
+    if (!displayedSessionId) {
+      lastDisplayedSessionIdRef.current = null;
+      pendingAutofocusSessionIdRef.current = null;
+      autofocusWaitAnchorRef.current = null;
+      return;
+    }
+
+    const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
+    const activeElement = document.activeElement;
+    const activeHtmlElement = activeElement instanceof HTMLElement ? activeElement : null;
+    const editor = composerEditorRef.current;
+    const focusInsideComposer = Boolean(
+      editor &&
+        activeHtmlElement &&
+        (editor === activeHtmlElement || editor.contains(activeHtmlElement)),
+    );
+
+    if (lastDisplayedSessionIdRef.current !== displayedSessionId) {
+      lastDisplayedSessionIdRef.current = displayedSessionId;
+      pendingAutofocusSessionIdRef.current = displayedSessionId;
+      autofocusWaitAnchorRef.current = isComposerInteractive ? null : activeHtmlElement;
+    }
+
+    if (pendingAutofocusSessionIdRef.current !== displayedSessionId) {
+      return;
+    }
+
+    if (!isComposerInteractive) {
+      return;
+    }
+
+    const waitAnchor = autofocusWaitAnchorRef.current;
+    const focusStayedOnAnchor =
+      !waitAnchor ||
+      !activeHtmlElement ||
+      activeHtmlElement === waitAnchor ||
+      (waitAnchor !== document.body && waitAnchor.contains(activeHtmlElement)) ||
+      activeHtmlElement === document.body;
+
+    if (waitAnchor && !focusStayedOnAnchor && !focusInsideComposer) {
+      pendingAutofocusSessionIdRef.current = null;
+      autofocusWaitAnchorRef.current = null;
+      return;
+    }
+
+    pendingAutofocusSessionIdRef.current = null;
+    autofocusWaitAnchorRef.current = null;
+    scheduleComposerFocus();
+  }, [
+    composerEditorRef,
+    displayedSessionId,
+    isComposerInputDisabled,
+    isSubmitting,
+    scheduleComposerFocus,
+  ]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (latestSendDisabledRef.current) {

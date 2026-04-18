@@ -41,6 +41,7 @@ const buildModel = () => ({
   },
   composer: {
     taskId: "task-1",
+    displayedSessionId: "session-1",
     agentStudioReady: true,
     isReadOnly: false,
     readOnlyReason: null,

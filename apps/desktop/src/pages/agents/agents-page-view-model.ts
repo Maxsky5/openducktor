@@ -137,6 +137,7 @@ type AgentChatThreadModelArgs = {
 
 type AgentChatComposerModelArgs = {
   taskId: string;
+  displayedSessionId: string | null;
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
@@ -216,6 +217,7 @@ export const buildAgentChatComposerModel = (
   args: AgentChatComposerModelArgs,
 ): AgentChatComposerModel => ({
   taskId: args.taskId,
+  displayedSessionId: args.displayedSessionId,
   agentStudioReady: args.agentStudioReady,
   isReadOnly: args.isReadOnly,
   readOnlyReason: args.readOnlyReason,
