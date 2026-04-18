@@ -22,7 +22,7 @@ use host_domain::{
 };
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::process::Child;
 use std::time::Duration;
@@ -53,7 +53,12 @@ impl OpenCodeRuntime {
                 .append_pair("directory", working_directory)
                 .finish()
         );
-        let mut stream = TcpStream::connect((host, port)).with_context(|| {
+        let socket_address = (host, port)
+            .to_socket_addrs()
+            .with_context(|| format!("Failed resolving OpenCode runtime endpoint: {endpoint}"))?
+            .next()
+            .ok_or_else(|| anyhow!("OpenCode runtime endpoint did not resolve: {endpoint}"))?;
+        let mut stream = TcpStream::connect_timeout(&socket_address, Duration::from_secs(2)).with_context(|| {
             format!(
                 "Failed to connect to OpenCode runtime at {endpoint} to inspect session status for {working_directory}"
             )

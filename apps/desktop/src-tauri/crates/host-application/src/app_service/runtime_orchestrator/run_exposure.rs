@@ -95,6 +95,9 @@ impl RunExposurePlan {
                     .any(|external_session_id| snapshot.has_live_session(external_session_id)))
             }
             super::super::RuntimeSessionStatusProbeOutcome::Unsupported => Ok(true),
+            // Run visibility is best-effort: if probing fails, hide the run rather than
+            // surfacing a stale entry. Task reset/delete guards stay fail-safe and propagate
+            // the same probe failure instead of allowing destructive actions to continue.
             super::super::RuntimeSessionStatusProbeOutcome::ActionableError(_) => Ok(false),
         }
     }

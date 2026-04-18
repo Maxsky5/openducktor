@@ -260,13 +260,9 @@ impl AppService {
         &self,
         unique_targets: Vec<RuntimeSessionStatusProbeTarget>,
     ) -> Result<HashMap<RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeOutcome>> {
-        let worker_count = unique_targets.len().min(
-            Self::RUNTIME_SESSION_STATUS_BATCH_WORKER_LIMIT.max(
-                self.runtime_session_status_probe_limiter
-                    .max_concurrent
-                    .max(1),
-            ),
-        );
+        let worker_count = unique_targets
+            .len()
+            .min(Self::RUNTIME_SESSION_STATUS_BATCH_WORKER_LIMIT);
         let queue = Mutex::new(VecDeque::from(unique_targets));
         let results = Mutex::new(HashMap::new());
 

@@ -87,16 +87,21 @@ impl TaskRuntimeRouteIndex {
 
     fn route_for_session(
         &self,
+        service: &AppService,
         session: &AgentSessionDocument,
-    ) -> Option<(AgentRuntimeKind, RuntimeRoute)> {
-        let runtime_kind = parse_runtime_kind_from_session(session)?;
-        let runtime_role = parse_runtime_role(session.role.as_str())?;
-        let runtime_route = self.route_for_role(
+    ) -> Result<Option<(AgentRuntimeKind, RuntimeRoute)>> {
+        let runtime_kind = parse_runtime_kind_from_session(service, session)?;
+        let Some(runtime_role) = parse_runtime_role(session.role.as_str()) else {
+            return Ok(None);
+        };
+        let Some(runtime_route) = self.route_for_role(
             &runtime_kind,
             runtime_role,
             session.working_directory.as_str(),
-        )?;
-        Some((runtime_kind, runtime_route))
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some((runtime_kind, runtime_route)))
     }
 
     fn route_for_role(
@@ -127,7 +132,7 @@ impl TaskRuntimeRouteIndex {
         service: &AppService,
         session: &AgentSessionDocument,
     ) -> Result<Option<RuntimeSessionStatusProbeTargetResolution>> {
-        let Some((runtime_kind, runtime_route)) = self.route_for_session(session) else {
+        let Some((runtime_kind, runtime_route)) = self.route_for_session(service, session)? else {
             return Ok(None);
         };
 
@@ -272,13 +277,33 @@ pub(super) fn build_session_probe_plans(
     Ok(session_plans)
 }
 
-fn parse_runtime_kind_from_session(session: &AgentSessionDocument) -> Option<AgentRuntimeKind> {
+fn parse_runtime_kind_from_session(
+    service: &AppService,
+    session: &AgentSessionDocument,
+) -> Result<AgentRuntimeKind> {
     let runtime_kind = session.runtime_kind.trim();
     if runtime_kind.is_empty() {
-        return None;
+        return Err(anyhow!(
+            "Persisted {} session '{}' is missing runtime kind metadata",
+            session.role.trim(),
+            session.session_id
+        ));
     }
 
-    Some(AgentRuntimeKind::from(runtime_kind))
+    let runtime_kind = AgentRuntimeKind::from(runtime_kind);
+    service
+        .runtime_registry
+        .runtime(&runtime_kind)
+        .with_context(|| {
+            format!(
+                "Persisted {} session '{}' references unsupported runtime kind '{}'",
+                session.role.trim(),
+                session.session_id,
+                session.runtime_kind.trim()
+            )
+        })?;
+
+    Ok(runtime_kind)
 }
 
 pub(super) fn parse_runtime_role(value: &str) -> Option<RuntimeRole> {

@@ -1293,6 +1293,54 @@ fn task_delete_ignores_stale_persisted_build_session_without_live_runtime() -> R
 }
 
 #[test]
+fn task_reset_fails_when_persisted_session_runtime_kind_is_unknown() -> Result<()> {
+    let repo_path = unique_temp_path("reset-task-unknown-session-runtime-kind-repo");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        &repo_path.to_string_lossy(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "unknown-runtime".to_string(),
+        working_directory: repo_path.to_string_lossy().to_string(),
+        selected_model: None,
+    }];
+
+    let error = service
+        .task_reset(&repo_path.to_string_lossy(), "task-1")
+        .expect_err("unknown persisted runtime kind should fail closed");
+    let error_text = format!("{error:#}");
+    assert!(error_text.contains("Failed checking live runtime state before"));
+    assert!(error_text.contains("references unsupported runtime kind 'unknown-runtime'"));
+    Ok(())
+}
+
+#[test]
 fn task_delete_rejects_live_build_session_status() -> Result<()> {
     let repo_path = unique_temp_path("delete-task-live-runtime-repo");
     fs::create_dir_all(&repo_path)?;
