@@ -1,9 +1,10 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type TaskDetailsSheetProps = {
-  activeRepo?: string | null;
+  activeWorkspace?: ActiveWorkspace | null;
   task: TaskCard | null;
   allTasks: TaskCard[];
   runs: RunSummary[];

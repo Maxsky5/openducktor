@@ -10,6 +10,7 @@ import { useMemo, useRef } from "react";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSession } from "@/state/app-state-provider";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import {
@@ -25,8 +26,7 @@ import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
-  activeRepo: string | null;
-  persistenceWorkspaceId: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   isRepoNavigationBoundaryPending: boolean;
   agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
@@ -164,8 +164,7 @@ export const buildSessionsByTaskIdWithCache = (
 };
 
 export function useAgentStudioSelectionController({
-  activeRepo,
-  persistenceWorkspaceId,
+  activeWorkspace,
   isRepoNavigationBoundaryPending,
   agentStudioReadinessState,
   tasks,
@@ -186,6 +185,7 @@ export function useAgentStudioSelectionController({
   clearComposerInput,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache>(new Map());
   const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
   const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
@@ -295,8 +295,7 @@ export function useAgentStudioSelectionController({
     handleCreateTab,
     handleCloseTab,
   } = useAgentStudioTaskTabs({
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     isRepoNavigationBoundaryPending,
     taskId,
     selectedTask,
@@ -368,11 +367,11 @@ export function useAgentStudioSelectionController({
   const runtimeAttachmentCandidates = useMemo(
     () =>
       selectRuntimeAttachmentCandidates({
-        repoPath: activeRepo ?? "",
+        repoPath: workspaceRepoPath ?? "",
         session: hydratedViewActiveSession,
         runtimeSources: runtimeAttachmentSources,
       }),
-    [activeRepo, hydratedViewActiveSession, runtimeAttachmentSources],
+    [workspaceRepoPath, hydratedViewActiveSession, runtimeAttachmentSources],
   );
 
   const {
@@ -383,7 +382,7 @@ export function useAgentStudioSelectionController({
     isActiveSessionHistoryHydrating,
     isWaitingForRuntimeReadiness,
   } = useAgentStudioTaskHydration({
-    activeRepo,
+    activeWorkspace,
     activeTaskId: viewTaskId,
     activeSession: hydratedViewActiveSession,
     agentStudioReadinessState,

@@ -327,6 +327,7 @@ pub async fn git_get_worktree_status_summary(
         worktree_status.file_status_counts,
         worktree_status.target_ahead_behind,
         worktree_status.upstream_ahead_behind,
+        worktree_status.git_conflict,
         WorktreeSnapshotMetadata {
             effective_working_dir: git_scope.effective_working_dir,
             target_branch: trimmed_target,

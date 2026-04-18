@@ -484,6 +484,7 @@ async fn handle_git_get_worktree_status_summary(
         summary.file_status_counts,
         summary.target_ahead_behind,
         summary.upstream_ahead_behind,
+        summary.git_conflict,
         build_worktree_snapshot_metadata(effective, &trimmed_target, scope, status_hash, diff_hash),
     ))
 }

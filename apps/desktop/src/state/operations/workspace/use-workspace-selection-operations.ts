@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
-import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
+import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   loadRepoConfigFromQuery,
   loadWorkspaceListFromQuery,
@@ -17,13 +17,13 @@ import type {
 } from "./workspace-operations-types";
 
 type UseWorkspaceSelectionOperationsArgs = {
-  setActiveRepo: (repoPath: string | null) => void;
+  activeWorkspace: ActiveWorkspace | null;
+  setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
   clearTaskData: () => void;
   clearActiveBeadsCheck: () => void;
   clearBranchData: () => void;
   hostClient: WorkspaceSelectionOperationsHostClient;
   preparedRepoSwitchRef: PreparedRepoSwitchRef;
-  activeRepo: string | null;
 };
 
 type UseWorkspaceSelectionOperationsResult = {
@@ -36,9 +36,32 @@ type UseWorkspaceSelectionOperationsResult = {
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
 
+const resolveActiveWorkspaceFromRecords = ({
+  records,
+  activeWorkspace,
+}: {
+  records: WorkspaceRecord[];
+  activeWorkspace: ActiveWorkspace | null;
+}): WorkspaceRecord | ActiveWorkspace | null => {
+  const activeRecord = records.find((entry) => entry.isActive);
+  if (activeRecord) {
+    return activeRecord;
+  }
+
+  if (!activeWorkspace) {
+    return null;
+  }
+
+  return (
+    records.find((entry) => entry.workspaceId === activeWorkspace.workspaceId) ??
+    records.find((entry) => entry.repoPath === activeWorkspace.repoPath) ??
+    activeWorkspace
+  );
+};
+
 export function useWorkspaceSelectionOperations({
-  activeRepo,
-  setActiveRepo,
+  activeWorkspace,
+  setActiveWorkspace,
   clearTaskData,
   clearActiveBeadsCheck,
   clearBranchData,
@@ -49,9 +72,9 @@ export function useWorkspaceSelectionOperations({
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const workspaceSwitchVersionRef = useRef(0);
-  const activeRepoRef = useRef(activeRepo);
+  const activeWorkspaceRef = useRef(activeWorkspace);
 
-  activeRepoRef.current = activeRepo;
+  activeWorkspaceRef.current = activeWorkspace;
 
   const markWorkspaceActiveLocally = useCallback((workspaceId: string): void => {
     setWorkspaces((current) => {
@@ -77,10 +100,13 @@ export function useWorkspaceSelectionOperations({
   const applyWorkspaceRecords = useCallback(
     (records: WorkspaceRecord[]): void => {
       setWorkspaces(records);
-      const selectedWorkspace = records.find((entry) => entry.isActive);
-      setActiveRepo(selectedWorkspace?.repoPath ?? null);
+      const selectedWorkspace = resolveActiveWorkspaceFromRecords({
+        records,
+        activeWorkspace: activeWorkspaceRef.current,
+      });
+      setActiveWorkspace(selectedWorkspace);
     },
-    [setActiveRepo],
+    [setActiveWorkspace],
   );
 
   const applyWorkspaceRecord = useCallback(
@@ -104,10 +130,10 @@ export function useWorkspaceSelectionOperations({
       });
 
       if (record.isActive) {
-        setActiveRepo(record.repoPath);
+        setActiveWorkspace(record);
       }
     },
-    [setActiveRepo],
+    [setActiveWorkspace],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
@@ -149,7 +175,7 @@ export function useWorkspaceSelectionOperations({
   const selectWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
-      const previousRepo = activeRepoRef.current;
+      const previousRepo = activeWorkspaceRef.current?.repoPath ?? null;
 
       setIsSwitchingWorkspace(true);
 
@@ -168,7 +194,7 @@ export function useWorkspaceSelectionOperations({
           previousRepo,
           nextRepo: selectedWorkspace.repoPath,
         };
-        setActiveRepo(selectedWorkspace.repoPath);
+        setActiveWorkspace(selectedWorkspace);
 
         void loadRepoConfigFromQuery(queryClient, selectedWorkspace.workspaceId, hostClient)
           .then((repoConfig) => {
@@ -233,7 +259,7 @@ export function useWorkspaceSelectionOperations({
       queryClient,
       refreshWorkspaceCachesAfterMutation,
       refreshWorkspaces,
-      setActiveRepo,
+      setActiveWorkspace,
     ],
   );
 

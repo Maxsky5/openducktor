@@ -2,11 +2,11 @@ import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import { pickInitialRepoPath } from "./settings-modal-normalization";
+import { pickInitialWorkspaceId } from "./settings-modal-normalization";
 
 type UseSettingsModalSnapshotStateArgs = {
   open: boolean;
-  activeRepo: string | null;
+  workspaceRepoPath: string | null;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
 };
 
@@ -14,9 +14,9 @@ type SettingsModalSnapshotState = {
   loadedSnapshot: SettingsSnapshot | null;
   snapshotDraft: SettingsSnapshot | null;
   setSnapshotDraft: Dispatch<SetStateAction<SettingsSnapshot | null>>;
-  selectedRepoPath: string | null;
-  setSelectedRepoPath: (next: string) => void;
-  repoPaths: string[];
+  selectedWorkspaceId: string | null;
+  setSelectedWorkspaceId: (next: string) => void;
+  workspaceIds: string[];
   selectedRepoConfig: RepoConfig | null;
   isLoadingSettings: boolean;
   settingsError: string | null;
@@ -25,16 +25,16 @@ type SettingsModalSnapshotState = {
 
 export const useSettingsModalSnapshotState = ({
   open,
-  activeRepo,
+  workspaceRepoPath,
   loadSettingsSnapshot,
 }: UseSettingsModalSnapshotStateArgs): SettingsModalSnapshotState => {
   const [loadedSnapshot, setLoadedSnapshot] = useState<SettingsSnapshot | null>(null);
   const [snapshotDraft, setSnapshotDraft] = useState<SettingsSnapshot | null>(null);
-  const [selectedRepoPath, setSelectedRepoPath] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const repoPaths = useMemo(() => {
+  const workspaceIds = useMemo(() => {
     if (!snapshotDraft) {
       return [];
     }
@@ -42,11 +42,11 @@ export const useSettingsModalSnapshotState = ({
   }, [snapshotDraft]);
 
   const selectedRepoConfig = useMemo(() => {
-    if (!snapshotDraft || !selectedRepoPath) {
+    if (!snapshotDraft || !selectedWorkspaceId) {
       return null;
     }
-    return snapshotDraft.workspaces[selectedRepoPath] ?? null;
-  }, [selectedRepoPath, snapshotDraft]);
+    return snapshotDraft.workspaces[selectedWorkspaceId] ?? null;
+  }, [selectedWorkspaceId, snapshotDraft]);
 
   useEffect(() => {
     if (!open) {
@@ -66,7 +66,7 @@ export const useSettingsModalSnapshotState = ({
 
         setLoadedSnapshot(snapshot);
         setSnapshotDraft(snapshot);
-        setSelectedRepoPath(pickInitialRepoPath(snapshot, activeRepo));
+        setSelectedWorkspaceId(pickInitialWorkspaceId(snapshot, workspaceRepoPath));
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -75,7 +75,7 @@ export const useSettingsModalSnapshotState = ({
 
         setLoadedSnapshot(null);
         setSnapshotDraft(null);
-        setSelectedRepoPath(null);
+        setSelectedWorkspaceId(null);
         setSettingsError(errorMessage(error));
       })
       .finally(() => {
@@ -87,30 +87,30 @@ export const useSettingsModalSnapshotState = ({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, loadSettingsSnapshot, open]);
+  }, [workspaceRepoPath, loadSettingsSnapshot, open]);
 
   useEffect(() => {
     if (!snapshotDraft) {
       return;
     }
 
-    if (selectedRepoPath && snapshotDraft.workspaces[selectedRepoPath]) {
+    if (selectedWorkspaceId && snapshotDraft.workspaces[selectedWorkspaceId]) {
       return;
     }
 
-    const fallbackRepo = pickInitialRepoPath(snapshotDraft, activeRepo);
-    if (fallbackRepo !== selectedRepoPath) {
-      setSelectedRepoPath(fallbackRepo);
+    const fallbackWorkspaceId = pickInitialWorkspaceId(snapshotDraft, workspaceRepoPath);
+    if (fallbackWorkspaceId !== selectedWorkspaceId) {
+      setSelectedWorkspaceId(fallbackWorkspaceId);
     }
-  }, [activeRepo, selectedRepoPath, snapshotDraft]);
+  }, [workspaceRepoPath, selectedWorkspaceId, snapshotDraft]);
 
   return {
     loadedSnapshot,
     snapshotDraft,
     setSnapshotDraft,
-    selectedRepoPath,
-    setSelectedRepoPath,
-    repoPaths,
+    selectedWorkspaceId,
+    setSelectedWorkspaceId,
+    workspaceIds,
     selectedRepoConfig,
     isLoadingSettings,
     settingsError,

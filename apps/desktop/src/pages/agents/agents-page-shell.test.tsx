@@ -1,13 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentsPageShell } from "./agents-page-shell";
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 describe("AgentsPageShell", () => {
   test("renders the navigation restore error state instead of the workspace", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
         activeTabValue: "task-1",
@@ -26,7 +33,7 @@ describe("AgentsPageShell", () => {
   test("omits the repository label when no active repo is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
-        activeRepo: null,
+        activeWorkspace: null,
         navigationPersistenceError: new Error("restore failed"),
         chatSettingsLoadError: null,
         activeTabValue: "task-1",
@@ -44,7 +51,7 @@ describe("AgentsPageShell", () => {
   test("renders the workspace when no navigation error is present", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: null,
         chatSettingsLoadError: null,
         activeTabValue: "task-1",
@@ -63,7 +70,7 @@ describe("AgentsPageShell", () => {
   test("renders a retryable chat settings error banner without hiding the workspace", () => {
     const html = renderToStaticMarkup(
       createElement(AgentsPageShell, {
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         navigationPersistenceError: null,
         chatSettingsLoadError: new Error("settings read failed"),
         activeTabValue: "task-1",

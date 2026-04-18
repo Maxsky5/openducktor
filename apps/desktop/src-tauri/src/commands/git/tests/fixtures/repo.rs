@@ -106,6 +106,7 @@ pub(crate) fn sample_worktree_status_data(
             behind: 0,
         },
         upstream_ahead_behind: upstream,
+        git_conflict: None,
     }
 }
 
@@ -133,5 +134,6 @@ pub(crate) fn sample_worktree_status_summary_data(
             behind: 0,
         },
         upstream_ahead_behind: upstream,
+        git_conflict: None,
     }
 }

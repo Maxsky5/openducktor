@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { getAgentStudioTaskHydrationDecision } from "./agent-studio-task-hydration-state";
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 describe("getAgentStudioTaskHydrationDecision", () => {
   test("waits while page readiness is still unavailable", () => {
     const decision = getAgentStudioTaskHydrationDecision({
-      activeRepo: "/repo-a",
+      activeWorkspace: createActiveWorkspace("/repo-a"),
       activeTaskId: "task-1",
       activeSession: {
         sessionId: "session-1",
@@ -25,7 +32,7 @@ describe("getAgentStudioTaskHydrationDecision", () => {
 
   test("waits for a build session runtime attachment even after page readiness turns ready", () => {
     const decision = getAgentStudioTaskHydrationDecision({
-      activeRepo: "/repo-a",
+      activeWorkspace: createActiveWorkspace("/repo-a"),
       activeTaskId: "task-1",
       activeSession: {
         sessionId: "session-1",
@@ -47,7 +54,7 @@ describe("getAgentStudioTaskHydrationDecision", () => {
 
   test("shows a recovering waiting session while runtime reattachment is in progress", () => {
     const decision = getAgentStudioTaskHydrationDecision({
-      activeRepo: "/repo-a",
+      activeWorkspace: createActiveWorkspace("/repo-a"),
       activeTaskId: "task-1",
       activeSession: {
         sessionId: "session-1",
@@ -68,7 +75,7 @@ describe("getAgentStudioTaskHydrationDecision", () => {
 
   test("allows recovery to retry after a session runtime recovery failure", () => {
     const decision = getAgentStudioTaskHydrationDecision({
-      activeRepo: "/repo-a",
+      activeWorkspace: createActiveWorkspace("/repo-a"),
       activeTaskId: "task-1",
       activeSession: {
         sessionId: "session-1",

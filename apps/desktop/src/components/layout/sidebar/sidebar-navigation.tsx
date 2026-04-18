@@ -9,19 +9,19 @@ const NAV_ITEMS = [
 ] as const;
 
 type SidebarNavigationProps = {
-  hasActiveRepo: boolean;
+  hasActiveWorkspace: boolean;
   compact?: boolean;
 };
 
 export function SidebarNavigation({
-  hasActiveRepo,
+  hasActiveWorkspace,
   compact = false,
 }: SidebarNavigationProps): ReactElement {
   return (
     <nav className="space-y-1">
       {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
-        const isDisabled = item.requiresRepo && !hasActiveRepo;
+        const isDisabled = item.requiresRepo && !hasActiveWorkspace;
         return (
           <NavLink
             key={item.to}

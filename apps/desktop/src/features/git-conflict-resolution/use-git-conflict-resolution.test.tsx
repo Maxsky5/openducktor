@@ -52,7 +52,11 @@ describe("useGitConflictResolution", () => {
   test("filters reusable Builder sessions to the conflicted worktree", async () => {
     const startConflictResolutionSession = mock(async () => "build-1");
     const harness = createHookHarness(useGitConflictResolution, {
-      activeRepo: "/repo",
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+      },
       startConflictResolutionSession,
       loadPromptOverrides: async () => ({}),
     });
@@ -105,7 +109,11 @@ describe("useGitConflictResolution", () => {
   test("allows starting a new conflict-resolution session without an existing selected model", async () => {
     const startConflictResolutionSession = mock(async () => "build-new");
     const harness = createHookHarness(useGitConflictResolution, {
-      activeRepo: "/repo",
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+      },
       startConflictResolutionSession,
       loadPromptOverrides: async () => ({}),
     });
@@ -144,7 +152,11 @@ describe("useGitConflictResolution", () => {
   test("passes the conflicted worktree when starting a fresh conflict-resolution session", async () => {
     const startConflictResolutionSession = mock(async () => "build-new");
     const harness = createHookHarness(useGitConflictResolution, {
-      activeRepo: "/repo",
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+      },
       startConflictResolutionSession,
       loadPromptOverrides: async () => ({}),
     });
@@ -173,10 +185,45 @@ describe("useGitConflictResolution", () => {
     }
   });
 
+  test("loads prompt overrides with the workspace id", async () => {
+    const startConflictResolutionSession = mock(async () => "build-new");
+    const loadPromptOverrides = mock(async () => ({}));
+    const harness = createHookHarness(useGitConflictResolution, {
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+      },
+      startConflictResolutionSession,
+      loadPromptOverrides,
+    });
+
+    try {
+      await harness.mount();
+
+      const resolved = await harness.getLatest().handleResolveGitConflict(createConflict(), {
+        taskId: "task-1",
+        task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
+        builderSessions: [],
+        currentViewSessionId: null,
+        onOpenSession: () => undefined,
+      });
+
+      expect(resolved).toBe(true);
+      expect(loadPromptOverrides).toHaveBeenCalledWith("workspace-repo");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("fails fast when the conflicted working directory is missing", async () => {
     const startConflictResolutionSession = mock(async () => "build-new");
     const harness = createHookHarness(useGitConflictResolution, {
-      activeRepo: "/repo",
+      activeWorkspace: {
+        workspaceId: "workspace-repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+      },
       startConflictResolutionSession,
       loadPromptOverrides: async () => ({}),
     });

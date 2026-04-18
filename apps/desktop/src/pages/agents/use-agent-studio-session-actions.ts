@@ -141,7 +141,6 @@ export function useAgentStudioSessionActions({
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
-  const activeRepo = activeWorkspace?.repoPath ?? null;
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
   >({});
@@ -161,7 +160,7 @@ export function useAgentStudioSessionActions({
   const activeSessionRuntimeDescriptor = activeSession?.modelCatalog?.runtime ?? null;
   const hasActiveSession = activeSession != null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-    activeRepo,
+    activeWorkspace,
     taskId,
     role,
     sessionId: activeSessionId,
@@ -271,7 +270,7 @@ export function useAgentStudioSessionActions({
         }
 
         const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-          activeRepo,
+          activeWorkspace,
           taskId,
           role,
           sessionId: targetSessionId,
@@ -312,7 +311,7 @@ export function useAgentStudioSessionActions({
       }
     },
     [
-      activeRepo,
+      activeWorkspace,
       activeComposerContextKey,
       activeSessionId,
       activeSessionIsLoadingModelCatalog,

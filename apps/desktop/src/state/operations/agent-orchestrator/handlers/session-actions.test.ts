@@ -64,8 +64,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef: { current: {} },
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: () => {},
@@ -90,6 +90,61 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     expect(typeof actions.sendAgentMessage).toBe("function");
     expect(typeof actions.startAgentSession).toBe("function");
     expect(typeof actions.stopAgentSession).toBe("function");
+  });
+
+  test("uses live workspace refs for session start stale checks", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const actions = createAgentSessionActions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef,
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: () => {},
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    currentWorkspaceRepoPathRef.current = "/tmp/other";
+
+    await expect(
+      actions.startAgentSession({
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startMode: "fresh",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5.4",
+          variant: "high",
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ).rejects.toThrow("Workspace changed while starting session.");
   });
 
   test("stops known session and clears pending state", async () => {
@@ -133,8 +188,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -220,8 +275,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: {
         current: new Map([
           [
@@ -304,8 +359,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -438,8 +493,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", unsubscribe]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
@@ -533,8 +588,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef,
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -615,8 +670,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -699,8 +754,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -797,8 +852,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -882,8 +937,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -985,8 +1040,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1084,8 +1139,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1203,8 +1258,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1282,8 +1337,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1356,8 +1411,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1449,8 +1504,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1528,8 +1583,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1608,8 +1663,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         ],
       },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1684,8 +1739,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         ],
       },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1754,8 +1809,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
       updateSession: (sessionId, updater) => {
@@ -1851,8 +1906,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef,
       turnModelBySessionRef,
@@ -1947,8 +2002,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
-      inFlightStartsByRepoTaskRef: { current: new Map() },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef,
       turnModelBySessionRef,

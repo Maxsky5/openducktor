@@ -36,6 +36,7 @@ fn build_worktree_status_with_snapshot_preserves_payload_and_snapshot_fields() {
             ahead: 1,
             behind: 4,
         },
+        git_conflict: None,
     };
 
     let built = build_worktree_status_with_snapshot(
@@ -236,6 +237,7 @@ fn build_worktree_status_summary_with_snapshot_preserves_payload_and_snapshot_fi
             ahead: 5,
             behind: 0,
         },
+        None,
         WorktreeSnapshotMetadata {
             effective_working_dir: "/tmp/openducktor-worktree".to_string(),
             target_branch: "origin/main".to_string(),

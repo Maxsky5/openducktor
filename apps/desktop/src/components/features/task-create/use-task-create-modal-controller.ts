@@ -42,7 +42,8 @@ export function useTaskCreateModalController({
   tasks,
   task,
 }: UseTaskCreateModalControllerOptions) {
-  const { activeRepo } = useWorkspaceState();
+  const { activeWorkspace } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { createTask, updateTask } = useTasksState();
   const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
 
@@ -182,7 +183,7 @@ export function useTaskCreateModalController({
   };
 
   const submit = async (): Promise<void> => {
-    if (!activeRepo) {
+    if (!workspaceRepoPath) {
       setError("Select a repository before creating tasks.");
       return;
     }

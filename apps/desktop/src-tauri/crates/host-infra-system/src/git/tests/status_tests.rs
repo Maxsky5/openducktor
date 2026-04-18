@@ -4,6 +4,7 @@ use super::super::GitCliPort;
 use super::support::{git_available, run_git_ok, setup_bare_remote, setup_repo};
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 #[test]
 fn get_diff_returns_error_when_target_branch_is_invalid() {
@@ -251,6 +252,76 @@ fn get_worktree_status_keeps_upstream_compare_empty_when_repo_is_dirty_and_untra
     assert_eq!(
         status.upstream_ahead_behind,
         GitUpstreamAheadBehind::Untracked { ahead: 0 }
+    );
+}
+
+#[test]
+fn get_worktree_status_rehydrates_rebase_conflict_context() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-rebase-conflict-context");
+    let git = GitCliPort::new();
+
+    fs::write(repo.path.join("shared.txt"), "initial\n").expect("base file should write");
+    run_git_ok(&repo.path, &["add", "shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "shared base"]);
+
+    git.switch_branch(&repo.path, "feature/rebase-conflict", true)
+        .expect("feature branch should be created");
+    fs::write(repo.path.join("shared.txt"), "feature value\n")
+        .expect("feature change should write");
+    run_git_ok(&repo.path, &["add", "shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "feature change"]);
+
+    git.switch_branch(&repo.path, "main", false)
+        .expect("return to main");
+    fs::write(repo.path.join("shared.txt"), "main value\n").expect("main change should write");
+    run_git_ok(&repo.path, &["add", "shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "main change"]);
+
+    git.switch_branch(&repo.path, "feature/rebase-conflict", false)
+        .expect("return to feature branch");
+    let rebase_output = Command::new("git")
+        .args(["rebase", "main"])
+        .current_dir(&repo.path)
+        .output()
+        .expect("git rebase should execute");
+    assert!(
+        !rebase_output.status.success(),
+        "rebase should stop on conflicts\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&rebase_output.stdout),
+        String::from_utf8_lossy(&rebase_output.stderr)
+    );
+
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("worktree status should resolve during rebase conflict");
+
+    let git_conflict = status
+        .git_conflict
+        .expect("rebase conflict context should be available after reload");
+    assert_eq!(
+        git_conflict.operation,
+        host_domain::GitConflictOperation::Rebase
+    );
+    assert_eq!(
+        git_conflict.current_branch.as_deref(),
+        Some("feature/rebase-conflict")
+    );
+    assert!(
+        git_conflict.target_branch.trim().len() > 0,
+        "rebase target branch should not be blank"
+    );
+    assert!(git_conflict
+        .conflicted_files
+        .iter()
+        .any(|file| file == "shared.txt"));
+    assert!(
+        git_conflict.output.contains("rebase") || git_conflict.output.contains("Unmerged paths"),
+        "conflict output should include actionable rebase context, got: {}",
+        git_conflict.output
     );
 }
 

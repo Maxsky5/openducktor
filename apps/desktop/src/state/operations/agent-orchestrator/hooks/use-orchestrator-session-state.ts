@@ -7,6 +7,7 @@ import {
   createAgentSessionsStore,
 } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
 
 type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => AgentSessionsById);
@@ -15,10 +16,10 @@ type OrchestratorMutableState = {
   sessionsById: AgentSessionsById;
   tasks: TaskCard[];
   runs: RunSummary[];
-  activeRepo: string | null;
-  previousRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
+  currentWorkspaceRepoPath: string | null;
   repoEpoch: number;
-  inFlightStartsByRepoTask: Map<string, Promise<string>>;
+  inFlightStartsByWorkspaceTask: Map<string, Promise<string>>;
   unsubscribersBySession: Map<string, () => void>;
   draftRawBySession: Record<string, DraftChannelValueMap<string>>;
   draftSourceBySession: Record<string, DraftChannelValueMap<DraftSource>>;
@@ -32,10 +33,10 @@ type OrchestratorRefBridges = {
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   taskRef: MutableRefObject<TaskCard[]>;
   runsRef: MutableRefObject<RunSummary[]>;
-  activeRepoRef: MutableRefObject<string | null>;
-  previousRepoRef: MutableRefObject<string | null>;
+  activeWorkspaceRef: MutableRefObject<ActiveWorkspace | null>;
+  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
-  inFlightStartsByRepoTaskRef: MutableRefObject<Map<string, Promise<string>>>;
+  inFlightStartsByWorkspaceTaskRef: MutableRefObject<Map<string, Promise<string>>>;
   unsubscribersRef: MutableRefObject<Map<string, () => void>>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
   draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
@@ -48,7 +49,7 @@ type OrchestratorRefBridges = {
 };
 
 type UseOrchestratorSessionStateArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   runs: RunSummary[];
 };
@@ -82,19 +83,20 @@ const clearUnsubscribers = (unsubscribers: Map<string, () => void>): void => {
 };
 
 export const useOrchestratorSessionState = ({
-  activeRepo,
+  activeWorkspace,
   tasks,
   runs,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const sessionStore = useMemo(() => createAgentSessionsStore(), []);
   const mutableStateRef = useRef<OrchestratorMutableState>({
     sessionsById: {},
     tasks,
     runs,
-    activeRepo,
-    previousRepo: null,
+    activeWorkspace,
+    currentWorkspaceRepoPath: workspaceRepoPath,
     repoEpoch: 0,
-    inFlightStartsByRepoTask: new Map<string, Promise<string>>(),
+    inFlightStartsByWorkspaceTask: new Map<string, Promise<string>>(),
     unsubscribersBySession: new Map<string, () => void>(),
     draftRawBySession: {},
     draftSourceBySession: {},
@@ -108,10 +110,13 @@ export const useOrchestratorSessionState = ({
       sessionsRef: createMutableBridge(mutableStateRef, "sessionsById"),
       taskRef: createMutableBridge(mutableStateRef, "tasks"),
       runsRef: createMutableBridge(mutableStateRef, "runs"),
-      activeRepoRef: createMutableBridge(mutableStateRef, "activeRepo"),
-      previousRepoRef: createMutableBridge(mutableStateRef, "previousRepo"),
+      activeWorkspaceRef: createMutableBridge(mutableStateRef, "activeWorkspace"),
+      currentWorkspaceRepoPathRef: createMutableBridge(mutableStateRef, "currentWorkspaceRepoPath"),
       repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
-      inFlightStartsByRepoTaskRef: createMutableBridge(mutableStateRef, "inFlightStartsByRepoTask"),
+      inFlightStartsByWorkspaceTaskRef: createMutableBridge(
+        mutableStateRef,
+        "inFlightStartsByWorkspaceTask",
+      ),
       unsubscribersRef: createMutableBridge(mutableStateRef, "unsubscribersBySession"),
       draftRawBySessionRef: createMutableBridge(mutableStateRef, "draftRawBySession"),
       draftSourceBySessionRef: createMutableBridge(mutableStateRef, "draftSourceBySession"),
@@ -138,17 +143,17 @@ export const useOrchestratorSessionState = ({
   );
 
   useEffect(() => {
-    mutableStateRef.current.activeRepo = activeRepo;
+    mutableStateRef.current.activeWorkspace = activeWorkspace;
     mutableStateRef.current.tasks = tasks;
     mutableStateRef.current.runs = runs;
-  }, [activeRepo, runs, tasks]);
+  }, [activeWorkspace, runs, tasks]);
 
   useEffect(() => {
-    if (mutableStateRef.current.previousRepo === activeRepo) {
+    if (mutableStateRef.current.currentWorkspaceRepoPath === workspaceRepoPath) {
       return;
     }
     mutableStateRef.current.repoEpoch += 1;
-    mutableStateRef.current.previousRepo = activeRepo;
+    mutableStateRef.current.currentWorkspaceRepoPath = workspaceRepoPath;
 
     clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
     for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
@@ -162,9 +167,9 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.draftFlushTimeoutBySession = {};
     mutableStateRef.current.turnStartedAtBySession = {};
     mutableStateRef.current.turnModelBySession = {};
-    mutableStateRef.current.inFlightStartsByRepoTask.clear();
+    mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
     commitSessions({});
-  }, [activeRepo, commitSessions]);
+  }, [workspaceRepoPath, commitSessions]);
 
   useEffect(() => {
     return () => {
@@ -174,7 +179,7 @@ export const useOrchestratorSessionState = ({
           clearTimeout(timeoutId);
         }
       }
-      mutableStateRef.current.inFlightStartsByRepoTask.clear();
+      mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
     };
   }, []);
 

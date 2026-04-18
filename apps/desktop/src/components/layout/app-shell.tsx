@@ -30,12 +30,13 @@ const SettingsModal = lazy(async () => {
 });
 
 export function AppShell(): ReactElement {
-  const { activeRepo, workspaces } = useWorkspaceState();
+  const { activeWorkspace, workspaces } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { tasks } = useTasksState();
   const sessions = useAgentSessionSummaries();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
-  const isRepositoryModalBlocking = !activeRepo && workspaces.length === 0;
+  const isRepositoryModalBlocking = !workspaceRepoPath && workspaces.length === 0;
   const taskTitleById = useMemo(() => new Map(tasks.map((task) => [task.id, task.title])), [tasks]);
   const agentActivity = useMemo(
     () =>
@@ -47,12 +48,12 @@ export function AppShell(): ReactElement {
   );
 
   useEffect(() => {
-    if (activeRepo) {
+    if (workspaceRepoPath) {
       setRepositoryModalOpen(false);
       return;
     }
     setRepositoryModalOpen(true);
-  }, [activeRepo]);
+  }, [workspaceRepoPath]);
 
   const handleRepositoryModalOpenChange = useCallback(
     (open: boolean) => {
@@ -115,7 +116,7 @@ export function AppShell(): ReactElement {
 
                   <DiagnosticsPanel />
 
-                  <SidebarNavigation hasActiveRepo={Boolean(activeRepo)} />
+                  <SidebarNavigation hasActiveWorkspace={Boolean(workspaceRepoPath)} />
                   <AgentActivityCard
                     activeSessionCount={agentActivity.activeSessionCount}
                     waitingForInputCount={agentActivity.waitingForInputCount}
@@ -170,7 +171,7 @@ export function AppShell(): ReactElement {
                   <FolderOpen className="size-4" />
                 </Button>
                 <div className="w-full border-t border-sidebar-border pt-2">
-                  <SidebarNavigation hasActiveRepo={Boolean(activeRepo)} compact />
+                  <SidebarNavigation hasActiveWorkspace={Boolean(workspaceRepoPath)} compact />
                 </div>
               </div>
             )}

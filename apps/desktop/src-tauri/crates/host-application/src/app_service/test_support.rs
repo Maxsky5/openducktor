@@ -1145,6 +1145,7 @@ impl GitPort for FakeGitPort {
                 behind: 0,
             },
             upstream_ahead_behind,
+            git_conflict: None,
         })
     }
 
@@ -1183,6 +1184,7 @@ impl GitPort for FakeGitPort {
                     behind: 0,
                 },
                 upstream_ahead_behind,
+                git_conflict: None,
             }
         };
 
@@ -1214,6 +1216,7 @@ impl GitPort for FakeGitPort {
             },
             target_ahead_behind: status_data.target_ahead_behind,
             upstream_ahead_behind: status_data.upstream_ahead_behind,
+            git_conflict: status_data.git_conflict,
         })
     }
 

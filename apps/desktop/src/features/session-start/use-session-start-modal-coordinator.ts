@@ -9,7 +9,7 @@ import {
 import { useCallback } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
 import type { SessionStartModalIntent, SessionStartPostAction } from "./session-start-modal-types";
 import { SCENARIO_LABELS } from "./session-start-prompts";
@@ -77,7 +77,7 @@ export type SessionStartModalOpenRequest = Omit<
 };
 
 type UseSessionStartModalCoordinatorArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   initialCatalog?: AgentModelCatalog | null;
@@ -91,14 +91,14 @@ type UseSessionStartModalCoordinatorResult = Omit<
 };
 
 export function useSessionStartModalCoordinator({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   repoSettings,
   initialCatalog,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
-    activeRepo,
+    activeWorkspace,
     branches,
     repoSettings,
     runtimeDefinitions,

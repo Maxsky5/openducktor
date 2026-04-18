@@ -45,7 +45,7 @@ describe("toRepositorySelectorOptions", () => {
         workspace("fairnest", "Fairnest", "/Users/dev/workspace/fairnest"),
       ],
       {
-        "/Users/dev/workspace/fairnest": 2,
+        fairnest: 2,
       },
     );
 

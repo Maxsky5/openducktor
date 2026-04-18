@@ -2,6 +2,7 @@ import type {
   AgentSessionHistoryHydrationState,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { isWaitingForAttachedWorktreeRuntime } from "./agent-studio-session-runtime";
 
 export type AgentStudioReadinessState = "ready" | "checking" | "blocked";
@@ -12,7 +13,7 @@ type TaskHydrationSessionState = Pick<
 >;
 
 type GetAgentStudioTaskHydrationDecisionArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   activeTaskId: string;
   activeSession: TaskHydrationSessionState | null;
   historyHydrationState: AgentSessionHistoryHydrationState;
@@ -29,23 +30,24 @@ export type AgentStudioTaskHydrationDecision = {
 };
 
 export const toRuntimeAttachmentSelectionKey = ({
-  activeRepo,
+  activeWorkspace,
   activeTaskId,
   activeSessionId,
 }: {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   activeTaskId: string;
   activeSessionId: string | null;
 }): string | null => {
-  if (!activeRepo || !activeTaskId || !activeSessionId) {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  if (!workspaceRepoPath || !activeTaskId || !activeSessionId) {
     return null;
   }
 
-  return `${activeRepo}::${activeTaskId}::${activeSessionId}`;
+  return `${workspaceRepoPath}::${activeTaskId}::${activeSessionId}`;
 };
 
 export const getAgentStudioTaskHydrationDecision = ({
-  activeRepo,
+  activeWorkspace,
   activeTaskId,
   activeSession,
   historyHydrationState,
@@ -53,7 +55,7 @@ export const getAgentStudioTaskHydrationDecision = ({
   agentStudioReadinessState,
 }: GetAgentStudioTaskHydrationDecisionArgs): AgentStudioTaskHydrationDecision => {
   const activeRuntimeAttachmentKey = toRuntimeAttachmentSelectionKey({
-    activeRepo,
+    activeWorkspace,
     activeTaskId,
     activeSessionId: activeSession?.sessionId ?? null,
   });

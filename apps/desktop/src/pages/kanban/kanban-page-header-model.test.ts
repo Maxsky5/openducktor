@@ -10,7 +10,11 @@ describe("isKanbanTaskCreationDisabled", () => {
   test("disables task creation when beads is unavailable", () => {
     expect(
       isKanbanTaskCreationDisabled(
-        "/repo",
+        {
+          workspaceId: "workspace-repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+        },
         createBeadsCheckFixture(
           {},
           {
@@ -32,7 +36,11 @@ describe("isKanbanTaskCreationDisabled", () => {
   test("enables task creation when beads is ready", () => {
     expect(
       isKanbanTaskCreationDisabled(
-        "/repo",
+        {
+          workspaceId: "workspace-repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+        },
         createBeadsCheckFixture(
           {},
           {

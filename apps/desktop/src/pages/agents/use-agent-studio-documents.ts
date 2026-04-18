@@ -6,11 +6,12 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { forEachSessionMessageFrom } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
 type UseAgentStudioDocumentsArgs = {
-  activeRepo?: string | null;
+  activeWorkspace?: ActiveWorkspace | null;
   taskId: string;
   activeSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
@@ -76,7 +77,7 @@ const resolveWorkflowDocumentTarget = (
 };
 
 export function useAgentStudioDocuments({
-  activeRepo = null,
+  activeWorkspace = null,
   taskId,
   activeSession,
   selectedTask,
@@ -85,11 +86,12 @@ export function useAgentStudioDocuments({
   planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
   qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
 } {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { specDoc, planDoc, qaDoc, reloadDocument, applyDocumentUpdate } = useTaskDocuments(
     taskId || null,
     true,
-    activeRepo ?? "",
+    workspaceRepoPath ?? "",
   );
   const workflowToolAliasesByCanonical = activeSession?.runtimeKind
     ? findRuntimeDefinition(runtimeDefinitions, activeSession.runtimeKind)
@@ -106,7 +108,7 @@ export function useAgentStudioDocuments({
   const taskDocumentVersionKey =
     taskId && selectedTask
       ? [
-          activeRepo ?? "",
+          workspaceRepoPath ?? "",
           taskId,
           selectedTask.updatedAt,
           selectedTask.documentSummary.spec.has ? "1" : "0",
@@ -159,7 +161,7 @@ export function useAgentStudioDocuments({
   }, [reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
-    if (!activeSession || !taskId || !activeRepo) {
+    if (!activeSession || !taskId || !workspaceRepoPath) {
       return;
     }
 
@@ -238,7 +240,7 @@ export function useAgentStudioDocuments({
     previousSessionIdRef.current = activeSession.sessionId;
     previousMessagesRef.current = activeSession.messages;
   }, [
-    activeRepo,
+    workspaceRepoPath,
     activeSession,
     applyDocumentUpdate,
     planDoc,

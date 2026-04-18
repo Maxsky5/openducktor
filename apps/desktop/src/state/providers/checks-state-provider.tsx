@@ -6,7 +6,7 @@ import {
   ChecksOperationsContext,
   type ChecksOperationsContextValue,
   ChecksStateContext,
-  useActiveRepoContext,
+  useActiveWorkspaceContext,
   useRuntimeDefinitionsContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations";
@@ -22,7 +22,7 @@ export function ChecksStateProvider({
   checkRepoRuntimeHealth,
   children,
 }: ChecksStateProviderProps): ReactElement {
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useActiveWorkspaceContext();
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const {
     runtimeCheck,
@@ -42,7 +42,7 @@ export function ChecksStateProvider({
     clearActiveBeadsCheck,
     clearActiveRepoRuntimeHealth,
   } = useChecks({
-    activeRepo,
+    activeWorkspace,
     runtimeDefinitions,
     checkRepoRuntimeHealth,
   });

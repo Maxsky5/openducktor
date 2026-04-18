@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,
@@ -32,8 +33,7 @@ const toClearTaskQueryUpdate = (): QueryUpdate => ({
 });
 
 export function useAgentStudioTaskTabs(args: {
-  activeRepo: string | null;
-  persistenceWorkspaceId: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   isRepoNavigationBoundaryPending?: boolean;
   taskId: string;
   selectedTask: TaskCard | null;
@@ -54,8 +54,7 @@ export function useAgentStudioTaskTabs(args: {
   handleCloseTab: (taskIdToClose: string) => void;
 } {
   const {
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     isRepoNavigationBoundaryPending = false,
     taskId,
     selectedTask,
@@ -97,8 +96,7 @@ export function useAgentStudioTaskTabs(args: {
   }, [updateQuery]);
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     isRepoNavigationBoundaryPending,
     taskId: taskIdForTabs,
     openTaskTabs: selectableOpenTaskTabs,
@@ -114,8 +112,7 @@ export function useAgentStudioTaskTabs(args: {
   });
 
   useTaskTabPersistence({
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     taskId: taskIdForTabs,
     selectedTask,
     tasks,

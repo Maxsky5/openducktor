@@ -10,7 +10,7 @@ import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions
 enableReactActEnvironment();
 
 type HarnessArgs = {
-  selectedRepoPath: string | null;
+  selectedWorkspaceId: string | null;
   initialSnapshot: SettingsSnapshot;
 };
 
@@ -51,10 +51,10 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   },
 });
 
-const useDraftActionsHarness = ({ selectedRepoPath, initialSnapshot }: HarnessArgs) => {
+const useDraftActionsHarness = ({ selectedWorkspaceId, initialSnapshot }: HarnessArgs) => {
   const [snapshotDraft, setSnapshotDraft] = useState<SettingsSnapshot | null>(initialSnapshot);
   const actions = useSettingsModalDraftActions({
-    selectedRepoPath,
+    selectedWorkspaceId,
     setSnapshotDraft,
   });
   return {
@@ -69,7 +69,7 @@ const createHookHarness = (initialProps: HarnessArgs) =>
 describe("useSettingsModalDraftActions", () => {
   test("updates selected repo config and prompt overrides", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "repo-a",
+      selectedWorkspaceId: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -111,7 +111,7 @@ describe("useSettingsModalDraftActions", () => {
 
   test("updates global chat settings without touching unrelated sections", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "repo-a",
+      selectedWorkspaceId: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -133,7 +133,7 @@ describe("useSettingsModalDraftActions", () => {
 
   test("updates global kanban settings without touching unrelated sections", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "repo-a",
+      selectedWorkspaceId: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -154,7 +154,7 @@ describe("useSettingsModalDraftActions", () => {
 
   test("updates and clears selected role agent defaults", async () => {
     const harness = createHookHarness({
-      selectedRepoPath: "repo-a",
+      selectedWorkspaceId: "repo-a",
       initialSnapshot: createInitialSnapshot(),
     });
     await harness.mount();
@@ -186,7 +186,7 @@ describe("useSettingsModalDraftActions", () => {
     };
 
     const harness = createHookHarness({
-      selectedRepoPath: "repo-a",
+      selectedWorkspaceId: "repo-a",
       initialSnapshot,
     });
     await harness.mount();

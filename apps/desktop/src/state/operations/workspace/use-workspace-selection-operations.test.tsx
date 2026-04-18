@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { useRef } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
   createDeferred,
@@ -36,12 +37,39 @@ beforeEach(() => {
 });
 
 type SelectionHarnessArgs = {
-  activeRepo: string | null;
-  setActiveRepo: (repoPath: string | null) => void;
+  activeWorkspace?: ActiveWorkspace | null;
+  setActiveWorkspace?: (workspace: ActiveWorkspace | null) => void;
+  activeRepo?: string | null;
+  setActiveRepo?: (repoPath: string | null) => void;
   clearTaskData: () => void;
   clearActiveBeadsCheck: () => void;
   clearBranchData: () => void;
 };
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+const normalizeSelectionArgs = ({
+  activeWorkspace,
+  setActiveWorkspace,
+  activeRepo,
+  setActiveRepo,
+  ...rest
+}: SelectionHarnessArgs): Omit<
+  Parameters<typeof useWorkspaceSelectionOperations>[0],
+  "hostClient" | "preparedRepoSwitchRef"
+> => ({
+  ...rest,
+  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+  setActiveWorkspace:
+    setActiveWorkspace ??
+    ((workspace) => {
+      setActiveRepo?.(workspace?.repoPath ?? null);
+    }),
+});
 
 const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   let latest: ReturnType<typeof useWorkspaceSelectionOperations> | null = null;
@@ -50,7 +78,7 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   const Harness = ({ args }: { args: SelectionHarnessArgs }) => {
     const preparedRepoSwitchRef = useRef<PreparedRepoSwitch | null>(null);
     latest = useWorkspaceSelectionOperations({
-      ...args,
+      ...normalizeSelectionArgs(args),
       hostClient: workspaceHost,
       preparedRepoSwitchRef,
     });
@@ -218,6 +246,30 @@ describe("use-workspace-selection-operations", () => {
         workspace("/repo-old", false),
       ]);
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-c");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("preserves the current active workspace during refresh when no record is marked active", async () => {
+    let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-old");
+    const harness = createSelectionHarness({
+      activeWorkspace: latestActiveWorkspace,
+      setActiveWorkspace: (workspace) => {
+        latestActiveWorkspace = workspace;
+      },
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([workspace("/repo-old", false), workspace("/repo-b", false)]);
+      });
+
+      expect(latestActiveWorkspace?.repoPath).toBe("/repo-old");
     } finally {
       await harness.unmount();
     }

@@ -68,8 +68,7 @@ const createHookHarness = (initialProps: HookArgs) => {
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: null,
-  persistenceWorkspaceId: null,
+  activeWorkspace: null,
   isRepoNavigationBoundaryPending: false,
   agentStudioReadinessState: "ready",
   tasks: [createTask("task-1"), createTask("task-2")],

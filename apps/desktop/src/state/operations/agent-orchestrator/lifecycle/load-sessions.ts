@@ -5,7 +5,6 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskDocuments } from "../runtime/runtime";
-import { createRepoStaleGuard } from "../support/core";
 import { getSessionMessageCount } from "../support/messages";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import {
@@ -23,8 +22,8 @@ type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: SessionLifecycleAdapter;
   repoEpochRef: MutableRefObject<number>;
-  activeRepoRef?: MutableRefObject<string | null>;
-  previousRepoRef: MutableRefObject<string | null>;
+  activeWorkspaceRef?: MutableRefObject<ActiveWorkspace | null>;
+  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   setSessionsById: Dispatch<SetStateAction<Record<string, AgentSessionState>>>;
   taskRef: MutableRefObject<TaskCard[]>;
@@ -39,8 +38,8 @@ export const createLoadAgentSessions = ({
   activeWorkspace,
   adapter,
   repoEpochRef,
-  activeRepoRef,
-  previousRepoRef,
+  activeWorkspaceRef,
+  currentWorkspaceRepoPathRef,
   sessionsRef,
   setSessionsById,
   taskRef,
@@ -108,12 +107,12 @@ export const createLoadAgentSessions = ({
     }
 
     const repoPath = activeWorkspace.repoPath;
-    const isStaleRepoOperation = createRepoStaleGuard({
-      repoPath,
-      repoEpochRef,
-      activeRepoRef,
-      previousRepoRef,
-    });
+    const repoEpochAtStart = repoEpochRef.current;
+    const isStaleRepoOperation = (): boolean => {
+      const currentRepoPath =
+        currentWorkspaceRepoPathRef.current ?? activeWorkspaceRef?.current?.repoPath ?? null;
+      return repoEpochRef.current !== repoEpochAtStart || currentRepoPath !== repoPath;
+    };
     if (isStaleRepoOperation()) {
       return;
     }

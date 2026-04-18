@@ -43,7 +43,7 @@ const DETAIL_ACTIONS_WITHOUT_TASK_RESET = DETAIL_ACTIONS.filter(
 );
 
 export function TaskDetailsSheet({
-  activeRepo = null,
+  activeWorkspace = null,
   task,
   allTasks,
   runs,
@@ -73,7 +73,7 @@ export function TaskDetailsSheet({
   onDelete,
 }: TaskDetailsSheetProps): ReactElement {
   const viewModel = useTaskDetailsSheetViewModel({
-    activeRepo,
+    activeWorkspace,
     task,
     allTasks,
     open,

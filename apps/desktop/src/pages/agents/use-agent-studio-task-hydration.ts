@@ -4,6 +4,7 @@ import {
   requiresHydratedAgentSessionHistory,
 } from "@/state/operations/agent-orchestrator/support/history-hydration";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type AgentStudioReadinessState,
   getAgentStudioTaskHydrationDecision,
@@ -14,7 +15,7 @@ import {
 } from "./use-agent-studio-runtime-attachment-retry";
 
 type UseAgentStudioTaskHydrationParams = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   activeTaskId: string;
   activeSession: AgentSessionState | null;
   agentStudioReadinessState: AgentStudioReadinessState;
@@ -41,7 +42,7 @@ type UseAgentStudioTaskHydrationResult = {
 };
 
 export function useAgentStudioTaskHydration({
-  activeRepo,
+  activeWorkspace,
   activeTaskId,
   activeSession,
   agentStudioReadinessState,
@@ -64,7 +65,7 @@ export function useAgentStudioTaskHydration({
     isRecoveringWaitingSession,
     shouldHydrateSessionHistory,
   } = getAgentStudioTaskHydrationDecision({
-    activeRepo,
+    activeWorkspace,
     activeTaskId,
     activeSession,
     historyHydrationState,
@@ -127,7 +128,7 @@ export function useAgentStudioTaskHydration({
   const shouldShowPendingHydrationState = shouldRequestHydration;
 
   return {
-    isActiveTaskHydrated: Boolean(activeRepo && activeTaskId),
+    isActiveTaskHydrated: Boolean(activeWorkspace && activeTaskId),
     isActiveTaskHydrationFailed: false,
     isActiveSessionHistoryHydrated: activeSessionId ? historyHydrationState === "hydrated" : false,
     isActiveSessionHistoryHydrationFailed: activeSessionId

@@ -1,5 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 export { normalizeWorkingDirectory } from "@/lib/working-directory";
 
@@ -29,16 +30,17 @@ type RefValue<T> = { current: T };
 export const createRepoStaleGuard = ({
   repoPath,
   repoEpochRef,
-  activeRepoRef,
-  previousRepoRef,
+  activeWorkspaceRef,
+  currentWorkspaceRepoPathRef,
 }: {
   repoPath: string;
   repoEpochRef: RefValue<number>;
-  activeRepoRef: RefValue<string | null> | undefined;
-  previousRepoRef: RefValue<string | null>;
+  activeWorkspaceRef?: RefValue<ActiveWorkspace | null>;
+  currentWorkspaceRepoPathRef: RefValue<string | null>;
 }): (() => boolean) => {
   const repoEpochAtStart = repoEpochRef.current;
-  const currentRepoAt = (): string | null => activeRepoRef?.current ?? previousRepoRef.current;
+  const currentRepoAt = (): string | null =>
+    currentWorkspaceRepoPathRef.current ?? activeWorkspaceRef?.current?.repoPath ?? null;
   return (): boolean => repoEpochRef.current !== repoEpochAtStart || currentRepoAt() !== repoPath;
 };
 

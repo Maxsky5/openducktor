@@ -9,7 +9,7 @@ import {
   targetBranchFromSelection,
   taskTargetBranchValidationError,
 } from "@/lib/target-branch";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
@@ -75,11 +75,11 @@ const requireSourceSessionId = (
 };
 
 export function useSessionStartModalRunner({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   repoSettings,
 }: {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
 }): {
@@ -123,7 +123,7 @@ export function useSessionStartModalRunner({
     handleSelectModel,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
-    activeRepo,
+    activeWorkspace,
     branches,
     repoSettings,
   });

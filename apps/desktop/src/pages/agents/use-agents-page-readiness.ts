@@ -3,6 +3,7 @@ import { describeRepoRuntimeStatus, isRepoRuntimeReady } from "@/lib/repo-runtim
 import type { useChecksState } from "@/state";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
   AgentStudioOrchestrationReadinessContext,
   AgentStudioOrchestrationSelectionContext,
@@ -56,7 +57,7 @@ export function useRunCompletionRecoverySignal({
 }
 
 type UseAgentStudioReadinessArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   runtimeDefinitions: ReturnType<typeof useRuntimeDefinitionsContext>["runtimeDefinitions"];
   isLoadingRuntimeDefinitions: ReturnType<
     typeof useRuntimeDefinitionsContext
@@ -70,7 +71,7 @@ type UseAgentStudioReadinessArgs = {
 };
 
 export function useAgentStudioReadiness({
-  activeRepo,
+  activeWorkspace,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -78,8 +79,9 @@ export function useAgentStudioReadiness({
   isLoadingChecks,
   refreshChecks,
 }: UseAgentStudioReadinessArgs): AgentStudioOrchestrationReadinessContext {
+  const hasActiveWorkspace = activeWorkspace !== null;
   const isRuntimeHealthPending =
-    activeRepo !== null &&
+    hasActiveWorkspace &&
     runtimeDefinitions.length > 0 &&
     runtimeDefinitions.some((definition) => runtimeHealthByRuntime[definition.kind] === undefined);
   const healthyRuntimeDefinition = useMemo(
@@ -111,15 +113,18 @@ export function useAgentStudioReadiness({
     ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
     : null;
 
-  const agentStudioReady = Boolean(activeRepo && healthyRuntimeDefinition);
+  const agentStudioReady = Boolean(hasActiveWorkspace && healthyRuntimeDefinition);
   const agentStudioReadinessState = (() => {
     if (agentStudioReady) {
       return "ready";
     }
-    if (activeRepo && checkingRuntimeDefinition) {
+    if (hasActiveWorkspace && checkingRuntimeDefinition) {
       return "checking";
     }
-    if (activeRepo && (isLoadingRuntimeDefinitions || isLoadingChecks || isRuntimeHealthPending)) {
+    if (
+      hasActiveWorkspace &&
+      (isLoadingRuntimeDefinitions || isLoadingChecks || isRuntimeHealthPending)
+    ) {
       return "checking";
     }
 
@@ -129,7 +134,7 @@ export function useAgentStudioReadiness({
     if (agentStudioReady) {
       return null;
     }
-    if (!activeRepo) {
+    if (!activeWorkspace) {
       return "Select a repository to use Agent Studio.";
     }
     if (runtimeDefinitionsError) {

@@ -70,14 +70,13 @@ export function useAgentStudioSessionStartSession({
   }) => Promise<SessionStartWorkflowResult | undefined>;
 } {
   const queryClient = useQueryClient();
-  const activeRepo = activeWorkspace?.repoPath ?? null;
   const startRequestedSession = useCallback(
     async (params: {
       reason: SessionStartRequestReason;
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
-        activeRepo,
+        activeWorkspace,
         taskId,
         role,
         sessionId: null,
@@ -141,7 +140,6 @@ export function useAgentStudioSessionStartSession({
       );
     },
     [
-      activeRepo,
       activeWorkspace,
       role,
       scenario,

@@ -342,6 +342,10 @@ export const gitWorktreeStatusSchema = z.object({
   fileDiffs: z.array(fileDiffSchema),
   targetAheadBehind: commitsAheadBehindSchema,
   upstreamAheadBehind: gitUpstreamAheadBehindSchema,
+  gitConflict: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitConflictSchema.optional(),
+  ),
   snapshot: gitWorktreeStatusSnapshotSchema,
 });
 export type GitWorktreeStatus = z.infer<typeof gitWorktreeStatusSchema>;
@@ -351,6 +355,10 @@ export const gitWorktreeStatusSummarySchema = z.object({
   fileStatusCounts: gitFileStatusCountsSchema,
   targetAheadBehind: commitsAheadBehindSchema,
   upstreamAheadBehind: gitUpstreamAheadBehindSchema,
+  gitConflict: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitConflictSchema.optional(),
+  ),
   snapshot: gitWorktreeStatusSnapshotSchema,
 });
 export type GitWorktreeStatusSummary = z.infer<typeof gitWorktreeStatusSummarySchema>;

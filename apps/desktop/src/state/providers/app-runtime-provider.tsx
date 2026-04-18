@@ -8,8 +8,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
-  ActiveRepoContext,
-  type ActiveRepoContextValue,
+  ActiveWorkspaceContext,
+  type ActiveWorkspaceContextValue,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "../app-state-contexts";
@@ -37,7 +37,8 @@ export function AppRuntimeProvider({
   loadRepoRuntimeSlashCommands,
   loadRepoRuntimeFileSearch,
 }: AppRuntimeProviderProps): ReactElement {
-  const [activeRepo, setActiveRepo] = useState<string | null>(null);
+  const [activeWorkspace, setActiveWorkspace] =
+    useState<ActiveWorkspaceContextValue["activeWorkspace"]>(null);
   const queryClient = useQueryClient();
   const {
     data: runtimeDefinitions = [],
@@ -46,12 +47,12 @@ export function AppRuntimeProvider({
     refetch,
   } = useQuery(runtimeDefinitionsQueryOptions());
 
-  const activeRepoValue = useMemo<ActiveRepoContextValue>(
+  const activeWorkspaceValue = useMemo<ActiveWorkspaceContextValue>(
     () => ({
-      activeRepo,
-      setActiveRepo,
+      activeWorkspace,
+      setActiveWorkspace,
     }),
-    [activeRepo],
+    [activeWorkspace],
   );
 
   const runtimeDefinitionsError = error ? errorMessage(error) : null;
@@ -88,10 +89,10 @@ export function AppRuntimeProvider({
   );
 
   return (
-    <ActiveRepoContext.Provider value={activeRepoValue}>
+    <ActiveWorkspaceContext.Provider value={activeWorkspaceValue}>
       <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
         {children}
       </RuntimeDefinitionsContext.Provider>
-    </ActiveRepoContext.Provider>
+    </ActiveWorkspaceContext.Provider>
   );
 }

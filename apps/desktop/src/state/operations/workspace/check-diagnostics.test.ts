@@ -5,6 +5,7 @@ import {
   type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildBeadsCheckErrorState,
   buildDiagnosticsRetryPlan,
@@ -17,6 +18,12 @@ const makeRepoHealth = (
   overrides: RepoRuntimeHealthFixtureOverrides = {},
 ): RepoRuntimeHealthCheck =>
   createRepoRuntimeHealthFixture({ checkedAt: "2026-02-22T08:00:00.000Z" }, overrides);
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 describe("check-diagnostics helpers", () => {
   test("projects runtime and beads query failures into concrete error states", () => {
@@ -54,7 +61,7 @@ describe("check-diagnostics helpers", () => {
 
   test("builds toast issues only for hard failures", () => {
     const issues = buildDiagnosticsToastIssues({
-      activeRepo: "/repo",
+      activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeCheck: null,
       runtimeCheckError: "Timed out after 15000ms",
@@ -93,7 +100,7 @@ describe("check-diagnostics helpers", () => {
 
   test("restores unhealthy cli and beads payload toasts even without query failures", () => {
     const issues = buildDiagnosticsToastIssues({
-      activeRepo: "/repo",
+      activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeCheck: buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "git missing"),
       runtimeCheckError: null,
@@ -122,7 +129,7 @@ describe("check-diagnostics helpers", () => {
 
   test("treats GitHub CLI and auth failures as CLI toast-level issues", () => {
     const issues = buildDiagnosticsToastIssues({
-      activeRepo: "/repo",
+      activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeCheck: {
         gitOk: true,
@@ -157,7 +164,7 @@ describe("check-diagnostics helpers", () => {
   test("computes retry plan per diagnostics family", () => {
     expect(
       buildDiagnosticsRetryPlan({
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: "timeout",
         runtimeCheckFetching: false,
@@ -178,7 +185,7 @@ describe("check-diagnostics helpers", () => {
 
     expect(
       buildDiagnosticsRetryPlan({
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: null,
         runtimeCheckFetching: false,
@@ -208,7 +215,7 @@ describe("check-diagnostics helpers", () => {
 
     expect(
       buildDiagnosticsRetryPlan({
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: null,
         runtimeCheckFetching: false,
@@ -242,7 +249,7 @@ describe("check-diagnostics helpers", () => {
 
     expect(
       buildDiagnosticsRetryPlan({
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: null,
         runtimeCheckFetching: false,

@@ -12,6 +12,7 @@ import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
@@ -39,7 +40,7 @@ const rememberProcessedExternalTaskEvent = (
 };
 
 type UseAppLifecycleArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
   setRunCompletionSignal: (runId: string, eventType: RunEvent["type"]) => void;
   refreshWorkspaces: () => Promise<void>;
@@ -52,7 +53,7 @@ type UseAppLifecycleArgs = {
 };
 
 export function useAppLifecycle({
-  activeRepo,
+  activeWorkspace,
   setEvents,
   setRunCompletionSignal,
   refreshWorkspaces,
@@ -64,15 +65,15 @@ export function useAppLifecycle({
   beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
-  const activeRepoRef = useRef(activeRepo);
+  const activeWorkspaceRef = useRef(activeWorkspace);
   const refreshTaskDataRef = useRef(refreshTaskData);
   const processedTaskEventIdsRef = useRef(new Set<string>());
   const processedTaskEventOrderRef = useRef<string[]>([]);
 
   useLayoutEffect(() => {
-    activeRepoRef.current = activeRepo;
+    activeWorkspaceRef.current = activeWorkspace;
     refreshTaskDataRef.current = refreshTaskData;
-  }, [activeRepo, refreshTaskData]);
+  }, [activeWorkspace, refreshTaskData]);
 
   useEffect(() => {
     let disposed = false;
@@ -102,7 +103,7 @@ export function useAppLifecycle({
           parsed.data.type === "error"
         ) {
           setRunCompletionSignal(parsed.data.runId, parsed.data.type);
-          const repoPath = activeRepoRef.current;
+          const repoPath = activeWorkspaceRef.current?.repoPath ?? null;
           if (repoPath) {
             void refreshTaskDataRef.current(repoPath).catch((error: unknown) => {
               toast.error("Failed to refresh tasks", {
@@ -140,8 +141,8 @@ export function useAppLifecycle({
     hostBridge
       .subscribeTaskEvents((payload) => {
         if (isBrowserLiveControlEvent(payload)) {
-          const activeRepo = activeRepoRef.current;
-          if (!activeRepo) {
+          const activeRepoPath = activeWorkspaceRef.current?.repoPath ?? null;
+          if (!activeRepoPath) {
             return;
           }
 
@@ -153,7 +154,7 @@ export function useAppLifecycle({
             });
           }
 
-          void refreshTaskDataRef.current(activeRepo).catch((error: unknown) => {
+          void refreshTaskDataRef.current(activeRepoPath).catch((error: unknown) => {
             toast.error("Failed to resync tasks after task stream reconnect", {
               description: summarizeTaskLoadError({ error }),
             });
@@ -179,7 +180,7 @@ export function useAppLifecycle({
           return;
         }
 
-        if (activeRepoRef.current !== parsed.data.repoPath) {
+        if (activeWorkspaceRef.current?.repoPath !== parsed.data.repoPath) {
           return;
         }
 
@@ -219,7 +220,8 @@ export function useAppLifecycle({
   }, []);
 
   useEffect(() => {
-    if (!activeRepo) {
+    const activeRepoPath = activeWorkspace?.repoPath ?? null;
+    if (!activeRepoPath) {
       clearBranchData();
       return;
     }
@@ -249,7 +251,10 @@ export function useAppLifecycle({
 
     const taskLoadPromise = (async () => {
       beadsPreparationTimer = setTimeout(() => {
-        if (repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo) {
+        if (
+          repoLoadVersionRef.current !== loadVersion ||
+          activeWorkspaceRef.current?.repoPath !== activeRepoPath
+        ) {
           return;
         }
         beadsPreparationToastShown = true;
@@ -260,7 +265,7 @@ export function useAppLifecycle({
       }, beadsPreparationToastDelayMs);
 
       try {
-        const beadsCheck = await refreshBeadsCheckForRepo(activeRepo, false);
+        const beadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, false);
         repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
         if (beadsCheck.repoStoreHealth.status !== "initializing") {
           clearBeadsPreparationTimer();
@@ -269,10 +274,10 @@ export function useAppLifecycle({
           }
         }
 
-        await refreshTaskData(activeRepo);
+        await refreshTaskData(activeRepoPath);
         if (!beadsCheck.repoStoreHealth.isReady) {
           try {
-            const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepo, true);
+            const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, true);
             repoStoreHealth = getBlockingRepoStoreHealth(refreshedBeadsCheck);
           } catch {
             // Preserve the main repo-load outcome if the follow-up diagnostics refresh fails.
@@ -283,7 +288,7 @@ export function useAppLifecycle({
           !repoStoreHealth &&
           hadBeadsPreparationToast &&
           repoLoadVersionRef.current === loadVersion &&
-          activeRepoRef.current === activeRepo
+          activeWorkspaceRef.current?.repoPath === activeRepoPath
         ) {
           dismissBeadsPreparationToast();
           toast.success("Beads database ready", {
@@ -297,7 +302,8 @@ export function useAppLifecycle({
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
     const isStaleRepoLoad = (): boolean =>
-      repoLoadVersionRef.current !== loadVersion || activeRepoRef.current !== activeRepo;
+      repoLoadVersionRef.current !== loadVersion ||
+      activeWorkspaceRef.current?.repoPath !== activeRepoPath;
 
     void refreshBranches(false).catch((error: unknown) => {
       if (isStaleRepoLoad()) {
@@ -331,7 +337,7 @@ export function useAppLifecycle({
       dismissBeadsPreparationToast();
     };
   }, [
-    activeRepo,
+    activeWorkspace,
     beadsPreparationToastDelayMs,
     clearBranchData,
     refreshBeadsCheckForRepo,

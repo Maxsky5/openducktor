@@ -5,7 +5,7 @@ import { useWorkspaceState } from "@/state/app-state-provider";
 
 export function BranchSwitcher(): ReactElement | null {
   const {
-    activeRepo,
+    activeWorkspace,
     branches,
     activeBranch,
     isSwitchingWorkspace,
@@ -14,6 +14,7 @@ export function BranchSwitcher(): ReactElement | null {
     branchSyncDegraded,
     switchBranch,
   } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [pendingBranchValue, setPendingBranchValue] = useState<string | null>(null);
   const activeBranchValue = activeBranch?.name ?? "";
 
@@ -22,7 +23,7 @@ export function BranchSwitcher(): ReactElement | null {
     ? (pendingBranchValue ?? activeBranchValue)
     : activeBranchValue;
 
-  if (!activeRepo) {
+  if (!workspaceRepoPath) {
     return null;
   }
 

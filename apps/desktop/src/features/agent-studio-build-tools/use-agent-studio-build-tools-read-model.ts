@@ -16,7 +16,7 @@ import {
 } from "./use-agent-studio-build-tools-bootstrap";
 
 type UseAgentStudioBuildToolsReadModelArgs = {
-  activeRepo: string | null;
+  workspaceRepoPath: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
   session: BuildToolsSessionDescriptor;
@@ -29,7 +29,7 @@ type UseAgentStudioBuildToolsReadModelArgs = {
 };
 
 export function useAgentStudioBuildToolsReadModel({
-  activeRepo,
+  workspaceRepoPath,
   activeBranch,
   viewRole,
   session,
@@ -59,7 +59,7 @@ export function useAgentStudioBuildToolsReadModel({
       ? { branch: UPSTREAM_TARGET_BRANCH }
       : taskTargetBranchState.effectiveTargetBranch;
   const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
-    activeRepo,
+    workspaceRepoPath,
     viewRole,
     session,
     viewSelectedTask,

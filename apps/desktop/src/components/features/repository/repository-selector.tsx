@@ -13,7 +13,7 @@ type RepositorySelectorProps = {
   triggerClassName?: string;
   placeholder?: string;
   searchPlaceholder?: string;
-  errorCountByPath?: Partial<Record<string, number>>;
+  errorCountByWorkspaceId?: Partial<Record<string, number>>;
 };
 
 export function RepositorySelector({
@@ -25,11 +25,11 @@ export function RepositorySelector({
   triggerClassName,
   placeholder = "Select repository",
   searchPlaceholder = "Search repository...",
-  errorCountByPath,
+  errorCountByWorkspaceId,
 }: RepositorySelectorProps) {
   const options = useMemo(
-    () => toRepositorySelectorOptions(workspaces, errorCountByPath),
-    [errorCountByPath, workspaces],
+    () => toRepositorySelectorOptions(workspaces, errorCountByWorkspaceId),
+    [errorCountByWorkspaceId, workspaces],
   );
 
   if (options.length === 0) {

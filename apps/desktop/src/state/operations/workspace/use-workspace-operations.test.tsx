@@ -7,6 +7,7 @@ import { act, createElement, type PropsWithChildren, useEffect, useRef, useState
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
@@ -179,10 +180,40 @@ beforeEach(async () => {
 });
 
 type HookArgs = Parameters<typeof useWorkspaceOperations>[0];
+type LegacyHookArgs = Partial<Omit<HookArgs, "activeWorkspace" | "setActiveWorkspace">> & {
+  activeWorkspace?: ActiveWorkspace | null;
+  setActiveWorkspace?: HookArgs["setActiveWorkspace"];
+  activeRepo?: string | null;
+  setActiveRepo?: (repoPath: string | null) => void;
+};
 
-const createHookHarness = (initialArgs: HookArgs) => {
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+const normalizeHookArgs = ({
+  activeWorkspace,
+  setActiveWorkspace,
+  activeRepo,
+  setActiveRepo,
+  ...rest
+}: LegacyHookArgs): HookArgs => ({
+  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+  setActiveWorkspace:
+    setActiveWorkspace ??
+    ((workspace) => {
+      setActiveRepo?.(workspace?.repoPath ?? null);
+    }),
+  clearTaskData: rest.clearTaskData ?? (() => {}),
+  clearActiveBeadsCheck: rest.clearActiveBeadsCheck ?? (() => {}),
+  ...(rest.hostClient === undefined ? {} : { hostClient: rest.hostClient }),
+});
+
+const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
-  let currentArgs = initialArgs;
+  let currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useWorkspaceOperations({
@@ -202,8 +233,8 @@ const createHookHarness = (initialArgs: HookArgs) => {
     mount: async () => {
       await sharedHarness.mount();
     },
-    updateArgs: async (nextArgs: HookArgs) => {
-      currentArgs = nextArgs;
+    updateArgs: async (nextArgs: LegacyHookArgs) => {
+      currentArgs = normalizeHookArgs(nextArgs);
       await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: ReturnType<typeof useWorkspaceOperations>) => Promise<void> | void) => {
@@ -304,7 +335,7 @@ describe("use-workspace-operations", () => {
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
-    type LifecycleHarnessArgs = HookArgs;
+    type LifecycleHarnessArgs = LegacyHookArgs;
 
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
     let currentArgs: LifecycleHarnessArgs = {
@@ -315,29 +346,30 @@ describe("use-workspace-operations", () => {
     };
 
     const StartupBranchLoader = ({
-      activeRepo,
+      activeWorkspace,
       value,
     }: {
-      activeRepo: string | null;
+      activeWorkspace: ActiveWorkspace | null;
       value: ReturnType<typeof useWorkspaceOperations>;
     }) => {
+      const activeRepoPath = activeWorkspace?.repoPath ?? null;
       useEffect(() => {
-        if (!activeRepo) {
+        if (!activeRepoPath) {
           return;
         }
         void value.refreshBranches();
-      }, [activeRepo, value.refreshBranches]);
+      }, [activeRepoPath, value.refreshBranches]);
 
       return null;
     };
 
     const Harness = ({ args }: { args: LifecycleHarnessArgs }) => {
       latest = useWorkspaceOperations({
-        ...args,
+        ...normalizeHookArgs(args),
         hostClient: workspaceHost,
       });
       return createElement(StartupBranchLoader, {
-        activeRepo: args.activeRepo,
+        activeWorkspace: normalizeHookArgs(args).activeWorkspace,
         value: latest,
       });
     };
@@ -490,8 +522,7 @@ describe("use-workspace-operations", () => {
 
     const Harness = () => {
       latest = useWorkspaceOperations({
-        activeRepo: null,
-        setActiveRepo,
+        ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
         clearTaskData: () => {},
         clearActiveBeadsCheck: () => {},
         hostClient,
@@ -699,8 +730,7 @@ describe("use-workspace-operations", () => {
 
     const Harness = () => {
       latest = useWorkspaceOperations({
-        activeRepo: null,
-        setActiveRepo,
+        ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
         clearTaskData,
         clearActiveBeadsCheck,
         hostClient,
@@ -815,20 +845,23 @@ describe("use-workspace-operations", () => {
     let latestActiveRepo: string | null = null;
 
     const Harness = () => {
-      const [activeRepo, setActiveRepo] = useState<string | null>("/repo-old");
+      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(
+        createActiveWorkspace("/repo-old"),
+      );
       const value = useWorkspaceOperations({
-        activeRepo,
-        setActiveRepo,
+        activeWorkspace,
+        setActiveWorkspace,
         clearTaskData: () => {},
         clearActiveBeadsCheck: () => {},
         hostClient: workspaceHost,
       });
-      const previousRepoRef = useRef(activeRepo);
+      const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
 
       latest = value;
-      latestActiveRepo = activeRepo;
+      latestActiveRepo = activeWorkspace?.repoPath ?? null;
 
       useEffect(() => {
+        const activeRepo = activeWorkspace?.repoPath ?? null;
         if (previousRepoRef.current === activeRepo) {
           return;
         }
@@ -840,7 +873,7 @@ describe("use-workspace-operations", () => {
         }
 
         void value.refreshBranches();
-      }, [activeRepo, value.refreshBranches]);
+      }, [activeWorkspace, value.refreshBranches]);
 
       return null;
     };
@@ -1096,19 +1129,21 @@ describe("use-workspace-operations", () => {
     let latestActiveRepo: string | null = null;
 
     const Harness = () => {
-      const [activeRepo, setActiveRepo] = useState<string | null>("/repo-old");
+      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(
+        createActiveWorkspace("/repo-old"),
+      );
       const value = useWorkspaceOperations({
-        activeRepo,
-        setActiveRepo,
+        activeWorkspace,
+        setActiveWorkspace,
         clearTaskData: () => {},
         clearActiveBeadsCheck: () => {},
         hostClient: workspaceHost,
       });
-      const previousRepoRef = useRef(activeRepo);
+      const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
       const hasSeededWorkspacesRef = useRef(false);
 
       latest = value;
-      latestActiveRepo = activeRepo;
+      latestActiveRepo = activeWorkspace?.repoPath ?? null;
 
       useEffect(() => {
         if (hasSeededWorkspacesRef.current) {
@@ -1120,6 +1155,7 @@ describe("use-workspace-operations", () => {
       }, [value]);
 
       useEffect(() => {
+        const activeRepo = activeWorkspace?.repoPath ?? null;
         if (previousRepoRef.current === activeRepo) {
           return;
         }
@@ -1131,7 +1167,7 @@ describe("use-workspace-operations", () => {
         }
 
         void value.refreshBranches();
-      }, [activeRepo, value.refreshBranches]);
+      }, [activeWorkspace, value.refreshBranches]);
 
       return null;
     };

@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { toTabsStorageKey } from "./agents-page-selection";
 import {
   canPersistTaskTabs,
@@ -33,8 +34,7 @@ const writeTaskTabsStorage = (storageKey: string, payload: string): void => {
 };
 
 type UseTaskTabPersistenceArgs = {
-  activeRepo: string | null;
-  persistenceWorkspaceId: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
@@ -50,8 +50,7 @@ type UseTaskTabPersistenceArgs = {
 
 export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
   const {
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     taskId,
     selectedTask,
     tasks,
@@ -64,9 +63,10 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     setIntentActiveTaskId,
     setTabsStorageHydratedWorkspaceId,
   } = args;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
 
   useEffect(() => {
-    if (!activeRepo || !persistenceWorkspaceId) {
+    if (!activeWorkspaceId) {
       setOpenTaskTabs([]);
       setPersistedActiveTaskId(null);
       setIntentActiveTaskId(null);
@@ -74,15 +74,14 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
       return;
     }
 
-    const tabsStorageKey = toTabsStorageKey(persistenceWorkspaceId);
+    const tabsStorageKey = toTabsStorageKey(activeWorkspaceId);
     const raw = readTaskTabsStorage(tabsStorageKey);
     const persistedTabs = parsePersistedTaskTabs(raw);
     setOpenTaskTabs(persistedTabs.tabs);
     setPersistedActiveTaskId(persistedTabs.activeTaskId);
-    setTabsStorageHydratedWorkspaceId(persistenceWorkspaceId);
+    setTabsStorageHydratedWorkspaceId(activeWorkspaceId);
   }, [
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspaceId,
     setIntentActiveTaskId,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
@@ -124,14 +123,14 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
   }, [selectedTask, setOpenTaskTabs, taskId]);
 
   useEffect(() => {
-    if (!canPersistTaskTabs(persistenceWorkspaceId, tabsStorageHydratedWorkspaceId)) {
+    if (!canPersistTaskTabs(activeWorkspaceId, tabsStorageHydratedWorkspaceId)) {
       return;
     }
-    if (!persistenceWorkspaceId) {
+    if (!activeWorkspaceId) {
       return;
     }
 
-    const tabsStorageKey = toTabsStorageKey(persistenceWorkspaceId);
+    const tabsStorageKey = toTabsStorageKey(activeWorkspaceId);
     writeTaskTabsStorage(
       tabsStorageKey,
       toPersistedTaskTabs({
@@ -139,5 +138,5 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
         activeTaskId: activeTaskTabId || null,
       }),
     );
-  }, [persistenceWorkspaceId, activeTaskTabId, openTaskTabs, tabsStorageHydratedWorkspaceId]);
+  }, [activeWorkspaceId, activeTaskTabId, openTaskTabs, tabsStorageHydratedWorkspaceId]);
 }

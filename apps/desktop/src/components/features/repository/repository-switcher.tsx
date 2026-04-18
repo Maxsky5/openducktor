@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { RepositorySelector } from "./repository-selector";
 
@@ -8,12 +7,8 @@ type RepositorySwitcherProps = {
 };
 
 export function RepositorySwitcher({ className, triggerClassName }: RepositorySwitcherProps = {}) {
-  const { workspaces, activeRepo, selectWorkspace, isSwitchingWorkspace } = useWorkspaceState();
-
-  const activeWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.repoPath === activeRepo) ?? null,
-    [activeRepo, workspaces],
-  );
+  const { workspaces, activeWorkspace, selectWorkspace, isSwitchingWorkspace } =
+    useWorkspaceState();
 
   if (workspaces.length === 0) {
     return null;

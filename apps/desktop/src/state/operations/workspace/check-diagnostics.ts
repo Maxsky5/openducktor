@@ -6,6 +6,7 @@ import type {
   RepoRuntimeHealthCheck,
   RepoRuntimeHealthMap,
 } from "@/types/diagnostics";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 type NonNullRepoRuntimeFailureKind = Exclude<RepoRuntimeFailureKind, null>;
 type DiagnosticsToastSeverity = Exclude<RepoRuntimeFailureKind, "timeout" | null>;
@@ -36,7 +37,7 @@ type DiagnosticsIssueCandidate = DiagnosticsIssueMeta & {
 };
 
 type BuildDiagnosticsToastIssuesArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheck: RuntimeCheck | null;
   runtimeCheckError: string | null;
@@ -48,7 +49,7 @@ type BuildDiagnosticsToastIssuesArgs = {
 };
 
 type BuildDiagnosticsRetryPlanArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
   runtimeCheckFetching: boolean;
@@ -288,7 +289,7 @@ const getRuntimeHealthIssueCandidates = (
 };
 
 export const buildDiagnosticsToastIssues = ({
-  activeRepo,
+  activeWorkspace,
   runtimeDefinitions,
   runtimeCheck,
   runtimeCheckError,
@@ -298,7 +299,7 @@ export const buildDiagnosticsToastIssues = ({
   beadsCheckFailureKind,
   runtimeHealthByRuntime,
 }: BuildDiagnosticsToastIssuesArgs): DiagnosticsToastIssue[] => {
-  if (activeRepo === null) {
+  if (activeWorkspace === null) {
     return [];
   }
 
@@ -353,7 +354,7 @@ export const hasDiagnosticsRetryingState = ({
 };
 
 export const buildDiagnosticsRetryPlan = ({
-  activeRepo,
+  activeWorkspace,
   runtimeDefinitions,
   runtimeCheckFailureKind,
   runtimeCheckFetching,
@@ -364,9 +365,9 @@ export const buildDiagnosticsRetryPlan = ({
 }: BuildDiagnosticsRetryPlanArgs): DiagnosticsRetryPlan => {
   const retryRuntimeCheck = runtimeCheckFailureKind === "timeout" && !runtimeCheckFetching;
   const retryBeadsCheck =
-    activeRepo !== null && beadsCheckFailureKind === "timeout" && !beadsCheckFetching;
+    activeWorkspace !== null && beadsCheckFailureKind === "timeout" && !beadsCheckFetching;
   const retryRuntimeHealth =
-    activeRepo !== null &&
+    activeWorkspace !== null &&
     runtimeDefinitions.length > 0 &&
     // Transient startup polling now lives in the runtime-health query refetchInterval.
     // Keep the timeout retry here so stalled probes still force a fresh invalidation.

@@ -18,7 +18,8 @@ import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
 export function DiagnosticsPanel(): ReactElement {
-  const { activeRepo, activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
+  const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
@@ -38,7 +39,7 @@ export function DiagnosticsPanel(): ReactElement {
   const model = useMemo(
     () =>
       buildDiagnosticsPanelModel({
-        activeRepo,
+        workspaceRepoPath: workspaceRepoPath,
         activeWorkspace,
         runtimeDefinitions,
         isLoadingRuntimeDefinitions,
@@ -51,7 +52,7 @@ export function DiagnosticsPanel(): ReactElement {
         isLoadingChecks,
       }),
     [
-      activeRepo,
+      workspaceRepoPath,
       activeWorkspace,
       beadsCheck,
       beadsCheckFailureKind,
@@ -66,30 +67,30 @@ export function DiagnosticsPanel(): ReactElement {
   );
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!workspaceRepoPath) {
       return;
     }
     if (model.criticalReasons.length === 0) {
       return;
     }
-    if (autoOpenedByRepoRef.current.has(activeRepo)) {
+    if (autoOpenedByRepoRef.current.has(workspaceRepoPath)) {
       return;
     }
-    autoOpenedByRepoRef.current.add(activeRepo);
+    autoOpenedByRepoRef.current.add(workspaceRepoPath);
     setOpen(true);
-  }, [activeRepo, model.criticalReasons.length]);
+  }, [workspaceRepoPath, model.criticalReasons.length]);
 
   useEffect(() => {
-    if (!isOpen || !activeRepo || runtimeDefinitions.length === 0 || isLoadingChecks) {
+    if (!isOpen || !workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
       return;
     }
     const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
-    if (hasCachedRepoRuntimeHealth(activeRepo, runtimeKinds)) {
+    if (hasCachedRepoRuntimeHealth(workspaceRepoPath, runtimeKinds)) {
       return;
     }
-    void refreshRepoRuntimeHealthForRepo(activeRepo, false);
+    void refreshRepoRuntimeHealthForRepo(workspaceRepoPath, false);
   }, [
-    activeRepo,
+    workspaceRepoPath,
     hasCachedRepoRuntimeHealth,
     isLoadingChecks,
     isOpen,
@@ -154,7 +155,7 @@ export function DiagnosticsPanel(): ReactElement {
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!activeRepo || isLoadingChecks || isSwitchingWorkspace}
+                disabled={!workspaceRepoPath || isLoadingChecks || isSwitchingWorkspace}
                 onClick={() => void refreshChecks()}
               >
                 <RefreshCcw className={cn("size-3.5", isLoadingChecks ? "animate-spin" : "")} />

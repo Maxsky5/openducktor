@@ -58,7 +58,7 @@ import {
 } from "./use-forwarded-worktree-refresh";
 
 type AgentsPageShellModel = {
-  activeRepo: string | null;
+  activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
   activeTabValue: string;
@@ -141,7 +141,8 @@ const noopOpenSession = (
 ): void => {};
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
-  const { activeRepo, activeBranch, branches, activeWorkspace } = useWorkspaceState();
+  const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
@@ -186,8 +187,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
 
-  const persistenceWorkspaceId = activeWorkspace?.workspaceId ?? null;
-
   const {
     taskIdParam,
     sessionParam,
@@ -199,8 +198,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     retryNavigationPersistence,
     updateQuery,
   } = useAgentStudioQuerySync({
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     navigationType,
     searchParams,
     setSearchParams,
@@ -220,10 +218,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const clearComposerInput = signalContextSwitchIntent;
   const runtimeListQueries = useQueries({
     queries:
-      activeRepo === null
+      workspaceRepoPath === null
         ? []
         : runtimeDefinitions.map((definition) => ({
-            ...runtimeListQueryOptions(definition.kind, activeRepo),
+            ...runtimeListQueryOptions(definition.kind, workspaceRepoPath),
           })),
   });
   const runtimeListRefetchersRef = useRef<Array<() => Promise<unknown>>>([]);
@@ -250,7 +248,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   }, []);
 
   const readiness = useAgentStudioReadiness({
-    activeRepo,
+    activeWorkspace,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
@@ -260,8 +258,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   const selection = useAgentStudioSelectionController({
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
@@ -334,16 +331,16 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   useEffect(() => {
-    if (!activeRepo || runtimeDefinitions.length === 0 || isLoadingChecks) {
+    if (!workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
       return;
     }
     const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
-    if (hasCachedRepoRuntimeHealth(activeRepo, runtimeKinds)) {
+    if (hasCachedRepoRuntimeHealth(workspaceRepoPath, runtimeKinds)) {
       return;
     }
-    void refreshRepoRuntimeHealthForRepo(activeRepo, false);
+    void refreshRepoRuntimeHealthForRepo(workspaceRepoPath, false);
   }, [
-    activeRepo,
+    workspaceRepoPath,
     hasCachedRepoRuntimeHealth,
     isLoadingChecks,
     refreshRepoRuntimeHealthForRepo,
@@ -365,7 +362,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   const orchestration = useAgentStudioOrchestrationController({
-    activeRepo,
     activeWorkspace,
     branches,
     selection: {
@@ -403,7 +399,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     : null;
 
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
-    activeRepo,
+    activeWorkspace,
     selection: {
       viewTaskId: selection.viewTaskId,
       viewSelectedTask: selection.viewSelectedTask,
@@ -453,7 +449,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         refreshWorktreeRef={rightPanelRefreshWorktreeRef}
       />
       <AgentsPageRightPanelRuntime
-        activeRepo={activeRepo}
+        activeWorkspace={activeWorkspace}
         branches={branches}
         activeBranch={activeBranch}
         viewRole={selection.viewRole}
@@ -496,7 +492,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const taskDetailsSheet = (
     <TaskDetailsSheetController
       ref={taskDetailsSheetRef}
-      activeRepo={activeRepo}
+      activeWorkspace={activeWorkspace}
       allTasks={tasks}
       taskSessionsByTaskId={EMPTY_TASK_SESSIONS_BY_TASK_ID}
       activeTaskSessionContextByTaskId={EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID}
@@ -511,7 +507,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
 
   return {
-    activeRepo,
+    activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
     activeTabValue: orchestration.activeTabValue,

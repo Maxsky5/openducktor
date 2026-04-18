@@ -27,14 +27,14 @@ type UseKanbanPageModelsArgs = {
 };
 
 export const isKanbanForegroundLoading = (args: {
-  hasActiveRepo: boolean;
+  hasActiveWorkspace: boolean;
   isForegroundLoadingTasks: boolean;
   isSettingsPending: boolean;
   doneVisibleDays: number | undefined;
   isKanbanPending: boolean;
 }): boolean => {
-  if (args.isForegroundLoadingTasks || !args.hasActiveRepo || args.isSettingsPending) {
-    return args.isForegroundLoadingTasks || (args.hasActiveRepo && args.isSettingsPending);
+  if (args.isForegroundLoadingTasks || !args.hasActiveWorkspace || args.isSettingsPending) {
+    return args.isForegroundLoadingTasks || (args.hasActiveWorkspace && args.isSettingsPending);
   }
 
   return args.doneVisibleDays !== undefined && args.isKanbanPending;
@@ -44,8 +44,8 @@ export function useKanbanPageModels({
   onOpenDetails,
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeRepo, activeWorkspace, branches, isSwitchingWorkspace, loadRepoSettings } =
-    useWorkspaceState();
+  const { activeWorkspace, branches, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspace });
   const {
     bootstrapTaskSessions,
@@ -82,8 +82,8 @@ export function useKanbanPageModels({
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const kanbanTaskListQuery = useQuery({
-    ...kanbanTaskListQueryOptions(activeRepo ?? "__disabled__", doneVisibleDays ?? 0),
-    enabled: activeRepo !== null && doneVisibleDays !== undefined,
+    ...kanbanTaskListQueryOptions(workspaceRepoPath ?? "__disabled__", doneVisibleDays ?? 0),
+    enabled: workspaceRepoPath !== null && doneVisibleDays !== undefined,
   });
   useEffect(() => {
     if (!settingsSnapshotQuery.isError) {
@@ -119,9 +119,9 @@ export function useKanbanPageModels({
     });
   }, [kanbanTaskListQuery.error, kanbanTaskListQuery.isError]);
 
-  const kanbanTasks = activeRepo ? (kanbanTaskListQuery.data ?? []) : [];
+  const kanbanTasks = workspaceRepoPath ? (kanbanTaskListQuery.data ?? []) : [];
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
-    hasActiveRepo: activeRepo !== null,
+    hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
     isSettingsPending: settingsSnapshotQuery.isPending,
     doneVisibleDays,
@@ -193,7 +193,7 @@ export function useKanbanPageModels({
     [loadAgentSessions, removeAgentSessions, resetTask],
   );
   const { handleResolveGitConflict } = useGitConflictResolution({
-    activeRepo,
+    activeWorkspace,
     startConflictResolutionSession: async (request) =>
       startSessionIntent({
         taskId: request.taskId,
@@ -240,7 +240,7 @@ export function useKanbanPageModels({
   });
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
-    activeRepo,
+    activeWorkspace,
     tasks: kanbanTasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
@@ -288,7 +288,7 @@ export function useKanbanPageModels({
     content,
     taskComposer: taskDialogs.taskComposer,
     taskDetailsController: {
-      activeRepo,
+      activeWorkspace,
       allTasks: kanbanTasks,
       runs,
       taskSessionsByTaskId: content.taskSessionsByTaskId,

@@ -1,12 +1,12 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { NavigateToTaskIntent } from "./agent-studio-types";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseTaskTabSelectionArgs = {
-  activeRepo: string | null;
-  persistenceWorkspaceId: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   isRepoNavigationBoundaryPending: boolean;
   taskId: string;
   openTaskTabs: string[];
@@ -29,8 +29,7 @@ type UseTaskTabSelectionResult = {
 
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspace,
     isRepoNavigationBoundaryPending,
     taskId,
     openTaskTabs,
@@ -44,6 +43,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
   } = args;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
 
   const tabTaskIds = useMemo(
     () => ensureActiveTaskTab(openTaskTabs, taskId),
@@ -75,9 +75,8 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
 
   useEffect(() => {
     if (
-      !activeRepo ||
-      !persistenceWorkspaceId ||
-      tabsStorageHydratedWorkspaceId !== persistenceWorkspaceId ||
+      !activeWorkspaceId ||
+      tabsStorageHydratedWorkspaceId !== activeWorkspaceId ||
       isRepoNavigationBoundaryPending
     ) {
       return;
@@ -92,15 +91,14 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     if (!fallbackTaskId) {
       return;
     }
-    const fallbackKey = `${persistenceWorkspaceId}:${fallbackTaskId}`;
+    const fallbackKey = `${activeWorkspaceId}:${fallbackTaskId}`;
     if (appliedFallbackKeyRef.current === fallbackKey) {
       return;
     }
     appliedFallbackKeyRef.current = fallbackKey;
     navigateToTaskIntent(fallbackTaskId);
   }, [
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
     navigateToTaskIntent,
     persistedActiveTaskId,
@@ -110,10 +108,10 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   ]);
 
   useEffect(() => {
-    if (!activeRepo || taskId || isRepoNavigationBoundaryPending) {
+    if (!activeWorkspace || taskId || isRepoNavigationBoundaryPending) {
       appliedFallbackKeyRef.current = null;
     }
-  }, [activeRepo, isRepoNavigationBoundaryPending, taskId]);
+  }, [activeWorkspace, isRepoNavigationBoundaryPending, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {

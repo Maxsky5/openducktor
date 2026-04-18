@@ -156,13 +156,12 @@ export function useKanbanSessionStartFlow({
   sendAgentMessage,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
-  const activeRepo = activeWorkspace?.repoPath ?? null;
   const tasksRef = useRef(tasks);
   const sessionsRef = useRef(sessions);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
-    activeRepo,
+    activeWorkspace,
     branches,
     repoSettings,
   });

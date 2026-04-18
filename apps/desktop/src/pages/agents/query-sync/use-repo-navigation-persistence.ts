@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type AgentStudioNavigationState,
   clearAgentStudioNavigationState,
@@ -13,8 +14,7 @@ import {
 } from "./agent-studio-navigation";
 
 type UseRepoNavigationPersistenceArgs = {
-  activeRepo: string | null;
-  persistenceWorkspaceId: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
 };
@@ -28,23 +28,25 @@ type UseRepoNavigationPersistenceResult = {
 export type RepoNavigationBoundaryPhase = "idle" | "detecting" | "clearing";
 
 export const resolveRepoNavigationBoundaryPhase = ({
-  activeRepo,
-  lastActiveRepo,
-  boundaryRepo,
+  activeWorkspace,
+  lastWorkspaceId,
+  boundaryWorkspaceId,
 }: {
-  activeRepo: string | null;
-  lastActiveRepo: string | null;
-  boundaryRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
+  lastWorkspaceId: string | null;
+  boundaryWorkspaceId: string | null;
 }): RepoNavigationBoundaryPhase => {
-  if (!activeRepo) {
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
+
+  if (!activeWorkspaceId) {
     return "idle";
   }
 
-  if (Boolean(lastActiveRepo) && lastActiveRepo !== activeRepo) {
+  if (Boolean(lastWorkspaceId) && lastWorkspaceId !== activeWorkspaceId) {
     return "detecting";
   }
 
-  if (boundaryRepo === activeRepo) {
+  if (boundaryWorkspaceId === activeWorkspaceId) {
     return "clearing";
   }
 
@@ -74,22 +76,22 @@ const writePersistedContextPayload = (storageKey: string, payload: string): void
 };
 
 export function useRepoNavigationPersistence({
-  activeRepo,
-  persistenceWorkspaceId,
+  activeWorkspace,
   navigation,
   setNavigation,
 }: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
-  const lastActiveRepoRef = useRef<string | null>(activeRepo);
-  const restoredContextRepoRef = useRef<string | null>(null);
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
+  const lastWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
+  const restoredContextWorkspaceIdRef = useRef<string | null>(null);
   const persistedContextPayloadRef = useRef<string | null>(null);
   const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
   const pendingPersistTimeoutIdRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const [boundaryRepo, setBoundaryRepo] = useState<string | null>(null);
+  const [boundaryWorkspaceId, setBoundaryWorkspaceId] = useState<string | null>(null);
   const [persistenceError, setPersistenceError] = useState<Error | null>(null);
   const repoNavigationBoundaryPhase = resolveRepoNavigationBoundaryPhase({
-    activeRepo,
-    lastActiveRepo: lastActiveRepoRef.current,
-    boundaryRepo,
+    activeWorkspace,
+    lastWorkspaceId: lastWorkspaceIdRef.current,
+    boundaryWorkspaceId,
   });
   const isRepoNavigationBoundaryPending = repoNavigationBoundaryPhase !== "idle";
 
@@ -109,7 +111,7 @@ export function useRepoNavigationPersistence({
   }, []);
 
   const retryPersistenceRestore = useCallback((): void => {
-    restoredContextRepoRef.current = null;
+    restoredContextWorkspaceIdRef.current = null;
     persistedContextPayloadRef.current = null;
     setPersistenceError(null);
   }, []);
@@ -132,64 +134,61 @@ export function useRepoNavigationPersistence({
   }, [flushPendingContextPersist, surfacePersistenceWriteError]);
 
   useEffect(() => {
-    if (lastActiveRepoRef.current === activeRepo) {
+    if (lastWorkspaceIdRef.current === activeWorkspaceId) {
       return;
     }
 
-    const previousRepo = lastActiveRepoRef.current;
-    lastActiveRepoRef.current = activeRepo;
-    restoredContextRepoRef.current = null;
+    const previousWorkspaceId = lastWorkspaceIdRef.current;
+    lastWorkspaceIdRef.current = activeWorkspaceId;
+    restoredContextWorkspaceIdRef.current = null;
     persistedContextPayloadRef.current = null;
-    setBoundaryRepo(previousRepo && activeRepo ? activeRepo : null);
+    setBoundaryWorkspaceId(previousWorkspaceId && activeWorkspaceId ? activeWorkspaceId : null);
 
     if (persistenceError) {
       setPersistenceError(null);
     }
-  }, [activeRepo, persistenceError]);
+  }, [activeWorkspaceId, persistenceError]);
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!activeWorkspaceId) {
       if (!tryFlushPendingContextPersist()) {
         return;
       }
-      setBoundaryRepo(null);
-      restoredContextRepoRef.current = null;
+      setBoundaryWorkspaceId(null);
+      restoredContextWorkspaceIdRef.current = null;
       persistedContextPayloadRef.current = null;
       setPersistenceError(null);
     }
-  }, [activeRepo, tryFlushPendingContextPersist]);
+  }, [activeWorkspaceId, tryFlushPendingContextPersist]);
 
   useEffect(() => {
-    if (!activeRepo || repoNavigationBoundaryPhase !== "clearing") {
+    if (!activeWorkspace || repoNavigationBoundaryPhase !== "clearing") {
       return;
     }
 
     if (!hasAgentStudioNavigationSelection(navigation)) {
-      setBoundaryRepo(null);
+      setBoundaryWorkspaceId(null);
       return;
     }
 
     setNavigation((current) => clearAgentStudioNavigationState(current));
-  }, [activeRepo, navigation, repoNavigationBoundaryPhase, setNavigation]);
+  }, [activeWorkspace, navigation, repoNavigationBoundaryPhase, setNavigation]);
 
   useEffect(() => {
-    if (!activeRepo || !persistenceWorkspaceId) {
+    if (!activeWorkspaceId) {
       return;
     }
-    if (persistenceError) {
+    if (persistenceError || isRepoNavigationBoundaryPending) {
       return;
     }
-    if (isRepoNavigationBoundaryPending) {
-      return;
-    }
-    if (restoredContextRepoRef.current === activeRepo) {
+    if (restoredContextWorkspaceIdRef.current === activeWorkspaceId) {
       return;
     }
 
     let raw: string | null;
     let persisted: PersistedAgentStudioContext | null = null;
     try {
-      raw = readPersistedContextPayload(toContextStorageKey(persistenceWorkspaceId));
+      raw = readPersistedContextPayload(toContextStorageKey(activeWorkspaceId));
       if (raw) {
         persisted = parsePersistedContext(raw);
       }
@@ -198,7 +197,7 @@ export function useRepoNavigationPersistence({
       return;
     }
 
-    restoredContextRepoRef.current = activeRepo;
+    restoredContextWorkspaceIdRef.current = activeWorkspaceId;
     persistedContextPayloadRef.current = raw;
 
     if (!persisted) {
@@ -212,21 +211,14 @@ export function useRepoNavigationPersistence({
 
       return restoreNavigationFromPersistedContext(current, persisted);
     });
-  }, [
-    activeRepo,
-    persistenceWorkspaceId,
-    isRepoNavigationBoundaryPending,
-    persistenceError,
-    setNavigation,
-  ]);
+  }, [activeWorkspaceId, isRepoNavigationBoundaryPending, persistenceError, setNavigation]);
 
   useEffect(() => {
     if (
-      !activeRepo ||
-      !persistenceWorkspaceId ||
+      !activeWorkspaceId ||
       isRepoNavigationBoundaryPending ||
       persistenceError ||
-      restoredContextRepoRef.current !== activeRepo
+      restoredContextWorkspaceIdRef.current !== activeWorkspaceId
     ) {
       return;
     }
@@ -237,7 +229,7 @@ export function useRepoNavigationPersistence({
     }
 
     persistedContextPayloadRef.current = serializedPayload;
-    const storageKey = toContextStorageKey(persistenceWorkspaceId);
+    const storageKey = toContextStorageKey(activeWorkspaceId);
     pendingContextPersistRef.current = { key: storageKey, payload: serializedPayload };
 
     if (pendingPersistTimeoutIdRef.current !== null) {
@@ -267,8 +259,7 @@ export function useRepoNavigationPersistence({
       }
     };
   }, [
-    activeRepo,
-    persistenceWorkspaceId,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
     navigation,
     persistenceError,

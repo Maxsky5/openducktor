@@ -56,7 +56,7 @@ export type SessionStateUpdater =
 export type SessionDependencies = {
   setSessionsById: (updater: SessionStateUpdater) => void;
   sessionsRef: { current: SessionStateById };
-  inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
+  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   attachSessionListener: (repoPath: string, sessionId: string) => void;
@@ -95,8 +95,8 @@ export type ModelDependencies = {
 export type RepoDependencies = {
   activeWorkspace: ActiveWorkspace | null;
   repoEpochRef: { current: number };
-  activeRepoRef?: { current: string | null };
-  previousRepoRef: { current: string | null };
+  activeWorkspaceRef?: { current: ActiveWorkspace | null };
+  currentWorkspaceRepoPathRef: { current: string | null };
 };
 
 export type StartSessionDependencies = {

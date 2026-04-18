@@ -20,7 +20,7 @@ import {
   targetBranchSelectionValue,
 } from "@/lib/target-branch";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import { orderStartModesForDisplay } from "./session-start-display";
 import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
@@ -37,7 +37,7 @@ export type {
 } from "./session-start-modal-types";
 
 type UseSessionStartModalStateArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -77,7 +77,7 @@ type UseSessionStartModalStateResult = {
 };
 
 export function useSessionStartModalState({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   repoSettings,
   runtimeDefinitions,
@@ -98,7 +98,7 @@ export function useSessionStartModalState({
     runtimeOptions,
     setRequestedRuntimeKind,
   } = useSessionStartModalRuntimeState({
-    activeRepo,
+    activeWorkspace,
     initialCatalog,
     isOpen: intent !== null,
     loadCatalog: loadCatalogForRepo,

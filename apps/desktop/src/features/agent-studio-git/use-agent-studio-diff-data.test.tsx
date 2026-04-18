@@ -181,6 +181,7 @@ const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeStatusSu
     },
     targetAheadBehind: status.targetAheadBehind,
     upstreamAheadBehind: status.upstreamAheadBehind,
+    ...(status.gitConflict ? { gitConflict: status.gitConflict } : {}),
     snapshot: status.snapshot,
   };
 };

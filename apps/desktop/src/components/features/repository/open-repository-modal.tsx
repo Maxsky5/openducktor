@@ -77,8 +77,9 @@ export function OpenRepositoryModal({
   canClose,
   onOpenChange,
 }: OpenRepositoryModalProps): ReactElement {
-  const { activeRepo, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
+  const { activeWorkspace, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
     useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
   const [selectedRepoPath, setSelectedRepoPath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -193,7 +194,7 @@ export function OpenRepositoryModal({
         throw new Error("Workspace not found.");
       }
 
-      if (selectedWorkspace.repoPath !== activeRepo) {
+      if (selectedWorkspace.repoPath !== workspaceRepoPath) {
         await selectWorkspace(workspaceId);
       }
       onOpenChange(false);
@@ -339,7 +340,7 @@ export function OpenRepositoryModal({
                     <span className="truncate text-sm font-semibold text-foreground">
                       {workspace.workspaceName}
                     </span>
-                    {workspace.repoPath === activeRepo ? (
+                    {workspace.repoPath === workspaceRepoPath ? (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-border bg-success-surface px-2 py-0.5 text-[11px] font-semibold text-success-muted">
                         <CheckCircle2 className="size-3" />
                         Active

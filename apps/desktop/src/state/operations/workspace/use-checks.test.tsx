@@ -17,6 +17,7 @@ import {
   type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DiagnosticsToastApi } from "./use-check-diagnostics-effects";
 import { useChecks } from "./use-checks";
 
@@ -83,28 +84,42 @@ const checkRepoRuntimeHealthMock = mock((repoPath: string, runtimeKind: RuntimeK
 type UseChecksHook = typeof import("./use-checks")["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
 type HookResult = ReturnType<UseChecksHook>;
-type HookHarnessArgs = Omit<HookArgs, "checkRepoRuntimeHealth"> & {
+type HookHarnessArgs = Partial<Omit<HookArgs, "checkRepoRuntimeHealth">> & {
   checkRepoRuntimeHealth?: HookArgs["checkRepoRuntimeHealth"];
+  activeRepo?: string | null;
 };
 type ResolvedHookArgs = HookArgs &
   Required<Pick<HookArgs, "runtimeCheck" | "beadsCheck" | "toastApi" | "checkRepoRuntimeHealth">>;
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 const buildHookArgs = (
   args: Partial<HookHarnessArgs>,
   previous?: ResolvedHookArgs,
 ): ResolvedHookArgs => {
-  const activeRepo = args.activeRepo !== undefined ? args.activeRepo : previous?.activeRepo;
+  const activeWorkspace =
+    args.activeWorkspace !== undefined
+      ? args.activeWorkspace
+      : args.activeRepo !== undefined
+        ? args.activeRepo
+          ? createActiveWorkspace(args.activeRepo)
+          : null
+        : previous?.activeWorkspace;
   const runtimeDefinitions =
     args.runtimeDefinitions !== undefined ? args.runtimeDefinitions : previous?.runtimeDefinitions;
 
-  if (activeRepo === undefined || runtimeDefinitions === undefined) {
-    throw new Error("Hook args must include activeRepo and runtimeDefinitions");
+  if (activeWorkspace === undefined || runtimeDefinitions === undefined) {
+    throw new Error("Hook args must include activeWorkspace and runtimeDefinitions");
   }
 
   return {
     ...previous,
     ...args,
-    activeRepo,
+    activeWorkspace,
     runtimeDefinitions,
     runtimeCheck: args.runtimeCheck ?? previous?.runtimeCheck ?? runtimeCheckMock,
     beadsCheck: args.beadsCheck ?? previous?.beadsCheck ?? beadsCheckMock,

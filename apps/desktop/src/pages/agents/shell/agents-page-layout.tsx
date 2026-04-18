@@ -3,6 +3,7 @@ import { AgentChat } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentsPageShell } from "./agents-page-shell";
 
 const PANEL_CONTAINMENT_STYLE = {
@@ -85,7 +86,7 @@ function AgentsPageModalContent({
 }
 
 type AgentsPageLayoutProps = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
   activeTabValue: string;
@@ -106,7 +107,7 @@ type AgentsPageLayoutProps = {
 };
 
 export function AgentsPageLayout({
-  activeRepo,
+  activeWorkspace,
   navigationPersistenceError,
   chatSettingsLoadError,
   activeTabValue,
@@ -127,7 +128,7 @@ export function AgentsPageLayout({
 }: AgentsPageLayoutProps): ReactElement {
   return (
     <AgentsPageShell
-      activeRepo={activeRepo}
+      activeWorkspace={activeWorkspace}
       navigationPersistenceError={navigationPersistenceError}
       chatSettingsLoadError={chatSettingsLoadError}
       activeTabValue={activeTabValue}

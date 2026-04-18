@@ -66,18 +66,19 @@ export const getManagedTaskDeleteImpactFromTasks = (
 export const TASK_DELETE_IMPACT_ERROR_MESSAGE = "Unable to load linked worktree cleanup impact.";
 
 export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDeleteImpact {
-  const { activeRepo } = useWorkspaceState();
+  const { activeWorkspace } = useWorkspaceState();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskSessionQueries = useQueries({
     queries: taskIds.map((taskId) => ({
-      ...(activeRepo
-        ? agentSessionListQueryOptions(activeRepo, taskId)
+      ...(workspaceRepoPath
+        ? agentSessionListQueryOptions(workspaceRepoPath, taskId)
         : agentSessionListQueryOptions("", taskId)),
-      enabled: open && Boolean(activeRepo),
+      enabled: open && Boolean(workspaceRepoPath),
     })),
   });
 
   return useMemo((): TaskDeleteImpact => {
-    if (taskIds.length === 0 || !open || !activeRepo) {
+    if (taskIds.length === 0 || !open || !workspaceRepoPath) {
       return EMPTY_DELETE_IMPACT;
     }
 
@@ -99,8 +100,8 @@ export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDelet
     }
 
     return getManagedTaskDeleteImpactFromTasks(
-      activeRepo,
+      workspaceRepoPath,
       taskSessionQueries.map((query) => query.data ?? []),
     );
-  }, [activeRepo, open, taskIds, taskSessionQueries]);
+  }, [workspaceRepoPath, open, taskIds, taskSessionQueries]);
 }

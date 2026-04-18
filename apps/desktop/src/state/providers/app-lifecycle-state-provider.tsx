@@ -1,22 +1,26 @@
 import type { PropsWithChildren, ReactElement } from "react";
 import {
-  useActiveRepoContext,
   useChecksOperationsContext,
   useDelegationEventsContext,
+  useRequiredContext,
   useTaskControlContext,
   useWorkspaceOperationsContext,
+  WorkspaceStateContext,
 } from "../app-state-contexts";
 import { useAppLifecycle } from "../lifecycle/use-app-lifecycle";
 
 export function AppLifecycleStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useRequiredContext(
+    WorkspaceStateContext,
+    "AppLifecycleStateProvider",
+  );
   const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { refreshRuntimeCheck, refreshBeadsCheckForRepo } = useChecksOperationsContext();
   const { refreshTaskData } = useTaskControlContext();
   const { setEvents, setRunCompletionSignal } = useDelegationEventsContext();
 
   useAppLifecycle({
-    activeRepo,
+    activeWorkspace,
     setEvents,
     setRunCompletionSignal,
     refreshWorkspaces,

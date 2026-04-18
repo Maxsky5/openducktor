@@ -175,12 +175,19 @@ pub(crate) fn build_worktree_status_with_snapshot(
     status_data: GitWorktreeStatusData,
     snapshot_metadata: WorktreeSnapshotMetadata,
 ) -> GitWorktreeStatus {
+    let effective_working_dir = snapshot_metadata.effective_working_dir.clone();
     GitWorktreeStatus {
         current_branch: status_data.current_branch,
         file_statuses: status_data.file_statuses,
         file_diffs: status_data.file_diffs,
         target_ahead_behind: status_data.target_ahead_behind,
         upstream_ahead_behind: status_data.upstream_ahead_behind,
+        git_conflict: status_data
+            .git_conflict
+            .map(|conflict| host_domain::GitConflict {
+                working_dir: Some(effective_working_dir.clone()),
+                ..conflict
+            }),
         snapshot: snapshot_from_metadata(snapshot_metadata),
     }
 }
@@ -190,13 +197,19 @@ pub(crate) fn build_worktree_status_summary_with_snapshot(
     file_status_counts: GitFileStatusCounts,
     target_ahead_behind: GitAheadBehind,
     upstream_ahead_behind: GitUpstreamAheadBehind,
+    git_conflict: Option<host_domain::GitConflict>,
     snapshot_metadata: WorktreeSnapshotMetadata,
 ) -> GitWorktreeStatusSummary {
+    let effective_working_dir = snapshot_metadata.effective_working_dir.clone();
     GitWorktreeStatusSummary {
         current_branch,
         file_status_counts,
         target_ahead_behind,
         upstream_ahead_behind,
+        git_conflict: git_conflict.map(|conflict| host_domain::GitConflict {
+            working_dir: Some(effective_working_dir.clone()),
+            ..conflict
+        }),
         snapshot: snapshot_from_metadata(snapshot_metadata),
     }
 }

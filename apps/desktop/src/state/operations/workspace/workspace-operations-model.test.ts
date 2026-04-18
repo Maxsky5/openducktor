@@ -30,7 +30,7 @@ describe("workspace-operations-model", () => {
   test("checks probe preconditions", () => {
     expect(
       shouldProbeExternalBranchChange({
-        activeRepo: "/repo",
+        activeWorkspaceRepoPath: "/repo",
         isSwitchingWorkspace: false,
         isSwitchingBranch: false,
         isLoadingBranches: false,
@@ -40,7 +40,7 @@ describe("workspace-operations-model", () => {
 
     expect(
       shouldProbeExternalBranchChange({
-        activeRepo: "/repo",
+        activeWorkspaceRepoPath: "/repo",
         isSwitchingWorkspace: true,
         isSwitchingBranch: false,
         isLoadingBranches: false,

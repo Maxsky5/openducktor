@@ -59,23 +59,23 @@ export function SettingsSidebar({
 
 type RepositorySidebarProps = {
   workspaces: WorkspaceRecord[];
-  selectedRepoPath: string | null;
+  selectedWorkspaceId: string | null;
   selectedRepositorySection: RepositorySectionId;
   disabled: boolean;
   selectedRepoPromptValidationErrorCount: number;
-  repoPromptErrorCountByPath: Record<string, number>;
-  onSelectRepoPath: (next: string) => void;
+  repoPromptErrorCountByWorkspaceId: Record<string, number>;
+  onSelectWorkspaceId: (next: string) => void;
   onSelectSection: (next: RepositorySectionId) => void;
 };
 
 export function RepositorySidebar({
   workspaces,
-  selectedRepoPath,
+  selectedWorkspaceId,
   selectedRepositorySection,
   disabled,
   selectedRepoPromptValidationErrorCount,
-  repoPromptErrorCountByPath,
-  onSelectRepoPath,
+  repoPromptErrorCountByWorkspaceId,
+  onSelectWorkspaceId,
   onSelectSection,
 }: RepositorySidebarProps): ReactElement {
   return (
@@ -84,12 +84,12 @@ export function RepositorySidebar({
         <Label className="text-xs text-muted-foreground">Repository</Label>
         <RepositorySelector
           workspaces={workspaces}
-          value={selectedRepoPath ?? ""}
+          value={selectedWorkspaceId ?? ""}
           placeholder={workspaces.length > 0 ? "Select repository" : "No repository configured"}
           searchPlaceholder="Search repository..."
           disabled={disabled || workspaces.length === 0}
-          errorCountByPath={repoPromptErrorCountByPath}
-          onValueChange={onSelectRepoPath}
+          errorCountByWorkspaceId={repoPromptErrorCountByWorkspaceId}
+          onValueChange={onSelectWorkspaceId}
         />
       </div>
 

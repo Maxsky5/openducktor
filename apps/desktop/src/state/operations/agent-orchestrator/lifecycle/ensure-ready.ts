@@ -11,19 +11,15 @@ import {
   runtimeRouteToConnection,
 } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
-import {
-  createRepoStaleGuard,
-  shouldReattachListenerForAttachedSession,
-  throwIfRepoStale,
-} from "../support/core";
+import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
-  activeRepoRef?: { current: string | null };
-  previousRepoRef: { current: string | null };
+  activeWorkspaceRef?: { current: ActiveWorkspace | null };
+  currentWorkspaceRepoPathRef: { current: string | null };
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
   unsubscribersRef: { current: Map<string, () => void> };
@@ -72,8 +68,8 @@ export const createEnsureSessionReady = ({
   activeWorkspace,
   adapter,
   repoEpochRef,
-  activeRepoRef,
-  previousRepoRef,
+  activeWorkspaceRef,
+  currentWorkspaceRepoPathRef,
   sessionsRef,
   taskRef,
   unsubscribersRef,
@@ -94,12 +90,12 @@ export const createEnsureSessionReady = ({
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }
-    const isStaleRepoOperation = createRepoStaleGuard({
-      repoPath,
-      repoEpochRef,
-      activeRepoRef,
-      previousRepoRef,
-    });
+    const repoEpochAtStart = repoEpochRef.current;
+    const isStaleRepoOperation = (): boolean => {
+      const currentRepoPath =
+        currentWorkspaceRepoPathRef.current ?? activeWorkspaceRef?.current?.repoPath ?? null;
+      return repoEpochRef.current !== repoEpochAtStart || currentRepoPath !== repoPath;
+    };
     const assertNotStale = (): void => {
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };

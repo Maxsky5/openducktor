@@ -62,7 +62,7 @@ export type DiagnosticsPanelModel = {
 };
 
 type BuildDiagnosticsPanelModelInput = {
-  activeRepo: string | null;
+  workspaceRepoPath: string | null;
   activeWorkspace: WorkspaceRecord | null;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
@@ -371,7 +371,7 @@ export const buildDiagnosticsPanelModel = (
   input: BuildDiagnosticsPanelModelInput,
 ): DiagnosticsPanelModel => {
   const {
-    activeRepo,
+    workspaceRepoPath,
     activeWorkspace,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
@@ -383,7 +383,7 @@ export const buildDiagnosticsPanelModel = (
     runtimeHealthByRuntime,
     isLoadingChecks,
   } = input;
-  const repoName = activeRepo?.split("/").filter(Boolean).at(-1) ?? "No repository";
+  const repoName = workspaceRepoPath?.split("/").filter(Boolean).at(-1) ?? "No repository";
   const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
   const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
   const runtimeEntries = runtimeDefinitions.map((definition) => ({
@@ -399,7 +399,7 @@ export const buildDiagnosticsPanelModel = (
   );
 
   const criticalReasons: string[] = [];
-  if (activeRepo) {
+  if (workspaceRepoPath) {
     const repoStoreHealth = getRepoStoreHealth(beadsCheck);
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
@@ -425,12 +425,12 @@ export const buildDiagnosticsPanelModel = (
   }
 
   const setupReasons: string[] = [];
-  if (activeRepo && !worktreeAvailable) {
+  if (workspaceRepoPath && !worktreeAvailable) {
     setupReasons.push("Configure worktree path");
   }
 
   const isSummaryChecking =
-    Boolean(activeRepo) &&
+    Boolean(workspaceRepoPath) &&
     (isLoadingRuntimeDefinitions ||
       isLoadingChecks ||
       runtimeCheck === null ||
@@ -520,7 +520,7 @@ export const buildDiagnosticsPanelModel = (
       badge: getRepoRuntimeBadge(runtimeHealth ?? null),
       rows: buildRuntimeRows(runtimeHealth),
       errors: buildRuntimeSectionErrors(definition.label, runtimeHealth),
-      ...(activeRepo
+      ...(workspaceRepoPath
         ? runtimeHealth == null
           ? { emptyMessage: "Runtime health is loading..." }
           : {}
@@ -535,9 +535,9 @@ export const buildDiagnosticsPanelModel = (
       key: `mcp:${definition.kind}`,
       title: `${definition.label} OpenDucktor MCP`,
       badge: getRepoRuntimeMcpBadge(runtimeHealth ?? null),
-      rows: activeRepo ? buildMcpRows(runtimeHealth) : [],
+      rows: workspaceRepoPath ? buildMcpRows(runtimeHealth) : [],
       errors: buildMcpSectionErrors(definition.label, runtimeHealth),
-      ...(activeRepo
+      ...(workspaceRepoPath
         ? runtimeHealth == null
           ? { emptyMessage: "MCP health is loading..." }
           : {}
@@ -551,16 +551,16 @@ export const buildDiagnosticsPanelModel = (
     key: "beads-store",
     title: "Beads Store",
     badge: getRepoStoreFailureBadge(beadsCheck, beadsCheckFailureKind),
-    rows: activeRepo ? buildRepoStoreRows(beadsCheck) : [],
+    rows: workspaceRepoPath ? buildRepoStoreRows(beadsCheck) : [],
     errors: buildRepoStoreErrors(beadsCheck, beadsCheckFailureKind),
-    ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
+    ...(workspaceRepoPath ? {} : { emptyMessage: "Select a repository first." }),
   };
 
   return {
     repoName,
     isSummaryChecking,
     summaryState: buildDiagnosticsSummary({
-      hasActiveRepo: Boolean(activeRepo),
+      hasActiveWorkspace: Boolean(workspaceRepoPath),
       isChecking: isSummaryChecking,
       hasCriticalIssues: criticalReasons.length > 0,
       hasSetupIssues: setupReasons.length > 0,

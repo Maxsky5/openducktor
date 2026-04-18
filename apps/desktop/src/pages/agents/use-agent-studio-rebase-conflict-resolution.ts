@@ -5,6 +5,7 @@ import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import type { SessionStartExistingSessionOption } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
+import type { ActiveWorkspace } from "../../types/state-slices";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import {
   resolveAgentStudioBuilderSessionForTask,
@@ -22,7 +23,7 @@ type AgentStudioRebaseConflictResolutionSelectionContext = {
 };
 
 type UseAgentStudioRebaseConflictResolutionArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   onContextSwitchIntent: () => void;
@@ -38,7 +39,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
     existingSessionOptions?: SessionStartExistingSessionOption[];
     initialSourceSessionId?: string | null;
   }) => Promise<string | undefined>;
-  loadPromptOverrides?: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 type UseAgentStudioRebaseConflictResolutionResult = {
@@ -46,7 +47,7 @@ type UseAgentStudioRebaseConflictResolutionResult = {
 };
 
 export function useAgentStudioRebaseConflictResolution({
-  activeRepo,
+  activeWorkspace,
   selection,
   scheduleQueryUpdate,
   onContextSwitchIntent,
@@ -54,7 +55,7 @@ export function useAgentStudioRebaseConflictResolution({
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
   const { handleResolveGitConflict } = useGitConflictResolution({
-    activeRepo,
+    activeWorkspace,
     startConflictResolutionSession: async (request) =>
       startSessionRequest({
         taskId: request.taskId,

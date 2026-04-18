@@ -102,37 +102,37 @@ export function useAgentStudioSessionStartFlow({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
-  const activeRepo = activeWorkspace?.repoPath ?? null;
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [startingActivityCountByContext, setStartingActivityCountByContext] = useState<
     Record<string, number>
   >({});
   const isStarting =
     (startingActivityCountByContext[
       buildAgentStudioAsyncActivityContextKey({
-        activeRepo,
+        activeWorkspace,
         taskId,
         role,
         sessionId: activeSession?.sessionId ?? null,
       })
     ] ?? 0) > 0;
 
-  const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
+  const previousRepoForSessionRefs = useRef<string | null>(workspaceRepoPath);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
-      activeRepo,
+      activeWorkspace,
       branches,
       repoSettings,
     });
 
   useEffect(() => {
-    if (previousRepoForSessionRefs.current === activeRepo) {
+    if (previousRepoForSessionRefs.current === workspaceRepoPath) {
       return;
     }
 
-    previousRepoForSessionRefs.current = activeRepo;
+    previousRepoForSessionRefs.current = workspaceRepoPath;
     startingSessionByTaskRef.current.clear();
-  }, [activeRepo]);
+  }, [workspaceRepoPath]);
 
   const executeRequestedSessionStart = useCallback(
     async <T>(

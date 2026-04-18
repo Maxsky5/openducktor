@@ -18,8 +18,16 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingBranch: false,
   branchSyncDegraded: false,
   workspaces: [],
-  activeRepo: "/repo-a",
-  activeWorkspace: null,
+  activeWorkspace: {
+    workspaceId: "workspace-a",
+    workspaceName: "Workspace A",
+    repoPath: "/repo-a",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/tmp/default-worktrees",
+    effectiveWorktreeBasePath: "/tmp/default-worktrees",
+  },
   branches: [],
   activeBranch: null,
   addWorkspace: async () => {},
@@ -47,7 +55,7 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
 );
 
 describe("TaskDetailsSheet", () => {
-  test("passes activeRepo into task details view model", async () => {
+  test("passes activeWorkspace into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
 
     const childTask = createTaskCardFixture({
@@ -89,7 +97,11 @@ describe("TaskDetailsSheet", () => {
     }));
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
-      activeRepo: "/repo-a",
+      activeWorkspace: {
+        workspaceId: "workspace-a",
+        workspaceName: "Workspace A",
+        repoPath: "/repo-a",
+      },
       task,
       allTasks: [task, childTask],
       open: true,
@@ -139,7 +151,11 @@ describe("TaskDetailsSheet", () => {
         IsolatedProviders,
         null,
         createElement(TaskDetailsSheet, {
-          activeRepo: "/repo-a",
+          activeWorkspace: {
+            workspaceId: "workspace-a",
+            workspaceName: "Workspace A",
+            repoPath: "/repo-a",
+          },
           task,
           allTasks: [task],
           runs: [],

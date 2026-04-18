@@ -52,9 +52,9 @@ export function SettingsModalContent({
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
-    repoPaths,
-    selectedRepoWorkspace,
-    selectedRepoPath,
+    workspaceIds,
+    selectedWorkspace,
+    selectedWorkspaceId,
     selectedRepoConfig,
     selectedRepoEffectiveWorktreeBasePath,
     selectedRepoBranches,
@@ -67,7 +67,7 @@ export function SettingsModalContent({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    setSelectedRepoPath,
+    setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
@@ -169,17 +169,17 @@ export function SettingsModalContent({
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
       <RepositorySidebar
         workspaces={controller.workspaces}
-        selectedRepoPath={selectedRepoPath}
+        selectedWorkspaceId={selectedWorkspaceId}
         selectedRepositorySection={repositorySection}
         disabled={isInteractionDisabled}
         selectedRepoPromptValidationErrorCount={selectedRepoPromptValidationErrorCount}
-        repoPromptErrorCountByPath={promptValidationState.repoErrorCountByPath}
-        onSelectRepoPath={setSelectedRepoPath}
+        repoPromptErrorCountByWorkspaceId={promptValidationState.repoErrorCountByWorkspaceId}
+        onSelectWorkspaceId={setSelectedWorkspaceId}
         onSelectSection={onRepositorySectionChange}
       />
 
       <div className="min-w-0 space-y-4">
-        {repoPaths.length === 0 ? (
+        {workspaceIds.length === 0 ? (
           <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
             Add a repository first, then configure repository settings.
           </div>
@@ -203,7 +203,7 @@ export function SettingsModalContent({
 
         {repositorySection === "git" ? (
           <RepositoryGitSection
-            selectedRepoPath={selectedRepoWorkspace?.repoPath ?? null}
+            selectedRepoPath={selectedWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
             runtimeCheck={controller.runtimeCheck}
             disabled={isInteractionDisabled}

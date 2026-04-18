@@ -75,12 +75,11 @@ export type WorkspaceStateContextValue = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   workspaces: WorkspaceRecord[];
-  activeRepo: string | null;
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
-  selectWorkspace: (repoPath: string) => Promise<void>;
+  selectWorkspace: (workspaceId: string) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;

@@ -2,6 +2,7 @@ import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DiagnosticsRetryPlan, DiagnosticsToastIssue } from "./check-diagnostics";
 
 const RUNTIME_HEALTH_TIMEOUT_RETRY_DELAY_MS = 2_000;
@@ -59,7 +60,7 @@ export function useDiagnosticsToasts(
 }
 
 type UseDiagnosticsRetrySchedulerArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   retryPlan: DiagnosticsRetryPlan;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
@@ -70,13 +71,14 @@ type UseDiagnosticsRetrySchedulerArgs = {
 };
 
 export function useDiagnosticsRetryScheduler({
-  activeRepo,
+  activeWorkspace,
   retryPlan,
   refreshRuntimeCheck,
   refreshBeadsCheckForRepo,
   refreshRepoRuntimeHealthForRepo,
 }: UseDiagnosticsRetrySchedulerArgs): void {
   const diagnosticsRetryTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const activeRepoPath = activeWorkspace?.repoPath ?? null;
 
   useEffect(() => {
     if (diagnosticsRetryTimeoutRef.current !== null) {
@@ -100,12 +102,12 @@ export function useDiagnosticsRetryScheduler({
         retries.push(refreshRuntimeCheck(true));
       }
 
-      if (retryPlan.retryBeadsCheck && activeRepo !== null) {
-        retries.push(refreshBeadsCheckForRepo(activeRepo, true));
+      if (retryPlan.retryBeadsCheck && activeRepoPath !== null) {
+        retries.push(refreshBeadsCheckForRepo(activeRepoPath, true));
       }
 
-      if (retryPlan.retryRuntimeHealth && activeRepo !== null) {
-        retries.push(refreshRepoRuntimeHealthForRepo(activeRepo, true));
+      if (retryPlan.retryRuntimeHealth && activeRepoPath !== null) {
+        retries.push(refreshRepoRuntimeHealthForRepo(activeRepoPath, true));
       }
 
       void Promise.allSettled(retries);
@@ -118,7 +120,7 @@ export function useDiagnosticsRetryScheduler({
       }
     };
   }, [
-    activeRepo,
+    activeRepoPath,
     refreshBeadsCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
     refreshRuntimeCheck,

@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,
@@ -17,7 +18,7 @@ type AgentStudioSessionSelectionQueryParams = {
 };
 
 type AgentStudioAsyncActivityContextKeyParams = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   role: AgentRole;
   sessionId: string | null | undefined;
@@ -90,7 +91,7 @@ export const buildAgentStudioAsyncActivityContextKey = (
   params: AgentStudioAsyncActivityContextKeyParams,
 ): string => {
   const sessionId = params.sessionId ?? "__draft__";
-  return `${params.activeRepo ?? ""}:${params.taskId}:${params.role}:${sessionId}`;
+  return `${params.activeWorkspace?.workspaceId ?? ""}:${params.taskId}:${params.role}:${sessionId}`;
 };
 
 export const incrementActivityCountRecord = (
