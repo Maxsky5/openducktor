@@ -434,10 +434,6 @@ describe("AgentStudioTaskTabs", () => {
     );
 
     await act(async () => {
-      fireEvent.mouseDown(screen.getByRole("tab", { name: /Ship QA checklist/i }), {
-        button: 0,
-        buttons: 1,
-      });
       fireEvent.click(screen.getByRole("tab", { name: /Ship QA checklist/i }));
     });
 
@@ -446,51 +442,54 @@ describe("AgentStudioTaskTabs", () => {
 
   test("does not start a reorder drag from the close button", async () => {
     const onReorderTab = mock(() => {});
-    render(
-      createElement(
-        Tabs,
-        { value: "task-1" },
-        createElement(AgentStudioTaskTabs, {
-          model: {
-            ...buildModel(),
-            onReorderTab,
-          },
-        }),
-      ),
-    );
 
-    const closeButton = screen.getByRole("button", { name: "Close tab for Ship QA checklist" });
-    const secondTab = screen
-      .getByRole("tab", { name: /Ship QA checklist/i })
-      .closest("[data-task-tab-id]") as HTMLElement;
+    await withMouseSensorFallback(async () => {
+      render(
+        createElement(
+          Tabs,
+          { value: "task-1" },
+          createElement(AgentStudioTaskTabs, {
+            model: {
+              ...buildModel(),
+              onReorderTab,
+            },
+          }),
+        ),
+      );
 
-    setElementRect(secondTab, {
-      x: 130,
-      y: 0,
-      left: 130,
-      top: 0,
-      right: 260,
-      bottom: 40,
-      width: 130,
-      height: 40,
-    });
+      const closeButton = screen.getByRole("button", { name: "Close tab for Ship QA checklist" });
+      const secondTab = screen
+        .getByRole("tab", { name: /Ship QA checklist/i })
+        .closest("[data-task-tab-id]") as HTMLElement;
 
-    await act(async () => {
-      fireEvent.mouseDown(closeButton, {
-        button: 0,
-        buttons: 1,
-        clientX: 200,
-        clientY: 20,
+      setElementRect(secondTab, {
+        x: 130,
+        y: 0,
+        left: 130,
+        top: 0,
+        right: 260,
+        bottom: 40,
+        width: 130,
+        height: 40,
       });
-      fireEvent.mouseMove(document, {
-        buttons: 1,
-        clientX: 240,
-        clientY: 20,
-      });
-    });
-    await finishMouseDrag({ clientX: 240, clientY: 20 });
 
-    expect(secondTab.getAttribute("data-dragging")).toBe("false");
-    expect(onReorderTab).toHaveBeenCalledTimes(0);
+      await act(async () => {
+        fireEvent.mouseDown(closeButton, {
+          button: 0,
+          buttons: 1,
+          clientX: 200,
+          clientY: 20,
+        });
+        fireEvent.mouseMove(document, {
+          buttons: 1,
+          clientX: 240,
+          clientY: 20,
+        });
+      });
+      await finishMouseDrag({ clientX: 240, clientY: 20 });
+
+      expect(secondTab.getAttribute("data-dragging")).toBe("false");
+      expect(onReorderTab).toHaveBeenCalledTimes(0);
+    });
   });
 });
