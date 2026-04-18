@@ -155,6 +155,14 @@ const workspaceSelect = async (
   return workspaceRecordSchema.parse(payload);
 };
 
+const workspaceReorder = async (
+  invokeFn: InvokeFn,
+  workspaceOrder: string[],
+): Promise<WorkspaceRecord[]> => {
+  const payload = await invokeFn("workspace_reorder", { workspaceOrder });
+  return parseArray(workspaceRecordSchema, payload, "workspace_reorder");
+};
+
 const workspaceUpdateRepoConfig = async (
   invokeFn: InvokeFn,
   workspaceId: string,
@@ -295,6 +303,10 @@ export class TauriWorkspaceClient {
 
   async workspaceSelect(workspaceId: string): Promise<WorkspaceRecord> {
     return workspaceSelect(this.invokeFn, workspaceId);
+  }
+
+  async workspaceReorder(workspaceOrder: string[]): Promise<WorkspaceRecord[]> {
+    return workspaceReorder(this.invokeFn, workspaceOrder);
   }
 
   async workspaceUpdateRepoConfig(

@@ -228,6 +228,14 @@ pub async fn workspace_select(
 }
 
 #[tauri::command]
+pub async fn workspace_reorder(
+    state: State<'_, AppState>,
+    workspace_order: Vec<String>,
+) -> Result<Vec<host_domain::WorkspaceRecord>, String> {
+    as_error(state.service.workspace_reorder(workspace_order))
+}
+
+#[tauri::command]
 pub async fn workspace_stage_local_attachment(
     name: String,
     _mime: Option<String>,

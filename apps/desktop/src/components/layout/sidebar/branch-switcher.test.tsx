@@ -79,6 +79,7 @@ describe("BranchSwitcher", () => {
         },
         addWorkspace: async () => {},
         selectWorkspace: async () => {},
+        reorderWorkspaces: async () => {},
         refreshBranches: async () => {},
         branches: [
           {

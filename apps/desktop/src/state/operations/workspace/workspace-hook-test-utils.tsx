@@ -17,6 +17,7 @@ export const workspace = (repoPath: string, isActive = false): WorkspaceRecord =
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
   workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
   repoPath,
+  iconDataUrl: null,
   isActive,
   hasConfig: true,
   configuredWorktreeBasePath: null,
@@ -28,6 +29,8 @@ export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   workspaceList: async () => [],
   workspaceAdd: async (input) => workspace(input.repoPath),
   workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
+  workspaceReorder: async (workspaceOrder: string[]) =>
+    workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
   workspaceGetRepoConfig: async () => {
     throw new Error("workspaceGetRepoConfig not configured");
   },

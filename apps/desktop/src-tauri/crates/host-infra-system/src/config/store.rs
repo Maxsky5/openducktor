@@ -11,10 +11,22 @@ use super::types::{
 };
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
+use base64::{engine::general_purpose, Engine as _};
 use host_domain::{RuntimeRegistry, WorkspaceRecord};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const WORKSPACE_ICON_CANDIDATES: [&str; 8] = [
+    "favicon.ico",
+    "favicon.png",
+    "icon.png",
+    "apple-touch-icon.png",
+    "public/favicon.ico",
+    "public/favicon.png",
+    "public/icon.png",
+    "public/apple-touch-icon.png",
+];
 
 fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
     path.into_os_string().into_string().map_err(|value| {
@@ -74,6 +86,77 @@ fn ensure_repo_path_available(
     }
 
     Ok(())
+}
+
+fn workspace_sort_key<'a>(repo: &'a RepoConfig, workspace_id: &'a str) -> (&'a str, &'a str) {
+    (repo.workspace_name.as_str(), workspace_id)
+}
+
+fn effective_workspace_order(config: &GlobalConfig) -> Vec<String> {
+    let mut ordered_workspace_ids = Vec::with_capacity(config.workspaces.len());
+    let mut seen_workspace_ids = HashSet::new();
+
+    for workspace_id in &config.workspace_order {
+        if config.workspaces.contains_key(workspace_id)
+            && seen_workspace_ids.insert(workspace_id.clone())
+        {
+            ordered_workspace_ids.push(workspace_id.clone());
+        }
+    }
+
+    let mut remaining_workspaces = config.workspaces.iter().collect::<Vec<_>>();
+    remaining_workspaces.sort_by(|(left_id, left_repo), (right_id, right_repo)| {
+        workspace_sort_key(left_repo, left_id).cmp(&workspace_sort_key(right_repo, right_id))
+    });
+
+    for (workspace_id, _) in remaining_workspaces {
+        if seen_workspace_ids.insert(workspace_id.clone()) {
+            ordered_workspace_ids.push(workspace_id.clone());
+        }
+    }
+
+    ordered_workspace_ids
+}
+
+fn workspace_records_in_effective_order(config: &GlobalConfig) -> Result<Vec<WorkspaceRecord>> {
+    effective_workspace_order(config)
+        .into_iter()
+        .map(|workspace_id| workspace_record(config, workspace_id.as_str()))
+        .collect()
+}
+
+fn workspace_icon_mime_type(path: &Path) -> Option<&'static str> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "png" => Some("image/png"),
+        "ico" => Some("image/x-icon"),
+        _ => None,
+    }
+}
+
+fn workspace_icon_data_url(repo_path: &str) -> Option<String> {
+    let repo_root = Path::new(repo_path);
+
+    for relative_path in WORKSPACE_ICON_CANDIDATES {
+        let candidate_path = repo_root.join(relative_path);
+        if !candidate_path.is_file() {
+            continue;
+        }
+
+        let Some(mime_type) = workspace_icon_mime_type(&candidate_path) else {
+            continue;
+        };
+        let Ok(bytes) = fs::read(&candidate_path) else {
+            continue;
+        };
+        if bytes.is_empty() {
+            continue;
+        }
+
+        let encoded = general_purpose::STANDARD.encode(bytes);
+        return Some(format!("data:{mime_type};base64,{encoded}"));
+    }
+
+    None
 }
 
 #[derive(Debug, Clone)]
@@ -159,18 +242,7 @@ impl AppConfigStore {
 
     pub fn list_workspaces(&self) -> Result<Vec<WorkspaceRecord>> {
         let config = self.load()?;
-        let mut records: Vec<WorkspaceRecord> = config
-            .workspaces
-            .iter()
-            .map(|(workspace_id, repo)| workspace_record_from_repo(&config, workspace_id, repo))
-            .collect::<Result<Vec<_>>>()?;
-
-        records.sort_by(|a, b| {
-            a.workspace_name
-                .cmp(&b.workspace_name)
-                .then_with(|| a.workspace_id.cmp(&b.workspace_id))
-        });
-        Ok(records)
+        workspace_records_in_effective_order(&config)
     }
 
     pub fn add_workspace(
@@ -199,8 +271,37 @@ impl AppConfigStore {
             config
                 .workspaces
                 .insert(workspace_id.to_string(), repo_config);
+            config.workspace_order.push(workspace_id.to_string());
             config.active_workspace = Some(workspace_id.to_string());
             Ok(())
+        })
+    }
+
+    pub fn reorder_workspaces(&self, workspace_order: Vec<String>) -> Result<Vec<WorkspaceRecord>> {
+        self.update_config(|config| {
+            if workspace_order.len() != config.workspaces.len() {
+                return Err(anyhow!(
+                    "Workspace reorder must include exactly {} configured workspaces.",
+                    config.workspaces.len()
+                ));
+            }
+
+            let mut seen_workspace_ids = HashSet::new();
+            for workspace_id in &workspace_order {
+                if !config.workspaces.contains_key(workspace_id) {
+                    return Err(anyhow!(
+                        "Workspace reorder included unknown workspace id: {workspace_id}"
+                    ));
+                }
+                if !seen_workspace_ids.insert(workspace_id.clone()) {
+                    return Err(anyhow!(
+                        "Workspace reorder included duplicate workspace id: {workspace_id}"
+                    ));
+                }
+            }
+
+            config.workspace_order = workspace_order;
+            workspace_records_in_effective_order(config)
         })
     }
 
@@ -519,6 +620,7 @@ fn workspace_record_from_repo(
         workspace_id: repo.workspace_id.clone(),
         workspace_name: repo.workspace_name.clone(),
         repo_path: repo.repo_path.clone(),
+        icon_data_url: workspace_icon_data_url(&repo.repo_path),
         is_active: config.active_workspace.as_deref() == Some(workspace_id),
         has_config: true,
         configured_worktree_base_path: repo.worktree_base_path.clone(),

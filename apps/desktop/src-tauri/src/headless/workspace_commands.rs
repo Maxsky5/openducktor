@@ -61,6 +61,12 @@ struct WorkspaceAddArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct WorkspaceReorderArgs {
+    workspace_order: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct WorkspaceSaveSettingsSnapshotArgs {
     snapshot: SettingsSnapshotPayload,
 }
@@ -126,6 +132,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("workspace_select", |state, args| {
         Box::pin(handle_workspace_select(state, args))
+    })?;
+    registry.register("workspace_reorder", |state, args| {
+        Box::pin(async move { handle_workspace_reorder(state, args) })
     })?;
     registry.register("workspace_update_repo_config", |state, args| {
         Box::pin(async move { handle_workspace_update_repo_config(state, args) })
@@ -216,6 +225,16 @@ async fn handle_workspace_select(state: &HeadlessState, args: Value) -> CommandR
         .map_err(service_error)?;
     super::command_support::invalidate_repo_worktree_cache(&selected.repo_path)?;
     serialize_value(selected)
+}
+
+fn handle_workspace_reorder(state: &HeadlessState, args: Value) -> CommandResult {
+    let WorkspaceReorderArgs { workspace_order } = deserialize_args(args)?;
+    serialize_value(
+        state
+            .service
+            .workspace_reorder(workspace_order)
+            .map_err(service_error)?,
+    )
 }
 
 fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> CommandResult {

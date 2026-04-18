@@ -119,6 +119,7 @@ mod tests {
             workspace_id: path.trim_start_matches('/').replace('/', "-"),
             workspace_name: path.trim_start_matches('/').to_string(),
             repo_path: path.to_string(),
+            icon_data_url: None,
             is_active,
             has_config: true,
             configured_worktree_base_path: None,

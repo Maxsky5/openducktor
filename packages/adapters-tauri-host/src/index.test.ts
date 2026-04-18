@@ -229,6 +229,7 @@ describe("TauriHostClient", () => {
       "workspaceList",
       "workspaceAdd",
       "workspaceSelect",
+      "workspaceReorder",
       "workspaceUpdateRepoConfig",
       "workspaceSaveRepoSettings",
       "workspaceUpdateRepoHooks",

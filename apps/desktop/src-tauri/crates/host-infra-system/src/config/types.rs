@@ -458,6 +458,8 @@ struct PersistedGlobalConfigV2 {
     #[serde(default)]
     pub workspaces: HashMap<String, RepoConfig>,
     #[serde(default)]
+    pub workspace_order: Vec<String>,
+    #[serde(default)]
     pub recent_workspaces: Vec<String>,
 }
 
@@ -500,6 +502,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub workspaces: HashMap<String, RepoConfig>,
     #[serde(default)]
+    pub workspace_order: Vec<String>,
+    #[serde(default)]
     pub recent_workspaces: Vec<String>,
 }
 
@@ -517,6 +521,7 @@ impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
             autopilot: config.autopilot,
             global_prompt_overrides: config.global_prompt_overrides,
             workspaces: config.workspaces,
+            workspace_order: config.workspace_order,
             recent_workspaces: config.recent_workspaces,
         })
     }
@@ -534,6 +539,7 @@ impl From<GlobalConfig> for PersistedGlobalConfigV2 {
             autopilot: value.autopilot,
             global_prompt_overrides: value.global_prompt_overrides,
             workspaces: value.workspaces,
+            workspace_order: value.workspace_order,
             recent_workspaces: value.recent_workspaces,
         }
     }
@@ -551,6 +557,7 @@ impl Default for GlobalConfig {
             autopilot: AutopilotSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
             workspaces: HashMap::new(),
+            workspace_order: Vec::new(),
             recent_workspaces: Vec::new(),
         }
     }

@@ -11,6 +11,7 @@ import {
   SidebarNavigation,
 } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
+import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useShellAgentActivity, useWorkspaceState } from "@/state";
@@ -46,10 +47,16 @@ export function AppShell(): ReactElement {
     [isRepositoryModalBlocking],
   );
 
+  const openRepositoryModal = useCallback(() => {
+    setRepositoryModalOpen(true);
+  }, []);
+
   return (
     <>
       <div className="h-screen min-h-screen w-full overflow-hidden">
         <div className="flex h-full min-h-0 w-full">
+          <WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />
+
           <aside
             className={cn(
               "flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
@@ -84,7 +91,7 @@ export function AppShell(): ReactElement {
                         type="button"
                         size="icon"
                         className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={() => setRepositoryModalOpen(true)}
+                        onClick={openRepositoryModal}
                         aria-label="Open repository"
                         title="Open repository"
                       >
@@ -145,7 +152,7 @@ export function AppShell(): ReactElement {
                   type="button"
                   size="icon"
                   className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => setRepositoryModalOpen(true)}
+                  onClick={openRepositoryModal}
                   aria-label="Open repository"
                   title="Open repository"
                 >

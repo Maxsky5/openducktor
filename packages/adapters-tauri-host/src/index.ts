@@ -18,6 +18,7 @@ const WORKSPACE_METHODS = [
   "workspaceList",
   "workspaceAdd",
   "workspaceSelect",
+  "workspaceReorder",
   "workspaceUpdateRepoConfig",
   "workspaceSaveRepoSettings",
   "workspaceUpdateRepoHooks",

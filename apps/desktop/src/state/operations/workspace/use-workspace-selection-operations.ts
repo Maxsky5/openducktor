@@ -32,6 +32,7 @@ type UseWorkspaceSelectionOperationsResult = {
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
@@ -112,21 +113,26 @@ export function useWorkspaceSelectionOperations({
   const applyWorkspaceRecord = useCallback(
     (record: WorkspaceRecord): void => {
       setWorkspaces((current) => {
-        const next = current
-          .filter((entry) => entry.workspaceId !== record.workspaceId)
-          .map((entry) => {
-            if (!record.isActive || !entry.isActive) {
-              return entry;
-            }
+        const next = current.map((entry) => {
+          if (entry.workspaceId === record.workspaceId) {
+            return record;
+          }
 
-            return {
-              ...entry,
-              isActive: false,
-            };
-          });
-        next.push(record);
-        next.sort((left, right) => left.workspaceName.localeCompare(right.workspaceName));
-        return next;
+          if (!record.isActive || !entry.isActive) {
+            return entry;
+          }
+
+          return {
+            ...entry,
+            isActive: false,
+          };
+        });
+
+        if (next.some((entry) => entry.workspaceId === record.workspaceId)) {
+          return next;
+        }
+
+        return [...next, record];
       });
 
       if (record.isActive) {
@@ -134,6 +140,22 @@ export function useWorkspaceSelectionOperations({
       }
     },
     [setActiveWorkspace],
+  );
+
+  const reorderWorkspaces = useCallback(
+    async (workspaceIds: string[]): Promise<void> => {
+      try {
+        const records = await hostClient.workspaceReorder(workspaceIds);
+        queryClient.setQueryData(workspaceQueryKeys.list(), records);
+        applyWorkspaceRecords(records);
+      } catch (error) {
+        toast.error("Failed to reorder repositories", {
+          description: errorMessage(error),
+        });
+        throw error;
+      }
+    },
+    [applyWorkspaceRecords, hostClient, queryClient],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
@@ -269,6 +291,7 @@ export function useWorkspaceSelectionOperations({
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    reorderWorkspaces,
     applyWorkspaceRecords,
     applyWorkspaceRecord,
   };

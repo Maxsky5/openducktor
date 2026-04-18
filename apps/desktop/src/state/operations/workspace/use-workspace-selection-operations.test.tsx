@@ -241,11 +241,55 @@ describe("use-workspace-selection-operations", () => {
       });
 
       expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-old", false),
         workspace("/repo-b"),
         workspace("/repo-c", true),
-        workspace("/repo-old", false),
       ]);
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-c");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reorders workspaces without clearing switch-dependent state", async () => {
+    const clearTaskData = mock(() => {});
+    const clearActiveBeadsCheck = mock(() => {});
+    const clearBranchData = mock(() => {});
+    const workspaceReorder = mock(async (workspaceOrder: string[]) =>
+      workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
+    );
+    workspaceHost.workspaceReorder = workspaceReorder;
+
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData,
+      clearActiveBeadsCheck,
+      clearBranchData,
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+          workspace("/repo-c"),
+        ]);
+      });
+      await harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+      });
+
+      expect(workspaceReorder).toHaveBeenCalledWith(["repo-c", "repo-a", "repo-b"]);
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-c"),
+        workspace("/repo-a"),
+        workspace("/repo-b"),
+      ]);
+      expect(clearTaskData).not.toHaveBeenCalled();
+      expect(clearActiveBeadsCheck).not.toHaveBeenCalled();
+      expect(clearBranchData).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

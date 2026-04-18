@@ -256,6 +256,38 @@ fn normalize_autopilot_settings(config: &mut AutopilotSettings) {
         .collect();
 }
 
+fn normalize_workspace_order(config: &mut GlobalConfig) {
+    let mut normalized_order = Vec::new();
+    let mut seen_workspace_ids = HashSet::new();
+
+    for workspace_id in std::mem::take(&mut config.workspace_order) {
+        let trimmed = workspace_id.trim();
+        if trimmed.is_empty()
+            || !config.workspaces.contains_key(trimmed)
+            || !seen_workspace_ids.insert(trimmed.to_string())
+        {
+            continue;
+        }
+        normalized_order.push(trimmed.to_string());
+    }
+
+    let mut remaining_workspaces = config.workspaces.iter().collect::<Vec<_>>();
+    remaining_workspaces.sort_by(|(left_id, left_repo), (right_id, right_repo)| {
+        left_repo
+            .workspace_name
+            .cmp(&right_repo.workspace_name)
+            .then_with(|| left_id.cmp(right_id))
+    });
+
+    for (workspace_id, _) in remaining_workspaces {
+        if seen_workspace_ids.insert(workspace_id.clone()) {
+            normalized_order.push(workspace_id.clone());
+        }
+    }
+
+    config.workspace_order = normalized_order;
+}
+
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);
@@ -286,6 +318,7 @@ pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     config
         .recent_workspaces
         .retain(|workspace_id| config.workspaces.contains_key(workspace_id));
+    normalize_workspace_order(config);
     Ok(())
 }
 

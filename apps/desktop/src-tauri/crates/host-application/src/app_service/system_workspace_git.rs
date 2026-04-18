@@ -457,6 +457,10 @@ impl AppService {
         Ok(workspace)
     }
 
+    pub fn workspace_reorder(&self, workspace_order: Vec<String>) -> Result<Vec<WorkspaceRecord>> {
+        self.config_store.reorder_workspaces(workspace_order)
+    }
+
     pub fn workspace_update_repo_config(
         &self,
         workspace_id: &str,
