@@ -16,6 +16,8 @@ For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-
 
 ## Usage
 
+With a startup default workspace:
+
 ```json
 {
   "mcpServers": {
@@ -30,13 +32,29 @@ For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-
 }
 ```
 
+Without a startup default workspace:
+
+```json
+{
+  "mcpServers": {
+    "openducktor": {
+      "command": "bunx",
+      "args": [
+        "@openducktor/mcp"
+      ]
+    }
+  }
+}
+```
+
 Optional arguments:
 
+- `--workspace-id <workspace-id>` default workspace for later workspace-scoped calls
 - `--host-url <url>`
 
 Equivalent environment variables:
 
-- `ODT_WORKSPACE_ID`
+- `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
 
 Automatic discovery:
@@ -53,11 +71,15 @@ Startup behavior:
 - It checks the host bridge `/health` endpoint.
 - It calls `odt_mcp_ready` before serving requests.
 - Startup fails if the host does not expose the full ODT tool surface.
+- Startup no longer requires `--workspace-id` or `ODT_WORKSPACE_ID`.
+- When both a startup default and a tool-input `workspaceId` are present, the tool input wins.
+- Workspace-scoped tools fail fast with an explicit error when neither a startup default nor a tool-input `workspaceId` is available.
 
 The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
 
 ## Public Tools
 
+- `get_workspaces`
 - `odt_create_task`
 - `odt_search_tasks`
 - `odt_read_task`
@@ -65,18 +87,48 @@ The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflo
 
 The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
+## `get_workspaces`
+
+Lists the workspaces currently known to the running OpenDucktor host.
+
+Input fields:
+
+- none
+
+Example response:
+
+```json
+[
+  {
+    "workspaceId": "my-workspace",
+    "workspaceName": "My Workspace",
+    "repoPath": "/Users/maxsky5/code/my-repo",
+    "isActive": true,
+    "hasConfig": true,
+    "configuredWorktreeBasePath": null,
+    "defaultWorktreeBasePath": null,
+    "effectiveWorktreeBasePath": null
+  }
+]
+```
+
+Use `get_workspaces` first when you start the MCP without a default workspace and need to discover the `workspaceId` for later calls.
+
 ## `odt_create_task`
 
 Creates a new `task`, `feature`, or `bug`.
 
 Input fields:
 
+- `workspaceId?` optional per-call workspace override
 - `title`
 - `issueType`
 - `priority`
 - `description?`
 - `labels?`
 - `aiReviewEnabled?`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
 
 `issueType=epic` is rejected by the MCP schema.
 
@@ -87,12 +139,15 @@ Active epics may appear in search results.
 
 Optional filters:
 
+- `workspaceId?` optional per-call workspace override
 - `priority`
 - `issueType`
 - `status`
 - `title`
 - `tags`
 - `limit`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
 
 ## Output Model
 
@@ -127,6 +182,8 @@ Optional filters:
 
 Use `odt_read_task` first to discover the task summary object, including task state, optional `targetBranch`, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
 
+`odt_read_task` and `odt_read_task_documents` also accept an optional top-level `workspaceId`. When the MCP started without a default workspace, provide that field explicitly.
+
 Use `odt_read_task_documents` only when you need document bodies:
 
 - Requested document keys are returned consistently even when no persisted body exists yet.
@@ -140,6 +197,7 @@ Use `odt_read_task_documents` only when you need document bodies:
 
 ```json
 {
+  "workspaceId": "my-workspace",
   "taskId": "repo-123",
   "includeSpec": true,
   "includePlan": false,

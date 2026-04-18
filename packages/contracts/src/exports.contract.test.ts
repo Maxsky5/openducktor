@@ -230,6 +230,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "kanbanSettingsSchema",
   "globalConfigSchema",
   "globalGitConfigSchema",
+  "GetWorkspacesInputSchema",
+  "getWorkspacesResultSchema",
   "issueTypeSchema",
   "knownGitProviderIdSchema",
   "knownGitProviderIdValues",
@@ -514,5 +516,26 @@ describe("contracts exports contract", () => {
         globalPromptOverrides: {},
       }),
     ).toThrow();
+  });
+
+  test("keeps get_workspaces workspace-free and workspace-scoped tool inputs overrideable", () => {
+    expect(contracts.GetWorkspacesInputSchema.parse({})).toEqual({});
+    expect(contracts.ReadTaskInputSchema.parse({ workspaceId: "repo", taskId: "task-1" })).toEqual({
+      workspaceId: "repo",
+      taskId: "task-1",
+    });
+    expect(
+      contracts.CreateTaskInputSchema.parse({
+        workspaceId: "repo",
+        title: "Bridge task",
+        issueType: "task",
+        priority: 2,
+      }),
+    ).toEqual({
+      workspaceId: "repo",
+      title: "Bridge task",
+      issueType: "task",
+      priority: 2,
+    });
   });
 });

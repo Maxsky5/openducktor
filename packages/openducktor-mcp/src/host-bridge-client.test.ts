@@ -44,21 +44,16 @@ describe("OdtHostBridgeClient", () => {
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
           bridgeVersion: 1,
-          workspaceId: "repo",
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
       throw new Error(`Unexpected URL: ${url}`);
     };
 
-    const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
-      { fetchImpl },
-    );
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     await expect(client.ready()).resolves.toEqual({
       bridgeVersion: 1,
-      workspaceId: "repo",
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
     });
   });
@@ -75,12 +70,54 @@ describe("OdtHostBridgeClient", () => {
       throw new Error(`Unexpected URL: ${url}`);
     };
 
-    const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
-      { fetchImpl },
-    );
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     await expect(client.ready()).rejects.toThrow("bridge unavailable");
+  });
+
+  test("getWorkspaces forwards a workspace-free request and validates the response", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      requests.push({
+        url,
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+      });
+      return jsonResponse([
+        {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: null,
+          defaultWorktreeBasePath: null,
+          effectiveWorktreeBasePath: null,
+        },
+      ]);
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    await expect(client.getWorkspaces()).resolves.toEqual([
+      {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: null,
+        effectiveWorktreeBasePath: null,
+      },
+    ]);
+
+    expect(requests).toEqual([
+      {
+        url: "http://127.0.0.1:14327/invoke/get_workspaces",
+        body: {},
+      },
+    ]);
   });
 
   test("call forwards workspace-scoped payloads and validates the response", async () => {
@@ -94,12 +131,9 @@ describe("OdtHostBridgeClient", () => {
       return jsonResponse(summaryPayload);
     };
 
-    const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
-      { fetchImpl },
-    );
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
-    const result = await client.call("odt_read_task", { taskId: "task-1" });
+    const result = await client.call("odt_read_task", "repo", { taskId: "task-1" });
     expect(result.task.id).toBe("task-1");
     expect(requests).toEqual([
       {
@@ -135,13 +169,10 @@ describe("OdtHostBridgeClient", () => {
       throw new Error(`Unexpected URL: ${url}`);
     };
 
-    const client = new OdtHostBridgeClient(
-      { baseUrl: "http://127.0.0.1:14327", workspaceId: "repo" },
-      { fetchImpl },
-    );
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     await expect(
-      client.call("odt_create_task", {
+      client.call("odt_create_task", "repo", {
         title: "Bridge task",
         issueType: "task",
         priority: 2,
@@ -152,7 +183,7 @@ describe("OdtHostBridgeClient", () => {
     ).resolves.toEqual(summaryPayload);
 
     await expect(
-      client.call("odt_search_tasks", {
+      client.call("odt_search_tasks", "repo", {
         status: "open",
         title: "Bridge",
         tags: ["mcp"],

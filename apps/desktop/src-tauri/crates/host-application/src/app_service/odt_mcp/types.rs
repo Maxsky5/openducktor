@@ -1,4 +1,6 @@
-use host_domain::{GitTargetBranch, IssueType, PullRequestRecord, QaWorkflowVerdict, TaskStatus};
+use host_domain::{
+    GitTargetBranch, IssueType, PullRequestRecord, QaWorkflowVerdict, TaskStatus, WorkspaceRecord,
+};
 use serde::{Deserialize, Serialize};
 
 const fn default_search_limit() -> usize {
@@ -168,6 +170,7 @@ pub struct OdtCreateTaskInput {
 #[serde(rename_all = "camelCase")]
 pub struct OdtHostBridgeReady {
     pub bridge_version: u8,
-    pub workspace_id: String,
     pub tool_names: Vec<String>,
 }
+
+pub type OdtGetWorkspacesResult = Vec<WorkspaceRecord>;
