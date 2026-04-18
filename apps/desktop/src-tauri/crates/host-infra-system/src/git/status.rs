@@ -16,6 +16,7 @@ const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const EMPTY_TREE_SHA256: &str = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 const REBASE_CONFLICT_OUTPUT_UNAVAILABLE: &str =
     "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
+const REBASE_CONFLICT_TARGET_UNAVAILABLE: &str = "current rebase target";
 
 fn has_unmerged_files(file_statuses: &[GitFileStatus]) -> bool {
     file_statuses
@@ -131,9 +132,7 @@ impl GitCliPort {
 
         let target_branch = fallback_target_branch
             .map(ToOwned::to_owned)
-            .ok_or_else(|| {
-                anyhow!("Cannot determine rebase target branch while a git conflict is in progress")
-            })?;
+            .unwrap_or_else(|| REBASE_CONFLICT_TARGET_UNAVAILABLE.to_string());
 
         let conflicted_files = file_statuses
             .iter()

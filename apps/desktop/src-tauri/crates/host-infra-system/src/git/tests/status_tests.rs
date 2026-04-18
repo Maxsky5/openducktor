@@ -323,6 +323,60 @@ fn get_worktree_status_rehydrates_rebase_conflict_context() {
 }
 
 #[test]
+fn get_worktree_status_rehydrates_rebase_conflict_context_without_upstream() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-rebase-conflict-context-no-upstream");
+    let git = GitCliPort::new();
+
+    fs::write(repo.path.join("shared.txt"), "initial\n").expect("base file should write");
+    run_git_ok(&repo.path, &["add", "shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "shared base"]);
+
+    git.switch_branch(&repo.path, "feature/rebase-no-upstream", true)
+        .expect("feature branch should be created");
+    fs::write(repo.path.join("shared.txt"), "feature value\n")
+        .expect("feature change should write");
+    run_git_ok(&repo.path, &["add", "shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "feature change"]);
+
+    git.switch_branch(&repo.path, "main", false)
+        .expect("return to main");
+    fs::write(repo.path.join("shared.txt"), "main value\n").expect("main change should write");
+    run_git_ok(&repo.path, &["add", "shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "main change"]);
+
+    git.switch_branch(&repo.path, "feature/rebase-no-upstream", false)
+        .expect("return to feature branch");
+    let rebase_output = Command::new("git")
+        .args(["rebase", "main"])
+        .current_dir(&repo.path)
+        .output()
+        .expect("git rebase should execute");
+    assert!(
+        !rebase_output.status.success(),
+        "rebase should stop on conflicts\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&rebase_output.stdout),
+        String::from_utf8_lossy(&rebase_output.stderr)
+    );
+
+    let status = git
+        .get_worktree_status(&repo.path, "@{upstream}", GitDiffScope::Target)
+        .expect("worktree status should resolve during rebase conflict without upstream");
+
+    let git_conflict = status
+        .git_conflict
+        .expect("rebase conflict context should still be available without upstream");
+    assert_eq!(git_conflict.target_branch, "current rebase target");
+    assert!(git_conflict
+        .conflicted_files
+        .iter()
+        .any(|file| file == "shared.txt"));
+}
+
+#[test]
 fn get_worktree_status_requires_non_empty_target_branch() {
     if !git_available() {
         return;
