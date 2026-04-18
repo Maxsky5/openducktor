@@ -97,13 +97,15 @@ describe("useShellAgentActivity", () => {
     });
 
     harness.sessionStore.setSessionsById({ [session.sessionId]: session });
-    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
-      createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
-      createTaskCardFixture({ id: "task-2", title: "Other Task" }),
-    ]);
     await harness.mount();
 
     try {
+      await harness.run(() => {
+        harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+          createTaskCardFixture({ id: "task-2", title: "Other Task" }),
+        ]);
+      });
       await waitForActivity(
         harness,
         (activity) => activity.activeSessions[0]?.taskTitle === "Visible Task",
@@ -169,12 +171,14 @@ describe("useShellAgentActivity", () => {
     });
 
     harness.sessionStore.setSessionsById({ [session.sessionId]: session });
-    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
-      createTaskCardFixture({ id: "task-1", title: "Initial Title" }),
-    ]);
     await harness.mount();
 
     try {
+      await harness.run(() => {
+        harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+          createTaskCardFixture({ id: "task-1", title: "Initial Title" }),
+        ]);
+      });
       await waitForActivity(
         harness,
         (activity) => activity.activeSessions[0]?.taskTitle === "Initial Title",
@@ -236,15 +240,17 @@ describe("useShellAgentActivity", () => {
     });
 
     harness.sessionStore.setSessionsById({ [repoASession.sessionId]: repoASession });
-    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-a"), [
-      createTaskCardFixture({ id: "task-a", title: "Repo A Task" }),
-    ]);
-    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-b"), [
-      createTaskCardFixture({ id: "task-b", title: "Repo B Task" }),
-    ]);
     await harness.mount();
 
     try {
+      await harness.run(() => {
+        harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-a"), [
+          createTaskCardFixture({ id: "task-a", title: "Repo A Task" }),
+        ]);
+        harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-b"), [
+          createTaskCardFixture({ id: "task-b", title: "Repo B Task" }),
+        ]);
+      });
       await waitForActivity(
         harness,
         (activity) => activity.activeSessions[0]?.taskTitle === "Repo A Task",
