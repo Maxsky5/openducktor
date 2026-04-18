@@ -2,11 +2,11 @@ use super::cleanup_plans::{
     normalize_path_for_comparison, normalize_path_key, IMPLEMENTATION_SESSION_ROLES,
 };
 use crate::app_service::{
-    has_live_runtime_session_status, service_core::AppService, RuntimeSessionStatusProbeOutcome,
-    RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeTargetResolution,
+    service_core::AppService, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
+    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshotKind,
 };
 use anyhow::{anyhow, Context, Result};
-use host_domain::{AgentSessionDocument, RunState, RuntimeRoute};
+use host_domain::{AgentSessionDocument, RunState, RuntimeRole, RuntimeRoute};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -14,8 +14,8 @@ mod probe_support;
 
 use self::probe_support::{
     build_run_probe_plans, build_session_probe_plans, collect_runtime_routes_by_worktree,
-    RunProbeCandidate, RunProbePlan, SessionProbePlan, TaskActiveWorkEvidence,
-    TaskActivityProbePlan,
+    RunProbeCandidate, RunProbePlan, SessionProbePlan, SessionRuntimeLookupKey,
+    TaskActiveWorkEvidence, TaskActivityProbePlan,
 };
 
 pub(super) struct TaskActivityGuard<'a> {
@@ -117,13 +117,13 @@ impl<'a> TaskActivityGuard<'a> {
     ) -> Result<TaskActiveWorkEvidence> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
         let candidate_runs = self.collect_candidate_runs(&normalized_repo, task_id)?;
-        let runtime_routes_by_worktree =
-            self.collect_runtime_routes_by_worktree(repo_path, &candidate_runs)?;
+        let runtime_routes_by_session =
+            self.collect_runtime_routes_by_session(repo_path, task_id, &candidate_runs)?;
         let probe_plan = self.build_probe_plan(
             &candidate_runs,
             sessions,
             session_roles,
-            &runtime_routes_by_worktree,
+            &runtime_routes_by_session,
         )?;
 
         let probe_outcomes_by_target = self
@@ -175,7 +175,7 @@ impl<'a> TaskActivityGuard<'a> {
         candidate_runs: &[RunProbeCandidate],
         sessions: &[AgentSessionDocument],
         session_roles: &[&str],
-        runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
+        runtime_routes_by_session: &HashMap<SessionRuntimeLookupKey, RuntimeRoute>,
     ) -> Result<TaskActivityProbePlan> {
         let mut probe_targets = Vec::new();
         let run_plans =
@@ -184,7 +184,7 @@ impl<'a> TaskActivityGuard<'a> {
             self.service,
             sessions,
             session_roles,
-            runtime_routes_by_worktree,
+            runtime_routes_by_session,
             &mut probe_targets,
         )?;
 
@@ -225,13 +225,15 @@ impl<'a> TaskActivityGuard<'a> {
                 })?;
 
             match probe_outcome {
-                RuntimeSessionStatusProbeOutcome::Statuses(statuses) => {
+                RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
+                    if snapshot.kind() == RuntimeSessionStatusSnapshotKind::NoLiveSessions {
+                        continue;
+                    }
+
                     if run_probe_plan
                         .external_session_ids
                         .iter()
-                        .any(|external_session_id| {
-                            has_live_runtime_session_status(statuses, external_session_id)
-                        })
+                        .any(|external_session_id| snapshot.has_live_session(external_session_id))
                     {
                         return Ok(true);
                     }
@@ -275,11 +277,14 @@ impl<'a> TaskActivityGuard<'a> {
                                 )
                             })?;
                     match probe_outcome {
-                        RuntimeSessionStatusProbeOutcome::Statuses(statuses) => {
-                            if has_live_runtime_session_status(
-                                statuses,
-                                session_probe_plan.external_session_id.as_str(),
-                            ) {
+                        RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
+                            if snapshot.kind() == RuntimeSessionStatusSnapshotKind::NoLiveSessions {
+                                continue;
+                            }
+
+                            if snapshot
+                                .has_live_session(session_probe_plan.external_session_id.as_str())
+                            {
                                 active_roles.insert(session_probe_plan.role.clone());
                             }
                         }
@@ -299,13 +304,15 @@ impl<'a> TaskActivityGuard<'a> {
         Ok(active_session_roles)
     }
 
-    fn collect_runtime_routes_by_worktree(
+    fn collect_runtime_routes_by_session(
         &self,
         repo_path: &str,
+        task_id: &str,
         candidate_runs: &[RunProbeCandidate],
-    ) -> Result<HashMap<String, RuntimeRoute>> {
+    ) -> Result<HashMap<SessionRuntimeLookupKey, RuntimeRoute>> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
-        let mut routes_by_worktree = collect_runtime_routes_by_worktree(candidate_runs);
+        let run_routes_by_worktree = collect_runtime_routes_by_worktree(candidate_runs);
+        let mut routes_by_session = HashMap::new();
         let runtimes = self
             .service
             .agent_runtimes
@@ -317,14 +324,32 @@ impl<'a> TaskActivityGuard<'a> {
             {
                 continue;
             }
+            if runtime.summary.task_id.as_deref() != Some(task_id) {
+                continue;
+            }
+            if runtime.summary.role == RuntimeRole::Workspace {
+                continue;
+            }
 
-            routes_by_worktree
-                .entry(normalize_path_key(
+            let key = SessionRuntimeLookupKey::new(
+                runtime.summary.kind.clone(),
+                runtime.summary.role,
+                runtime.summary.working_directory.as_str(),
+            );
+
+            if let Some(run_route) = run_routes_by_worktree
+                .get(&normalize_path_key(
                     runtime.summary.working_directory.as_str(),
                 ))
-                .or_insert_with(|| runtime.summary.runtime_route.clone());
+                .filter(|_| runtime.summary.role == RuntimeRole::Build)
+            {
+                routes_by_session.insert(key, run_route.clone());
+                continue;
+            }
+
+            routes_by_session.insert(key, runtime.summary.runtime_route.clone());
         }
 
-        Ok(routes_by_worktree)
+        Ok(routes_by_session)
     }
 }

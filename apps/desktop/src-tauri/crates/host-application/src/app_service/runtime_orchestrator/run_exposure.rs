@@ -84,10 +84,16 @@ impl RunExposurePlan {
         })?;
 
         match probe_outcome {
-            super::super::RuntimeSessionStatusProbeOutcome::Statuses(statuses) => {
-                Ok(self.external_session_ids.iter().any(|external_session_id| {
-                    super::super::has_live_runtime_session_status(statuses, external_session_id)
-                }))
+            super::super::RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
+                if snapshot.kind() == super::super::RuntimeSessionStatusSnapshotKind::NoLiveSessions
+                {
+                    return Ok(false);
+                }
+
+                Ok(self
+                    .external_session_ids
+                    .iter()
+                    .any(|external_session_id| snapshot.has_live_session(external_session_id)))
             }
             super::super::RuntimeSessionStatusProbeOutcome::Unsupported => Ok(true),
             super::super::RuntimeSessionStatusProbeOutcome::ActionableError(_) => Ok(false),

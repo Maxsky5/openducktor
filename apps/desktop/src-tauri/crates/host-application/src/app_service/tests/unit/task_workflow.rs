@@ -563,7 +563,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
 }
 
 #[test]
-fn task_reset_rejects_live_spec_session_status_with_repo_runtime_without_run() -> Result<()> {
+fn task_reset_rejects_live_spec_session_status_with_task_runtime_without_run() -> Result<()> {
     assert_task_reset_rejects_live_session_status(
         TaskStatus::SpecReady,
         "spec",
@@ -573,7 +573,7 @@ fn task_reset_rejects_live_spec_session_status_with_repo_runtime_without_run() -
 }
 
 #[test]
-fn task_reset_rejects_live_planner_session_status_with_repo_runtime_without_run() -> Result<()> {
+fn task_reset_rejects_live_planner_session_status_with_task_runtime_without_run() -> Result<()> {
     assert_task_reset_rejects_live_session_status(
         TaskStatus::ReadyForDev,
         "planner",
@@ -583,7 +583,7 @@ fn task_reset_rejects_live_planner_session_status_with_repo_runtime_without_run(
 }
 
 #[test]
-fn task_reset_rejects_live_build_session_status_with_repo_runtime_without_run() -> Result<()> {
+fn task_reset_rejects_live_build_session_status_with_task_runtime_without_run() -> Result<()> {
     assert_task_reset_rejects_live_session_status(
         TaskStatus::InProgress,
         "build",
@@ -593,7 +593,7 @@ fn task_reset_rejects_live_build_session_status_with_repo_runtime_without_run() 
 }
 
 #[test]
-fn task_reset_rejects_live_qa_session_status_with_repo_runtime_without_run() -> Result<()> {
+fn task_reset_rejects_live_qa_session_status_with_task_runtime_without_run() -> Result<()> {
     assert_task_reset_rejects_live_session_status(
         TaskStatus::AiReview,
         "qa",
@@ -647,7 +647,22 @@ fn assert_task_reset_rejects_live_session_status(
     let status_payload = format!(r#"{{"external-{role}-session":{{"type":"busy"}}}}"#);
     let status_payload = Box::leak(status_payload.into_boxed_str());
     let (port, server_handle) = spawn_opencode_session_status_server(status_payload)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+    let runtime_role = match role {
+        "spec" => RuntimeRole::Spec,
+        "planner" => RuntimeRole::Planner,
+        "build" => RuntimeRole::Build,
+        "qa" => RuntimeRole::Qa,
+        other => panic!("unsupported role fixture: {other}"),
+    };
+    insert_task_runtime_for_kind_role(
+        &service,
+        AgentRuntimeKind::opencode(),
+        "task-1",
+        runtime_role,
+        &repo_path.to_string_lossy(),
+        &repo_path.to_string_lossy(),
+        builtin_opencode_runtime_route(port),
+    )?;
 
     let error = service
         .task_reset(&repo_path.to_string_lossy(), "task-1")
@@ -1049,7 +1064,15 @@ fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whites
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+    insert_task_runtime_for_kind_role(
+        &service,
+        AgentRuntimeKind::opencode(),
+        "task-1",
+        RuntimeRole::Qa,
+        &repo_path.to_string_lossy(),
+        &repo_path.to_string_lossy(),
+        builtin_opencode_runtime_route(port),
+    )?;
 
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
@@ -1113,7 +1136,7 @@ fn task_reset_reports_completed_cleanup_steps_when_later_cleanup_fails() -> Resu
 }
 
 #[test]
-fn task_reset_implementation_rejects_live_qa_session_status_with_repo_runtime_without_run(
+fn task_reset_implementation_rejects_live_qa_session_status_with_task_runtime_without_run(
 ) -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-live-qa-shared-runtime-repo");
     fs::create_dir_all(&repo_path)?;
@@ -1153,7 +1176,15 @@ fn task_reset_implementation_rejects_live_qa_session_status_with_repo_runtime_wi
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+    insert_task_runtime_for_kind_role(
+        &service,
+        AgentRuntimeKind::opencode(),
+        "task-1",
+        RuntimeRole::Qa,
+        &repo_path.to_string_lossy(),
+        &repo_path.to_string_lossy(),
+        builtin_opencode_runtime_route(port),
+    )?;
 
     let error = service
         .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
@@ -1295,7 +1326,7 @@ fn task_delete_rejects_live_build_session_status() -> Result<()> {
 }
 
 #[test]
-fn task_delete_rejects_live_build_session_status_with_repo_runtime_without_run() -> Result<()> {
+fn task_delete_rejects_live_build_session_status_with_task_runtime_without_run() -> Result<()> {
     let repo_path = unique_temp_path("delete-task-live-shared-runtime-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
@@ -1334,7 +1365,15 @@ fn task_delete_rejects_live_build_session_status_with_repo_runtime_without_run()
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+    insert_task_runtime_for_kind_role(
+        &service,
+        AgentRuntimeKind::opencode(),
+        "task-1",
+        RuntimeRole::Build,
+        &repo_path.to_string_lossy(),
+        &repo_path.to_string_lossy(),
+        builtin_opencode_runtime_route(port),
+    )?;
 
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
@@ -1388,7 +1427,15 @@ fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Resu
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
+    insert_task_runtime_for_kind_role(
+        &service,
+        AgentRuntimeKind::opencode(),
+        "task-1",
+        RuntimeRole::Qa,
+        &repo_path.to_string_lossy(),
+        &repo_path.to_string_lossy(),
+        builtin_opencode_runtime_route(port),
+    )?;
 
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
@@ -1480,19 +1527,12 @@ fn task_delete_fails_when_stale_run_route_probe_cannot_be_reached() -> Result<()
             },
         );
 
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
-
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
         .expect_err("stale run route probe failure should stop delete");
     assert!(error
         .to_string()
         .contains("Failed checking active task work before deleting task-1"));
-    server_handle
-        .join()
-        .expect("status server thread should finish");
     Ok(())
 }
 
@@ -1759,19 +1799,12 @@ fn task_reset_implementation_fails_when_stale_run_route_probe_cannot_be_reached(
             },
         );
 
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
-
     let error = service
         .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
         .expect_err("stale run route probe failure should stop reset");
     assert!(error
         .to_string()
         .contains("Failed checking live runtime state before reset implementation task-1"));
-    server_handle
-        .join()
-        .expect("status server thread should finish");
     Ok(())
 }
 

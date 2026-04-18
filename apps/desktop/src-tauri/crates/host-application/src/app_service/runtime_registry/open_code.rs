@@ -11,8 +11,9 @@ use crate::app_service::{
     resolve_opencode_binary_path, wait_for_runtime_with_process, AppService, RuntimeProcessGuard,
     RuntimeRoute, RuntimeSessionStatusMap, RuntimeSessionStatusProbeError,
     RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
-    RuntimeSessionStatusProbeTargetResolution, RuntimeStartupReadinessPolicy,
-    RuntimeStartupWaitReport, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
+    RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
@@ -447,7 +448,9 @@ impl AppRuntime for OpenCodeRuntime {
         target: &RuntimeSessionStatusProbeTarget,
     ) -> RuntimeSessionStatusProbeOutcome {
         match Self::load_session_statuses(target.runtime_route(), target.working_directory()) {
-            Ok(statuses) => RuntimeSessionStatusProbeOutcome::Statuses(statuses),
+            Ok(statuses) => RuntimeSessionStatusProbeOutcome::Snapshot(
+                RuntimeSessionStatusSnapshot::from_statuses(statuses),
+            ),
             Err(error) => RuntimeSessionStatusProbeOutcome::ActionableError(
                 RuntimeSessionStatusProbeError::ProbeFailed(error.to_string()),
             ),

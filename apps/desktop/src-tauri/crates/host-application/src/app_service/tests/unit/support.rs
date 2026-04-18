@@ -39,8 +39,8 @@ pub(super) use crate::app_service::{
     wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
     RuntimeProcessGuard, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
-    RuntimeSessionStatusProbeTargetResolution, RuntimeStartupFailureReason, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload,
+    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
+    RuntimeStartupFailureReason, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
 };
 
 pub(super) fn init_git_repo(path: &std::path::Path) -> Result<()> {
@@ -90,10 +90,13 @@ pub(super) fn insert_workspace_runtime(
     Ok(())
 }
 
-pub(super) fn insert_workspace_runtime_for_kind(
+pub(super) fn insert_task_runtime_for_kind_role(
     service: &AppService,
     runtime_kind: AgentRuntimeKind,
+    task_id: &str,
+    role: RuntimeRole,
     repo_path: &str,
+    working_directory: &str,
     runtime_route: host_domain::RuntimeRoute,
 ) -> Result<()> {
     let descriptor = service
@@ -101,13 +104,18 @@ pub(super) fn insert_workspace_runtime_for_kind(
         .definition(&runtime_kind)?
         .descriptor()
         .clone();
+    let runtime_id = format!(
+        "runtime-{}-{task_id}-{}",
+        runtime_kind.as_str(),
+        role.as_str()
+    );
     let summary = RuntimeInstanceSummary {
         kind: runtime_kind,
-        runtime_id: "runtime-workspace-custom".to_string(),
+        runtime_id: runtime_id.clone(),
         repo_path: repo_path.to_string(),
-        task_id: None,
-        role: RuntimeRole::Workspace,
-        working_directory: repo_path.to_string(),
+        task_id: Some(task_id.to_string()),
+        role,
+        working_directory: working_directory.to_string(),
         runtime_route,
         started_at: "2026-03-17T11:00:00Z".to_string(),
         descriptor,
@@ -117,7 +125,7 @@ pub(super) fn insert_workspace_runtime_for_kind(
         .lock()
         .expect("runtime lock poisoned")
         .insert(
-            "runtime-workspace-custom".to_string(),
+            runtime_id,
             AgentRuntimeProcess {
                 summary,
                 child: Some(spawn_sleep_process(30)),
@@ -256,7 +264,9 @@ impl AppRuntime for TestRuntimeAdapter {
             SessionProbeBehavior::ReturnUnsupported => {
                 RuntimeSessionStatusProbeOutcome::Unsupported
             }
-            _ => RuntimeSessionStatusProbeOutcome::Statuses(Default::default()),
+            _ => RuntimeSessionStatusProbeOutcome::Snapshot(
+                RuntimeSessionStatusSnapshot::from_statuses(Default::default()),
+            ),
         }
     }
 }
