@@ -1,4 +1,8 @@
-import { ODT_TOOL_SCHEMAS, type OdtToolName } from "@openducktor/contracts";
+import {
+  ODT_TOOL_SCHEMAS,
+  type OdtToolName,
+  type WorkspaceScopedOdtToolName,
+} from "@openducktor/contracts";
 import type { z } from "zod";
 import { OdtHostBridgeClient, type OdtHostBridgeClientPort } from "./host-bridge-client";
 import type { OdtStoreOptions } from "./store-context";
@@ -8,7 +12,7 @@ export type OdtTaskStoreDeps = {
 };
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
-type WorkspaceScopedToolName = Exclude<OdtToolName, "get_workspaces">;
+type WorkspaceScopedToolName = WorkspaceScopedOdtToolName;
 
 export class OdtTaskStore {
   readonly workspaceId: string | undefined;

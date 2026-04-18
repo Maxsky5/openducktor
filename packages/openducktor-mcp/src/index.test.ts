@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -14,7 +15,13 @@ type RecordedRequest = {
   body: unknown;
 };
 
+type ContentToolResult = {
+  content: Array<{ type: string; text?: string }>;
+  structuredContent?: Record<string, unknown>;
+};
+
 const activeServers = new Set<ReturnType<typeof createServer>>();
+const mcpPackageRoot = fileURLToPath(new URL("..", import.meta.url));
 
 const closeServer = async (server: ReturnType<typeof createServer>): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
@@ -46,6 +53,27 @@ const writeJson = (response: ServerResponse, payload: unknown): void => {
   response.statusCode = 200;
   response.setHeader("Content-Type", "application/json");
   response.end(JSON.stringify(payload));
+};
+
+const taskSummaryPayload = {
+  task: {
+    id: "task-1",
+    title: "Read task",
+    description: "Inspect task payload",
+    status: "open",
+    priority: 2,
+    issueType: "task",
+    aiReviewEnabled: true,
+    labels: ["mcp"],
+    createdAt: "2026-04-18T00:00:00Z",
+    updatedAt: "2026-04-18T00:00:00Z",
+    qaVerdict: "not_reviewed",
+    documents: {
+      hasSpec: false,
+      hasPlan: false,
+      hasQaReport: false,
+    },
+  },
 };
 
 const startMockBridge = async (): Promise<{ url: string; requests: RecordedRequest[] }> => {
@@ -98,6 +126,12 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       return;
     }
 
+    if (url === "/invoke/odt_read_task") {
+      requests.push({ url, body: await readJsonBody(request) });
+      writeJson(response, taskSummaryPayload);
+      return;
+    }
+
     response.statusCode = 404;
     response.end(JSON.stringify({ error: `Unexpected URL: ${url}` }));
   });
@@ -119,6 +153,28 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   };
 };
 
+const createTransport = (hostUrl: string) => {
+  return new StdioClientTransport({
+    command: process.execPath,
+    args: ["src/index.ts"],
+    cwd: mcpPackageRoot,
+    env: {
+      ...inheritedEnv,
+      ODT_HOST_URL: hostUrl,
+    },
+    stderr: "pipe",
+  });
+};
+
+const requireContentToolResult = (result: unknown): ContentToolResult => {
+  expect("content" in (result as object)).toBe(true);
+  if (!("content" in (result as object))) {
+    throw new Error("Expected callTool() to return a content-based tool result.");
+  }
+
+  return result as ContentToolResult;
+};
+
 afterEach(async () => {
   await Promise.all(
     Array.from(activeServers, async (server) => {
@@ -131,31 +187,13 @@ afterEach(async () => {
 describe("MCP server tool results", () => {
   test("get_workspaces omits structuredContent for array payloads", async () => {
     const bridge = await startMockBridge();
-    const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: ["src/index.ts"],
-      cwd: "/Users/maxsky5/.openducktor/worktrees/openducktor/openducktor-f07/packages/openducktor-mcp",
-      env: {
-        ...inheritedEnv,
-        ODT_HOST_URL: bridge.url,
-      },
-      stderr: "pipe",
-    });
+    const transport = createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
       await client.connect(transport);
       const result = await client.callTool({ name: "get_workspaces", arguments: {} });
-
-      expect("content" in result).toBe(true);
-      if (!("content" in result)) {
-        throw new Error("Expected callTool() to return a content-based tool result.");
-      }
-
-      const contentResult = result as {
-        content: Array<{ type: string; text?: string }>;
-        structuredContent?: Record<string, unknown>;
-      };
+      const contentResult = requireContentToolResult(result);
 
       expect(contentResult.structuredContent).toBeUndefined();
       expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual([
@@ -173,6 +211,39 @@ describe("MCP server tool results", () => {
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
         { url: "/invoke/get_workspaces", body: {} },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("workspace-scoped object results keep structuredContent and preserve tool input workspaceId", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url);
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_read_task",
+        arguments: {
+          workspaceId: "repo",
+          taskId: "task-1",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+
+      expect(contentResult.structuredContent).toEqual(taskSummaryPayload);
+      expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual(taskSummaryPayload);
+      expect(bridge.requests).toEqual([
+        { url: "/invoke/odt_mcp_ready", body: {} },
+        {
+          url: "/invoke/odt_read_task",
+          body: {
+            workspaceId: "repo",
+            taskId: "task-1",
+          },
+        },
       ]);
     } finally {
       await client.close();

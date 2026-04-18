@@ -272,11 +272,19 @@ const ODT_WORKFLOW_TOOL_SCHEMAS = {
 
 export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
 
-export const ODT_TOOL_SCHEMAS = {
-  get_workspaces: GetWorkspacesInputSchema,
+export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   ...ODT_WORKFLOW_TOOL_SCHEMAS,
   odt_create_task: CreateTaskInputSchema,
   odt_search_tasks: SearchTasksInputSchema,
+} as const;
+export type WorkspaceScopedOdtToolName = keyof typeof ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS;
+export const ODT_WORKSPACE_SCOPED_TOOL_NAMES = Object.keys(
+  ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS,
+) as WorkspaceScopedOdtToolName[];
+
+export const ODT_TOOL_SCHEMAS = {
+  get_workspaces: GetWorkspacesInputSchema,
+  ...ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS,
 } as const;
 export type OdtToolName = keyof typeof ODT_TOOL_SCHEMAS;
 
