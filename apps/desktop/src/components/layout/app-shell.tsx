@@ -14,7 +14,8 @@ import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useShellAgentActivity, useWorkspaceState } from "@/state";
+import { useWorkspaceState } from "@/state/app-state-provider";
+import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings/settings-modal");

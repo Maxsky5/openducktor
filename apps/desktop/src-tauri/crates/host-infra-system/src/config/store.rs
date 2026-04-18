@@ -9,24 +9,13 @@ use super::types::{
     deserialize_global_config, repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig,
     RuntimeConfig,
 };
+use super::workspace_icons::discover_workspace_icon_data_url;
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
-use base64::{engine::general_purpose, Engine as _};
 use host_domain::{RuntimeRegistry, WorkspaceRecord};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-const WORKSPACE_ICON_CANDIDATES: [&str; 8] = [
-    "favicon.ico",
-    "favicon.png",
-    "icon.png",
-    "apple-touch-icon.png",
-    "public/favicon.ico",
-    "public/favicon.png",
-    "public/icon.png",
-    "public/apple-touch-icon.png",
-];
 
 fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
     path.into_os_string().into_string().map_err(|value| {
@@ -123,40 +112,6 @@ fn workspace_records_in_effective_order(config: &GlobalConfig) -> Result<Vec<Wor
         .into_iter()
         .map(|workspace_id| workspace_record(config, workspace_id.as_str()))
         .collect()
-}
-
-fn workspace_icon_mime_type(path: &Path) -> Option<&'static str> {
-    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
-        "png" => Some("image/png"),
-        "ico" => Some("image/x-icon"),
-        _ => None,
-    }
-}
-
-fn workspace_icon_data_url(repo_path: &str) -> Option<String> {
-    let repo_root = Path::new(repo_path);
-
-    for relative_path in WORKSPACE_ICON_CANDIDATES {
-        let candidate_path = repo_root.join(relative_path);
-        if !candidate_path.is_file() {
-            continue;
-        }
-
-        let Some(mime_type) = workspace_icon_mime_type(&candidate_path) else {
-            continue;
-        };
-        let Ok(bytes) = fs::read(&candidate_path) else {
-            continue;
-        };
-        if bytes.is_empty() {
-            continue;
-        }
-
-        let encoded = general_purpose::STANDARD.encode(bytes);
-        return Some(format!("data:{mime_type};base64,{encoded}"));
-    }
-
-    None
 }
 
 #[derive(Debug, Clone)]
@@ -620,7 +575,7 @@ fn workspace_record_from_repo(
         workspace_id: repo.workspace_id.clone(),
         workspace_name: repo.workspace_name.clone(),
         repo_path: repo.repo_path.clone(),
-        icon_data_url: workspace_icon_data_url(&repo.repo_path),
+        icon_data_url: discover_workspace_icon_data_url(&repo.repo_path),
         is_active: config.active_workspace.as_deref() == Some(workspace_id),
         has_config: true,
         configured_worktree_base_path: repo.worktree_base_path.clone(),

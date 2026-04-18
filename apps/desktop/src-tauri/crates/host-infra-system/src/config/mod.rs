@@ -4,6 +4,7 @@ mod persistence;
 mod security;
 mod store;
 mod types;
+mod workspace_icons;
 
 pub use migrate::{
     derive_workspace_name_from_repo_path, propose_workspace_id, uniquify_workspace_id,
