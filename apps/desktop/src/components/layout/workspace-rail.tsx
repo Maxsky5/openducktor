@@ -116,10 +116,10 @@ function WorkspaceRailButtonShell({
         size="icon"
         variant="ghost"
         className={cn(
-          "size-10 rounded-xl border p-0 shadow-none",
+          "size-10 rounded-lg border-none p-0 shadow-sm",
           workspace.isActive
-            ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-            : "border-border bg-card text-foreground hover:bg-muted",
+            ? "bg-primary text-primary-foreground hover:bg-primary"
+            : "bg-card text-foreground hover:bg-card",
           isDragOverlay && "pointer-events-none",
         )}
         aria-label={workspace.workspaceName}
@@ -266,8 +266,8 @@ export function WorkspaceRail({
   };
 
   return (
-    <aside className="flex h-full w-16 shrink-0 flex-col border-r border-border bg-background">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
+    <aside className="flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
+      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 py-2">
         {workspaces.length > 0 ? (
           <DndContext
             sensors={sensors}
@@ -323,7 +323,7 @@ export function WorkspaceRail({
           type="button"
           size="icon"
           variant="outline"
-          className="size-10 rounded-xl bg-card text-foreground shadow-none hover:bg-muted"
+          className="size-10 rounded-lg bg-card text-foreground border-none hover:bg-card shadow-sm"
           aria-label="Open repository"
           title="Open repository"
           onClick={onOpenRepositoryModal}
