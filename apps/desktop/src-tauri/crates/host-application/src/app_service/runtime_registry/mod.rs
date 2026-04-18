@@ -127,7 +127,7 @@ pub(crate) trait AppRuntime: Send + Sync {
         )
     }
 
-    fn abort_build_session(
+    fn stop_session(
         &self,
         runtime_route: &RuntimeRoute,
         external_session_id: &str,

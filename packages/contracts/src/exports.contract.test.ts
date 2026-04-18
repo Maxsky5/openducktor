@@ -10,6 +10,7 @@ import type {
   AgentSessionRole,
   AgentSessionScenario,
   AgentSessionStatus,
+  AgentSessionStopTarget,
   AgentSessionTodoPayloadRecord,
   AgentToolName,
   AgentWorkflowState,
@@ -153,6 +154,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStartModeSchema",
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
+  "agentSessionStopTargetSchema",
   "AUTOPILOT_ACTION_IDS",
   "AUTOPILOT_EVENT_IDS",
   "BuildBlockedInputSchema",
@@ -382,6 +384,7 @@ type ExportedTypeContract = {
   AgentSessionRole: AgentSessionRole;
   AgentSessionScenario: AgentSessionScenario;
   AgentSessionStatus: AgentSessionStatus;
+  AgentSessionStopTarget: AgentSessionStopTarget;
   AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;

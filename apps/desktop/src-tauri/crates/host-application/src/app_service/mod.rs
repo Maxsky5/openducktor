@@ -29,9 +29,9 @@ mod odt_mcp;
 mod opencode_runtime;
 mod process_registry;
 mod repo_init;
-mod runtime_session_status;
 mod runtime_orchestrator;
 mod runtime_registry;
+mod runtime_session_status;
 mod runtime_startup;
 mod service_core;
 mod startup_metrics;
@@ -70,12 +70,11 @@ pub(crate) use opencode_runtime::{
 pub(crate) type RuntimeSessionStatusMap = runtime_session_status::RuntimeSessionStatusMap;
 pub(crate) type RuntimeSessionStatusProbeTarget =
     runtime_session_status::RuntimeSessionStatusProbeTarget;
+pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use runtime_session_status::{
     RuntimeSessionStatusProbeError, RuntimeSessionStatusProbeOutcome,
-    RuntimeSessionStatusProbeTargetResolution,
-    RuntimeSessionStatusSnapshot,
+    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
 };
-pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use service_core::{
     AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess, RunProcess,
     RuntimeCleanupTarget,

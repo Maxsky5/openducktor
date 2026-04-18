@@ -1,49 +1,28 @@
-#![allow(unused_imports)]
-
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
-    PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
-};
-use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
-use serde_json::Value;
+use host_domain::{AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
+use host_infra_system::{hook_set_fingerprint, AppConfigStore, HookSet, RepoConfig};
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::fs;
-use std::net::TcpListener;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use super::support::{test_git_current_branch, test_repo_config};
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
-use crate::app_service::opencode_runtime::test_support::{
-    read_opencode_process_registry, with_locked_opencode_process_registry,
-    OpencodeProcessRegistryInstance, TrackedOpencodeProcessGuard,
-    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
-};
 #[cfg(not(unix))]
 use crate::app_service::test_support::remove_env_var;
 use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_store, builtin_opencode_runtime_route,
-    create_failing_opencode, create_fake_bd, create_fake_opencode, create_orphanable_opencode,
-    empty_patch, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_session, make_task,
-    prepend_path, process_is_alive, repo_config_for_workspace, set_env_var,
-    set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    workspace_update_repo_config_by_repo_path, write_executable_script, write_private_file,
-    EnvVarGuard, FakeTaskStore, GitCall, TaskStoreState,
+    build_service_with_store, builtin_opencode_runtime_route, create_failing_opencode,
+    create_fake_opencode, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_task,
+    repo_config_for_workspace, set_env_var, set_fake_opencode_and_bridge_binaries,
+    spawn_sleep_process, unique_temp_path, wait_for_path_exists, wait_for_process_exit,
+    workspace_update_repo_config_by_repo_path, write_private_file, EnvVarGuard,
 };
-use crate::app_service::{
-    build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
-    parse_mcp_command_json, read_opencode_version, resolve_mcp_command,
-    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    validate_parent_relationships_for_update, AgentRuntimeProcess, RunProcess,
-};
+use crate::app_service::RunProcess;
 
 fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
@@ -108,35 +87,14 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
@@ -250,11 +208,7 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -340,35 +294,14 @@ fn build_start_fails_when_task_target_remote_branch_is_unavailable_even_if_local
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
     task_state.lock().expect("task state lock poisoned").tasks[0].target_branch =
         Some(host_domain::GitTargetBranch {
@@ -410,11 +343,7 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -467,11 +396,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::InProgress)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
 
@@ -497,24 +422,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
             repo_path: repo_path.clone(),
             task_id: "task-1".to_string(),
             worktree_path: repo_path.clone(),
-            repo_config: RepoConfig {
-                default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: None,
-                branch_prefix: "odt".to_string(),
-                default_target_branch: host_infra_system::GitTargetBranch {
-                    remote: Some("origin".to_string()),
-                    branch: "main".to_string(),
-                },
-                git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-                ..Default::default()
-            },
+            repo_config: test_repo_config(None),
         },
     );
 
@@ -551,173 +459,6 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
 }
 
 #[test]
-fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> {
-    let _env_lock = lock_env();
-    let root = unique_temp_path("build-stop-aborts-builder-session");
-    let repo = root.join("repo");
-    init_git_repo(&repo)?;
-    let fake_opencode = root.join("opencode");
-    create_fake_opencode(&fake_opencode)?;
-    let _dolt_guard = install_fake_dolt(&root)?;
-    let aborts_file = root.join("aborts.log");
-    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
-    let _aborts_guard = set_env_var(
-        "OPENDUCKTOR_TEST_ABORTS_FILE",
-        aborts_file.to_string_lossy().as_ref(),
-    );
-
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
-
-    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
-    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
-    let mut session = make_session("task-1", "build-session");
-    session.role = "build".to_string();
-    session.working_directory = run.worktree_path.clone();
-    session.external_session_id = Some("external-build-session".to_string());
-    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
-
-    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
-    assert!(wait_for_path_exists(
-        aborts_file.as_path(),
-        Duration::from_secs(2)
-    ));
-    let abort_request = fs::read_to_string(aborts_file.as_path())?;
-    assert!(abort_request.contains("/session/external-build-session/abort?directory="));
-
-    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
-    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
-    assert_eq!(runtime.len(), 1);
-    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
-
-    let _ = fs::remove_dir_all(root);
-    Ok(())
-}
-
-#[test]
-fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<()> {
-    let _env_lock = lock_env();
-    let root = unique_temp_path("build-stop-abort-failure");
-    let repo = root.join("repo");
-    init_git_repo(&repo)?;
-    let fake_opencode = root.join("opencode");
-    create_fake_opencode(&fake_opencode)?;
-    let _dolt_guard = install_fake_dolt(&root)?;
-    let aborts_file = root.join("aborts.log");
-    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
-    let _aborts_guard = set_env_var(
-        "OPENDUCKTOR_TEST_ABORTS_FILE",
-        aborts_file.to_string_lossy().as_ref(),
-    );
-    let _abort_status_guard = set_env_var("OPENDUCKTOR_TEST_ABORT_STATUS", "500");
-    let _session_status_guard = set_env_var(
-        "OPENDUCKTOR_TEST_SESSION_STATUS_BODY",
-        r#"{"external-build-session":{"type":"busy"}}"#,
-    );
-
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
-
-    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
-    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
-    let mut session = make_session("task-1", "build-session");
-    session.role = "build".to_string();
-    session.working_directory = run.worktree_path.clone();
-    session.external_session_id = Some("external-build-session".to_string());
-    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
-
-    let error = service
-        .build_stop(run.run_id.as_str(), emitter.clone())
-        .expect_err("abort failures should surface to the caller");
-    assert!(error.to_string().contains(
-        "OpenCode runtime rejected abort for session external-build-session with status 500"
-    ));
-    let listed_runs = service.runs_list(Some(repo_path.as_str()))?;
-    assert_eq!(listed_runs.len(), 1);
-    assert!(matches!(listed_runs[0].state, RunState::Running));
-    assert!(wait_for_path_exists(
-        aborts_file.as_path(),
-        Duration::from_secs(2)
-    ));
-
-    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
-    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
-    assert_eq!(runtime.len(), 1);
-    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
-
-    let _ = fs::remove_dir_all(root);
-    Ok(())
-}
-
-#[test]
 fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("build-hooks");
@@ -737,11 +478,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             make_task("task-2", "bug", TaskStatus::Open),
         ],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -891,11 +628,7 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -976,37 +709,13 @@ fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     let workspace = service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         workspace.workspace_id.as_str(),
-        repo_config_for_workspace(
-            &workspace,
-            RepoConfig {
-                default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: None,
-                branch_prefix: "odt".to_string(),
-                default_target_branch: host_infra_system::GitTargetBranch {
-                    remote: Some("origin".to_string()),
-                    branch: "main".to_string(),
-                },
-                git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-                ..Default::default()
-            },
-        ),
+        repo_config_for_workspace(&workspace, test_repo_config(None)),
     )?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
@@ -1037,35 +746,14 @@ fn build_start_reports_home_or_override_guidance_when_default_worktree_resolutio
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: None,
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(None),
     )?;
 
     #[cfg(unix)]
@@ -1105,11 +793,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -1168,35 +852,14 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     let error = service
@@ -1231,35 +894,14 @@ fn build_start_uses_targeted_task_reads_instead_of_listing_all_tasks() -> Result
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     {
@@ -1303,38 +945,13 @@ fn build_start_reports_missing_task_from_targeted_lookup() -> Result<()> {
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
     let worktree_base = root.join("worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        Vec::new(),
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
+    let (service, _task_state, _git_state) =
+        build_service_with_store(Vec::new(), vec![], test_git_current_branch(), config_store);
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     let error = service
@@ -1362,35 +979,14 @@ fn build_start_preserves_transition_validation_with_targeted_lookup() -> Result<
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "feature", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     let error = service
@@ -1435,35 +1031,14 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     let error = service
@@ -1495,35 +1070,14 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     write_private_file(&config_path, "{ invalid json")?;
@@ -1570,35 +1124,14 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+        test_git_current_branch(),
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     workspace_update_repo_config_by_repo_path(
         &service,
         repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
+        test_repo_config(Some(worktree_base.as_path())),
     )?;
 
     let shared_runtime = service.runtime_ensure("opencode", repo_path.as_str())?;

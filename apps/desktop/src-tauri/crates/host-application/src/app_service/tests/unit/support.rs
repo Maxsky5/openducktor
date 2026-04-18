@@ -204,13 +204,13 @@ impl AppRuntime for TestRuntimeAdapter {
         self.health.clone()
     }
 
-    fn abort_build_session(
+    fn stop_session(
         &self,
         _runtime_route: &host_domain::RuntimeRoute,
         _external_session_id: &str,
         _working_directory: &str,
     ) -> Result<()> {
-        Err(anyhow::anyhow!("abort should not be used in this test"))
+        Err(anyhow::anyhow!("stop_session should not be used in this test"))
     }
 
     fn session_status_probe_target(

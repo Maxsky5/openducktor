@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  AgentSessionStopTarget,
   BuildContinuationTarget,
   GitTargetBranch,
   RepoPromptOverrides,
@@ -56,17 +57,13 @@ type SessionActionsDependencies = {
   ) => Promise<BuildContinuationTarget | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  loadRepoDefaultModel: (
-    workspaceId: string,
-    role: AgentRole,
-  ) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  stopBuildRun?: (runId: string) => Promise<void>;
+  stopAuthoritativeSession?: (target: AgentSessionStopTarget) => Promise<void>;
   invalidateSessionStopQueries?: (input: {
     repoPath: string;
     taskId: string;
@@ -146,8 +143,8 @@ export const createAgentSessionActions = ({
   clearTurnDuration,
   refreshTaskData,
   persistSessionRecord,
-  stopBuildRun = async () => {
-    throw new Error("Build stop operation is unavailable.");
+  stopAuthoritativeSession = async () => {
+    throw new Error("Agent session stop operation is unavailable.");
   },
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
@@ -302,6 +299,7 @@ export const createAgentSessionActions = ({
     if (!session) {
       return;
     }
+    let stopRepoPath: string | null = null;
 
     updateSession(
       sessionId,
@@ -312,13 +310,28 @@ export const createAgentSessionActions = ({
       { persist: false },
     );
 
-    const roleRequiresHostStop = session.role === "build" || session.role === "qa";
     const hasLocalRuntimeSession = adapter.hasSession(sessionId);
 
     try {
-      if (roleRequiresHostStop && session.runId) {
-        await stopBuildRun(session.runId);
+      stopRepoPath = workspaceRepoPath ?? currentWorkspaceRepoPathRef.current;
+      if (!stopRepoPath) {
+        throw new Error("Active workspace repo path is unavailable.");
       }
+
+      if (!session.runtimeKind) {
+        throw new Error("Session runtime kind is unavailable.");
+      }
+
+      await stopAuthoritativeSession({
+        repoPath: stopRepoPath,
+        taskId: session.taskId,
+        sessionId: session.sessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+        ...(session.externalSessionId.trim().length > 0
+          ? { externalSessionId: session.externalSessionId }
+          : {}),
+      });
     } catch (error) {
       updateSession(
         sessionId,
@@ -378,14 +391,14 @@ export const createAgentSessionActions = ({
       );
     }
 
-    if (workspaceRepoPath) {
+    if (stopRepoPath) {
       await Promise.all([
         invalidateSessionStopQueries?.({
-          repoPath: workspaceRepoPath,
+          repoPath: stopRepoPath,
           taskId: session.taskId,
           ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
         }),
-        refreshTaskData(workspaceRepoPath),
+        refreshTaskData(stopRepoPath),
         loadAgentSessions(session.taskId),
       ]);
     }

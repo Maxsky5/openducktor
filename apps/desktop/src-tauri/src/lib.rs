@@ -412,6 +412,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         dev_server_restart,
         build_respond,
         build_stop,
+        agent_session_stop,
         build_cleanup,
         build_blocked,
         build_resumed,

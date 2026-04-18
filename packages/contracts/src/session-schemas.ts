@@ -80,3 +80,13 @@ export const agentSessionRecordSchema = z.object({
   ),
 });
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
+
+export const agentSessionStopTargetSchema = z.object({
+  repoPath: z.string().trim().min(1),
+  taskId: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1),
+  runtimeKind: runtimeKindSchema,
+  workingDirectory: z.string().trim().min(1),
+  externalSessionId: optionalFromNullable(z.string().trim().min(1)),
+});
+export type AgentSessionStopTarget = z.infer<typeof agentSessionStopTargetSchema>;

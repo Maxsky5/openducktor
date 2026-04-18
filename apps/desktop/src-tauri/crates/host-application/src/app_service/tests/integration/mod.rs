@@ -4,5 +4,7 @@ mod git_and_task;
 mod opencode_runtime;
 mod repo_authorization;
 mod runtime_checks;
+mod session_stop;
 mod shutdown_and_helpers;
+mod support;
 mod workflow_docs;

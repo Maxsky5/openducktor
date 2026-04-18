@@ -6,11 +6,7 @@ use super::super::{
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use super::BuildResponseAction;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    now_rfc3339, AgentRuntimeKind, AgentSessionDocument, RunEvent, RunState, RunSummary,
-    RuntimeRoute, TaskStatus,
-};
-use std::path::{Component, PathBuf};
+use host_domain::{now_rfc3339, AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
 use uuid::Uuid;
 
 struct BuildRunRegistration {
@@ -30,14 +26,6 @@ struct BuildModeStartInput<'a> {
     task_id: &'a str,
     run_id: &'a str,
     emitter: RunEmitter,
-}
-
-struct BuildStopContext {
-    runtime_kind: AgentRuntimeKind,
-    runtime_route: RuntimeRoute,
-    repo_path: String,
-    task_id: String,
-    worktree_path: String,
 }
 
 impl AppService {
@@ -138,49 +126,6 @@ impl AppService {
         Ok(true)
     }
 
-    pub fn build_stop(&self, run_id: &str, emitter: RunEmitter) -> Result<bool> {
-        let stop_context = {
-            let runs = self
-                .runs
-                .lock()
-                .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            let run = runs
-                .get(run_id)
-                .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
-            BuildStopContext {
-                runtime_kind: run.summary.runtime_kind.clone(),
-                runtime_route: run.summary.runtime_route.clone(),
-                repo_path: run.repo_path.clone(),
-                task_id: run.task_id.clone(),
-                worktree_path: run.worktree_path.clone(),
-            }
-        };
-        self.abort_build_session_for_stop(&stop_context)?;
-
-        let mut runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let run = runs
-            .get_mut(run_id)
-            .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
-
-        run.summary.state = RunState::Stopped;
-        run.summary.last_message = Some("Run stopped by user".to_string());
-
-        emit_event(
-            &emitter,
-            RunEvent::RunFinished {
-                run_id: run_id.to_string(),
-                message: "Run stopped".to_string(),
-                timestamp: now_rfc3339(),
-                success: false,
-            },
-        );
-
-        Ok(true)
-    }
-
     pub(crate) fn resolve_build_startup_policy(
         &self,
         runtime_kind: &AgentRuntimeKind,
@@ -223,56 +168,6 @@ impl AppService {
                 timestamp: now_rfc3339(),
             },
         );
-    }
-
-    fn abort_build_session_for_stop(&self, context: &BuildStopContext) -> Result<()> {
-        let Some(session) = self.find_abortable_build_session_for_stop(context)? else {
-            return Ok(());
-        };
-        let external_session_id = session
-            .external_session_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| anyhow!("Build session is missing an external runtime session id"))?;
-
-        self.runtime_registry
-            .runtime(&context.runtime_kind)?
-            .abort_build_session(
-                &context.runtime_route,
-                external_session_id,
-                session.working_directory.as_str(),
-            )?;
-
-        Ok(())
-    }
-
-    fn find_abortable_build_session_for_stop(
-        &self,
-        context: &BuildStopContext,
-    ) -> Result<Option<AgentSessionDocument>> {
-        let normalized_worktree = normalize_path_for_comparison(context.worktree_path.as_str());
-        Ok(self
-            .agent_sessions_list(context.repo_path.as_str(), context.task_id.as_str())?
-            .into_iter()
-            .filter(|session| session.role.trim() == "build")
-            .filter(|session| session.runtime_kind.trim() == context.runtime_kind.as_str())
-            .filter(is_active_build_session)
-            .filter(|session| {
-                normalize_path_for_comparison(session.working_directory.as_str())
-                    == normalized_worktree
-            })
-            .filter(|session| {
-                session
-                    .external_session_id
-                    .as_deref()
-                    .is_some_and(|value| !value.trim().is_empty())
-            })
-            .max_by(|left, right| {
-                build_session_sort_key(left)
-                    .cmp(&build_session_sort_key(right))
-                    .then_with(|| left.session_id.cmp(&right.session_id))
-            }))
     }
 
     fn register_build_run(&self, registration: BuildRunRegistration) -> Result<RunSummary> {
@@ -363,44 +258,13 @@ impl AppService {
     }
 }
 
-fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (session.started_at.as_str(), session.session_id.as_str())
-}
-
-fn is_active_build_session(session: &AgentSessionDocument) -> bool {
-    session
-        .external_session_id
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-}
-
-fn normalize_path_for_comparison(path: &str) -> PathBuf {
-    let path = path.trim();
-    let mut normalized = PathBuf::new();
-    for component in PathBuf::from(path).components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            other => normalized.push(other.as_os_str()),
-        }
-    }
-
-    if normalized.as_os_str().is_empty() {
-        PathBuf::from(path)
-    } else {
-        normalized
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app_service::test_support::{
         build_service_with_state, builtin_opencode_runtime_descriptor, make_emitter, make_task,
     };
-    use host_domain::{GitTargetBranch, RuntimeRole, TaskStatus};
+    use host_domain::{GitTargetBranch, RuntimeRole, RuntimeRoute, TaskStatus};
     use host_infra_system::RepoConfig;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -460,24 +324,5 @@ mod tests {
             .expect("task store lock poisoned")
             .updated_patches
             .is_empty());
-    }
-
-    #[test]
-    fn abort_opencode_session_rejects_stdio_routes() {
-        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let error = service
-            .runtime_registry
-            .runtime(&AgentRuntimeKind::opencode())
-            .expect("opencode runtime should be registered")
-            .abort_build_session(
-                &RuntimeRoute::Stdio,
-                "external-session-1",
-                "/tmp/repo/worktree",
-            )
-            .expect_err("stdio abort should fail fast");
-
-        assert!(error
-            .to_string()
-            .contains("local_http runtime route with a port"));
     }
 }

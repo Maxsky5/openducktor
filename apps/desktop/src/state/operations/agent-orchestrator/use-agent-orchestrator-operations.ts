@@ -22,7 +22,6 @@ import {
   createEnsureRuntime,
   createLoadAgentSessions,
   loadBuildContinuationTarget,
-  loadRepoDefaultModel,
   loadRepoDefaultTargetBranch,
   loadRepoPromptOverrides,
   loadTaskDocuments,
@@ -540,15 +539,14 @@ export function useAgentOrchestratorOperations({
           loadBuildContinuationTarget(repoPath, taskId),
         ensureRuntime,
         loadTaskDocuments,
-        loadRepoDefaultModel,
         loadRepoPromptOverrides,
         loadRepoDefaultTargetBranch,
         loadAgentSessions,
         clearTurnDuration,
         refreshTaskData,
         persistSessionRecord,
-        stopBuildRun: async (runId) => {
-          await host.buildStop(runId);
+        stopAuthoritativeSession: async (target) => {
+          await host.agentSessionStop(target);
         },
         invalidateSessionStopQueries,
       }),

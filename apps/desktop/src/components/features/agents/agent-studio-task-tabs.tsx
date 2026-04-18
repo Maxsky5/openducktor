@@ -68,12 +68,12 @@ function AgentStudioTaskTabLabel({
   tab,
   isPreview = false,
   onMouseDown,
-  onClick,
+  onMouseUp,
 }: {
   tab: AgentStudioTaskTab;
   isPreview?: boolean;
   onMouseDown?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onMouseUp?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }): ReactElement {
   const className = cn(
     "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
@@ -106,7 +106,7 @@ function AgentStudioTaskTabLabel({
       value={tab.taskId}
       className={className}
       onMouseDown={onMouseDown}
-      onClick={onClick}
+      onMouseUp={onMouseUp}
     >
       {content}
     </TabsTrigger>
@@ -170,7 +170,7 @@ function AgentStudioTaskTabShell({
               onMouseDown: (event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault();
               },
-              onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
+              onMouseUp: (event: ReactMouseEvent<HTMLButtonElement>) => {
                 if (shouldSuppressSelection) {
                   event.preventDefault();
                   event.stopPropagation();

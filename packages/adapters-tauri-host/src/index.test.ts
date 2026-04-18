@@ -287,6 +287,7 @@ describe("TauriHostClient", () => {
       "humanApprove",
       "buildRespond",
       "buildStop",
+      "agentSessionStop",
       "buildCleanup",
       "gitGetBranches",
       "gitGetCurrentBranch",
@@ -1589,6 +1590,8 @@ describe("TauriHostClient", () => {
           return { ok: 1 };
         case "build_stop":
           return {};
+        case "agent_session_stop":
+          return { ok: "nope" };
         case "build_cleanup":
           return null;
         default:
@@ -1605,9 +1608,54 @@ describe("TauriHostClient", () => {
     await expect(client.buildStop("run-1")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command build_stop",
     );
+    await expect(
+      client.agentSessionStop({
+        repoPath: "/repo",
+        taskId: "task-1",
+        sessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/task-1",
+        externalSessionId: "external-session-1",
+      }),
+    ).rejects.toThrow("Expected { ok: boolean } payload from host command agent_session_stop");
     await expect(client.buildCleanup("run-1", "success")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command build_cleanup",
     );
+  });
+
+  test("agentSessionStop uses the session-oriented IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "agent_session_stop") {
+        return { ok: true };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.agentSessionStop({
+      repoPath: "/repo",
+      taskId: "task-1",
+      sessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/task-1",
+      externalSessionId: "external-session-1",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([
+      {
+        command: "agent_session_stop",
+        args: {
+          request: {
+            repoPath: "/repo",
+            taskId: "task-1",
+            sessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/task-1",
+            externalSessionId: "external-session-1",
+          },
+        },
+      },
+    ]);
   });
 
   test("runtimeEnsure preserves structured timeout metadata from host failures", async () => {
