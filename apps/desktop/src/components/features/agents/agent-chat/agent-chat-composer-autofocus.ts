@@ -49,17 +49,6 @@ const didFocusStayOnWaitAnchor = (
   );
 };
 
-const shouldFocusImmediatelyForNewSession = (
-  activeElement: HTMLElement | null,
-  focusInsideComposer: boolean,
-): boolean => {
-  if (focusInsideComposer || !activeElement) {
-    return true;
-  }
-
-  return activeElement === document.body;
-};
-
 export const resolveComposerAutofocus = (
   state: ComposerAutofocusState,
   snapshot: ComposerAutofocusSnapshot,
@@ -82,7 +71,7 @@ export const resolveComposerAutofocus = (
           pendingAutofocusSessionId: null,
           waitAnchor: null,
         },
-        shouldFocus: shouldFocusImmediatelyForNewSession(activeElement, focusInsideComposer),
+        shouldFocus: true,
       };
     }
 

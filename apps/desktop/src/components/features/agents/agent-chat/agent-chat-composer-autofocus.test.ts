@@ -38,7 +38,7 @@ describe("resolveComposerAutofocus", () => {
     });
   });
 
-  test("does not focus immediately when a new displayed session leaves focus on another control", () => {
+  test("focuses immediately when a new displayed session replaces another active control", () => {
     const result = resolveComposerAutofocus(createComposerAutofocusState(), {
       displayedSessionId: "session-1",
       isComposerInteractive: true,
@@ -46,7 +46,7 @@ describe("resolveComposerAutofocus", () => {
       focusInsideComposer: false,
     });
 
-    expect(result.shouldFocus).toBe(false);
+    expect(result.shouldFocus).toBe(true);
     expect(result.nextState).toEqual({
       lastDisplayedSessionId: "session-1",
       pendingAutofocusSessionId: null,
