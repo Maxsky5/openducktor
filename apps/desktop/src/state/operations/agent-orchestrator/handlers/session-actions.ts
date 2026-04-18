@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  AgentSessionStopTarget,
   BuildContinuationTarget,
   GitTargetBranch,
   RepoPromptOverrides,
@@ -66,7 +67,7 @@ type SessionActionsDependencies = {
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  stopBuildRun?: (runId: string) => Promise<void>;
+  stopAuthoritativeSession?: (target: AgentSessionStopTarget) => Promise<void>;
   invalidateSessionStopQueries?: (input: {
     repoPath: string;
     taskId: string;
@@ -146,8 +147,8 @@ export const createAgentSessionActions = ({
   clearTurnDuration,
   refreshTaskData,
   persistSessionRecord,
-  stopBuildRun = async () => {
-    throw new Error("Build stop operation is unavailable.");
+  stopAuthoritativeSession = async () => {
+    throw new Error("Agent session stop operation is unavailable.");
   },
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
@@ -312,13 +313,28 @@ export const createAgentSessionActions = ({
       { persist: false },
     );
 
-    const roleRequiresHostStop = session.role === "build" || session.role === "qa";
     const hasLocalRuntimeSession = adapter.hasSession(sessionId);
 
     try {
-      if (roleRequiresHostStop && session.runId) {
-        await stopBuildRun(session.runId);
+      const repoPath = workspaceRepoPath ?? currentWorkspaceRepoPathRef.current;
+      if (!repoPath) {
+        throw new Error("Active workspace repo path is unavailable.");
       }
+
+      if (!session.runtimeKind) {
+        throw new Error("Session runtime kind is unavailable.");
+      }
+
+      await stopAuthoritativeSession({
+        repoPath,
+        taskId: session.taskId,
+        sessionId: session.sessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+        ...(session.externalSessionId.trim().length > 0
+          ? { externalSessionId: session.externalSessionId }
+          : {}),
+      });
     } catch (error) {
       updateSession(
         sessionId,

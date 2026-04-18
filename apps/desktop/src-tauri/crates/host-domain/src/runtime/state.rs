@@ -72,6 +72,18 @@ pub struct RunSummary {
     pub started_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionStopRequest {
+    pub repo_path: String,
+    pub task_id: String,
+    pub session_id: String,
+    pub runtime_kind: AgentRuntimeKind,
+    pub working_directory: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_session_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeInstanceSummary {

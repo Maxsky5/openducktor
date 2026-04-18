@@ -2,9 +2,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
-    PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeKind, AgentSessionDocument, AgentSessionStopRequest, CreateTaskInput, GitBranch,
+    GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -565,6 +565,10 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
         "OPENDUCKTOR_TEST_ABORTS_FILE",
         aborts_file.to_string_lossy().as_ref(),
     );
+    let _session_status_guard = set_env_var(
+        "OPENDUCKTOR_TEST_SESSION_STATUS_BODY",
+        r#"{"external-build-session":{"type":"busy"}}"#,
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
@@ -696,6 +700,297 @@ fn build_stop_propagates_abort_failures_without_marking_run_stopped() -> Result<
 
     let error = service
         .build_stop(run.run_id.as_str(), emitter.clone())
+        .expect_err("abort failures should surface to the caller");
+    assert!(error.to_string().contains(
+        "OpenCode runtime rejected abort for session external-build-session with status 500"
+    ));
+    let listed_runs = service.runs_list(Some(repo_path.as_str()))?;
+    assert_eq!(listed_runs.len(), 1);
+    assert!(matches!(listed_runs[0].state, RunState::Running));
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
+    assert_eq!(runtime.len(), 1);
+    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_marks_the_matching_build_run_stopped() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-build");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let aborts_file = root.join("aborts.log");
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.working_directory = run.worktree_path.clone();
+    session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    let stopped = service.agent_session_stop(
+        AgentSessionStopRequest {
+            repo_path: repo_path.clone(),
+            task_id: "task-1".to_string(),
+            session_id: "build-session".to_string(),
+            runtime_kind: AgentRuntimeKind::opencode(),
+            working_directory: run.worktree_path.clone(),
+            external_session_id: Some("external-build-session".to_string()),
+        },
+        emitter.clone(),
+    )?;
+
+    assert!(stopped);
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let abort_request = fs::read_to_string(aborts_file.as_path())?;
+    assert!(abort_request.contains("/session/external-build-session/abort?directory="));
+    let listed_runs = service.runs_list(Some(repo_path.as_str()))?;
+    assert_eq!(listed_runs.len(), 1);
+    assert!(matches!(listed_runs[0].state, RunState::Stopped));
+
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
+    assert_eq!(runtime.len(), 1);
+    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_targets_shared_runtime_qa_sessions_without_stopping_the_build_run(
+) -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-qa");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let aborts_file = root.join("aborts.log");
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+
+    let mut build_session = make_session("task-1", "build-session");
+    build_session.role = "build".to_string();
+    build_session.working_directory = run.worktree_path.clone();
+    build_session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", build_session)?);
+
+    let mut qa_session = make_session("task-1", "qa-session");
+    qa_session.role = "qa".to_string();
+    qa_session.working_directory = run.worktree_path.clone();
+    qa_session.external_session_id = Some("external-qa-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", qa_session)?);
+
+    let stopped = service.agent_session_stop(
+        AgentSessionStopRequest {
+            repo_path: repo_path.clone(),
+            task_id: "task-1".to_string(),
+            session_id: "qa-session".to_string(),
+            runtime_kind: AgentRuntimeKind::opencode(),
+            working_directory: run.worktree_path.clone(),
+            external_session_id: Some("external-qa-session".to_string()),
+        },
+        emitter.clone(),
+    )?;
+
+    assert!(stopped);
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let abort_request = fs::read_to_string(aborts_file.as_path())?;
+    assert!(abort_request.contains("/session/external-qa-session/abort?directory="));
+    assert!(!abort_request.contains("external-build-session"));
+
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
+    assert_eq!(runtime.len(), 1);
+    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_propagates_abort_failures_without_marking_build_runs_stopped() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-abort-failure");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let aborts_file = root.join("aborts.log");
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+    let _abort_status_guard = set_env_var("OPENDUCKTOR_TEST_ABORT_STATUS", "500");
+    let _session_status_guard = set_env_var(
+        "OPENDUCKTOR_TEST_SESSION_STATUS_BODY",
+        r#"{"external-build-session":{"type":"busy"}}"#,
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.working_directory = run.worktree_path.clone();
+    session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    let error = service
+        .agent_session_stop(
+            AgentSessionStopRequest {
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                session_id: "build-session".to_string(),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                working_directory: run.worktree_path.clone(),
+                external_session_id: Some("external-build-session".to_string()),
+            },
+            emitter.clone(),
+        )
         .expect_err("abort failures should surface to the caller");
     assert!(error.to_string().contains(
         "OpenCode runtime rejected abort for session external-build-session with status 500"

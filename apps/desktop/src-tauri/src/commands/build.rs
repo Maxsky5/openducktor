@@ -4,7 +4,7 @@ use crate::{
 };
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
-    AgentRuntimeKind, DevServerGroupState, PullRequestRecord, RunSummary,
+    AgentRuntimeKind, AgentSessionStopRequest, DevServerGroupState, PullRequestRecord, RunSummary,
     TaskApprovalContextLoadResult, TaskCard, TaskDirectMergeResult, TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
@@ -113,6 +113,23 @@ pub async fn build_stop<R: tauri::Runtime>(
     let result = run_service_blocking("build_stop", move || {
         service
             .build_stop(&run_id, emitter)
+            .map(|ok| serde_json::json!({ "ok": ok }))
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn agent_session_stop<R: tauri::Runtime>(
+    state: State<'_, AppState>,
+    app: AppHandle<R>,
+    request: AgentSessionStopRequest,
+) -> Result<serde_json::Value, String> {
+    let service = state.service.clone();
+    let emitter = run_emitter(app);
+    let result = run_service_blocking("agent_session_stop", move || {
+        service
+            .agent_session_stop(request, emitter)
             .map(|ok| serde_json::json!({ "ok": ok }))
     })
     .await;

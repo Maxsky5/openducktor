@@ -547,8 +547,8 @@ export function useAgentOrchestratorOperations({
         clearTurnDuration,
         refreshTaskData,
         persistSessionRecord,
-        stopBuildRun: async (runId) => {
-          await host.buildStop(runId);
+        stopAuthoritativeSession: async (target) => {
+          await host.agentSessionStop(target);
         },
         invalidateSessionStopQueries,
       }),

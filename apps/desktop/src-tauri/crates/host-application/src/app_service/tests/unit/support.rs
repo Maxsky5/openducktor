@@ -204,7 +204,7 @@ impl AppRuntime for TestRuntimeAdapter {
         self.health.clone()
     }
 
-    fn abort_build_session(
+    fn stop_session(
         &self,
         _runtime_route: &host_domain::RuntimeRoute,
         _external_session_id: &str,

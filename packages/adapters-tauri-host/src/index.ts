@@ -103,6 +103,7 @@ const AGENT_METHODS = [
   "humanApprove",
   "buildRespond",
   "buildStop",
+  "agentSessionStop",
   "buildCleanup",
 ] as const satisfies readonly MethodName<TauriAgentClient>[];
 

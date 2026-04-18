@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentSessionStopTarget } from "@openducktor/contracts";
 import {
   findSessionMessageForTest,
   lastSessionMessageForTest,
@@ -85,6 +86,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
+      stopAuthoritativeSession: async () => {},
     });
 
     expect(typeof actions.ensureSessionReady).toBe("function");
@@ -127,6 +129,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
+      stopAuthoritativeSession: async () => {},
     });
 
     currentWorkspaceRepoPathRef.current = "/tmp/other";
@@ -152,6 +155,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => false;
+    const stopTargets: AgentSessionStopTarget[] = [];
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
@@ -215,10 +219,23 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
+      stopAuthoritativeSession: async (target) => {
+        stopTargets.push(target);
+      },
     });
 
     try {
       await actions.stopAgentSession("session-1");
+      expect(stopTargets).toEqual([
+        {
+          repoPath: "/tmp/repo",
+          taskId: "task-1",
+          sessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        },
+      ]);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
       expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
@@ -227,7 +244,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("keeps session active when authoritative build stop fails", async () => {
+  test("keeps session active when authoritative session stop fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
@@ -261,7 +278,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const stopBuildRun = async () => {
+    const stopAuthoritativeSession = async () => {
       throw new Error("build stop failed");
     };
 
@@ -313,7 +330,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
-      stopBuildRun,
+      stopAuthoritativeSession,
     });
 
     try {
@@ -333,7 +350,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("records stop intent before awaiting authoritative build stop", async () => {
+  test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const stopDeferred = createDeferred<void>();
@@ -386,7 +403,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
-      stopBuildRun: async () => {
+      stopAuthoritativeSession: async () => {
         await stopDeferred.promise;
       },
     });
@@ -514,6 +531,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
+      stopAuthoritativeSession: async () => {},
     });
 
     try {
@@ -547,7 +565,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("continues cleanup when local adapter stop fails after host stop", async () => {
+  test("continues cleanup when local adapter stop fails after authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
@@ -617,7 +635,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
-      stopBuildRun: async () => {
+      stopAuthoritativeSession: async () => {
         callOrder.push("host-stop");
       },
     });
@@ -638,7 +656,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("does not stop shared runtime when build/qa session lacks runId", async () => {
+  test("stops shared-runtime qa sessions authoritatively without runId", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
@@ -697,14 +715,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
-      stopBuildRun: async () => {
+      stopAuthoritativeSession: async (target) => {
         buildStopCalls += 1;
+        expect(target).toEqual({
+          repoPath: "/tmp/repo",
+          taskId: "task-1",
+          sessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        });
       },
     });
 
     try {
       await actions.stopAgentSession("session-1");
-      expect(buildStopCalls).toBe(0);
+      expect(buildStopCalls).toBe(1);
       expect(localStopCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
@@ -789,8 +815,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         await persistDeferred.promise;
         callOrder.push("persist-end");
       },
-      stopBuildRun: async () => {
-        callOrder.push("stop-build-run");
+      stopAuthoritativeSession: async () => {
+        callOrder.push("stop-authoritative-session");
       },
       invalidateSessionStopQueries: async () => {
         callOrder.push("invalidate-stop-queries");
@@ -801,7 +827,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       const stopPromise = actions.stopAgentSession("session-1");
       await Promise.resolve();
 
-      expect(callOrder).toEqual(["stop-build-run", "persist-start"]);
+      expect(callOrder).toEqual(["stop-authoritative-session", "persist-start"]);
 
       persistDeferred.resolve();
       await stopPromise;
@@ -819,7 +845,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("refreshes backend-owned state after successful host stop", async () => {
+  test("refreshes backend-owned state after successful authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
@@ -883,7 +909,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         refreshTaskDataCalls += 1;
       },
       persistSessionRecord: async () => {},
-      stopBuildRun: async () => {},
+      stopAuthoritativeSession: async () => {},
       invalidateSessionStopQueries: async (input) => {
         invalidationCalls.push(input);
       },
@@ -1766,7 +1792,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
-      stopBuildRun: async () => {
+      stopAuthoritativeSession: async () => {
         stopCalls += 1;
       },
     });

@@ -25,15 +25,15 @@ pub use git::{
     TaskApprovalContextLoadResult, TaskPullRequestDetectResult,
 };
 pub use runtime::{
-    builtin_runtime_registry, default_runtime_kind, AgentRuntimeKind, BuildContinuationTarget,
-    BuildContinuationTargetSource, DevServerEvent, DevServerGroupState, DevServerScriptState,
-    DevServerScriptStatus, DevServerTerminalChunk, RepoRuntimeHealthCheck, RepoRuntimeHealthMcp,
-    RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime, RepoRuntimeHealthState,
-    RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
-    RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities,
-    RuntimeDefinition, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode,
-    RuntimeRegistry, RuntimeRole, RuntimeRoute, RuntimeStartupReadinessConfig,
-    RuntimeSupportedScope,
+    builtin_runtime_registry, default_runtime_kind, AgentRuntimeKind, AgentSessionStopRequest,
+    BuildContinuationTarget, BuildContinuationTargetSource, DevServerEvent, DevServerGroupState,
+    DevServerScriptState, DevServerScriptStatus, DevServerTerminalChunk, RepoRuntimeHealthCheck,
+    RepoRuntimeHealthMcp, RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime,
+    RepoRuntimeHealthState, RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind,
+    RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary,
+    RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor, RuntimeInstanceSummary,
+    RuntimeProvisioningMode, RuntimeRegistry, RuntimeRole, RuntimeRoute,
+    RuntimeStartupReadinessConfig, RuntimeSupportedScope,
 };
 pub use store::TaskStore;
 pub use system::{

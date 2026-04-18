@@ -477,7 +477,7 @@ impl AppRuntime for OpenCodeRuntime {
         Self::health_client(runtime)?.load_tool_ids(runtime.working_directory.as_str())
     }
 
-    fn abort_build_session(
+    fn stop_session(
         &self,
         runtime_route: &RuntimeRoute,
         external_session_id: &str,

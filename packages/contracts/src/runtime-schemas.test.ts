@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   agentSessionPermissionRequestSchema,
   agentSessionRecordSchema,
+  agentSessionStopTargetSchema,
   buildContinuationTargetSchema,
   buildContinuationTargetSourceSchema,
   gitBranchSchema,
@@ -973,6 +974,26 @@ describe("runtime schemas", () => {
     expect(parsed.externalSessionId).toBeUndefined();
     expect(parsed.runtimeKind).toBe("claude-code");
     expect(parsed.selectedModel).toBeNull();
+  });
+
+  test("agent session stop target parses durable session identity", () => {
+    const parsed = agentSessionStopTargetSchema.parse({
+      repoPath: "/repo",
+      taskId: "task-1",
+      sessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/task-1",
+      externalSessionId: "external-session-1",
+    });
+
+    expect(parsed).toEqual({
+      repoPath: "/repo",
+      taskId: "task-1",
+      sessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/task-1",
+      externalSessionId: "external-session-1",
+    });
   });
 
   test("agent session permission request accepts recursive metadata values", () => {

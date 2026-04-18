@@ -1,4 +1,6 @@
 import {
+  type AgentSessionStopTarget,
+  agentSessionStopTargetSchema,
   type BeadsCheck,
   type BuildContinuationTarget,
   beadsCheckSchema,
@@ -478,6 +480,16 @@ const buildStop = async (invokeFn: InvokeFn, runId: string): Promise<{ ok: boole
   return parseOkResult(payload, "build_stop");
 };
 
+const agentSessionStop = async (
+  invokeFn: InvokeFn,
+  target: AgentSessionStopTarget,
+): Promise<{ ok: boolean }> => {
+  const payload = await invokeFn("agent_session_stop", {
+    request: agentSessionStopTargetSchema.parse(target),
+  });
+  return parseOkResult(payload, "agent_session_stop");
+};
+
 const buildCleanup = async (
   invokeFn: InvokeFn,
   runId: string,
@@ -659,6 +671,10 @@ export class TauriAgentClient {
 
   async buildStop(runId: string): Promise<{ ok: boolean }> {
     return buildStop(this.invokeFn, runId);
+  }
+
+  async agentSessionStop(target: AgentSessionStopTarget): Promise<{ ok: boolean }> {
+    return agentSessionStop(this.invokeFn, target);
   }
 
   async buildCleanup(runId: string, mode: BuildCleanupMode): Promise<{ ok: boolean }> {
