@@ -160,13 +160,15 @@ const mergePersistedSessionRecord = (
   current: AgentSessionState,
   record: AgentSessionRecord,
   taskId: string,
+  repoPath: string,
   promptOverrides: RepoPromptOverrides,
 ): AgentSessionState => {
-  const persisted = fromPersistedSessionRecord(record, taskId);
+  const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
   const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
 
   return {
     ...current,
+    repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
     role: persisted.role,
@@ -334,12 +336,13 @@ export const preparePersistedSessionMergeStage = async ({
             existingSession,
             record,
             intent.taskId,
+            intent.repoPath,
             existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           );
           continue;
         }
         next[record.sessionId] = {
-          ...fromPersistedSessionRecord(record, intent.taskId),
+          ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
           pendingPermissions: [],
           pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,

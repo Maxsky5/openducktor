@@ -14,6 +14,7 @@ const buildSession = (
     sessionId,
     externalSessionId: `external-${sessionId}`,
     taskId: "task-1",
+    repoPath: rest.repoPath ?? "/repo",
     runtimeKind: "opencode",
     role: "build",
     scenario: "build_implementation_start",

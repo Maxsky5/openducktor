@@ -142,6 +142,7 @@ export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
   taskId: string;
+  repoPath: string;
   runtimeKind?: RuntimeKind;
   role: AgentRole;
   scenario: AgentScenario;

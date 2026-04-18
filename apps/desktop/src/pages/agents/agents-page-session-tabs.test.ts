@@ -27,6 +27,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   sessionId: "session-1",
   externalSessionId: "ext-session-1",
   taskId: "task-1",
+  repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "spec",
   scenario: "spec_initial",
   status: "idle",

@@ -18,12 +18,22 @@ export type AgentSessionSummary = Pick<
   runtimeKind?: AgentSessionState["runtimeKind"];
 };
 
+export type AgentActivitySessionSummary = Pick<
+  AgentSessionState,
+  "sessionId" | "taskId" | "role" | "scenario" | "status" | "startedAt"
+> & {
+  repoPath: string;
+  hasPendingPermissions: boolean;
+  hasPendingQuestions: boolean;
+};
+
 type Listener = () => void;
 
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getSessionsSnapshot: () => AgentSessionState[];
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
+  getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
   getSessionsByIdSnapshot: () => AgentSessionsById;
   getSessionSnapshot: (sessionId: string | null) => AgentSessionState | null;
   setSessionsById: (nextSessionsById: AgentSessionsById) => void;
@@ -47,6 +57,22 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
   pendingQuestions: session.pendingQuestions,
 });
 
+export const toAgentActivitySessionSummary = (
+  session: AgentSessionState,
+): AgentActivitySessionSummary => {
+  return {
+    sessionId: session.sessionId,
+    taskId: session.taskId,
+    repoPath: session.repoPath,
+    role: session.role,
+    scenario: session.scenario,
+    status: session.status,
+    startedAt: session.startedAt,
+    hasPendingPermissions: session.pendingPermissions.length > 0,
+    hasPendingQuestions: session.pendingQuestions.length > 0,
+  };
+};
+
 const areSummariesEquivalent = (
   left: AgentSessionSummary | undefined,
   right: AgentSessionSummary,
@@ -67,6 +93,23 @@ const areSummariesEquivalent = (
   );
 };
 
+const areActivitySummariesEquivalent = (
+  left: AgentActivitySessionSummary | undefined,
+  right: AgentActivitySessionSummary,
+): boolean => {
+  return (
+    left?.sessionId === right.sessionId &&
+    left.taskId === right.taskId &&
+    left.repoPath === right.repoPath &&
+    left.role === right.role &&
+    left.scenario === right.scenario &&
+    left.status === right.status &&
+    left.startedAt === right.startedAt &&
+    left.hasPendingPermissions === right.hasPendingPermissions &&
+    left.hasPendingQuestions === right.hasPendingQuestions
+  );
+};
+
 const areArraysReferenceEqual = <T>(left: T[], right: T[]): boolean => {
   if (left.length !== right.length) {
     return false;
@@ -83,6 +126,7 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
   let sessionsById: AgentSessionsById = {};
   let sessions: AgentSessionState[] = [];
   let sessionSummaries: AgentSessionSummary[] = [];
+  let activitySessionSummaries: AgentActivitySessionSummary[] = [];
   let hasPendingNotification = false;
   let framePending = false;
   const listeners = new Set<Listener>();
@@ -127,6 +171,7 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
     },
     getSessionsSnapshot: () => sessions,
     getSessionSummariesSnapshot: () => sessionSummaries,
+    getActivitySessionsSnapshot: () => activitySessionSummaries,
     getSessionsByIdSnapshot: () => sessionsById,
     getSessionSnapshot: (sessionId) => (sessionId ? (sessionsById[sessionId] ?? null) : null),
     setSessionsById: (nextSessionsById) => {
@@ -137,11 +182,21 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
       const previousSummaryById = new Map(
         sessionSummaries.map((summary) => [summary.sessionId, summary]),
       );
+      const previousActivitySummaryById = new Map(
+        activitySessionSummaries.map((summary) => [summary.sessionId, summary]),
+      );
       const nextSessions = Object.values(nextSessionsById).sort(sortByStartedAtDesc);
       const nextSessionSummaries = nextSessions.map((session) => {
         const nextSummary = toAgentSessionSummary(session);
         const previousSummary = previousSummaryById.get(session.sessionId);
         return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
+          ? previousSummary
+          : nextSummary;
+      });
+      const nextActivitySessionSummaries = nextSessions.map((session) => {
+        const nextSummary = toAgentActivitySessionSummary(session);
+        const previousSummary = previousActivitySummaryById.get(session.sessionId);
+        return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
           ? previousSummary
           : nextSummary;
       });
@@ -151,6 +206,12 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
       sessionSummaries = areArraysReferenceEqual(sessionSummaries, nextSessionSummaries)
         ? sessionSummaries
         : nextSessionSummaries;
+      activitySessionSummaries = areArraysReferenceEqual(
+        activitySessionSummaries,
+        nextActivitySessionSummaries,
+      )
+        ? activitySessionSummaries
+        : nextActivitySessionSummaries;
       scheduleNotification();
     },
   };

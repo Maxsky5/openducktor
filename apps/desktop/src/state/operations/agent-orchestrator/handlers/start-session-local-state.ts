@@ -1,5 +1,6 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
@@ -25,43 +26,47 @@ export const buildInitialSession = ({
   systemPrompt: string;
   promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
   initialMessages?: AgentSessionState["messages"];
-}): AgentSessionState => ({
-  sessionId: startedCtx.summary.sessionId,
-  externalSessionId: startedCtx.summary.externalSessionId,
-  taskId: startedCtx.taskId,
-  runtimeKind: runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-  role: startedCtx.role,
-  scenario: startedCtx.resolvedScenario,
-  status: "starting",
-  startedAt: startedCtx.summary.startedAt,
-  runtimeId: runtime.runtimeId,
-  runId: runtime.runId,
-  runtimeRoute: runtime.runtimeRoute,
-  workingDirectory: runtime.workingDirectory,
-  historyHydrationState: "hydrated",
-  runtimeRecoveryState: "idle",
-  messages:
-    initialMessages ??
-    buildSessionHeaderMessages({
+}): AgentSessionState =>
+  createRepoScopedAgentSessionState(
+    {
       sessionId: startedCtx.summary.sessionId,
+      externalSessionId: startedCtx.summary.externalSessionId,
+      taskId: startedCtx.taskId,
+      runtimeKind: runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
       role: startedCtx.role,
       scenario: startedCtx.resolvedScenario,
-      systemPrompt,
+      status: "starting",
       startedAt: startedCtx.summary.startedAt,
-    }),
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  contextUsage: null,
-  pendingPermissions: [],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
-  selectedModel,
-  isLoadingModelCatalog: true,
-  promptOverrides,
-});
+      runtimeId: runtime.runtimeId,
+      runId: runtime.runId,
+      runtimeRoute: runtime.runtimeRoute,
+      workingDirectory: runtime.workingDirectory,
+      historyHydrationState: "hydrated",
+      runtimeRecoveryState: "idle",
+      messages:
+        initialMessages ??
+        buildSessionHeaderMessages({
+          sessionId: startedCtx.summary.sessionId,
+          role: startedCtx.role,
+          scenario: startedCtx.resolvedScenario,
+          systemPrompt,
+          startedAt: startedCtx.summary.startedAt,
+        }),
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: null,
+      pendingPermissions: [],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel,
+      isLoadingModelCatalog: true,
+      promptOverrides,
+    },
+    startedCtx.repoPath,
+  );
 
 export const persistInitialSession = async ({
   initialSession,

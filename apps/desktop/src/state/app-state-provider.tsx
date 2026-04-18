@@ -17,7 +17,7 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
-import type { AgentSessionSummary } from "./agent-sessions-store";
+import type { AgentActivitySessionSummary, AgentSessionSummary } from "./agent-sessions-store";
 import {
   AgentOperationsContext,
   AgentSessionsContext,
@@ -115,6 +115,15 @@ export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
     sessionStore.subscribe,
     sessionStore.getSessionSummariesSnapshot,
     sessionStore.getSessionSummariesSnapshot,
+  );
+};
+
+export const useAgentActivitySessions = (): AgentActivitySessionSummary[] => {
+  const sessionStore = useAgentSessionsContext();
+  return useSyncExternalStore(
+    sessionStore.subscribe,
+    sessionStore.getActivitySessionsSnapshot,
+    sessionStore.getActivitySessionsSnapshot,
   );
 };
 
