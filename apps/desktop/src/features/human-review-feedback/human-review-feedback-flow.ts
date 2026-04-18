@@ -12,7 +12,7 @@ export type HumanReviewFeedbackStartRequest = {
   scenario: HumanReviewFeedbackState["scenario"];
   initialStartMode?: "fresh" | "reuse" | "fork";
   existingSessionOptions: SessionStartExistingSessionOption[];
-  sourceSessionId?: string;
+  initialSourceSessionId?: string;
   postStartAction: "kickoff";
   message: string;
   beforeStartAction: {
@@ -52,7 +52,7 @@ const buildRequestChangesSessionRequest = (
     scenario: state.scenario,
     ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : {}),
     existingSessionOptions,
-    ...(latestBuilderSessionId ? { sourceSessionId: latestBuilderSessionId } : {}),
+    ...(latestBuilderSessionId ? { initialSourceSessionId: latestBuilderSessionId } : {}),
     postStartAction: "kickoff",
     message: feedback,
     beforeStartAction: {

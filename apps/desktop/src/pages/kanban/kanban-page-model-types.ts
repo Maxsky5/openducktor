@@ -11,9 +11,7 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type { SessionStartFlowRequest } from "@/features/session-start";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-export type KanbanSessionStartIntent = SessionStartFlowRequest & {
-  sourceSessionId?: string | null;
-};
+export type KanbanSessionStartIntent = SessionStartFlowRequest;
 
 export type TaskApprovalMode = "direct_merge" | "pull_request";
 export type PullRequestDraftMode = "manual" | "generate_ai";

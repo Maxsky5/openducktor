@@ -10,7 +10,7 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import type {
   SessionStartExistingSessionOption,
-  SessionStartFlowRequest,
+  SessionStartLaunchRequest,
   SessionStartPostAction,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -21,7 +21,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   startSessionRequest: (
-    request: SessionStartFlowRequest & {
+    request: SessionStartLaunchRequest & {
       role: "build";
       scenario: "build_after_human_request_changes";
       reason: "create_session";
@@ -99,7 +99,9 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             scenario: request.scenario,
             reason: "create_session" as const,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.sourceSessionId ? { initialSourceSessionId: request.sourceSessionId } : {}),
+            ...(request.initialSourceSessionId
+              ? { initialSourceSessionId: request.initialSourceSessionId }
+              : {}),
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             postStartAction: request.postStartAction,
             message: request.message,

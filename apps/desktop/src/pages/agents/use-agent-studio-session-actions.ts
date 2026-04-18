@@ -16,7 +16,7 @@ import {
   resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { SessionStartRequestReason } from "@/features/session-start";
+import type { SessionStartLaunchRequest } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -109,23 +109,7 @@ export function useAgentStudioSessionActions({
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  startSessionRequest: (request: {
-    taskId: string;
-    role: AgentRole;
-    scenario: AgentScenario;
-    reason: SessionStartRequestReason;
-    postStartAction: "none" | "kickoff" | "send_message";
-    message?: string;
-    initialStartMode?: "fresh" | "reuse" | "fork";
-    existingSessionOptions?: Array<{
-      value: string;
-      label: string;
-      description: string;
-      secondaryLabel?: string;
-      selectedModel?: AgentModelSelection | null;
-    }>;
-    initialSourceSessionId?: string | null;
-  }) => Promise<string | undefined>;
+  startSessionRequest: (request: SessionStartLaunchRequest) => Promise<string | undefined>;
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;

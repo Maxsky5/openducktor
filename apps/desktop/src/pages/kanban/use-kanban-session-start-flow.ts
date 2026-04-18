@@ -211,10 +211,7 @@ export function useKanbanSessionStartFlow({
       return runSessionStartRequest(
         buildSessionStartModalRequest({
           source: "kanban",
-          request: {
-            ...intent,
-            ...(intent.sourceSessionId ? { initialSourceSessionId: intent.sourceSessionId } : {}),
-          },
+          request: intent,
           selectedModel: null,
           taskSessions: sessionsRef.current,
           selectedTask,
@@ -269,7 +266,7 @@ export function useKanbanSessionStartFlow({
         taskId,
         role: "build",
         scenario: "build_pull_request_generation",
-        sourceSessionId: builderSessions[0]?.sessionId ?? null,
+        initialSourceSessionId: builderSessions[0]?.sessionId ?? null,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: builderSessions,
           role: "build",
@@ -423,7 +420,9 @@ export function useKanbanSessionStartFlow({
             scenario: request.scenario,
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.sourceSessionId ? { sourceSessionId: request.sourceSessionId } : {}),
+            ...(request.initialSourceSessionId
+              ? { initialSourceSessionId: request.initialSourceSessionId }
+              : {}),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,

@@ -8,12 +8,12 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type {
   ResolvedSessionStartDecision,
   SessionStartFlowRequest,
+  SessionStartLaunchRequest,
   SessionStartRequestReason,
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
   executeSessionStartFromDecision,
-  type SessionStartPostAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -55,10 +55,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   onContextSwitchIntent?: () => void;
 };
 
-type AgentStudioSessionStartRequest = SessionStartFlowRequest & {
-  reason: SessionStartRequestReason;
-  postStartAction: SessionStartPostAction;
-};
+type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
 
 export function useAgentStudioSessionStartFlow({
   activeWorkspace,

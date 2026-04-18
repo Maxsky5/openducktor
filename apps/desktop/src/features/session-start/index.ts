@@ -5,6 +5,7 @@ export {
   executeSessionStartFromDecision,
   type ResolvedSessionStartDecision,
   type SessionStartFlowRequest,
+  type SessionStartLaunchRequest,
 } from "./session-start-orchestration";
 export {
   buildGitConflictResolutionPrompt,

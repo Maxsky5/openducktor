@@ -6,7 +6,11 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
-import type { NewSessionStartDecision, NewSessionStartRequest } from "./session-start-types";
+import type {
+  NewSessionStartDecision,
+  NewSessionStartRequest,
+  SessionStartRequestReason,
+} from "./session-start-types";
 import {
   type SessionStartBeforeAction,
   type SessionStartPostAction,
@@ -20,6 +24,10 @@ export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedMode
   postStartAction: SessionStartPostAction;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
+};
+
+export type SessionStartLaunchRequest = SessionStartFlowRequest & {
+  reason: SessionStartRequestReason;
 };
 
 export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;

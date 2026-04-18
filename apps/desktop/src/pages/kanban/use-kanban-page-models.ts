@@ -201,7 +201,7 @@ export function useKanbanPageModels({
         scenario: request.scenario,
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
-        sourceSessionId: request.initialSourceSessionId,
+        initialSourceSessionId: request.initialSourceSessionId,
         existingSessionOptions: request.existingSessionOptions,
         postStartAction: "send_message",
         message: request.message,

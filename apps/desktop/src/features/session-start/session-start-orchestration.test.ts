@@ -127,6 +127,72 @@ describe("session-start-orchestration", () => {
     expect(request.targetWorkingDirectory).toBe("/repo/worktrees/TASK-1");
   });
 
+  test("keeps an explicit initial source session override even when another active session matches", () => {
+    const latestSession = createAgentSessionFixture({
+      sessionId: "builder-session-2",
+      taskId: "TASK-1",
+      role: "build",
+      scenario: "build_after_qa_rejected",
+      startedAt: "2026-03-20T12:00:00.000Z",
+    });
+    const activeSession = createAgentSessionFixture({
+      sessionId: "builder-session-1",
+      taskId: "TASK-1",
+      role: "build",
+      scenario: "build_after_qa_rejected",
+      startedAt: "2026-03-19T12:00:00.000Z",
+    });
+
+    const request = buildSessionStartModalRequest({
+      source: "kanban",
+      request: {
+        taskId: "TASK-1",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        initialSourceSessionId: "builder-session-2",
+        postStartAction: "kickoff",
+      },
+      selectedModel: null,
+      taskSessions: [latestSession, activeSession],
+      activeSession,
+    });
+
+    expect(request.initialSourceSessionId).toBe("builder-session-2");
+  });
+
+  test("keeps an explicit target branch override instead of selected task defaults", () => {
+    const request = buildSessionStartModalRequest({
+      source: "agent_studio",
+      request: {
+        taskId: "TASK-1",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        initialTargetBranch: {
+          remote: "origin",
+          branch: "release/2026.05",
+        },
+        initialTargetBranchError: "use the override instead",
+        postStartAction: "kickoff",
+      },
+      selectedModel: BUILD_SELECTION,
+      taskSessions: [],
+      selectedTask: createTaskCardFixture({
+        id: "TASK-1",
+        targetBranch: {
+          remote: "origin",
+          branch: "main",
+        },
+        targetBranchError: "saved task target branch is invalid",
+      }),
+    });
+
+    expect(request.initialTargetBranch).toEqual({
+      remote: "origin",
+      branch: "release/2026.05",
+    });
+    expect(request.initialTargetBranchError).toBe("use the override instead");
+  });
+
   test("maps reuse decisions to workflow execution without a selected model", async () => {
     const startAgentSession = mock(async () => "builder-session-2");
 

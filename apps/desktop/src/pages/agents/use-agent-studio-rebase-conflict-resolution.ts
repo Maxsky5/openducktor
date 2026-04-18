@@ -2,7 +2,10 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
-import type { SessionStartExistingSessionOption } from "@/features/session-start";
+import type {
+  SessionStartExistingSessionOption,
+  SessionStartLaunchRequest,
+} from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { ActiveWorkspace } from "../../types/state-slices";
@@ -27,18 +30,18 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   onContextSwitchIntent: () => void;
-  startSessionRequest: (request: {
-    taskId: string;
-    role: "build";
-    scenario: "build_rebase_conflict_resolution";
-    reason: "rebase_conflict_resolution";
-    postStartAction: "send_message";
-    message: string;
-    initialStartMode?: "fresh" | "reuse" | "fork";
-    targetWorkingDirectory?: string | null;
-    existingSessionOptions?: SessionStartExistingSessionOption[];
-    initialSourceSessionId?: string | null;
-  }) => Promise<string | undefined>;
+  startSessionRequest: (
+    request: SessionStartLaunchRequest & {
+      role: "build";
+      scenario: "build_rebase_conflict_resolution";
+      reason: "rebase_conflict_resolution";
+      postStartAction: "send_message";
+      message: string;
+      targetWorkingDirectory?: string | null;
+      existingSessionOptions?: SessionStartExistingSessionOption[];
+      initialSourceSessionId?: string | null;
+    },
+  ) => Promise<string | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
