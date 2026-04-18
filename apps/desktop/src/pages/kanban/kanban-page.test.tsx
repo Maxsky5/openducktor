@@ -423,6 +423,7 @@ describe("KanbanPage session start modal flow", () => {
         loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
       }),
       useAgentSessionSummaries: () => currentSessionsFixture,
+      useAgentActivitySessions: () => [],
       useAgentOperations: () => ({
         bootstrapTaskSessions: bootstrapTaskSessionsMock,
         hydrateRequestedTaskSessionHistory: hydrateRequestedTaskSessionHistoryMock,
