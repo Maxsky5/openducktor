@@ -33,6 +33,10 @@ import {
   validateComposerAttachments,
 } from "./agent-chat-attachments";
 import {
+  createComposerAutofocusState,
+  resolveComposerAutofocus,
+} from "./agent-chat-composer-autofocus";
+import {
   type AgentChatComposerDraft,
   appendAttachmentsToDraft,
   createEmptyComposerDraft,
@@ -380,9 +384,7 @@ export const AgentChatComposer = forwardRef<
       .join("|");
   }, [attachmentErrors, draft.attachments]);
   const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
-  const lastDisplayedSessionIdRef = useRef<string | null>(null);
-  const pendingAutofocusSessionIdRef = useRef<string | null>(null);
-  const autofocusWaitAnchorRef = useRef<HTMLElement | null>(null);
+  const composerAutofocusStateRef = useRef(createComposerAutofocusState());
 
   const sendDisabled =
     (isSending && !isSessionWorking) ||
@@ -458,59 +460,36 @@ export const AgentChatComposer = forwardRef<
     focusComposerEditor();
   }, [focusComposerEditor]);
 
-  useEffect(() => {
-    if (!displayedSessionId) {
-      lastDisplayedSessionIdRef.current = null;
-      pendingAutofocusSessionIdRef.current = null;
-      autofocusWaitAnchorRef.current = null;
-      return;
-    }
+  const isFocusInsideComposer = useCallback(
+    (activeElement: HTMLElement | null): boolean => {
+      const editor = composerEditorRef.current;
+      return Boolean(
+        editor && activeElement && (editor === activeElement || editor.contains(activeElement)),
+      );
+    },
+    [composerEditorRef],
+  );
 
+  useEffect(() => {
     const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
     const activeElement = document.activeElement;
     const activeHtmlElement = activeElement instanceof HTMLElement ? activeElement : null;
-    const editor = composerEditorRef.current;
-    const focusInsideComposer = Boolean(
-      editor &&
-        activeHtmlElement &&
-        (editor === activeHtmlElement || editor.contains(activeHtmlElement)),
-    );
+    const focusInsideComposer = isFocusInsideComposer(activeHtmlElement);
 
-    if (lastDisplayedSessionIdRef.current !== displayedSessionId) {
-      lastDisplayedSessionIdRef.current = displayedSessionId;
-      pendingAutofocusSessionIdRef.current = displayedSessionId;
-      autofocusWaitAnchorRef.current = isComposerInteractive ? null : activeHtmlElement;
+    const autofocusResult = resolveComposerAutofocus(composerAutofocusStateRef.current, {
+      displayedSessionId,
+      isComposerInteractive,
+      activeElement: activeHtmlElement,
+      focusInsideComposer,
+    });
+    composerAutofocusStateRef.current = autofocusResult.nextState;
+    if (autofocusResult.shouldFocus) {
+      scheduleComposerFocus();
     }
-
-    if (pendingAutofocusSessionIdRef.current !== displayedSessionId) {
-      return;
-    }
-
-    if (!isComposerInteractive) {
-      return;
-    }
-
-    const waitAnchor = autofocusWaitAnchorRef.current;
-    const focusStayedOnAnchor =
-      !waitAnchor ||
-      !activeHtmlElement ||
-      activeHtmlElement === waitAnchor ||
-      (waitAnchor !== document.body && waitAnchor.contains(activeHtmlElement)) ||
-      activeHtmlElement === document.body;
-
-    if (waitAnchor && !focusStayedOnAnchor && !focusInsideComposer) {
-      pendingAutofocusSessionIdRef.current = null;
-      autofocusWaitAnchorRef.current = null;
-      return;
-    }
-
-    pendingAutofocusSessionIdRef.current = null;
-    autofocusWaitAnchorRef.current = null;
-    scheduleComposerFocus();
   }, [
-    composerEditorRef,
     displayedSessionId,
     isComposerInputDisabled,
+    isFocusInsideComposer,
     isSubmitting,
     scheduleComposerFocus,
   ]);
