@@ -575,15 +575,11 @@ describe("KanbanPage session start modal flow", () => {
     tasksListMock.mockImplementation(async () => [currentTaskFixture]);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.tasksList = originalTasksList;
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
-  });
-
-  afterAll(async () => {
-    console.error = originalConsoleError;
     await restoreMockedModules([
       ["sonner", () => import("sonner")],
       [
@@ -602,6 +598,10 @@ describe("KanbanPage session start modal flow", () => {
       ],
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
     ]);
+  });
+
+  afterAll(async () => {
+    console.error = originalConsoleError;
   });
 
   test("delegate action opens modal and foreground confirm navigates to Agent Studio", async () => {
