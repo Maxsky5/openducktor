@@ -22,7 +22,7 @@ use host_domain::{
 };
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::process::Child;
 use std::time::Duration;
@@ -58,6 +58,7 @@ impl OpenCodeRuntime {
             .with_context(|| format!("Failed resolving OpenCode runtime endpoint: {endpoint}"))?
             .next()
             .ok_or_else(|| anyhow!("OpenCode runtime endpoint did not resolve: {endpoint}"))?;
+        let socket_address = Self::require_loopback_socket_address(socket_address, endpoint)?;
         let mut stream = TcpStream::connect_timeout(&socket_address, Duration::from_secs(2)).with_context(|| {
             format!(
                 "Failed to connect to OpenCode runtime at {endpoint} to inspect session status for {working_directory}"
@@ -93,7 +94,11 @@ impl OpenCodeRuntime {
         })?;
 
         if !(200..300).contains(&status_code) {
-            let response_body = Self::extract_http_response_body(response.as_str());
+            let response_body = Self::extract_http_response_body(response.as_str()).with_context(|| {
+                format!(
+                    "Failed decoding OpenCode session status response body for {working_directory}"
+                )
+            })?;
             let detail_suffix = if response_body.is_empty() {
                 String::new()
             } else {
@@ -104,7 +109,9 @@ impl OpenCodeRuntime {
             ));
         }
 
-        let body = Self::extract_http_response_body(response.as_str());
+        let body = Self::extract_http_response_body(response.as_str()).with_context(|| {
+            format!("Failed decoding OpenCode session status response body for {working_directory}")
+        })?;
         serde_json::from_str::<RuntimeSessionStatusMap>(body.as_str()).with_context(|| {
             format!("Failed parsing OpenCode session status response for {working_directory}")
         })
@@ -121,12 +128,62 @@ impl OpenCodeRuntime {
             .with_context(|| format!("Invalid OpenCode HTTP status code: {status_code}"))
     }
 
-    fn extract_http_response_body(response: &str) -> String {
-        response
+    fn require_loopback_socket_address(socket_address: SocketAddr, endpoint: &str) -> Result<SocketAddr> {
+        if socket_address.ip().is_loopback() {
+            return Ok(socket_address);
+        }
+
+        Err(anyhow!(
+            "OpenCode runtime endpoint for session status probes must resolve to a loopback address: {endpoint}"
+        ))
+    }
+
+    fn extract_http_response_body(response: &str) -> Result<String> {
+        let (headers, body) = response
             .split_once("\r\n\r\n")
             .or_else(|| response.split_once("\n\n"))
-            .map(|(_, body)| body.trim().to_string())
-            .unwrap_or_default()
+            .unwrap_or(("", response));
+
+        if headers
+            .lines()
+            .any(|line| line.eq_ignore_ascii_case("Transfer-Encoding: chunked"))
+        {
+            return Self::decode_chunked_http_body(body);
+        }
+
+        Ok(body.trim().to_string())
+    }
+
+    fn decode_chunked_http_body(body: &str) -> Result<String> {
+        let mut remaining = body;
+        let mut decoded = String::new();
+
+        loop {
+            let Some((size_line, rest)) = remaining.split_once("\r\n") else {
+                return Err(anyhow!("Chunked OpenCode response is missing a chunk size delimiter"));
+            };
+            let size_text = size_line
+                .split_once(';')
+                .map_or(size_line, |(size, _)| size)
+                .trim();
+            let size = usize::from_str_radix(size_text, 16).with_context(|| {
+                format!("Invalid chunk size in OpenCode response: {size_text}")
+            })?;
+            if size == 0 {
+                return Ok(decoded.trim().to_string());
+            }
+            if rest.len() < size + 2 {
+                return Err(anyhow!("Chunked OpenCode response ended before the declared chunk size"));
+            }
+
+            decoded.push_str(&rest[..size]);
+            let chunk_suffix = &rest[size..size + 2];
+            if chunk_suffix != "\r\n" {
+                return Err(anyhow!("Chunked OpenCode response is missing a chunk terminator"));
+            }
+
+            remaining = &rest[size + 2..];
+        }
     }
 
     fn read_http_response_body(
@@ -460,5 +517,52 @@ impl AppRuntime for OpenCodeRuntime {
                 RuntimeSessionStatusProbeError::ProbeFailed(error.to_string()),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OpenCodeRuntime;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    #[test]
+    fn require_loopback_socket_address_accepts_loopback_addresses() {
+        let loopback = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        let result = OpenCodeRuntime::require_loopback_socket_address(loopback, "http://127.0.0.1:8080")
+            .expect("loopback endpoint should be accepted");
+
+        assert_eq!(result, loopback);
+    }
+
+    #[test]
+    fn require_loopback_socket_address_rejects_non_loopback_addresses() {
+        let error = OpenCodeRuntime::require_loopback_socket_address(
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)), 8080),
+            "http://192.168.1.10:8080",
+        )
+        .expect_err("non-loopback endpoint should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("must resolve to a loopback address"));
+    }
+
+    #[test]
+    fn extract_http_response_body_decodes_chunked_transfer_encoding() {
+        let response = concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Transfer-Encoding: chunked\r\n",
+            "\r\n",
+            "7\r\n",
+            "{\"a\":1}\r\n",
+            "0\r\n",
+            "\r\n"
+        );
+
+        let body = OpenCodeRuntime::extract_http_response_body(response)
+            .expect("chunked body should decode");
+
+        assert_eq!(body, "{\"a\":1}");
     }
 }
