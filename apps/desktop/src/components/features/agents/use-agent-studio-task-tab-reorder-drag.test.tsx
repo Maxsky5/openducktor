@@ -109,6 +109,18 @@ describe("useAgentStudioTaskTabReorderDrag", () => {
     });
 
     expect(harness.getLatest().activeTaskId).toBeNull();
+
+    act(() => {
+      harness.getLatest().handleDragStart(dragStartEvent("task-2"));
+    });
+
+    expect(harness.getLatest().activeTaskId).toBe("task-2");
+
+    act(() => {
+      harness.getLatest().handleDragEnd(dragEndEvent("task-2", null));
+    });
+
+    expect(harness.getLatest().activeTaskId).toBeNull();
     harness.unmount();
   });
 });

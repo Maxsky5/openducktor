@@ -172,7 +172,6 @@ mod tests {
                         "workspaceId": "repo",
                         "workspaceName": "Repo",
                         "repoPath": "/repo",
-                        "iconDataUrl": null,
                         "isActive": true,
                         "hasConfig": true,
                         "configuredWorktreeBasePath": null,

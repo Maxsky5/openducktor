@@ -45,7 +45,15 @@ const orderWorkspaceRecords = (
     return null;
   }
 
+  if (new Set(workspaceIds).size !== workspaceIds.length) {
+    return null;
+  }
+
   const recordsById = new Map(records.map((record) => [record.workspaceId, record]));
+  if (recordsById.size !== records.length) {
+    return null;
+  }
+
   const orderedRecords = workspaceIds
     .map((workspaceId) => recordsById.get(workspaceId) ?? null)
     .filter((record): record is WorkspaceRecord => record !== null);
@@ -248,6 +256,7 @@ export function useWorkspaceSelectionOperations({
   const selectWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
+      workspaceReorderVersionRef.current += 1;
       const previousRepo = activeWorkspaceRef.current?.repoPath ?? null;
 
       setIsSwitchingWorkspace(true);

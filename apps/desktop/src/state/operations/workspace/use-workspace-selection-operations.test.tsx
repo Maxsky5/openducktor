@@ -426,6 +426,77 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("ignores a stale reorder response after a newer workspace switch starts", async () => {
+    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-a");
+    workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
+    workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
+    workspaceHost.workspaceList = mock(async () => [
+      workspace("/repo-a"),
+      workspace("/repo-b", true),
+    ]);
+    workspaceHost.workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-b",
+      workspaceName: "repo-b",
+      repoPath: "/repo-b",
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "odt",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      devServers: [],
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
+    workspaceHost.runtimeEnsure = mock(async (repoPath: string) =>
+      createWorkspaceRuntimeSummary(repoPath),
+    );
+
+    const harness = createSelectionHarness({
+      activeWorkspace: latestActiveWorkspace,
+      setActiveWorkspace: (workspace) => {
+        latestActiveWorkspace = workspace;
+      },
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([workspace("/repo-a", true), workspace("/repo-b")]);
+      });
+
+      const pendingReorder = harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-b", "repo-a"]);
+      });
+
+      await harness.run(async (value) => {
+        await value.selectWorkspace("repo-b");
+      });
+
+      reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
+      await pendingReorder;
+
+      expect(latestActiveWorkspace?.repoPath).toBe("/repo-b");
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-a"),
+        workspace("/repo-b", true),
+      ]);
+    } finally {
+      reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
+      await harness.unmount();
+    }
+  });
+
   test("skips stale runtime ensure calls after a newer workspace switch starts", async () => {
     const repoAConfigDeferred = createDeferred<RepoConfigFixture>();
     const runtimeEnsure = mock(async (repoPath: string) => createWorkspaceRuntimeSummary(repoPath));

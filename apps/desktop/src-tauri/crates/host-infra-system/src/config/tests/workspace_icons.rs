@@ -19,7 +19,7 @@ fn discover_workspace_icon_data_url_returns_png_data_for_supported_icon() {
 
 #[test]
 fn discover_workspace_icon_data_url_returns_svg_data_for_src_assets_logo() {
-    let harness = TestStoreHarness::new("workspace-icon-helper-empty");
+    let harness = TestStoreHarness::new("workspace-icon-helper-src-assets-svg");
     let repo = harness.root().join("repo");
     fake_git_workspace(&repo);
     fs::create_dir_all(repo.join("src/assets")).expect("src assets dir");
@@ -70,6 +70,21 @@ fn discover_workspace_icon_data_url_skips_large_icons() {
     let repo = harness.root().join("repo");
     fake_git_workspace(&repo);
     fs::write(repo.join("logo.svg"), vec![b'a'; (512 * 1024) + 1]).expect("large icon");
+
+    let icon_data_url = discover_workspace_icon_data_url(repo.to_string_lossy().as_ref());
+
+    assert!(icon_data_url.is_none());
+}
+
+#[test]
+fn discover_workspace_icon_data_url_skips_icons_that_grow_during_read() {
+    let harness = TestStoreHarness::new("workspace-icon-helper-bounded-read");
+    let repo = harness.root().join("repo");
+    fake_git_workspace(&repo);
+    fs::write(repo.join("logo.svg"), vec![b'a'; 32]).expect("small icon");
+
+    let _metadata = fs::metadata(repo.join("logo.svg")).expect("metadata");
+    fs::write(repo.join("logo.svg"), vec![b'a'; (512 * 1024) + 1]).expect("grown icon");
 
     let icon_data_url = discover_workspace_icon_data_url(repo.to_string_lossy().as_ref());
 

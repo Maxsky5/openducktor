@@ -167,6 +167,7 @@ function SortableWorkspaceRailButton({
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.workspaceId,
+    disabled: isSwitchingWorkspace,
     transition: {
       duration: 180,
       easing: "cubic-bezier(0.22, 1, 0.36, 1)",
@@ -177,8 +178,8 @@ function SortableWorkspaceRailButton({
     <WorkspaceRailButtonShell
       workspace={workspace}
       shellRef={setNodeRef}
-      dragListeners={listeners}
-      isDragSource={isDragging || isActiveDrag}
+      dragListeners={isSwitchingWorkspace ? undefined : listeners}
+      isDragSource={(isDragging || isActiveDrag) && !isSwitchingWorkspace}
       shouldSuppressSelection={shouldSuppressSelection}
       isSwitchingWorkspace={isSwitchingWorkspace}
       onSelectWorkspace={onSelectWorkspace}

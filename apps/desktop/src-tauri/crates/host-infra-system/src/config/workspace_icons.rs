@@ -1,6 +1,7 @@
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
@@ -40,17 +41,38 @@ fn workspace_icon_signature(path: &Path) -> Option<(SystemTime, u64)> {
     Some((metadata.modified().ok()?, metadata.len()))
 }
 
+fn read_workspace_icon_bytes(path: &Path) -> Option<Vec<u8>> {
+    let file = fs::File::open(path).ok()?;
+    let mut limited = file.take(MAX_WORKSPACE_ICON_BYTES + 1);
+    let mut bytes = Vec::new();
+    limited.read_to_end(&mut bytes).ok()?;
+
+    if bytes.is_empty() || bytes.len() as u64 > MAX_WORKSPACE_ICON_BYTES {
+        return None;
+    }
+
+    Some(bytes)
+}
+
 fn cached_workspace_icon(repo_root: &Path) -> Option<String> {
-    let mut cache = workspace_icon_cache().lock().ok()?;
-    let cached = cache.entries.get(repo_root)?.clone();
+    let cached = {
+        let cache = workspace_icon_cache().lock().ok()?;
+        cache.entries.get(repo_root)?.clone()
+    };
 
     let Some((modified_at, byte_len)) = workspace_icon_signature(&cached.icon_path) else {
+        let Ok(mut cache) = workspace_icon_cache().lock() else {
+            return None;
+        };
         cache.entries.remove(repo_root);
         cache.insertion_order.retain(|path| path != repo_root);
         return None;
     };
 
     if cached.modified_at != modified_at || cached.byte_len != byte_len {
+        let Ok(mut cache) = workspace_icon_cache().lock() else {
+            return None;
+        };
         cache.entries.remove(repo_root);
         cache.insertion_order.retain(|path| path != repo_root);
         return None;
@@ -75,14 +97,6 @@ fn cache_workspace_icon(repo_root: &Path, cached_icon: CachedWorkspaceIcon) {
         };
         cache.entries.remove(&oldest_repo_root);
     }
-}
-
-fn clear_cached_workspace_icon(repo_root: &Path) {
-    let Ok(mut cache) = workspace_icon_cache().lock() else {
-        return;
-    };
-    cache.entries.remove(repo_root);
-    cache.insertion_order.retain(|path| path != repo_root);
 }
 
 fn workspace_icon_mime_type(path: &Path) -> Option<&'static str> {
@@ -121,7 +135,7 @@ pub(super) fn discover_workspace_icon_data_url(repo_path: &str) -> Option<String
                 let Some((modified_at, byte_len)) = workspace_icon_signature(&candidate_path) else {
                     continue;
                 };
-                let Ok(bytes) = fs::read(&candidate_path) else {
+                let Some(bytes) = read_workspace_icon_bytes(&candidate_path) else {
                     continue;
                 };
 
@@ -141,6 +155,5 @@ pub(super) fn discover_workspace_icon_data_url(repo_path: &str) -> Option<String
         }
     }
 
-    clear_cached_workspace_icon(repo_root);
     None
 }
