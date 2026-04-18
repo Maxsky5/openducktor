@@ -19,8 +19,9 @@ mod tests {
     use crate::app_service::AppService;
     use host_domain::{
         AgentWorkflows, IssueType, TaskCard, TaskDocumentPresence, TaskDocumentSummary,
-        TaskQaDocumentPresence,
+        TaskQaDocumentPresence, WorkspaceRecord,
     };
+    use serde_json::json;
 
     fn task(id: &str, title: &str) -> TaskCard {
         TaskCard {
@@ -143,6 +144,44 @@ mod tests {
         assert!(!result.has_more);
         assert_eq!(result.results.len(), 1);
         assert_eq!(result.results[0].task.task.id, "task-1");
+    }
+
+    #[test]
+    fn get_workspaces_result_serializes_as_object_payload() {
+        let payload = types::OdtGetWorkspacesResult {
+            workspaces: vec![WorkspaceRecord {
+                workspace_id: "repo".to_string(),
+                workspace_name: "Repo".to_string(),
+                repo_path: "/repo".to_string(),
+                icon_data_url: None,
+                is_active: true,
+                has_config: true,
+                configured_worktree_base_path: None,
+                default_worktree_base_path: None,
+                effective_worktree_base_path: None,
+            }],
+        };
+
+        let serialized = serde_json::to_value(payload).expect("serialize get workspaces result");
+
+        assert_eq!(
+            serialized,
+            json!({
+                "workspaces": [
+                    {
+                        "workspaceId": "repo",
+                        "workspaceName": "Repo",
+                        "repoPath": "/repo",
+                        "iconDataUrl": null,
+                        "isActive": true,
+                        "hasConfig": true,
+                        "configuredWorktreeBasePath": null,
+                        "defaultWorktreeBasePath": null,
+                        "effectiveWorktreeBasePath": null,
+                    }
+                ]
+            })
+        );
     }
 
     #[test]
