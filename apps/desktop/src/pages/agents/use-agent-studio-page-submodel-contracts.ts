@@ -6,6 +6,7 @@ export type WorkflowHeaderContext = Pick<
   | "workflowStateByRole"
   | "selectedInteractionRole"
   | "workflowSessionByRole"
+  | "sessionSelectorAutofocusByValue"
   | "sessionSelectorValue"
   | "sessionSelectorGroups"
   | "sessionCreateOptions"

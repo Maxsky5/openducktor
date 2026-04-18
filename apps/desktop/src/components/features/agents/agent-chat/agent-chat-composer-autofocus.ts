@@ -1,13 +1,13 @@
 export type ComposerAutofocusState = {
   lastDisplayedSessionId: string | null;
   pendingAutofocusSessionId: string | null;
-  waitAnchor: HTMLElement | null;
+  waitAnchor: Element | null;
 };
 
 export type ComposerAutofocusSnapshot = {
   displayedSessionId: string | null;
   isComposerInteractive: boolean;
-  activeElement: HTMLElement | null;
+  activeElement: Element | null;
   focusInsideComposer: boolean;
 };
 
@@ -22,11 +22,7 @@ export const createComposerAutofocusState = (): ComposerAutofocusState => ({
   waitAnchor: null,
 });
 
-const clearComposerAutofocusState = (): ComposerAutofocusState => ({
-  lastDisplayedSessionId: null,
-  pendingAutofocusSessionId: null,
-  waitAnchor: null,
-});
+const clearComposerAutofocusState = (): ComposerAutofocusState => createComposerAutofocusState();
 
 const completeComposerAutofocusState = (state: ComposerAutofocusState): ComposerAutofocusState => ({
   ...state,
@@ -35,17 +31,20 @@ const completeComposerAutofocusState = (state: ComposerAutofocusState): Composer
 });
 
 const didFocusStayOnWaitAnchor = (
-  waitAnchor: HTMLElement | null,
-  activeElement: HTMLElement | null,
+  waitAnchor: Element | null,
+  activeElement: Element | null,
 ): boolean => {
   if (!waitAnchor || !activeElement) {
+    // Treat an unknown anchor as "focus didn't move" so delayed readiness can still autofocus.
     return true;
   }
 
+  const documentBody = globalThis.document?.body ?? null;
+
   return (
     activeElement === waitAnchor ||
-    (waitAnchor !== document.body && waitAnchor.contains(activeElement)) ||
-    activeElement === document.body
+    (documentBody !== null && waitAnchor !== documentBody && waitAnchor.contains(activeElement)) ||
+    activeElement === documentBody
   );
 };
 

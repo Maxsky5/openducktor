@@ -461,7 +461,7 @@ export const AgentChatComposer = forwardRef<
   }, [focusComposerEditor]);
 
   const isFocusInsideComposer = useCallback(
-    (activeElement: HTMLElement | null): boolean => {
+    (activeElement: Element | null): boolean => {
       const editor = composerEditorRef.current;
       return Boolean(
         editor && activeElement && (editor === activeElement || editor.contains(activeElement)),
@@ -472,14 +472,13 @@ export const AgentChatComposer = forwardRef<
 
   useEffect(() => {
     const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
-    const activeElement = document.activeElement;
-    const activeHtmlElement = activeElement instanceof HTMLElement ? activeElement : null;
-    const focusInsideComposer = isFocusInsideComposer(activeHtmlElement);
+    const activeElement = globalThis.document?.activeElement ?? null;
+    const focusInsideComposer = isFocusInsideComposer(activeElement);
 
     const autofocusResult = resolveComposerAutofocus(composerAutofocusStateRef.current, {
       displayedSessionId,
       isComposerInteractive,
-      activeElement: activeHtmlElement,
+      activeElement,
       focusInsideComposer,
     });
     composerAutofocusStateRef.current = autofocusResult.nextState;
@@ -489,6 +488,7 @@ export const AgentChatComposer = forwardRef<
   }, [
     displayedSessionId,
     isComposerInputDisabled,
+    // Stable helper over a stable ref; included so the effect deps stay explicit.
     isFocusInsideComposer,
     isSubmitting,
     scheduleComposerFocus,

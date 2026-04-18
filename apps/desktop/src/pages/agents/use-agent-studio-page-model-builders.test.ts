@@ -113,7 +113,46 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(context.selectedRoleAvailable).toBe(false);
     expect(context.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
     expect(context.sessionSelectorValue).toBe("planner-session");
+    expect(context.sessionSelectorAutofocusByValue[plannerSession.sessionId]).toBe(false);
     expect(context.createSessionDisabled).toBe(false);
+  });
+
+  test("buildWorkflowModelContext marks only immediately interactive sessions for header autofocus", () => {
+    const specSession = createSession({
+      runtimeKind: "opencode",
+      sessionId: "spec-session",
+      role: "spec",
+      scenario: "spec_initial",
+    });
+    const qaWaitingSession = createSession({
+      runtimeKind: "opencode",
+      sessionId: "qa-session",
+      role: "qa",
+      scenario: "qa_review",
+      pendingQuestions: [{ requestId: "q-1", questions: [] }],
+    });
+    const task = createTaskCardFixture({
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: true, completed: false },
+      },
+    });
+
+    const context = buildWorkflowModelContext({
+      selectedTask: task,
+      sessionsForTask: [specSession, qaWaitingSession],
+      activeSession: null,
+      role: "spec",
+      isSessionWorking: false,
+      roleLabelByRole,
+    });
+
+    expect(context.sessionSelectorAutofocusByValue).toEqual({
+      [specSession.sessionId]: true,
+      [qaWaitingSession.sessionId]: false,
+    });
   });
 
   test("buildWorkflowModelContext includes follow-up build scenario from human feedback", () => {

@@ -1,15 +1,37 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TEST_ROLE_OPTIONS } from "./agent-chat/agent-chat-test-fixtures";
-import { AgentStudioHeader } from "./agent-studio-header";
+import {
+  AgentStudioHeader,
+  deriveSessionHistorySelectionFocusBehavior,
+} from "./agent-studio-header";
+
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+
+const immediateRequestAnimationFrame = ((callback: FrameRequestCallback): number => {
+  callback(0);
+  return 1;
+}) as typeof requestAnimationFrame;
 
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeEach(() => {
+  globalThis.requestAnimationFrame = immediateRequestAnimationFrame;
+  globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+});
+
+afterEach(() => {
+  globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+  document.body.innerHTML = "";
+});
 
 const roleIcon = (index: number) => {
   const option = TEST_ROLE_OPTIONS[index];
@@ -92,6 +114,7 @@ const buildModel = () => ({
     ],
     disabled: false,
     onValueChange: () => {},
+    shouldAutofocusComposerForValue: () => true,
   },
   sessionCreateOptions: [
     {
@@ -209,6 +232,7 @@ describe("AgentStudioHeader", () => {
             ],
             disabled: false,
             onValueChange,
+            shouldAutofocusComposerForValue: () => true,
           },
         },
       }),
@@ -259,6 +283,7 @@ describe("AgentStudioHeader", () => {
             ],
             disabled: false,
             onValueChange,
+            shouldAutofocusComposerForValue: (value) => value === "build-session",
           },
         },
       }),
@@ -280,6 +305,26 @@ describe("AgentStudioHeader", () => {
       expect(onValueChange).toHaveBeenCalledWith("build-session");
       expect(document.activeElement).not.toBe(sessionHistoryTrigger);
     });
+  });
+
+  test("restores focus to the history trigger after selecting a non-interactive session", async () => {
+    expect(
+      deriveSessionHistorySelectionFocusBehavior({
+        currentValue: "spec-session",
+        nextValue: "build-session",
+        shouldAutofocusComposerForValue: () => false,
+      }),
+    ).toBe("trigger");
+  });
+
+  test("does not request any focus change when the selected session stays the same", () => {
+    expect(
+      deriveSessionHistorySelectionFocusBehavior({
+        currentValue: "spec-session",
+        nextValue: "spec-session",
+        shouldAutofocusComposerForValue: () => true,
+      }),
+    ).toBe("none");
   });
 
   test("hides the task details button when no task is selected", () => {
