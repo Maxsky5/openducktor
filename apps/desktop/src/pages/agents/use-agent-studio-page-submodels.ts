@@ -289,6 +289,7 @@ type UseAgentStudioComposerModelArgs = {
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
+  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
@@ -330,6 +331,7 @@ export const useAgentStudioComposerModel = ({
   slashCommandCatalog,
   slashCommands,
   slashCommandsError,
+  sessionRuntimeDataError,
   isSlashCommandsLoading,
   searchFiles,
   agentOptions,
@@ -447,6 +449,7 @@ export const useAgentStudioComposerModel = ({
         slashCommandCatalog,
         slashCommands,
         slashCommandsError,
+        sessionRuntimeDataError: sessionRuntimeDataError ?? null,
         isSlashCommandsLoading,
         searchFiles,
         agentOptions,
@@ -503,6 +506,7 @@ export const useAgentStudioComposerModel = ({
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,
+      sessionRuntimeDataError,
       supportsSlashCommands,
       supportsFileSearch,
       taskId,

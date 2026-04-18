@@ -73,6 +73,7 @@ export type AgentChatComposerModel = {
   slashCommandCatalog: AgentSlashCommandCatalog | null;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
+  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];

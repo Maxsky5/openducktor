@@ -115,7 +115,6 @@ const toRuntimeQueryInput = (
     workingDirectory: string;
   } | null,
   runtimeKind: RuntimeKind | null,
-  action = "active session runtime queries",
 ): {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
@@ -123,14 +122,10 @@ const toRuntimeQueryInput = (
   const runtimeConnection =
     session === null
       ? null
-      : toAttachedSessionRuntimeConnection(
-          {
-            runtimeRoute: session.runtimeRoute,
-            workingDirectory: session.workingDirectory,
-          },
-          runtimeKind,
-          action,
-        );
+      : toAttachedSessionRuntimeConnection({
+          runtimeRoute: session.runtimeRoute,
+          workingDirectory: session.workingDirectory,
+        });
   if (!session || runtimeKind == null || runtimeConnection === null) {
     return null;
   }
@@ -223,7 +218,6 @@ export function useAgentStudioModelSelection({
             }
           : null,
         activeSessionRuntimeKind,
-        "active session runtime queries",
       ),
     [
       activeSessionRuntimeKind,
@@ -331,6 +325,7 @@ export function useAgentStudioModelSelection({
       hasActiveSession &&
       activeSessionStatus !== "starting" &&
       activeSessionRuntimeQueryInput !== null &&
+      activeSessionRuntimeQueryError === null &&
       readSessionSlashCommands !== undefined,
   });
   const repoSlashCommandsQuery = useQuery({

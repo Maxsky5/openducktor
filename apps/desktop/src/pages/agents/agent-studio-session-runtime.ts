@@ -32,22 +32,12 @@ export const toAttachedSessionRuntimeConnection = (
     | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
     | null
     | undefined,
-  runtimeKind: RuntimeKind | null | undefined,
-  action = "attached session runtime access",
 ) => {
   if (!session?.runtimeRoute) {
     return null;
   }
 
-  const runtimeConnection = runtimeRouteToConnection(
-    session.runtimeRoute,
-    session.workingDirectory,
-  );
-  if (getRuntimeConnectionSupportError(runtimeKind, runtimeConnection, action)) {
-    return null;
-  }
-
-  return runtimeConnection;
+  return runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory);
 };
 
 export const getAttachedSessionRuntimeConnectionError = (

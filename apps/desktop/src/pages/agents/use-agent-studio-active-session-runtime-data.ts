@@ -13,6 +13,7 @@ import {
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  getAttachedSessionRuntimeConnectionError,
   hasAttachedSessionRuntime,
   toAttachedSessionRuntimeConnection,
 } from "./agent-studio-session-runtime";
@@ -32,12 +33,15 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
   ) => Promise<AgentSessionTodoItem[]>;
 };
 
+type ActiveSessionRuntimeDataResult = {
+  session: AgentSessionState | null;
+  runtimeDataError: string | null;
+};
+
 const toRuntimeQueryInput = (session: AgentSessionState | null) => {
   const runtimeKind = session?.runtimeKind ?? null;
   const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
-  const runtimeConnection = session
-    ? toAttachedSessionRuntimeConnection(session, runtimeKind)
-    : null;
+  const runtimeConnection = session ? toAttachedSessionRuntimeConnection(session) : null;
   if (!session || !runtimeKind || !hasRuntimeAttachment || runtimeConnection === null) {
     return null;
   }
@@ -52,11 +56,23 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   agentStudioReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
-}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentSessionState | null => {
+}: UseAgentStudioActiveSessionRuntimeDataArgs): ActiveSessionRuntimeDataResult => {
   const runtimeQueryInput = toRuntimeQueryInput(session);
+  const runtimeDataSupportError = useMemo(() => {
+    if (!session) {
+      return null;
+    }
+
+    return getAttachedSessionRuntimeConnectionError(
+      session,
+      session.runtimeKind,
+      "active session runtime data access",
+    );
+  }, [session]);
   const shouldHydrateRuntimeData =
     agentStudioReadinessState === "ready" &&
     runtimeQueryInput !== null &&
+    runtimeDataSupportError === null &&
     session?.status !== "starting";
   const catalogQuery = useQuery({
     queryKey:
@@ -105,34 +121,55 @@ export const useAgentStudioActiveSessionRuntimeData = ({
 
   return useMemo(() => {
     if (!session) {
-      return null;
+      return {
+        session: null,
+        runtimeDataError: null,
+      };
     }
 
+    const runtimeDataQueryError =
+      catalogQuery.error instanceof Error
+        ? catalogQuery.error.message
+        : todosQuery.error instanceof Error
+          ? todosQuery.error.message
+          : null;
+    const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
     const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
-    const isLoadingModelCatalog = shouldHydrateRuntimeData
-      ? resolvedCatalog === null && catalogQuery.isPending
-      : session.isLoadingModelCatalog && resolvedCatalog === null;
+    const isLoadingModelCatalog = runtimeDataError
+      ? false
+      : shouldHydrateRuntimeData
+        ? resolvedCatalog === null && catalogQuery.isPending
+        : session.isLoadingModelCatalog && resolvedCatalog === null;
 
     if (
       resolvedCatalog === session.modelCatalog &&
       resolvedTodos === session.todos &&
       isLoadingModelCatalog === session.isLoadingModelCatalog
     ) {
-      return session;
+      return {
+        session,
+        runtimeDataError,
+      };
     }
 
     return {
-      ...session,
-      modelCatalog: resolvedCatalog,
-      todos: resolvedTodos,
-      isLoadingModelCatalog,
+      session: {
+        ...session,
+        modelCatalog: resolvedCatalog,
+        todos: resolvedTodos,
+        isLoadingModelCatalog,
+      },
+      runtimeDataError,
     };
   }, [
     catalogQuery.data,
+    catalogQuery.error,
     catalogQuery.isPending,
     session,
     shouldHydrateRuntimeData,
     todosQuery.data,
+    todosQuery.error,
+    runtimeDataSupportError,
   ]);
 };

@@ -162,6 +162,7 @@ type AgentChatComposerModelArgs = {
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
+  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
@@ -244,6 +245,7 @@ export const buildAgentChatComposerModel = (
   slashCommandCatalog: args.slashCommandCatalog,
   slashCommands: args.slashCommands,
   slashCommandsError: args.slashCommandsError,
+  sessionRuntimeDataError: args.sessionRuntimeDataError ?? null,
   isSlashCommandsLoading: args.isSlashCommandsLoading,
   searchFiles: args.searchFiles,
   agentOptions: args.agentOptions,

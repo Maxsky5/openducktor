@@ -92,6 +92,7 @@ type AgentStudioModelSelectionContext = {
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
+  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
@@ -378,6 +379,7 @@ export function useAgentStudioPageModels({
     slashCommandCatalog: modelSelection.slashCommandCatalog,
     slashCommands: modelSelection.slashCommands,
     slashCommandsError: modelSelection.slashCommandsError,
+    sessionRuntimeDataError: modelSelection.sessionRuntimeDataError ?? null,
     isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
     searchFiles: modelSelection.searchFiles,
     agentOptions: modelSelection.agentOptions,

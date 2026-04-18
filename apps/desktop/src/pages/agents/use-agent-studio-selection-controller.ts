@@ -68,6 +68,7 @@ export type AgentStudioSelectionControllerResult = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   activeSession: AgentSessionState | null;
+  activeSessionRuntimeDataError?: string | null;
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -84,6 +85,7 @@ export type AgentStudioSelectionControllerResult = {
   viewSelectedTask: TaskCard | null;
   viewSessionsForTask: AgentSessionSummary[];
   viewActiveSession: AgentSessionState | null;
+  viewSessionRuntimeDataError?: string | null;
   viewRole: AgentRole;
   viewScenario: AgentScenario;
   isActiveTaskHydrated: boolean;
@@ -374,10 +376,10 @@ export function useAgentStudioSelectionController({
     () =>
       selectRuntimeAttachmentCandidates({
         repoPath: workspaceRepoPath ?? "",
-        session: hydratedViewActiveSession,
+        session: hydratedViewActiveSession.session,
         runtimeSources: runtimeAttachmentSources,
       }),
-    [workspaceRepoPath, hydratedViewActiveSession, runtimeAttachmentSources],
+    [workspaceRepoPath, hydratedViewActiveSession.session, runtimeAttachmentSources],
   );
 
   const {
@@ -390,7 +392,7 @@ export function useAgentStudioSelectionController({
   } = useAgentStudioTaskHydration({
     activeWorkspace,
     activeTaskId: viewTaskId,
-    activeSession: hydratedViewActiveSession,
+    activeSession: hydratedViewActiveSession.session,
     agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
     retrySessionRuntimeAttachment,
@@ -403,7 +405,8 @@ export function useAgentStudioSelectionController({
     taskId,
     selectedTask,
     sessionsForTask,
-    activeSession: hydratedActiveSession,
+    activeSession: hydratedActiveSession.session,
+    activeSessionRuntimeDataError: hydratedActiveSession.runtimeDataError,
     isLoadingTasks,
     activeTaskTabId,
     availableTabTasks,
@@ -415,7 +418,8 @@ export function useAgentStudioSelectionController({
     viewTaskId,
     viewSelectedTask,
     viewSessionsForTask,
-    viewActiveSession: hydratedViewActiveSession,
+    viewActiveSession: hydratedViewActiveSession.session,
+    viewSessionRuntimeDataError: hydratedViewActiveSession.runtimeDataError,
     viewRole,
     viewScenario,
     isActiveTaskHydrated,

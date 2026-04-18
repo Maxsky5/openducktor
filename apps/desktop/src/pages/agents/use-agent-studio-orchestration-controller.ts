@@ -136,7 +136,9 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "handleSelectAgent"
   | "handleSelectModel"
   | "handleSelectVariant"
->;
+> & {
+  sessionRuntimeDataError?: string | null;
+};
 
 type BuildAgentStudioPageModelsArgsInput = {
   view: AgentStudioPageModelsViewContext;
@@ -230,6 +232,7 @@ export function useAgentStudioOrchestrationController({
     viewSelectedTask,
     viewSessionsForTask,
     viewActiveSession,
+    viewSessionRuntimeDataError = null,
     activeTaskTabId,
     taskTabs,
     availableTabTasks,
@@ -416,6 +419,7 @@ export function useAgentStudioOrchestrationController({
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,
+      sessionRuntimeDataError: viewSessionRuntimeDataError,
       isSlashCommandsLoading,
       searchFiles,
       agentOptions,

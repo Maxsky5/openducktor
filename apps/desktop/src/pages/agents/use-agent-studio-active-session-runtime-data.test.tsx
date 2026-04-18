@@ -51,7 +51,8 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
 
       expect(readSessionModelCatalog).not.toHaveBeenCalled();
       expect(readSessionTodos).not.toHaveBeenCalled();
-      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(true);
+      expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(true);
+      expect(harness.getLatest()?.runtimeDataError).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -79,14 +80,17 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(true);
+      expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(true);
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(1);
 
       catalogLoad.resolve(CATALOG);
-      await harness.waitFor((state) => state !== null && state.isLoadingModelCatalog === false);
+      await harness.waitFor(
+        (state) => state.session !== null && state.session.isLoadingModelCatalog === false,
+      );
 
-      expect(harness.getLatest()?.modelCatalog).toEqual(CATALOG);
-      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(false);
+      expect(harness.getLatest()?.session?.modelCatalog).toEqual(CATALOG);
+      expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(false);
+      expect(harness.getLatest()?.runtimeDataError).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -116,7 +120,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
 
       expect(readSessionModelCatalog).not.toHaveBeenCalled();
       expect(readSessionTodos).not.toHaveBeenCalled();
-      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(true);
+      expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(true);
 
       await harness.update({
         session,
@@ -126,21 +130,22 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       });
       await harness.waitFor((state) =>
         Boolean(
-          state?.modelCatalog?.models[0]?.id === CATALOG.models[0]?.id &&
-            state?.isLoadingModelCatalog === false,
+          state.session?.modelCatalog?.models[0]?.id === CATALOG.models[0]?.id &&
+            state.session?.isLoadingModelCatalog === false,
         ),
       );
 
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest()?.modelCatalog).toEqual(CATALOG);
-      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(false);
+      expect(harness.getLatest()?.session?.modelCatalog).toEqual(CATALOG);
+      expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(false);
+      expect(harness.getLatest()?.runtimeDataError).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("does not query runtime-backed session data for unsupported stdio OpenCode sessions", async () => {
+  test("surfaces an explicit error for unsupported stdio OpenCode session runtime data", async () => {
     const readSessionModelCatalog = mock(async () => CATALOG);
     const readSessionTodos = mock(async () => []);
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
@@ -163,7 +168,8 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
 
       expect(readSessionModelCatalog).not.toHaveBeenCalled();
       expect(readSessionTodos).not.toHaveBeenCalled();
-      expect(harness.getLatest()?.isLoadingModelCatalog).toBe(false);
+      expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(false);
+      expect(harness.getLatest()?.runtimeDataError).toContain("local_http is required");
     } finally {
       await harness.unmount();
     }

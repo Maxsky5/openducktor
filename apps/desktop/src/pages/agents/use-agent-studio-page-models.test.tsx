@@ -234,6 +234,25 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("forwards session runtime data errors into the composer model", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        modelSelection: {
+          sessionRuntimeDataError:
+            "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().agentChatModel.composer.sessionRuntimeDataError).toContain(
+      "local_http is required",
+    );
+
+    await harness.unmount();
+  });
+
   test("scrolls to bottom immediately when sending a message", async () => {
     const sendResolver = { current: null as ((value: boolean) => void) | null };
     const onSend = mock(

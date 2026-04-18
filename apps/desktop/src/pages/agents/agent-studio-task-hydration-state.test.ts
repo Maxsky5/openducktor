@@ -73,6 +73,28 @@ describe("getAgentStudioTaskHydrationDecision", () => {
     expect(decision.shouldHydrateSessionHistory).toBe(false);
   });
 
+  test("treats attached stdio build sessions as ready for history hydration", () => {
+    const decision = getAgentStudioTaskHydrationDecision({
+      activeWorkspace: createActiveWorkspace("/repo-a"),
+      activeTaskId: "task-1",
+      activeSession: {
+        sessionId: "session-1",
+        role: "build",
+        runId: null,
+        runtimeId: null,
+        runtimeRoute: { type: "stdio" },
+        runtimeRecoveryState: "idle",
+      },
+      historyHydrationState: "not_requested",
+      sessionNeedsHydration: true,
+      agentStudioReadinessState: "ready",
+    });
+
+    expect(decision.shouldWaitForSessionRuntime).toBe(false);
+    expect(decision.isWaitingForRuntimeReadiness).toBe(false);
+    expect(decision.shouldHydrateSessionHistory).toBe(true);
+  });
+
   test("allows recovery to retry after a session runtime recovery failure", () => {
     const decision = getAgentStudioTaskHydrationDecision({
       activeWorkspace: createActiveWorkspace("/repo-a"),
