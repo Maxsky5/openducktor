@@ -4,6 +4,7 @@ import {
   type DragStartEvent,
   MeasuringStrategy,
   MouseSensor,
+  PointerSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -34,8 +35,10 @@ export function useAgentStudioTaskTabReorderDrag({
   handleDragEnd: (event: DragEndEvent) => void;
   handleDragCancel: () => void;
 } {
+  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
+
   const sensors = useSensors(
-    useSensor(MouseSensor, {
+    useSensor(PrimarySensor, {
       activationConstraint: {
         distance: 6,
       },

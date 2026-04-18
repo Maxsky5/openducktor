@@ -6,6 +6,7 @@ import { Circle, CircleAlert, LoaderCircle, Plus, X } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
+  type MouseEvent as ReactMouseEvent,
   type RefCallback,
   useEffect,
   useMemo,
@@ -44,6 +45,7 @@ export type AgentStudioTaskTabsModel = {
   tabs: AgentStudioTaskTab[];
   availableTabTasks: TaskCard[];
   isLoadingAvailableTabTasks: boolean;
+  onSelectTab: (taskId: string) => void;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
   onReorderTab: (draggedTaskId: string, targetTaskId: string, position: "before" | "after") => void;
@@ -57,15 +59,21 @@ type AgentStudioTaskTabShellProps = {
   style?: CSSProperties;
   isDragSource?: boolean;
   isDragOverlay?: boolean;
+  shouldSuppressSelection?: boolean;
+  onSelectTab?: (taskId: string) => void;
   onCloseTab?: (taskId: string) => void;
 };
 
 function AgentStudioTaskTabLabel({
   tab,
   isPreview = false,
+  onMouseDown,
+  onClick,
 }: {
   tab: AgentStudioTaskTab;
   isPreview?: boolean;
+  onMouseDown?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }): ReactElement {
   const className = cn(
     "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
@@ -93,7 +101,13 @@ function AgentStudioTaskTabLabel({
   }
 
   return (
-    <TabsTrigger id={`agent-studio-tab-${tab.taskId}`} value={tab.taskId} className={className}>
+    <TabsTrigger
+      id={`agent-studio-tab-${tab.taskId}`}
+      value={tab.taskId}
+      className={className}
+      onMouseDown={onMouseDown}
+      onClick={onClick}
+    >
       {content}
     </TabsTrigger>
   );
@@ -126,6 +140,8 @@ function AgentStudioTaskTabShell({
   style,
   isDragSource = false,
   isDragOverlay = false,
+  shouldSuppressSelection = false,
+  onSelectTab,
   onCloseTab,
 }: AgentStudioTaskTabShellProps): ReactElement {
   return (
@@ -136,17 +152,35 @@ function AgentStudioTaskTabShell({
       data-task-tab-id={tab.taskId}
       style={style}
       className={cn(
-        "group relative z-1 inline-flex h-10 shrink-0 select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
+        "group relative z-1 inline-flex h-10 shrink-0 touch-none select-none items-center gap-1 rounded-t-[10px] pl-2 pr-1",
         "cursor-pointer",
         tab.isActive
           ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
           : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
         isDragSource && "opacity-0",
-        isDragOverlay && "z-50 border-input bg-card after:hidden",
+        isDragOverlay && "z-50 after:hidden",
       )}
       {...dragListeners}
     >
-      <AgentStudioTaskTabLabel tab={tab} isPreview={isDragOverlay} />
+      <AgentStudioTaskTabLabel
+        tab={tab}
+        isPreview={isDragOverlay}
+        {...(!isDragOverlay
+          ? {
+              onMouseDown: (event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault();
+              },
+              onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
+                if (shouldSuppressSelection) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  return;
+                }
+                onSelectTab?.(tab.taskId);
+              },
+            }
+          : {})}
+      />
       <button
         type="button"
         className={cn(
@@ -179,10 +213,14 @@ function AgentStudioTaskTabShell({
 function SortableAgentStudioTaskTab({
   tab,
   isActiveDrag,
+  shouldSuppressSelection,
+  onSelectTab,
   onCloseTab,
 }: {
   tab: AgentStudioTaskTab;
   isActiveDrag: boolean;
+  shouldSuppressSelection: boolean;
+  onSelectTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -199,6 +237,8 @@ function SortableAgentStudioTaskTab({
       shellRef={setNodeRef}
       dragListeners={listeners}
       isDragSource={isDragging || isActiveDrag}
+      shouldSuppressSelection={shouldSuppressSelection}
+      onSelectTab={onSelectTab}
       onCloseTab={onCloseTab}
       style={{
         transform: CSS.Transform.toString(transform),
@@ -219,6 +259,7 @@ export function AgentStudioTaskTabs({
     tabs,
     availableTabTasks,
     isLoadingAvailableTabTasks,
+    onSelectTab,
     onCreateTab,
     onCloseTab,
     onReorderTab,
@@ -227,6 +268,8 @@ export function AgentStudioTaskTabs({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState("");
   const [isCreateDialogReady, setIsCreateDialogReady] = useState(false);
+  const suppressedSelectionTaskIdRef = useRef<string | null>(null);
+  const selectionSuppressionFrameRef = useRef<number | null>(null);
   const scrollRegionRef = useRef<HTMLDivElement | null>(null);
   const tabTaskIds = useMemo(() => tabs.map((tab) => tab.taskId), [tabs]);
   const {
@@ -273,6 +316,24 @@ export function AgentStudioTaskTabs({
     ? (tabs.find((tab) => tab.taskId === activeTaskId) ?? null)
     : null;
 
+  const scheduleSelectionSuppressionClear = (): void => {
+    if (selectionSuppressionFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(selectionSuppressionFrameRef.current);
+    }
+    selectionSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
+      suppressedSelectionTaskIdRef.current = null;
+      selectionSuppressionFrameRef.current = null;
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (selectionSuppressionFrameRef.current !== null) {
+        globalThis.cancelAnimationFrame(selectionSuppressionFrameRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="bg-studio-chrome px-2 pt-1.5 pb-0">
       <div className="flex min-w-0 items-center gap-1">
@@ -285,9 +346,18 @@ export function AgentStudioTaskTabs({
                   collisionDetection={collisionDetection}
                   measuring={measuring}
                   modifiers={modifiers}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={handleDragCancel}
+                  onDragStart={(event) => {
+                    suppressedSelectionTaskIdRef.current = String(event.active.id);
+                    handleDragStart(event);
+                  }}
+                  onDragEnd={(event) => {
+                    handleDragEnd(event);
+                    scheduleSelectionSuppressionClear();
+                  }}
+                  onDragCancel={() => {
+                    handleDragCancel();
+                    scheduleSelectionSuppressionClear();
+                  }}
                 >
                   <SortableContext items={tabTaskIds} strategy={horizontalListSortingStrategy}>
                     <TabsList
@@ -299,6 +369,10 @@ export function AgentStudioTaskTabs({
                           key={tab.taskId}
                           tab={tab}
                           isActiveDrag={activeTaskId === tab.taskId}
+                          shouldSuppressSelection={
+                            suppressedSelectionTaskIdRef.current === tab.taskId
+                          }
+                          onSelectTab={onSelectTab}
                           onCloseTab={onCloseTab}
                         />
                       ))}

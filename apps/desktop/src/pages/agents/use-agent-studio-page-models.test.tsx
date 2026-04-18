@@ -100,6 +100,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
       availableTabTasks: [createTask()],
       isLoadingTasks: false,
+      onSelectTab: () => {},
       onCreateTab: () => {},
       onCloseTab: () => {},
       onReorderTab: () => {},

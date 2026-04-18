@@ -90,6 +90,7 @@ describe("agents-page-view-model", () => {
   });
 
   test("buildAgentStudioTaskTabsModel maps tab model fields", () => {
+    const onSelectTab = mock(() => {});
     const onCreateTab = mock(() => {});
     const onCloseTab = mock(() => {});
     const onReorderTab = mock(() => {});
@@ -99,6 +100,7 @@ describe("agents-page-view-model", () => {
       taskTabs: [{ taskId: task.id, taskTitle: task.title, status: "idle", isActive: true }],
       availableTabTasks: [task],
       isLoadingTasks: true,
+      onSelectTab,
       onCreateTab,
       onCloseTab,
       onReorderTab,
@@ -109,6 +111,8 @@ describe("agents-page-view-model", () => {
     expect(model.availableTabTasks[0]?.id).toBe("task-1");
     expect(model.isLoadingAvailableTabTasks).toBe(true);
     expect(model.agentStudioReady).toBe(false);
+    model.onSelectTab("task-1");
+    expect(onSelectTab).toHaveBeenCalledWith("task-1");
     model.onReorderTab("task-1", "task-1", "before");
     expect(onReorderTab).toHaveBeenCalledWith("task-1", "task-1", "before");
   });
