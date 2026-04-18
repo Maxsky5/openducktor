@@ -1,7 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus,
-};
+use host_domain::{AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
 use host_infra_system::{hook_set_fingerprint, AppConfigStore, HookSet, RepoConfig};
 #[cfg(unix)]
 use std::ffi::OsString;
@@ -18,11 +16,11 @@ use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 #[cfg(not(unix))]
 use crate::app_service::test_support::remove_env_var;
 use crate::app_service::test_support::{
-    build_service_with_store, builtin_opencode_runtime_route,
-    create_failing_opencode, create_fake_opencode, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_task, repo_config_for_workspace, set_env_var,
-    set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path, wait_for_path_exists, wait_for_process_exit,
-    workspace_update_repo_config_by_repo_path, write_private_file,
-    EnvVarGuard,
+    build_service_with_store, builtin_opencode_runtime_route, create_failing_opencode,
+    create_fake_opencode, init_git_repo, install_fake_dolt, lock_env, make_emitter, make_task,
+    repo_config_for_workspace, set_env_var, set_fake_opencode_and_bridge_binaries,
+    spawn_sleep_process, unique_temp_path, wait_for_path_exists, wait_for_process_exit,
+    workspace_update_repo_config_by_repo_path, write_private_file, EnvVarGuard,
 };
 use crate::app_service::RunProcess;
 

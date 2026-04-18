@@ -94,11 +94,12 @@ impl OpenCodeRuntime {
         })?;
 
         if !(200..300).contains(&status_code) {
-            let response_body = Self::extract_http_response_body(response.as_str()).with_context(|| {
-                format!(
+            let response_body =
+                Self::extract_http_response_body(response.as_str()).with_context(|| {
+                    format!(
                     "Failed decoding OpenCode session status response body for {working_directory}"
                 )
-            })?;
+                })?;
             let detail_suffix = if response_body.is_empty() {
                 String::new()
             } else {
@@ -128,7 +129,10 @@ impl OpenCodeRuntime {
             .with_context(|| format!("Invalid OpenCode HTTP status code: {status_code}"))
     }
 
-    fn require_loopback_socket_address(socket_address: SocketAddr, endpoint: &str) -> Result<SocketAddr> {
+    fn require_loopback_socket_address(
+        socket_address: SocketAddr,
+        endpoint: &str,
+    ) -> Result<SocketAddr> {
         if socket_address.ip().is_loopback() {
             return Ok(socket_address);
         }
@@ -160,26 +164,31 @@ impl OpenCodeRuntime {
 
         loop {
             let Some((size_line, rest)) = remaining.split_once("\r\n") else {
-                return Err(anyhow!("Chunked OpenCode response is missing a chunk size delimiter"));
+                return Err(anyhow!(
+                    "Chunked OpenCode response is missing a chunk size delimiter"
+                ));
             };
             let size_text = size_line
                 .split_once(';')
                 .map_or(size_line, |(size, _)| size)
                 .trim();
-            let size = usize::from_str_radix(size_text, 16).with_context(|| {
-                format!("Invalid chunk size in OpenCode response: {size_text}")
-            })?;
+            let size = usize::from_str_radix(size_text, 16)
+                .with_context(|| format!("Invalid chunk size in OpenCode response: {size_text}"))?;
             if size == 0 {
                 return Ok(decoded.trim().to_string());
             }
             if rest.len() < size + 2 {
-                return Err(anyhow!("Chunked OpenCode response ended before the declared chunk size"));
+                return Err(anyhow!(
+                    "Chunked OpenCode response ended before the declared chunk size"
+                ));
             }
 
             decoded.push_str(&rest[..size]);
             let chunk_suffix = &rest[size..size + 2];
             if chunk_suffix != "\r\n" {
-                return Err(anyhow!("Chunked OpenCode response is missing a chunk terminator"));
+                return Err(anyhow!(
+                    "Chunked OpenCode response is missing a chunk terminator"
+                ));
             }
 
             remaining = &rest[size + 2..];
@@ -529,8 +538,9 @@ mod tests {
     fn require_loopback_socket_address_accepts_loopback_addresses() {
         let loopback = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
 
-        let result = OpenCodeRuntime::require_loopback_socket_address(loopback, "http://127.0.0.1:8080")
-            .expect("loopback endpoint should be accepted");
+        let result =
+            OpenCodeRuntime::require_loopback_socket_address(loopback, "http://127.0.0.1:8080")
+                .expect("loopback endpoint should be accepted");
 
         assert_eq!(result, loopback);
     }

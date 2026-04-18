@@ -1,4 +1,7 @@
-use super::super::{emit_event, has_live_runtime_session_status, AppService, RunEmitter};
+use super::super::{
+    emit_event, AppService, RunEmitter, RuntimeSessionStatusProbeOutcome,
+    RuntimeSessionStatusProbeTargetResolution,
+};
 use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, AgentSessionDocument, AgentSessionStopRequest, RunEvent,
@@ -418,34 +421,39 @@ impl LiveSessionStopRouteResolver<'_> {
         let probe_targets = candidate_routes
             .iter()
             .filter_map(|runtime_route| {
-                runtime
-                    .session_status_probe_target(
-                        runtime_route,
-                        self.request.working_directory.as_str(),
-                    )
-                    .transpose()
-                    .map(|target| target.map(|probe_target| (runtime_route.clone(), probe_target)))
+                match runtime.session_status_probe_target(
+                    runtime_route,
+                    self.request.working_directory.as_str(),
+                ) {
+                    Ok(RuntimeSessionStatusProbeTargetResolution::Target(probe_target)) => {
+                        Some(Ok((runtime_route.clone(), probe_target)))
+                    }
+                    Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported) => None,
+                    Err(error) => Some(Err(error)),
+                }
             })
             .collect::<Result<Vec<_>>>()?;
         if probe_targets.is_empty() {
             return Ok(Vec::new());
         }
 
+        let unique_probe_targets = probe_targets
+            .iter()
+            .map(|(_, probe_target)| probe_target.clone())
+            .collect::<Vec<_>>();
         let statuses_by_target = self
             .service
-            .load_cached_runtime_session_statuses_for_targets(
-                probe_targets
-                    .iter()
-                    .map(|(_, probe_target)| probe_target.clone())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-            )?;
+            .load_cached_runtime_session_statuses_for_targets(unique_probe_targets.as_slice())?;
         let mut matching_routes = Vec::new();
         for (runtime_route, probe_target) in probe_targets {
             if statuses_by_target
                 .get(&probe_target)
-                .is_some_and(|statuses| {
-                    has_live_runtime_session_status(statuses, external_session_id)
+                .is_some_and(|outcome| {
+                    matches!(
+                        outcome,
+                        RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)
+                            if snapshot.has_live_session(external_session_id)
+                    )
                 })
             {
                 push_unique_runtime_route(&mut matching_routes, runtime_route);
