@@ -27,7 +27,7 @@ pub(crate) enum RuntimeExternalSessionStatus {
 
 pub(crate) type RuntimeSessionStatusMap = HashMap<String, RuntimeExternalSessionStatus>;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RuntimeSessionStatusSnapshotKind {
     NoLiveSessions,
     HasLiveSessions,
@@ -55,13 +55,20 @@ impl RuntimeSessionStatusSnapshot {
         Self { statuses, kind }
     }
 
-    pub(crate) fn kind(&self) -> RuntimeSessionStatusSnapshotKind {
-        self.kind.clone()
+    pub(crate) fn has_any_live_sessions(&self) -> bool {
+        self.kind == RuntimeSessionStatusSnapshotKind::HasLiveSessions
+    }
+
+    pub(crate) fn has_no_live_sessions(&self) -> bool {
+        !self.has_any_live_sessions()
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn statuses(&self) -> &RuntimeSessionStatusMap {
-        &self.statuses
+    pub(crate) fn session_status(
+        &self,
+        external_session_id: &str,
+    ) -> Option<&RuntimeExternalSessionStatus> {
+        self.statuses.get(external_session_id)
     }
 
     pub(crate) fn has_live_session(&self, external_session_id: &str) -> bool {
@@ -502,7 +509,6 @@ mod tests {
         AppService, CachedRuntimeSessionStatusProbe, RuntimeExternalSessionStatus,
         RuntimeSessionStatusFlightGuard, RuntimeSessionStatusMap, RuntimeSessionStatusProbeOutcome,
         RuntimeSessionStatusProbeTarget, RuntimeSessionStatusSnapshot,
-        RuntimeSessionStatusSnapshotKind,
     };
     use crate::app_service::runtime_registry::{AppRuntime, OpenCodeRuntime};
     use crate::app_service::test_support::{
@@ -584,13 +590,10 @@ mod tests {
             panic!("status request should succeed");
         };
         assert!(matches!(
-            snapshot.statuses().get("external-session"),
+            snapshot.session_status("external-session"),
             Some(RuntimeExternalSessionStatus::Busy)
         ));
-        assert_eq!(
-            snapshot.kind(),
-            RuntimeSessionStatusSnapshotKind::HasLiveSessions
-        );
+        assert!(snapshot.has_any_live_sessions());
         assert!(snapshot.has_live_session("external-session"));
 
         server.join().expect("server thread should finish");
@@ -645,13 +648,10 @@ mod tests {
             service.load_cached_runtime_session_status_outcome_for_target(&target)?,
         );
         assert!(matches!(
-            statuses.statuses().get("external-session"),
+            statuses.session_status("external-session"),
             Some(RuntimeExternalSessionStatus::Busy)
         ));
-        assert_eq!(
-            statuses.kind(),
-            RuntimeSessionStatusSnapshotKind::HasLiveSessions
-        );
+        assert!(statuses.has_any_live_sessions());
 
         server.join().expect("server thread should finish");
         let captured_request = request_line
@@ -687,8 +687,8 @@ mod tests {
             .join()
             .expect("status server thread should finish");
 
-        assert!(first.statuses().contains_key("external-build-session"));
-        assert!(second.statuses().contains_key("external-build-session"));
+        assert!(first.session_status("external-build-session").is_some());
+        assert!(second.session_status("external-build-session").is_some());
         assert_eq!(connections.load(Ordering::SeqCst), 1);
         Ok(())
     }
@@ -774,11 +774,8 @@ mod tests {
             .join()
             .expect("status server thread should finish");
 
-        assert!(statuses.statuses().contains_key("external-build-session"));
-        assert_eq!(
-            statuses.kind(),
-            RuntimeSessionStatusSnapshotKind::HasLiveSessions
-        );
+        assert!(statuses.session_status("external-build-session").is_some());
+        assert!(statuses.has_any_live_sessions());
         let cache = service
             .runtime_session_status_cache
             .lock()
@@ -817,11 +814,8 @@ mod tests {
             for handle in handles {
                 let statuses =
                     expect_statuses(handle.join().expect("probe thread should not panic"));
-                assert!(statuses.statuses().contains_key("external-build-session"));
-                assert_eq!(
-                    statuses.kind(),
-                    RuntimeSessionStatusSnapshotKind::HasLiveSessions
-                );
+                assert!(statuses.session_status("external-build-session").is_some());
+                assert!(statuses.has_any_live_sessions());
             }
         });
 

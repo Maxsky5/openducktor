@@ -3,19 +3,18 @@ use super::cleanup_plans::{
 };
 use crate::app_service::{
     service_core::AppService, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
-    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshotKind,
+    RuntimeSessionStatusProbeTargetResolution,
 };
 use anyhow::{anyhow, Context, Result};
-use host_domain::{AgentSessionDocument, RunState, RuntimeRole, RuntimeRoute};
+use host_domain::{AgentSessionDocument, RunState};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 mod probe_support;
 
 use self::probe_support::{
-    build_run_probe_plans, build_session_probe_plans, collect_runtime_routes_by_worktree,
-    RunProbeCandidate, RunProbePlan, SessionProbePlan, SessionRuntimeLookupKey,
-    TaskActiveWorkEvidence, TaskActivityProbePlan,
+    build_run_probe_plans, build_session_probe_plans, RunProbeCandidate, RunProbePlan,
+    SessionProbePlan, TaskActiveWorkEvidence, TaskActivityProbePlan, TaskRuntimeRouteIndex,
 };
 
 pub(super) struct TaskActivityGuard<'a> {
@@ -118,7 +117,7 @@ impl<'a> TaskActivityGuard<'a> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
         let candidate_runs = self.collect_candidate_runs(&normalized_repo, task_id)?;
         let runtime_routes_by_session =
-            self.collect_runtime_routes_by_session(repo_path, task_id, &candidate_runs)?;
+            TaskRuntimeRouteIndex::collect(self.service, repo_path, task_id, &candidate_runs)?;
         let probe_plan = self.build_probe_plan(
             &candidate_runs,
             sessions,
@@ -175,7 +174,7 @@ impl<'a> TaskActivityGuard<'a> {
         candidate_runs: &[RunProbeCandidate],
         sessions: &[AgentSessionDocument],
         session_roles: &[&str],
-        runtime_routes_by_session: &HashMap<SessionRuntimeLookupKey, RuntimeRoute>,
+        runtime_route_index: &TaskRuntimeRouteIndex,
     ) -> Result<TaskActivityProbePlan> {
         let mut probe_targets = Vec::new();
         let run_plans =
@@ -184,7 +183,7 @@ impl<'a> TaskActivityGuard<'a> {
             self.service,
             sessions,
             session_roles,
-            runtime_routes_by_session,
+            runtime_route_index,
             &mut probe_targets,
         )?;
 
@@ -226,7 +225,7 @@ impl<'a> TaskActivityGuard<'a> {
 
             match probe_outcome {
                 RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
-                    if snapshot.kind() == RuntimeSessionStatusSnapshotKind::NoLiveSessions {
+                    if snapshot.has_no_live_sessions() {
                         continue;
                     }
 
@@ -278,7 +277,7 @@ impl<'a> TaskActivityGuard<'a> {
                             })?;
                     match probe_outcome {
                         RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
-                            if snapshot.kind() == RuntimeSessionStatusSnapshotKind::NoLiveSessions {
+                            if snapshot.has_no_live_sessions() {
                                 continue;
                             }
 
@@ -302,54 +301,5 @@ impl<'a> TaskActivityGuard<'a> {
         let mut active_session_roles = active_roles.into_iter().collect::<Vec<_>>();
         active_session_roles.sort_unstable();
         Ok(active_session_roles)
-    }
-
-    fn collect_runtime_routes_by_session(
-        &self,
-        repo_path: &str,
-        task_id: &str,
-        candidate_runs: &[RunProbeCandidate],
-    ) -> Result<HashMap<SessionRuntimeLookupKey, RuntimeRoute>> {
-        let normalized_repo = normalize_path_for_comparison(repo_path);
-        let run_routes_by_worktree = collect_runtime_routes_by_worktree(candidate_runs);
-        let mut routes_by_session = HashMap::new();
-        let runtimes = self
-            .service
-            .agent_runtimes
-            .lock()
-            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-
-        for runtime in runtimes.values() {
-            if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo
-            {
-                continue;
-            }
-            if runtime.summary.task_id.as_deref() != Some(task_id) {
-                continue;
-            }
-            if runtime.summary.role == RuntimeRole::Workspace {
-                continue;
-            }
-
-            let key = SessionRuntimeLookupKey::new(
-                runtime.summary.kind.clone(),
-                runtime.summary.role,
-                runtime.summary.working_directory.as_str(),
-            );
-
-            if let Some(run_route) = run_routes_by_worktree
-                .get(&normalize_path_key(
-                    runtime.summary.working_directory.as_str(),
-                ))
-                .filter(|_| runtime.summary.role == RuntimeRole::Build)
-            {
-                routes_by_session.insert(key, run_route.clone());
-                continue;
-            }
-
-            routes_by_session.insert(key, runtime.summary.runtime_route.clone());
-        }
-
-        Ok(routes_by_session)
     }
 }

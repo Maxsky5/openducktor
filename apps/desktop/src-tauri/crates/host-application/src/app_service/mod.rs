@@ -73,7 +73,7 @@ pub(crate) type RuntimeSessionStatusProbeTarget =
 pub(crate) use runtime_session_status::{
     RuntimeSessionStatusProbeError, RuntimeSessionStatusProbeOutcome,
     RuntimeSessionStatusProbeTargetResolution,
-    RuntimeSessionStatusSnapshot, RuntimeSessionStatusSnapshotKind,
+    RuntimeSessionStatusSnapshot,
 };
 pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use service_core::{

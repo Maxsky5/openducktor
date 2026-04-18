@@ -85,8 +85,7 @@ impl RunExposurePlan {
 
         match probe_outcome {
             super::super::RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) => {
-                if snapshot.kind() == super::super::RuntimeSessionStatusSnapshotKind::NoLiveSessions
-                {
+                if snapshot.has_no_live_sessions() {
                     return Ok(false);
                 }
 

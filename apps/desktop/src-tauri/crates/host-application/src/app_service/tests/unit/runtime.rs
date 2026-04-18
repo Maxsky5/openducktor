@@ -464,6 +464,88 @@ fn task_delete_uses_task_runtime_route_for_matching_runtime_kind_and_worktree() 
 }
 
 #[test]
+fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() -> Result<()> {
+    let repo_path = unique_temp_path("task-delete-mixed-runtime-qa-route-selection");
+    fs::create_dir_all(&repo_path)?;
+    init_git_repo(&repo_path)?;
+
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, task_state, _git_state) = build_service_with_runtime_registry(
+        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        runtime_registry,
+    );
+    let repo_path_string = repo_path.to_string_lossy().to_string();
+    let workspace = service.workspace_add(repo_path_string.as_str())?;
+    service.workspace_update_repo_config(
+        workspace.workspace_id.as_str(),
+        repo_config_for_workspace(
+            &workspace,
+            host_infra_system::RepoConfig {
+                branch_prefix: "odt".to_string(),
+                default_runtime_kind: "test-runtime".to_string(),
+                ..Default::default()
+            },
+        ),
+    )?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "qa-session".to_string(),
+        external_session_id: Some("external-qa-session".to_string()),
+        role: "qa".to_string(),
+        scenario: "qa_review".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "test-runtime".to_string(),
+        working_directory: repo_path_string.clone(),
+        selected_model: None,
+    }];
+    insert_workspace_runtime(&service, repo_path_string.as_str(), 43123)?;
+    insert_task_runtime_for_kind_role(
+        &service,
+        AgentRuntimeKind::from("test-runtime"),
+        "task-1",
+        RuntimeRole::Qa,
+        repo_path_string.as_str(),
+        repo_path_string.as_str(),
+        host_domain::RuntimeRoute::Stdio,
+    )?;
+
+    let error = service
+        .task_delete(repo_path_string.as_str(), "task-1", false)
+        .expect_err("matching task runtime should block QA delete conservatively");
+    assert!(error
+        .to_string()
+        .contains("Cannot delete tasks with active QA work in progress"));
+
+    Ok(())
+}
+
+#[test]
 fn runs_list_hides_runs_when_runtime_probe_returns_actionable_failure() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
