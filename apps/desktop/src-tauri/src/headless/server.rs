@@ -885,10 +885,7 @@ mod tests {
         fs::create_dir_all(&root).expect("test root should exist");
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         let task_store: Arc<dyn TaskStore> = Arc::new(
-            BeadsTaskStore::with_metadata_namespace_and_config(
-                "openducktor",
-                config_store.clone(),
-            ),
+            BeadsTaskStore::with_metadata_namespace_and_config("openducktor", config_store.clone()),
         );
         let service = Arc::new(AppService::new(task_store, config_store));
         let registry = Arc::new(build_registry().expect("registry should build"));
@@ -910,7 +907,12 @@ mod tests {
 
     fn test_state_fixture_with_task_store(
         tasks: Vec<TaskCard>,
-    ) -> (TestStateFixture, Arc<Mutex<TestTaskStoreState>>, PathBuf, String) {
+    ) -> (
+        TestStateFixture,
+        Arc<Mutex<TestTaskStoreState>>,
+        PathBuf,
+        String,
+    ) {
         let root = unique_temp_path("server-task-store");
         fs::create_dir_all(&root).expect("test root should exist");
         let repo_path = root.join("repo");

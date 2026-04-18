@@ -139,7 +139,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register(
         "workspace_prepare_trusted_hooks_challenge",
         |state, args| {
-            Box::pin(handle_workspace_prepare_trusted_hooks_challenge(state, args))
+            Box::pin(handle_workspace_prepare_trusted_hooks_challenge(
+                state, args,
+            ))
         },
     )?;
     registry.register("workspace_get_repo_config", |state, args| {

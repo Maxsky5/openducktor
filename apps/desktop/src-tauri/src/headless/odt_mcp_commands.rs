@@ -392,8 +392,9 @@ mod tests {
 
     #[test]
     fn ready_args_deserialize_workspace_id() {
-        let parsed: WorkspaceArgs = serde_json::from_value(serde_json::json!({ "workspaceId": "repo" }))
-            .expect("args should parse");
+        let parsed: WorkspaceArgs =
+            serde_json::from_value(serde_json::json!({ "workspaceId": "repo" }))
+                .expect("args should parse");
         assert_eq!(parsed.workspace_id, "repo");
     }
 

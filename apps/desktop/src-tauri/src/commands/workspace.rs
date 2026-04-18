@@ -336,7 +336,11 @@ pub async fn workspace_update_repo_hooks(
     workspace_id: String,
     hooks: HookSet,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    as_error(state.service.workspace_update_repo_hooks(&workspace_id, hooks))
+    as_error(
+        state
+            .service
+            .workspace_update_repo_hooks(&workspace_id, hooks),
+    )
 }
 
 #[tauri::command]
@@ -796,12 +800,11 @@ mod tests {
             .update_repo_hooks(&workspace_id, hooks)
             .expect("hooks should be persisted");
 
-        let task_store: Arc<dyn TaskStore> = Arc::new(
-            BeadsTaskStore::with_metadata_namespace_and_config(
+        let task_store: Arc<dyn TaskStore> =
+            Arc::new(BeadsTaskStore::with_metadata_namespace_and_config(
                 TASK_METADATA_NAMESPACE,
                 config_store.clone(),
-            ),
-        );
+            ));
         let service = Arc::new(AppService::with_git_port(
             task_store,
             config_store,
@@ -1663,10 +1666,11 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() -> Result<(), String> {
         let fixture = setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
-        let (_theme, _git, chat, kanban, _autopilot, _workspaces, _global_prompt_overrides) = fixture
-            .service
-            .workspace_get_settings_snapshot()
-            .map_err(|error| error.to_string())?;
+        let (_theme, _git, chat, kanban, _autopilot, _workspaces, _global_prompt_overrides) =
+            fixture
+                .service
+                .workspace_get_settings_snapshot()
+                .map_err(|error| error.to_string())?;
 
         assert_eq!(chat, ChatSettings::default());
         assert!(!chat.show_thinking_messages);

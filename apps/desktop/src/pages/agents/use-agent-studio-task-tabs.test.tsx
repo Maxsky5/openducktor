@@ -402,7 +402,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
           taskId: "task-2",
           selectedTask: createTask("task-2"),
           tasks: [createTask("task-1"), createTask("task-2"), createTask("task-3")],
