@@ -260,7 +260,11 @@ impl AppService {
         match matching_run_ids.as_slice() {
             [run_id] => Ok(Some(run_id.clone())),
             [] => Ok(None),
-            _ => Ok(None),
+            _ => Err(anyhow!(
+                "Multiple live build runs matched session {}: {}",
+                request.session_id,
+                matching_run_ids.join(", ")
+            )),
         }
     }
 
@@ -514,7 +518,8 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_service::test_support::build_service_with_state;
+    use crate::app_service::{test_support::build_service_with_state, RunProcess};
+    use host_domain::RunSummary;
 
     #[test]
     fn stop_opencode_session_rejects_stdio_routes() {
@@ -533,5 +538,84 @@ mod tests {
         assert!(error
             .to_string()
             .contains("local_http runtime route with a port"));
+    }
+
+    #[test]
+    fn resolve_build_run_id_for_session_stop_fails_when_multiple_runs_match() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/repo".to_string();
+        let worktree_path = "/tmp/repo/worktree".to_string();
+        let runtime_route = RuntimeRoute::LocalHttp {
+            endpoint: "http://127.0.0.1:4312".to_string(),
+        };
+
+        service.runs.lock().expect("run lock poisoned").insert(
+            "run-primary".to_string(),
+            RunProcess {
+                summary: RunSummary {
+                    run_id: "run-primary".to_string(),
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    runtime_route: runtime_route.clone(),
+                    repo_path: repo_path.clone(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: worktree_path.clone(),
+                    port: Some(4312),
+                    state: RunState::Running,
+                    last_message: None,
+                    started_at: "2026-02-20T12:00:00Z".to_string(),
+                },
+                child: None,
+                _runtime_process_guard: None,
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                worktree_path: worktree_path.clone(),
+                repo_config: Default::default(),
+            },
+        );
+        service.runs.lock().expect("run lock poisoned").insert(
+            "run-duplicate".to_string(),
+            RunProcess {
+                summary: RunSummary {
+                    run_id: "run-duplicate".to_string(),
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    runtime_route: runtime_route.clone(),
+                    repo_path: repo_path.clone(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: worktree_path.clone(),
+                    port: Some(4312),
+                    state: RunState::Running,
+                    last_message: None,
+                    started_at: "2026-02-20T12:00:01Z".to_string(),
+                },
+                child: None,
+                _runtime_process_guard: None,
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                worktree_path: worktree_path.clone(),
+                repo_config: Default::default(),
+            },
+        );
+
+        let error = service
+            .resolve_build_run_id_for_session_stop(
+                repo_path.as_str(),
+                &AgentSessionStopRequest {
+                    repo_path: repo_path.clone(),
+                    task_id: "task-1".to_string(),
+                    session_id: "build-session".to_string(),
+                    runtime_kind: AgentRuntimeKind::opencode(),
+                    working_directory: worktree_path,
+                    external_session_id: Some("external-build-session".to_string()),
+                },
+                &runtime_route,
+            )
+            .expect_err("ambiguous build runs should fail fast");
+
+        let error_message = error.to_string();
+        assert!(error_message.contains("Multiple live build runs matched session build-session"));
+        assert!(error_message.contains("run-primary"));
+        assert!(error_message.contains("run-duplicate"));
     }
 }

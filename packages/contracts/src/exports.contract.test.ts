@@ -10,6 +10,7 @@ import type {
   AgentSessionRole,
   AgentSessionScenario,
   AgentSessionStatus,
+  AgentSessionStopTarget,
   AgentSessionTodoPayloadRecord,
   AgentToolName,
   AgentWorkflowState,
@@ -383,6 +384,7 @@ type ExportedTypeContract = {
   AgentSessionRole: AgentSessionRole;
   AgentSessionScenario: AgentSessionScenario;
   AgentSessionStatus: AgentSessionStatus;
+  AgentSessionStopTarget: AgentSessionStopTarget;
   AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;

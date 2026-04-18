@@ -80,7 +80,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -123,7 +122,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -214,7 +212,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -323,7 +320,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {
@@ -398,7 +394,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -526,7 +521,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -628,7 +622,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {
@@ -710,7 +703,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -802,7 +794,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         callOrder.push("load-agent-sessions");
@@ -900,7 +891,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
@@ -931,6 +921,96 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
+    }
+  });
+
+  test("refreshes backend-owned state when stop uses current workspace repo fallback", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => false;
+    const fallbackRepoPath = "/tmp/fallback-repo";
+    const stopTargets: AgentSessionStopTarget[] = [];
+    const refreshTaskDataCalls: string[] = [];
+    const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
+    let loadAgentSessionsCalls = 0;
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          repoPath: fallbackRepoPath,
+          workingDirectory: `${fallbackRepoPath}/worktree`,
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeWorkspace: null,
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: fallbackRepoPath },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        workingDirectory: fallbackRepoPath,
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {
+        loadAgentSessionsCalls += 1;
+      },
+      clearTurnDuration: () => {},
+      refreshTaskData: async (repoPath) => {
+        refreshTaskDataCalls.push(repoPath);
+      },
+      persistSessionRecord: async () => {},
+      stopAuthoritativeSession: async (target) => {
+        stopTargets.push(target);
+      },
+      invalidateSessionStopQueries: async (input) => {
+        invalidationCalls.push(input);
+      },
+    });
+
+    try {
+      await actions.stopAgentSession("session-1");
+
+      expect(stopTargets).toEqual([
+        {
+          repoPath: fallbackRepoPath,
+          taskId: "task-1",
+          sessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: `${fallbackRepoPath}/worktree`,
+          externalSessionId: "external-1",
+        },
+      ]);
+      expect(invalidationCalls).toEqual([
+        {
+          repoPath: fallbackRepoPath,
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        },
+      ]);
+      expect(refreshTaskDataCalls).toEqual([fallbackRepoPath]);
+      expect(loadAgentSessionsCalls).toBe(1);
+    } finally {
+      adapter.hasSession = originalHasSession;
     }
   });
 
@@ -985,7 +1065,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1088,7 +1167,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1187,7 +1265,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1306,7 +1383,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1385,7 +1461,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1459,7 +1534,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         callOrder.push("hydrate");
@@ -1552,7 +1626,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1631,7 +1704,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1711,7 +1783,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1787,7 +1858,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {},
@@ -1857,7 +1927,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {
@@ -1955,7 +2024,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {
@@ -2051,7 +2119,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {},
       clearTurnDuration: () => {

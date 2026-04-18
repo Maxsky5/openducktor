@@ -1,5 +1,5 @@
 use host_domain::GitCurrentBranch;
-use host_infra_system::{HookSet, RepoConfig};
+use host_infra_system::RepoConfig;
 use std::path::Path;
 
 pub(super) const TEST_TASK_ID: &str = "task-1";
@@ -25,14 +25,7 @@ pub(super) fn test_repo_config(worktree_base: Option<&Path>) -> RepoConfig {
             remote: Some(TEST_REMOTE_NAME.to_string()),
             branch: TEST_MAIN_BRANCH.to_string(),
         },
-        git: Default::default(),
         trusted_hooks: true,
-        trusted_hooks_fingerprint: None,
-        hooks: HookSet::default(),
-        dev_servers: Vec::new(),
-        worktree_file_copies: Vec::new(),
-        prompt_overrides: Default::default(),
-        agent_defaults: Default::default(),
         ..Default::default()
     }
 }

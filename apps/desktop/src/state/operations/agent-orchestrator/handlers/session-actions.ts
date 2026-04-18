@@ -57,10 +57,6 @@ type SessionActionsDependencies = {
   ) => Promise<BuildContinuationTarget | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  loadRepoDefaultModel: (
-    workspaceId: string,
-    role: AgentRole,
-  ) => Promise<AgentModelSelection | null>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
@@ -303,6 +299,7 @@ export const createAgentSessionActions = ({
     if (!session) {
       return;
     }
+    let stopRepoPath: string | null = null;
 
     updateSession(
       sessionId,
@@ -316,8 +313,8 @@ export const createAgentSessionActions = ({
     const hasLocalRuntimeSession = adapter.hasSession(sessionId);
 
     try {
-      const repoPath = workspaceRepoPath ?? currentWorkspaceRepoPathRef.current;
-      if (!repoPath) {
+      stopRepoPath = workspaceRepoPath ?? currentWorkspaceRepoPathRef.current;
+      if (!stopRepoPath) {
         throw new Error("Active workspace repo path is unavailable.");
       }
 
@@ -326,7 +323,7 @@ export const createAgentSessionActions = ({
       }
 
       await stopAuthoritativeSession({
-        repoPath,
+        repoPath: stopRepoPath,
         taskId: session.taskId,
         sessionId: session.sessionId,
         runtimeKind: session.runtimeKind,
@@ -394,14 +391,14 @@ export const createAgentSessionActions = ({
       );
     }
 
-    if (workspaceRepoPath) {
+    if (stopRepoPath) {
       await Promise.all([
         invalidateSessionStopQueries?.({
-          repoPath: workspaceRepoPath,
+          repoPath: stopRepoPath,
           taskId: session.taskId,
           ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
         }),
-        refreshTaskData(workspaceRepoPath),
+        refreshTaskData(stopRepoPath),
         loadAgentSessions(session.taskId),
       ]);
     }
