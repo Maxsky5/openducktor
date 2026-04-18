@@ -19,6 +19,10 @@ const toErrorMessage = (error: unknown): string => {
   return "Unknown error";
 };
 
+const isStructuredToolPayload = (payload: unknown): payload is Record<string, unknown> => {
+  return payload !== null && typeof payload === "object" && !Array.isArray(payload);
+};
+
 const toToolResult = (payload: unknown): ToolResult => {
   return {
     content: [
@@ -27,9 +31,7 @@ const toToolResult = (payload: unknown): ToolResult => {
         text: JSON.stringify(payload, null, 2),
       },
     ],
-    ...(payload && typeof payload === "object"
-      ? { structuredContent: payload as Record<string, unknown> }
-      : {}),
+    ...(isStructuredToolPayload(payload) ? { structuredContent: payload } : {}),
   };
 };
 
