@@ -49,7 +49,9 @@ impl AppService {
     }
 
     pub fn odt_get_workspaces(&self) -> Result<OdtGetWorkspacesResult> {
-        self.workspace_list()
+        Ok(OdtGetWorkspacesResult {
+            workspaces: self.workspace_list()?,
+        })
     }
 
     pub fn odt_read_task(&self, workspace_id: &str, task_id: &str) -> Result<OdtTaskSummary> {

@@ -114,6 +114,8 @@ pub struct WorkspaceRecord {
     pub workspace_id: String,
     pub workspace_name: String,
     pub repo_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_data_url: Option<String>,
     pub is_active: bool,
     pub has_config: bool,
     pub configured_worktree_base_path: Option<String>,

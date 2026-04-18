@@ -83,7 +83,26 @@ describe("OdtHostBridgeClient", () => {
         url,
         body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
       });
-      return jsonResponse([
+      return jsonResponse({
+        workspaces: [
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ],
+      });
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    await expect(client.getWorkspaces()).resolves.toEqual({
+      workspaces: [
         {
           workspaceId: "repo",
           workspaceName: "Repo",
@@ -94,23 +113,8 @@ describe("OdtHostBridgeClient", () => {
           defaultWorktreeBasePath: null,
           effectiveWorktreeBasePath: null,
         },
-      ]);
-    };
-
-    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
-
-    await expect(client.getWorkspaces()).resolves.toEqual([
-      {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: null,
-        effectiveWorktreeBasePath: null,
-      },
-    ]);
+      ],
+    });
 
     expect(requests).toEqual([
       {

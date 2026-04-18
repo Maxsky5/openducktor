@@ -356,6 +356,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         workspace_list,
         workspace_add,
         workspace_select,
+        workspace_reorder,
         workspace_update_repo_config,
         workspace_save_repo_settings,
         workspace_update_repo_hooks,

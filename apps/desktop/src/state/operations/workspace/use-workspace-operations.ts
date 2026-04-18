@@ -55,6 +55,7 @@ export function useWorkspaceOperations({
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    reorderWorkspaces,
     applyWorkspaceRecords,
     applyWorkspaceRecord,
   } = useWorkspaceSelectionOperations({
@@ -93,6 +94,7 @@ export function useWorkspaceOperations({
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    reorderWorkspaces,
     refreshBranches,
     switchBranch,
     clearBranchData,

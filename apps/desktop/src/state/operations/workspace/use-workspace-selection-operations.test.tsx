@@ -241,11 +241,162 @@ describe("use-workspace-selection-operations", () => {
       });
 
       expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-old", false),
         workspace("/repo-b"),
         workspace("/repo-c", true),
-        workspace("/repo-old", false),
       ]);
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-c");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reorders workspaces without clearing switch-dependent state", async () => {
+    const clearTaskData = mock(() => {});
+    const clearActiveBeadsCheck = mock(() => {});
+    const clearBranchData = mock(() => {});
+    const workspaceReorder = mock(async (workspaceOrder: string[]) =>
+      workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
+    );
+    workspaceHost.workspaceReorder = workspaceReorder;
+
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData,
+      clearActiveBeadsCheck,
+      clearBranchData,
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+          workspace("/repo-c"),
+        ]);
+      });
+      await harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+      });
+
+      expect(workspaceReorder).toHaveBeenCalledWith(["repo-c", "repo-a", "repo-b"]);
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-c"),
+        workspace("/repo-a"),
+        workspace("/repo-b"),
+      ]);
+      expect(clearTaskData).not.toHaveBeenCalled();
+      expect(clearActiveBeadsCheck).not.toHaveBeenCalled();
+      expect(clearBranchData).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ignores stale reorder responses when a newer drag finishes first", async () => {
+    const firstReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const secondReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const workspaceReorder = mock((workspaceOrder: string[]) => {
+      if (workspaceOrder[0] === "repo-c") {
+        return firstReorder.promise;
+      }
+      return secondReorder.promise;
+    });
+    workspaceHost.workspaceReorder = workspaceReorder;
+
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+          workspace("/repo-c"),
+        ]);
+      });
+
+      const firstCall = harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+      });
+      const secondCall = harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-b", "repo-c", "repo-a"]);
+      });
+
+      secondReorder.resolve([
+        workspace("/repo-b"),
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+      ]);
+      await secondCall;
+
+      firstReorder.resolve([
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+        workspace("/repo-b"),
+      ]);
+      await firstCall;
+
+      expect(workspaceReorder).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-b"),
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reorders workspaces optimistically before the host confirms the new order", async () => {
+    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
+
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+          workspace("/repo-c"),
+        ]);
+      });
+
+      let pendingReorder: Promise<void> | null = null;
+      await harness.run((value) => {
+        pendingReorder = value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+      });
+
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+        workspace("/repo-b"),
+      ]);
+
+      await harness.run(async () => {
+        reorderDeferred.resolve([
+          workspace("/repo-c"),
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+        ]);
+        await pendingReorder;
+      });
     } finally {
       await harness.unmount();
     }
@@ -271,6 +422,77 @@ describe("use-workspace-selection-operations", () => {
 
       expect(latestActiveWorkspace?.repoPath).toBe("/repo-old");
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ignores a stale reorder response after a newer workspace switch starts", async () => {
+    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-a");
+    workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
+    workspaceHost.workspaceSelect = mock(async () => workspace("/repo-b", true));
+    workspaceHost.workspaceList = mock(async () => [
+      workspace("/repo-a"),
+      workspace("/repo-b", true),
+    ]);
+    workspaceHost.workspaceGetRepoConfig = mock(async () => ({
+      workspaceId: "repo-b",
+      workspaceName: "repo-b",
+      repoPath: "/repo-b",
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "odt",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      devServers: [],
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
+    workspaceHost.runtimeEnsure = mock(async (repoPath: string) =>
+      createWorkspaceRuntimeSummary(repoPath),
+    );
+
+    const harness = createSelectionHarness({
+      activeWorkspace: latestActiveWorkspace,
+      setActiveWorkspace: (workspace) => {
+        latestActiveWorkspace = workspace;
+      },
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([workspace("/repo-a", true), workspace("/repo-b")]);
+      });
+
+      const pendingReorder = harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-b", "repo-a"]);
+      });
+
+      await harness.run(async (value) => {
+        await value.selectWorkspace("repo-b");
+      });
+
+      reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
+      await pendingReorder;
+
+      expect(latestActiveWorkspace?.repoPath).toBe("/repo-b");
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-a"),
+        workspace("/repo-b", true),
+      ]);
+    } finally {
+      reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
       await harness.unmount();
     }
   });

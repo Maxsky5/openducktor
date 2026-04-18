@@ -238,7 +238,7 @@ export function OpenRepositoryModal({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 pt-2">
+        <DialogBody className="space-y-4 py-4">
           <Button
             type="button"
             size="lg"
@@ -358,9 +358,9 @@ export function OpenRepositoryModal({
         </DialogBody>
 
         {canClose || selectedRepoPath ? (
-          <DialogFooter className="mt-0 border-t border-border pt-5">
+          <DialogFooter className="mt-0 border-t border-border pt-5 justify-between">
             {canClose ? (
-              <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
             ) : null}
@@ -369,6 +369,7 @@ export function OpenRepositoryModal({
                 type="button"
                 onClick={() => void submitWorkspaceCreation()}
                 disabled={isModalBusy || workspaceValidationError !== null}
+                className="ml-auto"
               >
                 Open Repository
               </Button>

@@ -173,4 +173,8 @@ pub struct OdtHostBridgeReady {
     pub tool_names: Vec<String>,
 }
 
-pub type OdtGetWorkspacesResult = Vec<WorkspaceRecord>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OdtGetWorkspacesResult {
+    pub workspaces: Vec<WorkspaceRecord>,
+}

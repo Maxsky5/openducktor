@@ -12,7 +12,12 @@ export type WorkspaceBranchProbeHostClient = Pick<typeof host, "gitGetCurrentBra
 
 export type WorkspaceSelectionOperationsHostClient = Pick<
   typeof host,
-  "runtimeEnsure" | "workspaceAdd" | "workspaceGetRepoConfig" | "workspaceList" | "workspaceSelect"
+  | "runtimeEnsure"
+  | "workspaceAdd"
+  | "workspaceGetRepoConfig"
+  | "workspaceList"
+  | "workspaceReorder"
+  | "workspaceSelect"
 >;
 
 export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient &
@@ -29,6 +34,7 @@ export type UseWorkspaceOperationsResult = {
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
   clearBranchData: () => void;

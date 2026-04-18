@@ -14,6 +14,7 @@ mod permissions;
 mod runtime_config;
 mod trust_fingerprint;
 mod workspace_config;
+mod workspace_icons;
 
 pub(super) struct TestStoreHarness {
     store: AppConfigStore,

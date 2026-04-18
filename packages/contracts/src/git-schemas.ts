@@ -4,6 +4,7 @@ export const workspaceRecordSchema = z.object({
   workspaceId: z.string(),
   workspaceName: z.string(),
   repoPath: z.string(),
+  iconDataUrl: z.string().nullable().optional(),
   isActive: z.boolean(),
   hasConfig: z.boolean(),
   configuredWorktreeBasePath: z.string().nullable(),

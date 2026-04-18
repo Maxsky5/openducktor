@@ -10,6 +10,9 @@ export const createAppStateProviderModuleMock = (
   overrides: Partial<AppStateProviderModule>,
 ): AppStateProviderModule => ({
   AppStateProvider: ({ children }: { children?: ReactNode }) => children as ReactElement,
+  useActiveWorkspace: unused("useActiveWorkspace"),
+  useWorkspaceBranchState: unused("useWorkspaceBranchState"),
+  useWorkspacePresence: unused("useWorkspacePresence"),
   useWorkspaceState: unused("useWorkspaceState"),
   useChecksState: unused("useChecksState"),
   useTasksState: unused("useTasksState"),

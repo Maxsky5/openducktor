@@ -102,6 +102,84 @@ fn workspace_add_select_and_update_persist_state() {
 }
 
 #[test]
+fn reorder_workspaces_persists_custom_order_and_exposes_icon_data_url() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("workspace-reorder");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo_a = root.join("repo-a");
+    let repo_b = root.join("repo-b");
+    fs::create_dir_all(repo_a.join(".git")).expect("repo a");
+    fs::create_dir_all(repo_b.join(".git")).expect("repo b");
+    fs::create_dir_all(repo_b.join("public")).expect("public dir");
+    fs::write(repo_b.join("public/icon.png"), [0x89, b'P', b'N', b'G']).expect("icon");
+
+    let repo_a_str = repo_a.to_string_lossy().to_string();
+    let repo_b_str = repo_b.to_string_lossy().to_string();
+    let (workspace_a_id, workspace_a_name, _repo_a_canonical) = workspace_identity(&repo_a);
+    let (workspace_b_id, workspace_b_name, _repo_b_canonical) = workspace_identity(&repo_b);
+
+    store
+        .add_workspace(&workspace_a_id, &workspace_a_name, &repo_a_str)
+        .expect("add workspace a");
+    store
+        .add_workspace(&workspace_b_id, &workspace_b_name, &repo_b_str)
+        .expect("add workspace b");
+
+    let reordered = store
+        .reorder_workspaces(vec![workspace_b_id.clone(), workspace_a_id.clone()])
+        .expect("reorder workspaces");
+
+    assert_eq!(reordered[0].workspace_id, workspace_b_id);
+    assert!(reordered[0]
+        .icon_data_url
+        .as_deref()
+        .is_some_and(|value| value.starts_with("data:image/png;base64,")));
+    assert_eq!(reordered[1].workspace_id, workspace_a_id);
+
+    let loaded = store.load().expect("load config");
+    assert_eq!(loaded.workspace_order, vec![workspace_b_id, workspace_a_id]);
+}
+
+#[test]
+fn reorder_workspaces_rejects_duplicate_and_unknown_ids() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("workspace-reorder-invalid");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo_a = root.join("repo-a");
+    let repo_b = root.join("repo-b");
+    fs::create_dir_all(repo_a.join(".git")).expect("repo a");
+    fs::create_dir_all(repo_b.join(".git")).expect("repo b");
+
+    let repo_a_str = repo_a.to_string_lossy().to_string();
+    let repo_b_str = repo_b.to_string_lossy().to_string();
+    let (workspace_a_id, workspace_a_name, _repo_a_canonical) = workspace_identity(&repo_a);
+    let (workspace_b_id, workspace_b_name, _repo_b_canonical) = workspace_identity(&repo_b);
+
+    store
+        .add_workspace(&workspace_a_id, &workspace_a_name, &repo_a_str)
+        .expect("add workspace a");
+    store
+        .add_workspace(&workspace_b_id, &workspace_b_name, &repo_b_str)
+        .expect("add workspace b");
+
+    let duplicate_error = store
+        .reorder_workspaces(vec![workspace_a_id.clone(), workspace_a_id.clone()])
+        .expect_err("duplicate reorder should fail");
+    assert!(duplicate_error
+        .to_string()
+        .contains("duplicate workspace id"));
+
+    let unknown_error = store
+        .reorder_workspaces(vec![workspace_a_id, "missing".to_string()])
+        .expect_err("unknown reorder should fail");
+    assert!(unknown_error.to_string().contains("unknown workspace id"));
+}
+
+#[test]
 fn add_workspace_rejects_missing_and_non_git_paths() {
     let _env_lock = lock_env();
     let harness = TestStoreHarness::new("workspace-invalid");

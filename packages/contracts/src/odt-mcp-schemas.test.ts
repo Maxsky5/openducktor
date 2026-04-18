@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  getWorkspacesResultSchema,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   publicTaskSchema,
   taskSummarySchema,
@@ -79,5 +80,24 @@ describe("odt mcp public task schemas", () => {
         "odt_set_spec",
       ].sort(),
     );
+  });
+
+  test("get workspaces result keeps workspace records in an object payload", () => {
+    const parsed = getWorkspacesResultSchema.parse({
+      workspaces: [
+        {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: null,
+          defaultWorktreeBasePath: null,
+          effectiveWorktreeBasePath: null,
+        },
+      ],
+    });
+
+    expect(parsed.workspaces[0]?.workspaceId).toBe("repo");
   });
 });

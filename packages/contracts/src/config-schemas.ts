@@ -207,6 +207,7 @@ export const globalConfigSchema = z.object({
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
+  workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
 });
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;

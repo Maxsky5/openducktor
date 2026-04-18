@@ -8,12 +8,15 @@ import {
 } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
+  ActiveWorkspace,
   AgentOperationsContextValue,
   AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
+  WorkspaceBranchStateContextValue,
+  WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
@@ -25,9 +28,12 @@ import {
   DelegationStateContext,
   SpecStateContext,
   TasksStateContext,
+  useActiveWorkspaceContext,
   useAgentOperationsContext,
   useAgentSessionsContext,
   useRequiredContext,
+  useWorkspaceBranchStateContext,
+  useWorkspacePresenceContext,
   WorkspaceStateContext,
 } from "./app-state-contexts";
 import { createHostRuntimeCatalogOperations } from "./operations";
@@ -85,6 +91,15 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
 
 export const useWorkspaceState = (): WorkspaceStateContextValue =>
   useRequiredContext(WorkspaceStateContext, "useWorkspaceState");
+
+export const useWorkspaceBranchState = (): WorkspaceBranchStateContextValue =>
+  useWorkspaceBranchStateContext();
+
+export const useWorkspacePresence = (): WorkspacePresenceContextValue =>
+  useWorkspacePresenceContext();
+
+export const useActiveWorkspace = (): ActiveWorkspace | null =>
+  useActiveWorkspaceContext().activeWorkspace;
 
 export const useChecksState = (): ChecksStateContextValue =>
   useRequiredContext(ChecksStateContext, "useChecksState");

@@ -25,6 +25,8 @@ const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
     workspaceList: async () => [],
     workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
+    workspaceReorder: async (workspaceOrder: string[]) =>
+      workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
     workspaceGetRepoConfig: async () => {
       throw new Error("workspaceGetRepoConfig not configured");
     },

@@ -49,6 +49,59 @@ fn load_clamps_negative_kanban_done_visible_days() {
 }
 
 #[test]
+fn load_normalizes_workspace_order_and_appends_missing_workspaces() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("normalize-workspace-order");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo_a = root.join("repo-a");
+    let repo_b = root.join("repo-b");
+    fs::create_dir_all(repo_a.join(".git")).expect("repo a");
+    fs::create_dir_all(repo_b.join(".git")).expect("repo b");
+    let (workspace_a_id, workspace_a_name, repo_a_path) = workspace_identity(&repo_a);
+    let (workspace_b_id, workspace_b_name, repo_b_path) = workspace_identity(&repo_b);
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 2,
+        "workspaces": {
+            workspace_a_id.clone(): {
+                "workspaceId": workspace_a_id,
+                "workspaceName": workspace_a_name,
+                "repoPath": repo_a_path,
+                "defaultRuntimeKind": "opencode"
+            },
+            workspace_b_id.clone(): {
+                "workspaceId": workspace_b_id,
+                "workspaceName": workspace_b_name,
+                "repoPath": repo_b_path,
+                "defaultRuntimeKind": "opencode"
+            }
+        },
+        "workspaceOrder": [" ", workspace_b_id.as_str(), workspace_b_id.as_str(), "missing"]
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let config = store.load().expect("load normalized config");
+    assert_eq!(config.workspace_order.len(), 2);
+    assert_eq!(config.workspace_order[0], workspace_b_id);
+    assert_eq!(config.workspace_order[1], workspace_a_id);
+}
+
+#[test]
 fn update_repo_config_normalizes_blank_worktree_path() {
     let _env_lock = lock_env();
     let harness = TestStoreHarness::new("normalize-worktree");

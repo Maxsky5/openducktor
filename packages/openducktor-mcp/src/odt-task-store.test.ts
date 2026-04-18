@@ -146,36 +146,40 @@ describe("OdtTaskStore", () => {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => {
         calls += 1;
-        return [
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ];
+        return {
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        };
       },
       call: async () => summaryPayload,
     } as OdtHostBridgeClientPort;
 
     const store = new OdtTaskStore({ hostUrl: "http://127.0.0.1:14327" }, { client });
 
-    await expect(store.getWorkspaces({})).resolves.toEqual([
-      {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: null,
-        effectiveWorktreeBasePath: null,
-      },
-    ]);
+    await expect(store.getWorkspaces({})).resolves.toEqual({
+      workspaces: [
+        {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: null,
+          defaultWorktreeBasePath: null,
+          effectiveWorktreeBasePath: null,
+        },
+      ],
+    });
     expect(calls).toBe(1);
   });
 

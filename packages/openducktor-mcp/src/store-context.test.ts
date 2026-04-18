@@ -54,18 +54,20 @@ describe("resolveStoreContext", () => {
         });
       }
       if (url.endsWith("/invoke/get_workspaces")) {
-        return jsonResponse([
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ]);
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
       }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
@@ -146,18 +148,20 @@ describe("resolveStoreContext", () => {
         });
       }
       if (url === "http://127.0.0.1:14327/invoke/get_workspaces") {
-        return jsonResponse([
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ]);
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
       }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
@@ -191,18 +195,20 @@ describe("resolveStoreContext", () => {
         });
       }
       if (url === "http://127.0.0.1:14328/invoke/get_workspaces") {
-        return jsonResponse([
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ]);
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
       }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
@@ -233,32 +239,36 @@ describe("resolveStoreContext", () => {
         });
       }
       if (url === "http://127.0.0.1:14327/invoke/get_workspaces") {
-        return jsonResponse([
-          {
-            workspaceId: "other-repo",
-            workspaceName: "Other Repo",
-            repoPath: "/other-repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ]);
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "other-repo",
+              workspaceName: "Other Repo",
+              repoPath: "/other-repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
       }
       if (url === "http://127.0.0.1:14328/invoke/get_workspaces") {
-        return jsonResponse([
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ]);
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
       }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
@@ -302,18 +312,20 @@ describe("resolveStoreContext", () => {
         });
       }
       if (url.endsWith("/invoke/get_workspaces")) {
-        return jsonResponse([
-          {
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          },
-        ]);
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
       }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;

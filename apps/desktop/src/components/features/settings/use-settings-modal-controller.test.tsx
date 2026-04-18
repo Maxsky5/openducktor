@@ -140,6 +140,7 @@ const createHookHarness = (
     activeBranch: null,
     addWorkspace: async () => {},
     selectWorkspace: async () => {},
+    reorderWorkspaces: async () => {},
     refreshBranches: async () => {},
     switchBranch: async () => {},
     loadRepoSettings: async () => {

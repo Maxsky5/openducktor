@@ -5,8 +5,10 @@ import {
   useActiveWorkspaceContext,
   useChecksOperationsContext,
   useTaskControlContext,
+  WorkspaceBranchStateContext,
   WorkspaceOperationsContext,
   type WorkspaceOperationsContextValue,
+  WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "../app-state-contexts";
 import { useRepoSettingsOperations, useWorkspaceOperations } from "../operations";
@@ -27,6 +29,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    reorderWorkspaces,
     refreshBranches,
     switchBranch,
     clearBranchData,
@@ -109,6 +112,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         activeBranch,
         addWorkspace,
         selectWorkspace,
+        reorderWorkspaces,
         refreshBranches,
         switchBranch,
         loadRepoSettings,
@@ -130,6 +134,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       loadRepoSettings,
       loadSettingsSnapshot,
       detectGithubRepository,
+      reorderWorkspaces,
       saveGlobalGitConfig,
       refreshBranches,
       saveRepoSettings,
@@ -138,6 +143,36 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       switchBranch,
       workspaces,
     ],
+  );
+
+  const workspaceBranchStateValue = useMemo(
+    () => ({
+      activeWorkspace: resolvedActiveWorkspace,
+      branches,
+      activeBranch,
+      isSwitchingWorkspace,
+      isLoadingBranches,
+      isSwitchingBranch,
+      branchSyncDegraded,
+      switchBranch,
+    }),
+    [
+      activeBranch,
+      resolvedActiveWorkspace,
+      branches,
+      isLoadingBranches,
+      isSwitchingBranch,
+      isSwitchingWorkspace,
+      branchSyncDegraded,
+      switchBranch,
+    ],
+  );
+
+  const workspacePresenceValue = useMemo(
+    () => ({
+      hasWorkspaces: workspaces.length > 0,
+    }),
+    [workspaces.length],
   );
 
   const workspaceOperationsValue = useMemo<WorkspaceOperationsContextValue>(
@@ -151,9 +186,13 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
 
   return (
     <WorkspaceOperationsContext.Provider value={workspaceOperationsValue}>
-      <WorkspaceStateContext.Provider value={workspaceStateValue}>
-        {children}
-      </WorkspaceStateContext.Provider>
+      <WorkspacePresenceContext.Provider value={workspacePresenceValue}>
+        <WorkspaceBranchStateContext.Provider value={workspaceBranchStateValue}>
+          <WorkspaceStateContext.Provider value={workspaceStateValue}>
+            {children}
+          </WorkspaceStateContext.Provider>
+        </WorkspaceBranchStateContext.Provider>
+      </WorkspacePresenceContext.Provider>
     </WorkspaceOperationsContext.Provider>
   );
 }

@@ -1,9 +1,8 @@
-import { FolderOpen, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
+import { lazy, memo, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
-import { RepositorySwitcher } from "@/components/features/repository/repository-switcher";
 import {
   AgentActivityCard,
   AppBrand,
@@ -11,21 +10,24 @@ import {
   SidebarNavigation,
 } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
+import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useShellAgentActivity, useWorkspaceState } from "@/state";
+import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
+import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings/settings-modal");
   return { default: module.SettingsModal };
 });
 
-export function AppShell(): ReactElement {
-  const { activeWorkspace, workspaces } = useWorkspaceState();
+export const AppShell = memo(function AppShell(): ReactElement {
+  const activeWorkspace = useActiveWorkspace();
+  const { hasWorkspaces } = useWorkspacePresence();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const hasActiveWorkspace = activeWorkspace !== null;
-  const isRepositoryModalBlocking = !hasActiveWorkspace && workspaces.length === 0;
+  const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
   const agentActivity = useShellAgentActivity(activeWorkspace);
 
   useEffect(() => {
@@ -46,10 +48,16 @@ export function AppShell(): ReactElement {
     [isRepositoryModalBlocking],
   );
 
+  const openRepositoryModal = useCallback(() => {
+    setRepositoryModalOpen(true);
+  }, []);
+
   return (
     <>
       <div className="h-screen min-h-screen w-full overflow-hidden">
         <div className="flex h-full min-h-0 w-full">
+          <WorkspaceRail onOpenRepositoryModal={openRepositoryModal} />
+
           <aside
             className={cn(
               "flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
@@ -76,21 +84,16 @@ export function AppShell(): ReactElement {
 
                   <div className="space-y-2">
                     <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground">
-                      Repository
+                      Workspace
                     </p>
-                    <div className="flex items-center gap-2">
-                      <RepositorySwitcher className="min-w-0 flex-1" />
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={() => setRepositoryModalOpen(true)}
-                        aria-label="Open repository"
-                        title="Open repository"
-                      >
-                        <FolderOpen className="size-4" />
-                      </Button>
-                    </div>
+                    <p
+                      className="px-1 text-[1rem] font-semibold leading-tight text-sidebar-foreground"
+                      title={activeWorkspace?.workspaceName ?? "No workspace selected"}
+                    >
+                      <span className="line-clamp-2 break-words">
+                        {activeWorkspace?.workspaceName ?? "No workspace selected"}
+                      </span>
+                    </p>
                   </div>
 
                   <BranchSwitcher />
@@ -141,16 +144,6 @@ export function AppShell(): ReactElement {
                 >
                   <PanelLeftOpen className="size-4" />
                 </Button>
-                <Button
-                  type="button"
-                  size="icon"
-                  className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => setRepositoryModalOpen(true)}
-                  aria-label="Open repository"
-                  title="Open repository"
-                >
-                  <FolderOpen className="size-4" />
-                </Button>
                 <div className="w-full border-t border-sidebar-border pt-2">
                   <SidebarNavigation hasActiveWorkspace={hasActiveWorkspace} compact />
                 </div>
@@ -175,4 +168,4 @@ export function AppShell(): ReactElement {
       />
     </>
   );
-}
+});

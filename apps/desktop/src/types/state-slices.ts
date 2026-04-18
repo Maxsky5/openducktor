@@ -80,6 +80,7 @@ export type WorkspaceStateContextValue = {
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
@@ -88,6 +89,22 @@ export type WorkspaceStateContextValue = {
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
+};
+
+export type WorkspaceBranchStateContextValue = Pick<
+  WorkspaceStateContextValue,
+  | "activeWorkspace"
+  | "branches"
+  | "activeBranch"
+  | "isSwitchingWorkspace"
+  | "isLoadingBranches"
+  | "isSwitchingBranch"
+  | "branchSyncDegraded"
+  | "switchBranch"
+>;
+
+export type WorkspacePresenceContextValue = {
+  hasWorkspaces: boolean;
 };
 
 export type ChecksStateContextValue = {

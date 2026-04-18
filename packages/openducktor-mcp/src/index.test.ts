@@ -114,18 +114,20 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
 
     if (url === "/invoke/get_workspaces") {
       requests.push({ url, body: await readJsonBody(request) });
-      writeJson(response, [
-        {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: null,
-          effectiveWorktreeBasePath: null,
-        },
-      ]);
+      writeJson(response, {
+        workspaces: [
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ],
+      });
       return;
     }
 
@@ -188,7 +190,7 @@ afterEach(async () => {
 });
 
 describe("MCP server tool results", () => {
-  test("get_workspaces omits structuredContent for array payloads", async () => {
+  test("get_workspaces keeps structuredContent for workspace discovery payloads", async () => {
     const bridge = await startMockBridge();
     const transport = createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
@@ -198,19 +200,34 @@ describe("MCP server tool results", () => {
       const result = await client.callTool({ name: "get_workspaces", arguments: {} });
       const contentResult = requireContentToolResult(result);
 
-      expect(contentResult.structuredContent).toBeUndefined();
-      expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual([
-        {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: null,
-          effectiveWorktreeBasePath: null,
-        },
-      ]);
+      expect(contentResult.structuredContent).toEqual({
+        workspaces: [
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ],
+      });
+      expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual({
+        workspaces: [
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ],
+      });
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
         { url: "/invoke/get_workspaces", body: {} },
