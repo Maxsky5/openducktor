@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,10 +20,7 @@ type StartKanbanSessionFlowInput = {
   queryClient: QueryClient;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-  setTaskTargetBranch?: (
-    taskId: string,
-    targetBranch: import("@openducktor/contracts").GitTargetBranch,
-  ) => Promise<void>;
+  setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   openSessionInAgentStudio: (intent: KanbanSessionStartIntent, sessionId: string) => void;
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
@@ -85,16 +82,6 @@ export const startKanbanSessionFlow = async ({
 
   if (effectivePostStartAction === "none") {
     return workflow.sessionId;
-  }
-
-  if (workflow.postStartActionError) {
-    const failureMessage =
-      effectivePostStartAction === "kickoff"
-        ? "Session started, but kickoff message failed."
-        : "Session started, but feedback message failed.";
-    toast.error(failureMessage, {
-      description: workflow.postStartActionError.message,
-    });
   }
 
   return workflow.sessionId;

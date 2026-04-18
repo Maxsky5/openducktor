@@ -94,18 +94,18 @@ export function useAgentStudioFreshSessionCreation({
       const executeStartedSession = async (
         decision: ResolvedSessionStartDecision,
       ): Promise<string | undefined> => {
+        const shouldSwitchContext = shouldTriggerContextSwitchIntent({
+          currentSessionId: activeSession?.sessionId ?? null,
+          currentRole: activeSession?.role ?? role,
+          nextSessionId: decision.startMode === "reuse" ? decision.sourceSessionId : null,
+          nextRole: params.nextRole,
+        });
+
         setStartingActivityCountByContext((current) =>
           incrementActivityCountRecord(current, startContextKey),
         );
         try {
-          if (
-            shouldTriggerContextSwitchIntent({
-              currentSessionId: activeSession?.sessionId ?? null,
-              currentRole: activeSession?.role ?? role,
-              nextSessionId: decision.startMode === "reuse" ? decision.sourceSessionId : null,
-              nextRole: params.nextRole,
-            })
-          ) {
+          if (shouldSwitchContext && decision.startMode !== "reuse") {
             onContextSwitchIntent?.();
           }
 
@@ -126,13 +126,8 @@ export function useAgentStudioFreshSessionCreation({
               postStartExecution: "detached",
               ...(onPostStartActionError
                 ? {
-                    onPostStartActionError: (
-                      action: "kickoff" | "send_message" | "none",
-                      error: Error,
-                    ) => {
-                      if (action === "kickoff") {
-                        onPostStartActionError(action, error);
-                      }
+                    onPostStartActionError: (_action, error) => {
+                      onPostStartActionError("kickoff", error);
                     },
                   }
                 : {}),
@@ -144,6 +139,10 @@ export function useAgentStudioFreshSessionCreation({
             const sessionId = workflow.sessionId;
             if (!sessionId) {
               return undefined;
+            }
+
+            if (shouldSwitchContext && decision.startMode === "reuse") {
+              onContextSwitchIntent?.();
             }
 
             applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import { getAgentScenarioDefinition } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
@@ -57,10 +57,7 @@ type ExecuteSessionStartFromDecisionArgs = {
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
   task: TaskCard | null;
-  persistTaskTargetBranch?: (
-    taskId: string,
-    targetBranch: import("@openducktor/contracts").GitTargetBranch,
-  ) => Promise<void>;
+  persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
