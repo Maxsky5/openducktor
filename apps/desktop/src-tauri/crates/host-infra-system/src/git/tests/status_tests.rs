@@ -310,10 +310,7 @@ fn get_worktree_status_rehydrates_rebase_conflict_context() {
         git_conflict.current_branch.as_deref(),
         Some("feature/rebase-conflict")
     );
-    assert!(
-        git_conflict.target_branch.trim().len() > 0,
-        "rebase target branch should not be blank"
-    );
+    assert_eq!(git_conflict.target_branch, "main");
     assert!(git_conflict
         .conflicted_files
         .iter()

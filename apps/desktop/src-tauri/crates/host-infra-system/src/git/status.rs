@@ -129,11 +129,8 @@ impl GitCliPort {
             .or_else(|| merge_head_name.as_deref().and_then(normalize_head_name))
             .or_else(|| apply_head_name.as_deref().and_then(normalize_head_name));
 
-        let merge_onto = self.read_git_path_contents_if_exists(repo_path, "rebase-merge/onto")?;
-        let apply_onto = self.read_git_path_contents_if_exists(repo_path, "rebase-apply/onto")?;
-        let target_branch = merge_onto
-            .or(apply_onto)
-            .or_else(|| fallback_target_branch.map(ToOwned::to_owned))
+        let target_branch = fallback_target_branch
+            .map(ToOwned::to_owned)
             .ok_or_else(|| {
                 anyhow!("Cannot determine rebase target branch while a git conflict is in progress")
             })?;

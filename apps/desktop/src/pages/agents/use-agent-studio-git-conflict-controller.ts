@@ -30,6 +30,11 @@ type GitConflictControllerAction =
       snapshotKey: string | null;
     }
   | {
+      type: "replace_conflict";
+      conflict: GitConflict;
+      snapshotKey: string | null;
+    }
+  | {
       type: "mark_snapshot_seen";
       snapshotKey: string | null;
     }
@@ -79,6 +84,17 @@ const haveSameConflictedFiles = (left: string[], right: string[]): boolean => {
   return sortedLeft.every((filePath, index) => filePath === sortedRight[index]);
 };
 
+const haveSameConflictMetadata = (left: GitConflict, right: GitConflict): boolean => {
+  return (
+    left.operation === right.operation &&
+    left.currentBranch === right.currentBranch &&
+    left.targetBranch === right.targetBranch &&
+    left.output === right.output &&
+    left.workingDir === right.workingDir &&
+    haveSameConflictedFiles(left.conflictedFiles, right.conflictedFiles)
+  );
+};
+
 function gitConflictControllerReducer(
   state: GitConflictControllerState,
   action: GitConflictControllerAction,
@@ -101,6 +117,12 @@ function gitConflictControllerReducer(
           ...state.localConflict,
           conflictedFiles: action.conflictedFiles,
         },
+        gitConflictSnapshotKey: action.snapshotKey,
+      };
+    case "replace_conflict":
+      return {
+        ...state,
+        localConflict: action.conflict,
         gitConflictSnapshotKey: action.snapshotKey,
       };
     case "mark_snapshot_seen":
@@ -186,6 +208,18 @@ export function useAgentStudioGitConflictController({
     }
 
     if ((effectiveDetectedConflict?.conflictedFiles ?? detectedConflictedFiles).length > 0) {
+      if (
+        detectedConflict != null &&
+        !haveSameConflictMetadata(state.localConflict, detectedConflict)
+      ) {
+        dispatch({
+          type: "replace_conflict",
+          conflict: detectedConflict,
+          snapshotKey: worktreeStatusSnapshotKey,
+        });
+        return;
+      }
+
       const conflictedFilesChanged = !haveSameConflictedFiles(
         state.localConflict.conflictedFiles,
         effectiveDetectedConflict?.conflictedFiles ?? detectedConflictedFiles,
@@ -210,6 +244,7 @@ export function useAgentStudioGitConflictController({
     dispatch({ type: "clear_local_conflict", closeModal: true });
   }, [
     detectedConflictedFiles,
+    detectedConflict,
     effectiveDetectedConflict,
     state.gitConflictSnapshotKey,
     state.isHandlingGitConflict,
