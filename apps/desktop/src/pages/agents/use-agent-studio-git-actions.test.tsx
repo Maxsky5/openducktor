@@ -7,6 +7,8 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 
+const actualSharedHostModule = await import("@/state/operations/shared/host");
+
 enableReactActEnvironment();
 
 const gitCommitAllMock = mock(async () => ({ outcome: "committed", commitHash: "abc123" }));
@@ -78,7 +80,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await restoreMockedModules([
-    ["@/state/operations/shared/host", () => import("@/state/operations/shared/host")],
+    ["@/state/operations/shared/host", async () => actualSharedHostModule],
     ["sonner", () => import("sonner")],
   ]);
 });

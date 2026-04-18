@@ -60,8 +60,10 @@ describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
   beforeEach(async () => {
-    mock.module("@/components/features/task-create", () => ({
+    mock.module("@/components/features/task-create/task-create-discard-dialog", () => ({
       TaskCreateDiscardDialog: () => null,
+    }));
+    mock.module("@/components/features/task-create/use-task-create-modal-controller", () => ({
       useTaskCreateModalController: () => controllerMock,
     }));
     mock.module("@/components/features/task-composer/task-document-editor", () => ({
@@ -88,7 +90,14 @@ describe("TaskCreateModal", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/components/features/task-create", () => import("@/components/features/task-create")],
+      [
+        "@/components/features/task-create/task-create-discard-dialog",
+        () => import("./task-create-discard-dialog"),
+      ],
+      [
+        "@/components/features/task-create/use-task-create-modal-controller",
+        () => import("./use-task-create-modal-controller"),
+      ],
       [
         "@/components/features/task-composer/task-document-editor",
         () => import("@/components/features/task-composer/task-document-editor"),

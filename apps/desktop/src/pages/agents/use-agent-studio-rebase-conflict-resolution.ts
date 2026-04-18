@@ -72,7 +72,7 @@ export function useAgentStudioRebaseConflictResolution({
         ...(request.existingSessionOptions.length > 0
           ? { existingSessionOptions: request.existingSessionOptions }
           : {}),
-        ...(request.initialSourceSessionId
+        ...(request.initialSourceSessionId !== undefined
           ? { initialSourceSessionId: request.initialSourceSessionId }
           : {}),
       }),

@@ -1,10 +1,12 @@
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig } from "@openducktor/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+
+const actualHostOperationsModule = await import("@/state/operations/host");
 
 const hostMock = {
   workspaceGetRepoConfig: mock(
@@ -28,17 +30,18 @@ const hostMock = {
   ),
 };
 
-mock.module("@/state/operations/host", () => ({
-  host: hostMock,
-}));
+let useAgentStudioRepoSettings: typeof import("./use-agent-studio-repo-settings").useAgentStudioRepoSettings;
 
-afterAll(async () => {
-  await restoreMockedModules([
-    ["@/state/operations/host", () => import("@/state/operations/host")],
-  ]);
+beforeEach(async () => {
+  mock.module("@/state/operations/host", () => ({
+    host: hostMock,
+  }));
+  ({ useAgentStudioRepoSettings } = await import("./use-agent-studio-repo-settings"));
 });
 
-const { useAgentStudioRepoSettings } = await import("./use-agent-studio-repo-settings");
+afterEach(async () => {
+  await restoreMockedModules([["@/state/operations/host", async () => actualHostOperationsModule]]);
+});
 
 enableReactActEnvironment();
 

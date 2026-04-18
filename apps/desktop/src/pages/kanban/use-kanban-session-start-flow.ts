@@ -208,12 +208,15 @@ export function useKanbanSessionStartFlow({
   const startSessionIntent = useCallback(
     async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
       const selectedTask = tasksRef.current.find((task) => task.id === intent.taskId) ?? null;
+      const taskSessions = sessionsRef.current.filter(
+        (session) => session.taskId === intent.taskId,
+      );
       return runSessionStartRequest(
         buildSessionStartModalRequest({
           source: "kanban",
           request: intent,
           selectedModel: null,
-          taskSessions: sessionsRef.current,
+          taskSessions,
           selectedTask,
         }),
         async ({ decision, runInBackground }) => {
@@ -420,7 +423,7 @@ export function useKanbanSessionStartFlow({
             scenario: request.scenario,
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSessionId
+            ...(request.initialSourceSessionId !== undefined
               ? { initialSourceSessionId: request.initialSourceSessionId }
               : {}),
             postStartAction: request.postStartAction,

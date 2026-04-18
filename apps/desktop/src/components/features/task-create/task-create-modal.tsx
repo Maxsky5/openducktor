@@ -5,10 +5,8 @@ import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-gr
 import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
 import { TaskDetailsForm } from "@/components/features/task-composer/task-details-form";
 import { TaskEditSectionSwitcher } from "@/components/features/task-composer/task-edit-section-switcher";
-import {
-  TaskCreateDiscardDialog,
-  useTaskCreateModalController,
-} from "@/components/features/task-create";
+import { TaskCreateDiscardDialog } from "@/components/features/task-create/task-create-discard-dialog";
+import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

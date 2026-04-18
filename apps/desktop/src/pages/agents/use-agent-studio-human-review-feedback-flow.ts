@@ -99,7 +99,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             scenario: request.scenario,
             reason: "create_session" as const,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSessionId
+            ...(request.initialSourceSessionId !== undefined
               ? { initialSourceSessionId: request.initialSourceSessionId }
               : {}),
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),

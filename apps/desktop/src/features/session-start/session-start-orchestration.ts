@@ -148,7 +148,7 @@ export const buildSessionStartModalRequest = ({
       : {}),
     ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
     ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
-    ...(initialSourceSessionId ? { initialSourceSessionId } : {}),
+    ...(initialSourceSessionId !== undefined ? { initialSourceSessionId } : {}),
   };
 };
 

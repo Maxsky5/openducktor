@@ -124,13 +124,16 @@ export function useAgentStudioFreshSessionCreation({
               startAgentSession,
               sendAgentMessage,
               postStartExecution: "detached",
-              ...(onPostStartActionError
-                ? {
-                    onPostStartActionError: (_action, error) => {
-                      onPostStartActionError("kickoff", error);
-                    },
-                  }
-                : {}),
+              onPostStartActionError: (_action, error) => {
+                if (onPostStartActionError) {
+                  onPostStartActionError("kickoff", error);
+                  return;
+                }
+
+                toast.error("Session started, but the kickoff prompt failed to send.", {
+                  description: error.message,
+                });
+              },
             });
             if (!workflow) {
               return undefined;

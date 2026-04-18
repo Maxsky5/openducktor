@@ -122,7 +122,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(request.existingSessionOptions).toBeUndefined();
-    expect(request.initialSourceSessionId).toBeUndefined();
+    expect(request.initialSourceSessionId).toBeNull();
     expect(request.initialStartMode).toBe("fresh");
     expect(request.targetWorkingDirectory).toBe("/repo/worktrees/TASK-1");
   });
