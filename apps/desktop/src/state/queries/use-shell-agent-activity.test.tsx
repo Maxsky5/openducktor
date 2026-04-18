@@ -104,6 +104,10 @@ describe("useShellAgentActivity", () => {
     await harness.mount();
 
     try {
+      await waitForActivity(
+        harness,
+        (activity) => activity.activeSessions[0]?.taskTitle === "Visible Task",
+      );
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Visible Task");
 
       const baselineActivity = harness.getLatest();
@@ -171,6 +175,10 @@ describe("useShellAgentActivity", () => {
     await harness.mount();
 
     try {
+      await waitForActivity(
+        harness,
+        (activity) => activity.activeSessions[0]?.taskTitle === "Initial Title",
+      );
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Initial Title");
 
       const initialRenderCount = harness.getRenderCount();
@@ -237,6 +245,10 @@ describe("useShellAgentActivity", () => {
     await harness.mount();
 
     try {
+      await waitForActivity(
+        harness,
+        (activity) => activity.activeSessions[0]?.taskTitle === "Repo A Task",
+      );
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Repo A Task");
 
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
