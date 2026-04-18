@@ -27,3 +27,5 @@ packages/openducktor-mcp/tsconfig.tsbuildinfo
 .cache/cef/
 .cargo-tools/
 .husky/_/
+# Added by code-review-graph
+.code-review-graph/
