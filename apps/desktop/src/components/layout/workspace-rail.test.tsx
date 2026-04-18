@@ -2,17 +2,15 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  type AppStateProviderModule,
+  createAppStateProviderModuleMock,
+} from "@/test-utils/app-state-provider-mock";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 const selectWorkspaceMock = mock(async (_workspaceId: string): Promise<void> => {});
 const reorderWorkspacesMock = mock(async (_workspaceIds: string[]): Promise<void> => {});
-
-type WorkspaceStateMock = {
-  workspaces: WorkspaceRecord[];
-  selectWorkspace: typeof selectWorkspaceMock;
-  reorderWorkspaces: typeof reorderWorkspacesMock;
-  isSwitchingWorkspace: boolean;
-};
 
 const workspaceRecord = (
   workspaceId: string,
@@ -29,7 +27,7 @@ const workspaceRecord = (
   effectiveWorktreeBasePath: options.effectiveWorktreeBasePath ?? null,
 });
 
-let workspaceState: WorkspaceStateMock;
+let workspaceState: WorkspaceStateContextValue;
 let WorkspaceRail: typeof import("./workspace-rail").WorkspaceRail;
 
 const setElementRect = (element: HTMLElement, rect: Omit<DOMRect, "toJSON">): void => {
@@ -92,23 +90,46 @@ const withMouseSensorFallback = async (run: () => Promise<void>): Promise<void> 
 describe("WorkspaceRail", () => {
   beforeEach(async () => {
     workspaceState = {
+      isLoadingBranches: false,
+      isSwitchingBranch: false,
+      branchSyncDegraded: false,
       workspaces: [],
+      activeWorkspace: null,
+      branches: [],
+      activeBranch: null,
+      addWorkspace: async () => {},
       selectWorkspace: selectWorkspaceMock,
       reorderWorkspaces: reorderWorkspacesMock,
+      refreshBranches: async () => {},
+      switchBranch: async () => {},
+      loadRepoSettings: async () => {
+        throw new Error("loadRepoSettings is not used in this test");
+      },
+      saveRepoSettings: async () => {},
+      loadSettingsSnapshot: async () => {
+        throw new Error("loadSettingsSnapshot is not used in this test");
+      },
+      detectGithubRepository: async () => null,
+      saveGlobalGitConfig: async () => {},
+      saveSettingsSnapshot: async () => {},
       isSwitchingWorkspace: false,
     };
     selectWorkspaceMock.mockClear();
     reorderWorkspacesMock.mockClear();
 
-    mock.module("@/state", () => ({
-      useWorkspaceState: () => workspaceState,
-    }));
+    mock.module("@/state/app-state-provider", () =>
+      createAppStateProviderModuleMock({
+        useWorkspaceState: (() => workspaceState) as AppStateProviderModule["useWorkspaceState"],
+      }),
+    );
 
     ({ WorkspaceRail } = await import("./workspace-rail"));
   });
 
   afterEach(async () => {
-    await restoreMockedModules([["@/state", () => import("@/state")]]);
+    await restoreMockedModules([
+      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+    ]);
   });
 
   test("renders icon and initials variants with hidden-scrollbar overflow", () => {
@@ -153,6 +174,24 @@ describe("WorkspaceRail", () => {
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps buttons interactive-looking while a workspace switch is pending", () => {
+    workspaceState.isSwitchingWorkspace = true;
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        isActive: true,
+      }),
+      workspaceRecord("beta", {
+        workspaceName: "Beta Repo",
+      }),
+    ];
+
+    render(<WorkspaceRail onOpenRepositoryModal={() => {}} />);
+
+    expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("disabled")).toBe(null);
+    expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("disabled")).toBe(null);
   });
 
   test("reorders workspaces vertically without making a duplicate switch", async () => {

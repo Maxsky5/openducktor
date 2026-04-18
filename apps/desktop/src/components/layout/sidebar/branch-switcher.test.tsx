@@ -1,7 +1,7 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { act, createElement } from "react";
+import { act, createElement, useSyncExternalStore } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   type AppStateProviderModule,
@@ -14,8 +14,55 @@ let isSwitchingWorkspace = false;
 let isSwitchingBranch = false;
 let activeBranchName = "main";
 let latestOnValueChange: ((value: string) => void) | undefined;
+const branchStateListeners = new Set<() => void>();
 
 const switchBranch = mock(async (_branchName: string) => {});
+
+type BranchState = ReturnType<AppStateProviderModule["useWorkspaceBranchState"]>;
+
+let branchState: BranchState;
+
+const resetBranchState = (): void => {
+  branchState = {
+    activeWorkspace: {
+      workspaceId: "workspace-repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/tmp/default-worktrees",
+      effectiveWorktreeBasePath: "/tmp/default-worktrees",
+    },
+    branches: [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+    ],
+    activeBranch: {
+      name: activeBranchName,
+      detached: false,
+    },
+    isSwitchingWorkspace,
+    isLoadingBranches: false,
+    isSwitchingBranch,
+    branchSyncDegraded,
+    switchBranch,
+  };
+};
+
+const updateBranchState = (nextState: Partial<BranchState>): void => {
+  branchState = {
+    ...branchState,
+    ...nextState,
+  };
+
+  for (const listener of branchStateListeners) {
+    listener();
+  }
+};
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -65,57 +112,15 @@ describe("BranchSwitcher", () => {
       useTasksState: () => {
         throw new Error("useTasksState is not used in this test");
       },
-      useWorkspaceState: (() => ({
-        workspaces: [],
-        activeWorkspace: {
-          workspaceId: "workspace-repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/tmp/default-worktrees",
-          effectiveWorktreeBasePath: "/tmp/default-worktrees",
-        },
-        addWorkspace: async () => {},
-        selectWorkspace: async () => {},
-        reorderWorkspaces: async () => {},
-        refreshBranches: async () => {},
-        branches: [
-          {
-            name: "main",
-            isCurrent: true,
-            isRemote: false,
+      useWorkspaceBranchState: (() =>
+        useSyncExternalStore(
+          (listener) => {
+            branchStateListeners.add(listener);
+            return () => branchStateListeners.delete(listener);
           },
-        ],
-        activeBranch: {
-          name: activeBranchName,
-          detached: false,
-        },
-        isSwitchingWorkspace,
-        isLoadingBranches: false,
-        isSwitchingBranch,
-        branchSyncDegraded,
-        switchBranch,
-        loadRepoSettings: async () => {
-          throw new Error("loadRepoSettings is not used in this test");
-        },
-        saveRepoSettings: async () => {
-          throw new Error("saveRepoSettings is not used in this test");
-        },
-        loadSettingsSnapshot: async () => {
-          throw new Error("loadSettingsSnapshot is not used in this test");
-        },
-        detectGithubRepository: async () => {
-          throw new Error("detectGithubRepository is not used in this test");
-        },
-        saveGlobalGitConfig: async () => {
-          throw new Error("saveGlobalGitConfig is not used in this test");
-        },
-        saveSettingsSnapshot: async () => {
-          throw new Error("saveSettingsSnapshot is not used in this test");
-        },
-      })) as AppStateProviderModule["useWorkspaceState"],
+          () => branchState,
+          () => branchState,
+        )) as AppStateProviderModule["useWorkspaceBranchState"],
     });
 
     mock.module("@/state/app-state-provider", () => stateModule);
@@ -142,11 +147,13 @@ describe("BranchSwitcher", () => {
     isSwitchingBranch = false;
     activeBranchName = "main";
     latestOnValueChange = undefined;
+    branchStateListeners.clear();
     switchBranch.mockReset();
     switchBranch.mockImplementation(async () => {});
+    resetBranchState();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
       [
@@ -158,6 +165,7 @@ describe("BranchSwitcher", () => {
 
   test("shows degraded sync status when branch probe failures are active", async () => {
     branchSyncDegraded = true;
+    resetBranchState();
     const { BranchSwitcher } = await import("./branch-switcher");
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
@@ -173,6 +181,7 @@ describe("BranchSwitcher", () => {
 
   test("disables branch selection while switching repositories", async () => {
     isSwitchingWorkspace = true;
+    resetBranchState();
     const { BranchSwitcher } = await import("./branch-switcher");
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
@@ -181,6 +190,7 @@ describe("BranchSwitcher", () => {
 
   test("uses the active branch name on the first render", async () => {
     activeBranchName = "feature/desloppify";
+    resetBranchState();
     const { BranchSwitcher } = await import("./branch-switcher");
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
@@ -190,6 +200,7 @@ describe("BranchSwitcher", () => {
   test("clears pending branch state after a successful switch completes", async () => {
     const deferred = createDeferred<void>();
     switchBranch.mockImplementation(() => deferred.promise);
+    resetBranchState();
     const { BranchSwitcher } = await import("./branch-switcher");
 
     const renderBranchSwitcher = (): ReactElement => createElement(BranchSwitcher);
@@ -201,24 +212,37 @@ describe("BranchSwitcher", () => {
       latestOnValueChange?.("feature/desloppify");
     });
 
-    isSwitchingBranch = true;
     await act(async () => {
-      rendered.rerender(renderBranchSwitcher());
+      isSwitchingBranch = true;
+      updateBranchState({ isSwitchingBranch: true });
     });
 
     expect(rendered.container.innerHTML).toContain('data-branch-value="feature/desloppify"');
 
-    activeBranchName = "feature/desloppify";
-    isSwitchingBranch = false;
     await act(async () => {
+      activeBranchName = "feature/desloppify";
+      isSwitchingBranch = false;
+      updateBranchState({
+        activeBranch: {
+          name: activeBranchName,
+          detached: false,
+        },
+        isSwitchingBranch: false,
+      });
       deferred.resolve();
       await flush();
     });
 
-    activeBranchName = "release";
-    isSwitchingBranch = true;
     await act(async () => {
-      rendered.rerender(renderBranchSwitcher());
+      activeBranchName = "release";
+      isSwitchingBranch = true;
+      updateBranchState({
+        activeBranch: {
+          name: activeBranchName,
+          detached: false,
+        },
+        isSwitchingBranch: true,
+      });
     });
 
     expect(rendered.container.innerHTML).toContain('data-branch-value="release"');

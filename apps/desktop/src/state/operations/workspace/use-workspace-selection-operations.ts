@@ -37,6 +37,26 @@ type UseWorkspaceSelectionOperationsResult = {
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
 
+const orderWorkspaceRecords = (
+  records: WorkspaceRecord[],
+  workspaceIds: string[],
+): WorkspaceRecord[] | null => {
+  if (records.length !== workspaceIds.length) {
+    return null;
+  }
+
+  const recordsById = new Map(records.map((record) => [record.workspaceId, record]));
+  const orderedRecords = workspaceIds
+    .map((workspaceId) => recordsById.get(workspaceId) ?? null)
+    .filter((record): record is WorkspaceRecord => record !== null);
+
+  if (orderedRecords.length !== records.length) {
+    return null;
+  }
+
+  return orderedRecords;
+};
+
 const resolveActiveWorkspaceFromRecords = ({
   records,
   activeWorkspace,
@@ -75,8 +95,10 @@ export function useWorkspaceSelectionOperations({
   const workspaceSwitchVersionRef = useRef(0);
   const workspaceReorderVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
+  const workspacesRef = useRef(workspaces);
 
   activeWorkspaceRef.current = activeWorkspace;
+  workspacesRef.current = workspaces;
 
   const markWorkspaceActiveLocally = useCallback((workspaceId: string): void => {
     setWorkspaces((current) => {
@@ -146,6 +168,13 @@ export function useWorkspaceSelectionOperations({
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
       const reorderVersion = ++workspaceReorderVersionRef.current;
+      const previousRecords = workspacesRef.current;
+      const optimisticRecords = orderWorkspaceRecords(previousRecords, workspaceIds);
+
+      if (optimisticRecords) {
+        setWorkspaces(optimisticRecords);
+        queryClient.setQueryData(workspaceQueryKeys.list(), optimisticRecords);
+      }
 
       try {
         const records = await hostClient.workspaceReorder(workspaceIds);
@@ -161,13 +190,23 @@ export function useWorkspaceSelectionOperations({
           return;
         }
 
+        if (optimisticRecords) {
+          setWorkspaces(previousRecords);
+          queryClient.setQueryData(workspaceQueryKeys.list(), previousRecords);
+          const selectedWorkspace = resolveActiveWorkspaceFromRecords({
+            records: previousRecords,
+            activeWorkspace: activeWorkspaceRef.current,
+          });
+          setActiveWorkspace(selectedWorkspace);
+        }
+
         toast.error("Failed to reorder repositories", {
           description: errorMessage(error),
         });
         throw error;
       }
     },
-    [applyWorkspaceRecords, hostClient, queryClient],
+    [applyWorkspaceRecords, hostClient, queryClient, setActiveWorkspace],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {

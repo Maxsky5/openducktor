@@ -21,11 +21,17 @@ import type {
   DelegationStateContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
+  WorkspaceBranchStateContextValue,
+  WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import type { AgentSessionsStore } from "./agent-sessions-store";
 
 export const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(null);
+export const WorkspaceBranchStateContext = createContext<WorkspaceBranchStateContextValue | null>(
+  null,
+);
+export const WorkspacePresenceContext = createContext<WorkspacePresenceContextValue | null>(null);
 export const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
 export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
 export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
@@ -151,3 +157,9 @@ export const useAgentSessionsContext = (): AgentSessionsStore =>
 
 export const useAgentOperationsContext = (): AgentOperationsContextValue =>
   useRequiredContext(AgentOperationsContext, "useAgentOperations");
+
+export const useWorkspaceBranchStateContext = (): WorkspaceBranchStateContextValue =>
+  useRequiredContext(WorkspaceBranchStateContext, "useWorkspaceBranchState");
+
+export const useWorkspacePresenceContext = (): WorkspacePresenceContextValue =>
+  useRequiredContext(WorkspacePresenceContext, "useWorkspacePresence");

@@ -91,6 +91,22 @@ export type WorkspaceStateContextValue = {
   saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
+export type WorkspaceBranchStateContextValue = Pick<
+  WorkspaceStateContextValue,
+  | "activeWorkspace"
+  | "branches"
+  | "activeBranch"
+  | "isSwitchingWorkspace"
+  | "isLoadingBranches"
+  | "isSwitchingBranch"
+  | "branchSyncDegraded"
+  | "switchBranch"
+>;
+
+export type WorkspacePresenceContextValue = {
+  hasWorkspaces: boolean;
+};
+
 export type ChecksStateContextValue = {
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;

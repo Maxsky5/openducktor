@@ -1,9 +1,9 @@
-import { type ReactElement, useMemo, useState } from "react";
+import { memo, type ReactElement, useMemo, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import { useWorkspaceState } from "@/state/app-state-provider";
+import { useWorkspaceBranchState } from "@/state/app-state-provider";
 
-export function BranchSwitcher(): ReactElement | null {
+export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | null {
   const {
     activeWorkspace,
     branches,
@@ -13,7 +13,7 @@ export function BranchSwitcher(): ReactElement | null {
     isSwitchingBranch,
     branchSyncDegraded,
     switchBranch,
-  } = useWorkspaceState();
+  } = useWorkspaceBranchState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [pendingBranchValue, setPendingBranchValue] = useState<string | null>(null);
   const activeBranchValue = activeBranch?.name ?? "";
@@ -71,4 +71,4 @@ export function BranchSwitcher(): ReactElement | null {
       ) : null}
     </div>
   );
-}
+});

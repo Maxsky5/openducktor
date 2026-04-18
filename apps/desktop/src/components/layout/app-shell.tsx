@@ -1,5 +1,5 @@
 import { FolderOpen, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, memo, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
@@ -14,7 +14,7 @@ import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useWorkspaceState } from "@/state/app-state-provider";
+import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
 const SettingsModal = lazy(async () => {
@@ -22,12 +22,13 @@ const SettingsModal = lazy(async () => {
   return { default: module.SettingsModal };
 });
 
-export function AppShell(): ReactElement {
-  const { activeWorkspace, workspaces } = useWorkspaceState();
+export const AppShell = memo(function AppShell(): ReactElement {
+  const activeWorkspace = useActiveWorkspace();
+  const { hasWorkspaces } = useWorkspacePresence();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const hasActiveWorkspace = activeWorkspace !== null;
-  const isRepositoryModalBlocking = !hasActiveWorkspace && workspaces.length === 0;
+  const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
   const agentActivity = useShellAgentActivity(activeWorkspace);
 
   useEffect(() => {
@@ -183,4 +184,4 @@ export function AppShell(): ReactElement {
       />
     </>
   );
-}
+});

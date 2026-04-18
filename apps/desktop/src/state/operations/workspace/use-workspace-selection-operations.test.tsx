@@ -356,6 +356,52 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("reorders workspaces optimistically before the host confirms the new order", async () => {
+    const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
+    workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
+
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+          workspace("/repo-c"),
+        ]);
+      });
+
+      let pendingReorder: Promise<void> | null = null;
+      await harness.run((value) => {
+        pendingReorder = value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+      });
+
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+        workspace("/repo-b"),
+      ]);
+
+      await harness.run(async () => {
+        reorderDeferred.resolve([
+          workspace("/repo-c"),
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+        ]);
+        await pendingReorder;
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("preserves the current active workspace during refresh when no record is marked active", async () => {
     let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-old");
     const harness = createSelectionHarness({

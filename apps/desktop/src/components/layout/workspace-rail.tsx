@@ -32,7 +32,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useWorkspaceState } from "@/state";
+import { useWorkspaceState } from "@/state/app-state-provider";
 
 const DRAG_DISTANCE_PX = 6;
 
@@ -124,9 +124,9 @@ function WorkspaceRailButtonShell({
         )}
         aria-label={workspace.workspaceName}
         title={workspace.workspaceName}
-        disabled={isInteractionDisabled}
+        aria-disabled={isInteractionDisabled ? true : undefined}
         onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
-          if (isDragOverlay) {
+          if (isDragOverlay || isInteractionDisabled) {
             return;
           }
           event.preventDefault();
