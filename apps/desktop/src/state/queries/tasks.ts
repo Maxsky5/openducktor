@@ -80,6 +80,7 @@ export const loadRepoTaskDataFromQuery = (
         tasks: toVisibleTasks(taskList),
         runs: runList,
       };
+      queryClient.setQueryData(taskQueryKeys.visibleTasks(repoPath), repoTaskData.tasks);
       queryClient.setQueryData(taskQueryKeys.runs(repoPath), repoTaskData.runs);
       return repoTaskData;
     },
