@@ -310,7 +310,11 @@ export const searchTasksResultSchema = z
   .strict();
 export type SearchTasksResult = z.infer<typeof searchTasksResultSchema>;
 
-export const getWorkspacesResultSchema = z.array(workspaceRecordSchema);
+export const getWorkspacesResultSchema = z
+  .object({
+    workspaces: z.array(workspaceRecordSchema),
+  })
+  .strict();
 export type GetWorkspacesResult = z.infer<typeof getWorkspacesResultSchema>;
 
 export const setSpecResultSchema = z

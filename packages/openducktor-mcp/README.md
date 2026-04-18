@@ -98,18 +98,20 @@ Input fields:
 Example response:
 
 ```json
-[
-  {
-    "workspaceId": "my-workspace",
-    "workspaceName": "My Workspace",
-    "repoPath": "/Users/maxsky5/code/my-repo",
-    "isActive": true,
-    "hasConfig": true,
-    "configuredWorktreeBasePath": null,
-    "defaultWorktreeBasePath": null,
-    "effectiveWorktreeBasePath": null
-  }
-]
+{
+  "workspaces": [
+    {
+      "workspaceId": "my-workspace",
+      "workspaceName": "My Workspace",
+      "repoPath": "/Users/maxsky5/code/my-repo",
+      "isActive": true,
+      "hasConfig": true,
+      "configuredWorktreeBasePath": null,
+      "defaultWorktreeBasePath": null,
+      "effectiveWorktreeBasePath": null
+    }
+  ]
+}
 ```
 
 Use `get_workspaces` first when you start the MCP without a default workspace and need to discover the `workspaceId` for later calls.

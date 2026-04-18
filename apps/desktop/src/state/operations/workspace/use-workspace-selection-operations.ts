@@ -73,6 +73,7 @@ export function useWorkspaceSelectionOperations({
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const workspaceSwitchVersionRef = useRef(0);
+  const workspaceReorderVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
 
   activeWorkspaceRef.current = activeWorkspace;
@@ -144,11 +145,22 @@ export function useWorkspaceSelectionOperations({
 
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
+      const reorderVersion = ++workspaceReorderVersionRef.current;
+
       try {
         const records = await hostClient.workspaceReorder(workspaceIds);
+
+        if (workspaceReorderVersionRef.current !== reorderVersion) {
+          return;
+        }
+
         queryClient.setQueryData(workspaceQueryKeys.list(), records);
         applyWorkspaceRecords(records);
       } catch (error) {
+        if (workspaceReorderVersionRef.current !== reorderVersion) {
+          return;
+        }
+
         toast.error("Failed to reorder repositories", {
           description: errorMessage(error),
         });

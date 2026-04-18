@@ -65,7 +65,7 @@ const validateExplicitHostUrl = async (hostUrl: string): Promise<string> => {
 
 const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string): Promise<void> => {
   const workspaces = await new OdtHostBridgeClient({ baseUrl: hostUrl }).getWorkspaces();
-  if (workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
+  if (workspaces.workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
     return;
   }
 

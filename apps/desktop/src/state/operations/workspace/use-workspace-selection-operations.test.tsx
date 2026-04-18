@@ -295,6 +295,67 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("ignores stale reorder responses when a newer drag finishes first", async () => {
+    const firstReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const secondReorder = createDeferred<ReturnType<typeof workspace>[]>();
+    const workspaceReorder = mock((workspaceOrder: string[]) => {
+      if (workspaceOrder[0] === "repo-c") {
+        return firstReorder.promise;
+      }
+      return secondReorder.promise;
+    });
+    workspaceHost.workspaceReorder = workspaceReorder;
+
+    const harness = createSelectionHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((value) => {
+        value.applyWorkspaceRecords([
+          workspace("/repo-a", true),
+          workspace("/repo-b"),
+          workspace("/repo-c"),
+        ]);
+      });
+
+      const firstCall = harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-c", "repo-a", "repo-b"]);
+      });
+      const secondCall = harness.run(async (value) => {
+        await value.reorderWorkspaces(["repo-b", "repo-c", "repo-a"]);
+      });
+
+      secondReorder.resolve([
+        workspace("/repo-b"),
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+      ]);
+      await secondCall;
+
+      firstReorder.resolve([
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+        workspace("/repo-b"),
+      ]);
+      await firstCall;
+
+      expect(workspaceReorder).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().workspaces).toEqual([
+        workspace("/repo-b"),
+        workspace("/repo-c"),
+        workspace("/repo-a", true),
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("preserves the current active workspace during refresh when no record is marked active", async () => {
     let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-old");
     const harness = createSelectionHarness({
