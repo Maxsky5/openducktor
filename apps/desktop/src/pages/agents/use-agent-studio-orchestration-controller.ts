@@ -100,8 +100,10 @@ type AgentStudioPageModelsTabsContext = Pick<
   | "taskTabs"
   | "availableTabTasks"
   | "isLoadingTasks"
+  | "handleSelectTab"
   | "handleCreateTab"
   | "handleCloseTab"
+  | "handleReorderTab"
 >;
 
 type AgentStudioPageModelsDocumentsContext = Pick<
@@ -163,7 +165,14 @@ export const buildAgentStudioPageModelsArgs = ({
   chatSettings,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
-  const { activeTaskTabId, handleCreateTab, handleCloseTab, ...taskTabs } = tabs;
+  const {
+    activeTaskTabId,
+    handleSelectTab,
+    handleCreateTab,
+    handleCloseTab,
+    handleReorderTab,
+    ...taskTabs
+  } = tabs;
   const { handleSelectAgent, handleSelectModel, handleSelectVariant, ...restOfModelSelection } =
     modelSelection;
 
@@ -186,8 +195,10 @@ export const buildAgentStudioPageModelsArgs = ({
     },
     taskTabs: {
       ...taskTabs,
+      onSelectTab: handleSelectTab,
       onCreateTab: handleCreateTab,
       onCloseTab: handleCloseTab,
+      onReorderTab: handleReorderTab,
     },
     documents,
     readiness,
@@ -225,8 +236,10 @@ export function useAgentStudioOrchestrationController({
     contextSwitchVersion,
     isLoadingTasks,
     isActiveTaskHydrated,
+    handleSelectTab,
     handleCreateTab,
     handleCloseTab,
+    handleReorderTab,
   } = selection;
   const { agentStudioReady } = readiness;
   const {
@@ -364,8 +377,10 @@ export function useAgentStudioOrchestrationController({
       taskTabs,
       availableTabTasks,
       isLoadingTasks,
+      handleSelectTab,
       handleCreateTab,
       handleCloseTab,
+      handleReorderTab,
     },
     documents: {
       specDoc,

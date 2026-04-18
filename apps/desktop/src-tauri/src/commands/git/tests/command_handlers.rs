@@ -59,9 +59,11 @@ fn git_get_worktree_status_rejects_unauthorized_repo() {
 fn git_get_worktree_status_keeps_upstream_error_variant_and_snapshot_metadata() {
     let fixture = setup_command_git_fixture(
         "git-command-upstream-error",
-        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(GitUpstreamAheadBehind::Error {
-            message: "upstream not configured".to_string(),
-        }))),
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
+            GitUpstreamAheadBehind::Error {
+                message: "upstream not configured".to_string(),
+            },
+        ))),
         true,
     );
 

@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback } from "react";
 import type { NavigateToTaskIntent } from "./agent-studio-types";
-import { closeTaskTab } from "./agents-page-session-tabs";
+import { closeTaskTab, reorderTaskTabs } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -33,6 +33,11 @@ type UseTaskTabActionsArgs = {
 type UseTaskTabActionsResult = {
   handleCreateTab: (nextTaskId: string) => void;
   handleCloseTab: (taskIdToClose: string) => void;
+  handleReorderTab: (
+    draggedTaskId: string,
+    targetTaskId: string,
+    position: "before" | "after",
+  ) => void;
 };
 
 export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabActionsResult {
@@ -100,8 +105,27 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
     ],
   );
 
+  const handleReorderTab = useCallback(
+    (draggedTaskId: string, targetTaskId: string, position: "before" | "after"): void => {
+      const nextTabTaskIds = reorderTaskTabs({
+        tabTaskIds,
+        draggedTaskId,
+        targetTaskId,
+        position,
+      });
+
+      if (nextTabTaskIds === tabTaskIds) {
+        return;
+      }
+
+      setOpenTaskTabs(nextTabTaskIds);
+    },
+    [setOpenTaskTabs, tabTaskIds],
+  );
+
   return {
     handleCreateTab,
     handleCloseTab,
+    handleReorderTab,
   };
 }

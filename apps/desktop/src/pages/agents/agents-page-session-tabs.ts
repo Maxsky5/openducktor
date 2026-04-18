@@ -199,6 +199,32 @@ export const ensureActiveTaskTab = (openTaskTabs: string[], activeTaskId: string
   return [...openTaskTabs, activeTaskId];
 };
 
+export const reorderTaskTabs = (params: {
+  tabTaskIds: string[];
+  draggedTaskId: string;
+  targetTaskId: string;
+  position: "before" | "after";
+}): string[] => {
+  const { tabTaskIds, draggedTaskId, targetTaskId, position } = params;
+  const sourceIndex = tabTaskIds.indexOf(draggedTaskId);
+  const targetIndex = tabTaskIds.indexOf(targetTaskId);
+
+  if (sourceIndex < 0 || targetIndex < 0 || draggedTaskId === targetTaskId) {
+    return tabTaskIds;
+  }
+
+  const nextTabTaskIds = tabTaskIds.filter((taskId) => taskId !== draggedTaskId);
+  const nextTargetIndex = nextTabTaskIds.indexOf(targetTaskId);
+
+  if (nextTargetIndex < 0) {
+    return tabTaskIds;
+  }
+
+  const insertionIndex = position === "before" ? nextTargetIndex : nextTargetIndex + 1;
+  nextTabTaskIds.splice(insertionIndex, 0, draggedTaskId);
+  return nextTabTaskIds;
+};
+
 export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsState => {
   if (!raw) {
     return DEFAULT_PERSISTED_TABS_STATE;

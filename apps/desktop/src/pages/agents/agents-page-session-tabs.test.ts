@@ -17,6 +17,7 @@ import {
   getAvailableTabTasks,
   getTabStatusForTask,
   parsePersistedTaskTabs,
+  reorderTaskTabs,
   resolveFallbackTaskId,
   toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
@@ -105,6 +106,48 @@ describe("agents-page-session-tabs", () => {
     const tabIds = ensureActiveTaskTab(["task-1"], "task-2");
     expect(tabIds).toEqual(["task-1", "task-2"]);
     expect(ensureActiveTaskTab(tabIds, "task-2")).toEqual(["task-1", "task-2"]);
+  });
+
+  test("reorders tabs before or after the hovered tab without duplicates", () => {
+    expect(
+      reorderTaskTabs({
+        tabTaskIds: ["task-1", "task-2", "task-3", "task-4"],
+        draggedTaskId: "task-3",
+        targetTaskId: "task-1",
+        position: "before",
+      }),
+    ).toEqual(["task-3", "task-1", "task-2", "task-4"]);
+
+    expect(
+      reorderTaskTabs({
+        tabTaskIds: ["task-1", "task-2", "task-3", "task-4"],
+        draggedTaskId: "task-2",
+        targetTaskId: "task-4",
+        position: "after",
+      }),
+    ).toEqual(["task-1", "task-3", "task-4", "task-2"]);
+  });
+
+  test("treats invalid or self-reorder requests as no-ops", () => {
+    const tabTaskIds = ["task-1", "task-2", "task-3"];
+
+    expect(
+      reorderTaskTabs({
+        tabTaskIds,
+        draggedTaskId: "task-2",
+        targetTaskId: "task-2",
+        position: "before",
+      }),
+    ).toBe(tabTaskIds);
+
+    expect(
+      reorderTaskTabs({
+        tabTaskIds,
+        draggedTaskId: "task-9",
+        targetTaskId: "task-1",
+        position: "after",
+      }),
+    ).toBe(tabTaskIds);
   });
 
   test("parses persisted task tabs and deduplicates invalid entries", () => {

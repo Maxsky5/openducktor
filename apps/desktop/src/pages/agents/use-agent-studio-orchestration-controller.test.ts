@@ -20,8 +20,10 @@ const session = createAgentSessionFixture({
   role: "planner",
   scenario: "planner_initial",
 });
+const onSelectTab = () => {};
 const onCreateTab = () => {};
 const onCloseTab = () => {};
+const onReorderTab = () => {};
 const handleSelectAgent = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
@@ -47,8 +49,10 @@ const baseArgs: BuildArgs = {
     taskTabs: [],
     availableTabTasks: [task],
     isLoadingTasks: false,
+    handleSelectTab: onSelectTab,
     handleCreateTab: onCreateTab,
     handleCloseTab: onCloseTab,
+    handleReorderTab: onReorderTab,
   },
   documents: {
     specDoc: taskDocument,
@@ -123,8 +127,10 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.core.contextSwitchVersion).toBe(4);
     expect(mapped.core.isSessionHistoryHydrationFailed).toBe(false);
     expect(mapped.core.isWaitingForRuntimeReadiness).toBe(false);
+    expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
+    expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");
     expect(mapped.readiness.agentStudioReadinessState).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgent);
