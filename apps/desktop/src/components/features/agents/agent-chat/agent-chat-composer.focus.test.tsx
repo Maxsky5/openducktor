@@ -138,15 +138,14 @@ describe("AgentChatComposer focus", () => {
     await waitForComposerFocus(container);
   });
 
-  test("autofocuses when the displayed session changes", async () => {
+  test("autofocuses when the displayed session changes after focus returns to the page", async () => {
     const { container, rerender } = render(<AgentChatComposer model={buildModel()} />);
-    await waitForComposerFocus(container);
+    const composerSurface = await waitForComposerFocus(container);
 
-    const externalButton = document.createElement("button");
-    externalButton.type = "button";
-    document.body.appendChild(externalButton);
-    externalButton.focus();
-    expect(document.activeElement).toBe(externalButton);
+    composerSurface.blur();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(document.body);
+    });
 
     rerender(
       <AgentChatComposer
@@ -158,6 +157,28 @@ describe("AgentChatComposer focus", () => {
     );
 
     await waitForComposerFocus(container);
+  });
+
+  test("does not steal focus on session changes when another control stays active", async () => {
+    const { container, rerender } = render(<ComposerWithExternalButton model={buildModel()} />);
+    await waitForComposerFocus(container);
+
+    const externalButton = screen.getByRole("button", { name: "External control" });
+    externalButton.focus();
+    expect(document.activeElement).toBe(externalButton);
+
+    rerender(
+      <ComposerWithExternalButton
+        model={{
+          ...buildModel(),
+          displayedSessionId: "session-2",
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(externalButton);
+    });
   });
 
   test("does not autofocus when no session is displayed", async () => {

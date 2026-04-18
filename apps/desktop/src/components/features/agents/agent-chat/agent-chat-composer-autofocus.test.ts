@@ -38,6 +38,22 @@ describe("resolveComposerAutofocus", () => {
     });
   });
 
+  test("does not focus immediately when a new displayed session leaves focus on another control", () => {
+    const result = resolveComposerAutofocus(createComposerAutofocusState(), {
+      displayedSessionId: "session-1",
+      isComposerInteractive: true,
+      activeElement: document.createElement("button"),
+      focusInsideComposer: false,
+    });
+
+    expect(result.shouldFocus).toBe(false);
+    expect(result.nextState).toEqual({
+      lastDisplayedSessionId: "session-1",
+      pendingAutofocusSessionId: null,
+      waitAnchor: null,
+    });
+  });
+
   test("focuses when the same displayed session becomes interactive and focus did not move", () => {
     const waitAnchor = document.createElement("button");
     const pendingResult = resolveComposerAutofocus(createComposerAutofocusState(), {

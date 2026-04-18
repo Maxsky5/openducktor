@@ -49,6 +49,17 @@ const didFocusStayOnWaitAnchor = (
   );
 };
 
+const shouldFocusImmediatelyForNewSession = (
+  activeElement: HTMLElement | null,
+  focusInsideComposer: boolean,
+): boolean => {
+  if (focusInsideComposer || !activeElement) {
+    return true;
+  }
+
+  return activeElement === document.body;
+};
+
 export const resolveComposerAutofocus = (
   state: ComposerAutofocusState,
   snapshot: ComposerAutofocusSnapshot,
@@ -64,10 +75,21 @@ export const resolveComposerAutofocus = (
 
   let nextState = state;
   if (state.lastDisplayedSessionId !== displayedSessionId) {
+    if (isComposerInteractive) {
+      return {
+        nextState: {
+          lastDisplayedSessionId: displayedSessionId,
+          pendingAutofocusSessionId: null,
+          waitAnchor: null,
+        },
+        shouldFocus: shouldFocusImmediatelyForNewSession(activeElement, focusInsideComposer),
+      };
+    }
+
     nextState = {
       lastDisplayedSessionId: displayedSessionId,
       pendingAutofocusSessionId: displayedSessionId,
-      waitAnchor: isComposerInteractive ? null : activeElement,
+      waitAnchor: activeElement,
     };
   }
 
