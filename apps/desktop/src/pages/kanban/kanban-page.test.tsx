@@ -596,7 +596,7 @@ describe("KanbanPage session start modal flow", () => {
         "@/features/human-review-feedback/human-review-feedback-modal",
         () => import("@/features/human-review-feedback/human-review-feedback-modal"),
       ],
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
   });
 

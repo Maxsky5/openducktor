@@ -155,7 +155,7 @@ describe("BranchSwitcher", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
       [
         "@/components/features/repository/branch-selector",
         () => import("@/components/features/repository/branch-selector"),

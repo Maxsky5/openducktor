@@ -132,7 +132,7 @@ describe("useAgentStudioSelectionController", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
   });
 

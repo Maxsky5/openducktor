@@ -123,7 +123,7 @@ describe("OpenRepositoryModal", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
       ["@/components/ui/button", () => import("@/components/ui/button")],
       ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
     ]);

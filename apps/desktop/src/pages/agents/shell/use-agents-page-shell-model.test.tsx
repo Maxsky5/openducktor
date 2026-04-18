@@ -281,7 +281,7 @@ let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const mockedModuleResets = [
   ["react-router-dom", () => import("react-router-dom")],
-  ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+  ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
   ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
   ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
   [
