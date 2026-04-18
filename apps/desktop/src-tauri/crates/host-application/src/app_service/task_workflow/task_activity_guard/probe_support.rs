@@ -33,19 +33,15 @@ pub(super) struct TaskActivityProbePlan {
 }
 
 pub(super) struct TaskRuntimeRouteIndex {
-    session_routes: HashMap<SessionRuntimeLookupKey, RuntimeRoute>,
+    task_routes: HashMap<SessionRuntimeLookupKey, RuntimeRoute>,
+    shared_routes: HashMap<SharedRuntimeLookupKey, RuntimeRoute>,
 }
 
 impl TaskRuntimeRouteIndex {
-    pub(super) fn collect(
-        service: &AppService,
-        repo_path: &str,
-        task_id: &str,
-        candidate_runs: &[RunProbeCandidate],
-    ) -> Result<Self> {
+    pub(super) fn collect(service: &AppService, repo_path: &str, task_id: &str) -> Result<Self> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
-        let run_routes_by_worktree = collect_runtime_routes_by_worktree(candidate_runs);
-        let mut session_routes = HashMap::new();
+        let mut task_routes = HashMap::new();
+        let mut shared_routes = HashMap::new();
         let runtimes = service
             .agent_runtimes
             .lock()
@@ -56,10 +52,21 @@ impl TaskRuntimeRouteIndex {
             {
                 continue;
             }
-            if runtime.summary.task_id.as_deref() != Some(task_id) {
+
+            if runtime.summary.role == RuntimeRole::Workspace {
+                if runtime.summary.task_id.is_none() {
+                    shared_routes.insert(
+                        SharedRuntimeLookupKey::new(
+                            runtime.summary.kind.clone(),
+                            runtime.summary.working_directory.as_str(),
+                        ),
+                        runtime.summary.runtime_route.clone(),
+                    );
+                }
                 continue;
             }
-            if runtime.summary.role == RuntimeRole::Workspace {
+
+            if runtime.summary.task_id.as_deref() != Some(task_id) {
                 continue;
             }
 
@@ -69,18 +76,13 @@ impl TaskRuntimeRouteIndex {
                 runtime.summary.working_directory.as_str(),
             );
 
-            let route = run_routes_by_worktree
-                .get(&normalize_path_key(
-                    runtime.summary.working_directory.as_str(),
-                ))
-                .filter(|_| runtime.summary.role == RuntimeRole::Build)
-                .cloned()
-                .unwrap_or_else(|| runtime.summary.runtime_route.clone());
-
-            session_routes.insert(key, route);
+            task_routes.insert(key, runtime.summary.runtime_route.clone());
         }
 
-        Ok(Self { session_routes })
+        Ok(Self {
+            task_routes,
+            shared_routes,
+        })
     }
 
     fn route_for_session(
@@ -89,15 +91,35 @@ impl TaskRuntimeRouteIndex {
     ) -> Option<(AgentRuntimeKind, RuntimeRoute)> {
         let runtime_kind = parse_runtime_kind_from_session(session)?;
         let runtime_role = parse_runtime_role(session.role.as_str())?;
-        let runtime_route = self
-            .session_routes
+        let runtime_route = self.route_for_role(
+            &runtime_kind,
+            runtime_role,
+            session.working_directory.as_str(),
+        )?;
+        Some((runtime_kind, runtime_route))
+    }
+
+    fn route_for_role(
+        &self,
+        runtime_kind: &AgentRuntimeKind,
+        runtime_role: RuntimeRole,
+        working_directory: &str,
+    ) -> Option<RuntimeRoute> {
+        self.task_routes
             .get(&SessionRuntimeLookupKey::new(
                 runtime_kind.clone(),
                 runtime_role,
-                session.working_directory.as_str(),
-            ))?
-            .clone();
-        Some((runtime_kind, runtime_route))
+                working_directory,
+            ))
+            .cloned()
+            .or_else(|| {
+                self.shared_routes
+                    .get(&SharedRuntimeLookupKey::new(
+                        runtime_kind.clone(),
+                        working_directory,
+                    ))
+                    .cloned()
+            })
     }
 
     pub(super) fn probe_target_resolution_for_session(
@@ -115,6 +137,41 @@ impl TaskRuntimeRouteIndex {
                 .runtime(&runtime_kind)?
                 .session_status_probe_target(&runtime_route, session.working_directory.as_str())?,
         ))
+    }
+
+    pub(super) fn probe_target_resolution_for_run(
+        &self,
+        service: &AppService,
+        run_candidate: &RunProbeCandidate,
+        runtime_role: RuntimeRole,
+    ) -> Result<RuntimeSessionStatusProbeTargetResolution> {
+        let runtime_route = self
+            .route_for_role(
+                &run_candidate.runtime_kind,
+                runtime_role,
+                run_candidate.worktree_path.as_str(),
+            )
+            .unwrap_or_else(|| run_candidate.runtime_route.clone());
+
+        service
+            .runtime_registry
+            .runtime(&run_candidate.runtime_kind)?
+            .session_status_probe_target(&runtime_route, run_candidate.worktree_path.as_str())
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct SharedRuntimeLookupKey {
+    runtime_kind: AgentRuntimeKind,
+    working_directory_key: String,
+}
+
+impl SharedRuntimeLookupKey {
+    fn new(runtime_kind: AgentRuntimeKind, working_directory: &str) -> Self {
+        Self {
+            runtime_kind,
+            working_directory_key: normalize_path_key(working_directory),
+        }
     }
 }
 
@@ -143,6 +200,7 @@ pub(super) fn build_run_probe_plans(
     service: &AppService,
     candidate_runs: &[RunProbeCandidate],
     sessions: &[AgentSessionDocument],
+    runtime_route_index: &TaskRuntimeRouteIndex,
     probe_targets: &mut Vec<RuntimeSessionStatusProbeTarget>,
 ) -> Result<Vec<RunProbePlan>> {
     let mut run_plans = Vec::with_capacity(candidate_runs.len());
@@ -151,13 +209,11 @@ pub(super) fn build_run_probe_plans(
         let probe_target_resolution = if external_session_ids.is_empty() {
             None
         } else {
-            let resolution = service
-                .runtime_registry
-                .runtime(&run_candidate.runtime_kind)?
-                .session_status_probe_target(
-                    &run_candidate.runtime_route,
-                    run_candidate.worktree_path.as_str(),
-                )?;
+            let resolution = runtime_route_index.probe_target_resolution_for_run(
+                service,
+                run_candidate,
+                RuntimeRole::Build,
+            )?;
             if let RuntimeSessionStatusProbeTargetResolution::Target(target) = &resolution {
                 probe_targets.push(target.clone());
             }
@@ -214,20 +270,6 @@ pub(super) fn build_session_probe_plans(
         });
     }
     Ok(session_plans)
-}
-
-pub(super) fn collect_runtime_routes_by_worktree(
-    candidate_runs: &[RunProbeCandidate],
-) -> HashMap<String, RuntimeRoute> {
-    candidate_runs
-        .iter()
-        .map(|run_candidate| {
-            (
-                normalize_path_key(run_candidate.worktree_path.as_str()),
-                run_candidate.runtime_route.clone(),
-            )
-        })
-        .collect()
 }
 
 fn parse_runtime_kind_from_session(session: &AgentSessionDocument) -> Option<AgentRuntimeKind> {

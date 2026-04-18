@@ -117,7 +117,7 @@ impl<'a> TaskActivityGuard<'a> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
         let candidate_runs = self.collect_candidate_runs(&normalized_repo, task_id)?;
         let runtime_routes_by_session =
-            TaskRuntimeRouteIndex::collect(self.service, repo_path, task_id, &candidate_runs)?;
+            TaskRuntimeRouteIndex::collect(self.service, repo_path, task_id)?;
         let probe_plan = self.build_probe_plan(
             &candidate_runs,
             sessions,
@@ -177,8 +177,13 @@ impl<'a> TaskActivityGuard<'a> {
         runtime_route_index: &TaskRuntimeRouteIndex,
     ) -> Result<TaskActivityProbePlan> {
         let mut probe_targets = Vec::new();
-        let run_plans =
-            build_run_probe_plans(self.service, candidate_runs, sessions, &mut probe_targets)?;
+        let run_plans = build_run_probe_plans(
+            self.service,
+            candidate_runs,
+            sessions,
+            runtime_route_index,
+            &mut probe_targets,
+        )?;
         let session_plans = build_session_probe_plans(
             self.service,
             sessions,
