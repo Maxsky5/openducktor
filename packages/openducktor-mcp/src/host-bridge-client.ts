@@ -1,4 +1,5 @@
 import {
+  type GetWorkspacesResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   type OdtHostBridgeReady,
@@ -12,15 +13,20 @@ type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Nam
 type ToolOutput<Name extends OdtToolName> = z.infer<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
+type WorkspaceScopedToolName = Exclude<OdtToolName, "get_workspaces">;
 
 export type OdtHostBridgeClientPort = {
   ready(): Promise<OdtHostBridgeReady>;
-  call<Name extends OdtToolName>(toolName: Name, input: ToolInput<Name>): Promise<ToolOutput<Name>>;
+  getWorkspaces(): Promise<GetWorkspacesResult>;
+  call<Name extends WorkspaceScopedToolName>(
+    toolName: Name,
+    workspaceId: string,
+    input: ToolInput<Name>,
+  ): Promise<ToolOutput<Name>>;
 };
 
 export type OdtHostBridgeClientOptions = {
   baseUrl: string;
-  workspaceId: string;
 };
 
 export type OdtHostBridgeClientDeps = {
@@ -54,30 +60,34 @@ const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
 
 export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   private readonly baseUrl: string;
-  private readonly workspaceId: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OdtHostBridgeClientOptions, deps: OdtHostBridgeClientDeps = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
-    this.workspaceId = options.workspaceId;
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
   async ready(): Promise<OdtHostBridgeReady> {
     await this.checkHealth();
-    const payload = await this.invokeJson(READY_TOOL_NAME, { workspaceId: this.workspaceId });
+    const payload = await this.invokeJson(READY_TOOL_NAME, {});
     const ready = odtHostBridgeReadySchema.parse(payload);
     assertToolCoverage(ready);
     return ready;
   }
 
-  async call<Name extends OdtToolName>(
+  async getWorkspaces(): Promise<GetWorkspacesResult> {
+    const payload = await this.invokeJson("get_workspaces", {});
+    return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.get_workspaces.parse(payload);
+  }
+
+  async call<Name extends WorkspaceScopedToolName>(
     toolName: Name,
+    workspaceId: string,
     input: ToolInput<Name>,
   ): Promise<ToolOutput<Name>> {
     const payload = await this.invokeJson(toolName, {
-      workspaceId: this.workspaceId,
       ...input,
+      workspaceId,
     });
     return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName].parse(payload) as ToolOutput<Name>;
   }

@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { gitTargetBranchSchema, knownGitProviderIdSchema, pullRequestSchema } from "./git-schemas";
+import {
+  gitTargetBranchSchema,
+  knownGitProviderIdSchema,
+  pullRequestSchema,
+  workspaceRecordSchema,
+} from "./git-schemas";
 import {
   issueTypeSchema,
   planSubtaskInputSchema,
@@ -90,6 +95,7 @@ export type TaskDocumentsRead = z.infer<typeof taskDocumentsReadSchema>;
 
 export const ReadTaskInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
   })
   .strict();
@@ -97,6 +103,7 @@ export type ReadTaskInput = z.infer<typeof ReadTaskInputSchema>;
 
 export const ReadTaskDocumentsInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     includeSpec: z.boolean().optional(),
     includePlan: z.boolean().optional(),
@@ -131,6 +138,7 @@ const labelStringSchema = z.string().trim().min(1);
 
 export const SetSpecInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
   })
@@ -139,6 +147,7 @@ export type SetSpecInput = z.infer<typeof SetSpecInputSchema>;
 
 export const SetPlanInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
     subtasks: z.array(planSubtaskInputSchema.strict()).optional(),
@@ -148,6 +157,7 @@ export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
 
 export const BuildBlockedInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     reason: z.string().trim().min(1),
   })
@@ -156,6 +166,7 @@ export type BuildBlockedInput = z.infer<typeof BuildBlockedInputSchema>;
 
 export const BuildResumedInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
   })
   .strict();
@@ -163,6 +174,7 @@ export type BuildResumedInput = z.infer<typeof BuildResumedInputSchema>;
 
 export const BuildCompletedInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     summary: z.string().optional(),
   })
@@ -171,6 +183,7 @@ export type BuildCompletedInput = z.infer<typeof BuildCompletedInputSchema>;
 
 export const SetPullRequestInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     providerId: knownGitProviderIdSchema,
     number: z.number().int().positive(),
@@ -180,6 +193,7 @@ export type SetPullRequestInput = z.infer<typeof SetPullRequestInputSchema>;
 
 export const QaApprovedInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     reportMarkdown: z.string().trim().min(1),
   })
@@ -188,6 +202,7 @@ export type QaApprovedInput = z.infer<typeof QaApprovedInputSchema>;
 
 export const QaRejectedInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     taskId: z.string().trim().min(1),
     reportMarkdown: z.string().trim().min(1),
   })
@@ -196,6 +211,7 @@ export type QaRejectedInput = z.infer<typeof QaRejectedInputSchema>;
 
 export const CreateTaskInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     title: z.string().trim().min(1).describe("Task title."),
     issueType: publicIssueTypeSchema.describe(
       "Issue type. Allowed values: task, feature, bug. Epic is not supported by the public MCP create tool.",
@@ -215,6 +231,7 @@ export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
 
 export const SearchTasksInputSchema = z
   .object({
+    workspaceId: z.string().trim().min(1).optional(),
     priority: taskPrioritySchema.optional().describe("Exact-match priority filter."),
     issueType: issueTypeSchema
       .optional()
@@ -237,6 +254,9 @@ export const SearchTasksInputSchema = z
   .strict();
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
+export const GetWorkspacesInputSchema = z.object({}).strict();
+export type GetWorkspacesInput = z.infer<typeof GetWorkspacesInputSchema>;
+
 const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_read_task: ReadTaskInputSchema,
   odt_read_task_documents: ReadTaskDocumentsInputSchema,
@@ -252,10 +272,19 @@ const ODT_WORKFLOW_TOOL_SCHEMAS = {
 
 export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
 
-export const ODT_TOOL_SCHEMAS = {
+export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   ...ODT_WORKFLOW_TOOL_SCHEMAS,
   odt_create_task: CreateTaskInputSchema,
   odt_search_tasks: SearchTasksInputSchema,
+} as const;
+export type WorkspaceScopedOdtToolName = keyof typeof ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS;
+export const ODT_WORKSPACE_SCOPED_TOOL_NAMES = Object.keys(
+  ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS,
+) as WorkspaceScopedOdtToolName[];
+
+export const ODT_TOOL_SCHEMAS = {
+  get_workspaces: GetWorkspacesInputSchema,
+  ...ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS,
 } as const;
 export type OdtToolName = keyof typeof ODT_TOOL_SCHEMAS;
 
@@ -280,6 +309,9 @@ export const searchTasksResultSchema = z
   })
   .strict();
 export type SearchTasksResult = z.infer<typeof searchTasksResultSchema>;
+
+export const getWorkspacesResultSchema = z.array(workspaceRecordSchema);
+export type GetWorkspacesResult = z.infer<typeof getWorkspacesResultSchema>;
 
 export const setSpecResultSchema = z
   .object({
@@ -346,13 +378,13 @@ export type QaRejectedResult = z.infer<typeof qaRejectedResultSchema>;
 export const odtHostBridgeReadySchema = z
   .object({
     bridgeVersion: z.literal(1),
-    workspaceId: z.string().trim().min(1),
     toolNames: z.array(z.string().trim().min(1)).min(1),
   })
   .strict();
 export type OdtHostBridgeReady = z.infer<typeof odtHostBridgeReadySchema>;
 
 export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
+  get_workspaces: getWorkspacesResultSchema,
   odt_create_task: createTaskResultSchema,
   odt_search_tasks: searchTasksResultSchema,
   odt_read_task: taskSummarySchema,

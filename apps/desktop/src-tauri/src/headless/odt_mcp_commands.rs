@@ -10,9 +10,13 @@ use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WorkspaceArgs {
-    workspace_id: String,
+struct ReadyArgs {
+    workspace_id: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GetWorkspacesArgs {}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +97,9 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("odt_mcp_ready", |state, args| {
         Box::pin(handle_odt_mcp_ready(state, args))
     })?;
+    registry.register("get_workspaces", |state, args| {
+        Box::pin(handle_get_workspaces(state, args))
+    })?;
     registry.register("odt_read_task", |state, args| {
         Box::pin(handle_odt_read_task(state, args))
     })?;
@@ -133,11 +140,24 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
 }
 
 async fn handle_odt_mcp_ready(state: &HeadlessState, args: Value) -> CommandResult {
-    let WorkspaceArgs { workspace_id } = deserialize_args(args)?;
+    let ReadyArgs {
+        workspace_id: _workspace_id,
+    } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         super::command_support::run_headless_blocking("odt_mcp_ready", move || {
-            service.odt_mcp_ready(&workspace_id)
+            service.odt_mcp_ready()
+        })
+        .await?,
+    )
+}
+
+async fn handle_get_workspaces(state: &HeadlessState, args: Value) -> CommandResult {
+    let _: GetWorkspacesArgs = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        super::command_support::run_headless_blocking("get_workspaces", move || {
+            service.odt_get_workspaces()
         })
         .await?,
     )
@@ -391,11 +411,26 @@ mod tests {
     use host_application::{OdtCreateTaskInput, OdtSearchTasksInput};
 
     #[test]
-    fn ready_args_deserialize_workspace_id() {
-        let parsed: WorkspaceArgs =
+    fn ready_args_allow_missing_workspace_id() {
+        let parsed: ReadyArgs =
+            serde_json::from_value(serde_json::json!({})).expect("args should parse");
+        assert_eq!(parsed.workspace_id, None);
+    }
+
+    #[test]
+    fn ready_args_still_accept_workspace_id_when_present() {
+        let parsed: ReadyArgs =
             serde_json::from_value(serde_json::json!({ "workspaceId": "repo" }))
                 .expect("args should parse");
-        assert_eq!(parsed.workspace_id, "repo");
+        assert_eq!(parsed.workspace_id.as_deref(), Some("repo"));
+    }
+
+    #[test]
+    fn get_workspaces_args_reject_workspace_id() {
+        let parsed = serde_json::from_value::<GetWorkspacesArgs>(serde_json::json!({
+            "workspaceId": "repo"
+        }));
+        assert!(parsed.is_err());
     }
 
     #[test]

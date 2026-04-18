@@ -10,13 +10,14 @@ use super::mapping::{
 };
 use super::task_resolution::resolve_task_reference;
 use super::types::{
-    OdtBuildBlockedResult, OdtBuildCompletedResult, OdtCreateTaskInput, OdtHostBridgeReady,
-    OdtSearchTasksInput, OdtSearchTasksResult, OdtSetPlanResult, OdtSetPullRequestResult,
-    OdtSetSpecResult, OdtTaskDocumentsRead, OdtTaskResult, OdtTaskSummary,
+    OdtBuildBlockedResult, OdtBuildCompletedResult, OdtCreateTaskInput, OdtGetWorkspacesResult,
+    OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult, OdtSetPlanResult,
+    OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead, OdtTaskResult, OdtTaskSummary,
 };
 use crate::app_service::workflow_rules::normalize_title_key;
 
-pub(super) const ODT_MCP_TOOL_NAMES: [&str; 12] = [
+pub(super) const ODT_MCP_TOOL_NAMES: [&str; 13] = [
+    "get_workspaces",
     "odt_create_task",
     "odt_search_tasks",
     "odt_read_task",
@@ -37,16 +38,18 @@ impl AppService {
         self.resolve_task_repo_path(repo_path.as_str())
     }
 
-    pub fn odt_mcp_ready(&self, workspace_id: &str) -> Result<OdtHostBridgeReady> {
-        self.odt_repo_path(workspace_id)?;
+    pub fn odt_mcp_ready(&self) -> Result<OdtHostBridgeReady> {
         Ok(OdtHostBridgeReady {
             bridge_version: 1,
-            workspace_id: workspace_id.to_string(),
             tool_names: ODT_MCP_TOOL_NAMES
                 .iter()
                 .map(|name| name.to_string())
                 .collect(),
         })
+    }
+
+    pub fn odt_get_workspaces(&self) -> Result<OdtGetWorkspacesResult> {
+        self.workspace_list()
     }
 
     pub fn odt_read_task(&self, workspace_id: &str, task_id: &str) -> Result<OdtTaskSummary> {

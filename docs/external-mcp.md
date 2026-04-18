@@ -25,7 +25,7 @@ MCP server name:
 
 ## Basic Configuration
 
-Example MCP config:
+Example MCP config with a startup default workspace:
 
 ```json
 {
@@ -41,13 +41,29 @@ Example MCP config:
 }
 ```
 
+Example MCP config without a startup default workspace:
+
+```json
+{
+  "mcpServers": {
+    "openducktor": {
+      "command": "bunx",
+      "args": [
+        "@openducktor/mcp"
+      ]
+    }
+  }
+}
+```
+
 Optional arguments:
 
+- `--workspace-id <workspace-id>` optional default workspace for later workspace-scoped calls
 - `--host-url <url>`
 
 Equivalent environment variables:
 
-- `ODT_WORKSPACE_ID`
+- `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
 
 Automatic discovery:
@@ -58,20 +74,22 @@ Automatic discovery:
 
 Startup contract:
 
-1. Resolve the requested workspace ID.
+1. Resolve an optional startup default workspace from `--workspace-id` or `ODT_WORKSPACE_ID`.
 2. Use `ODT_HOST_URL` or `--host-url` first when provided.
 3. Otherwise read the local discovery registry and try discovered bridge ports in registry order.
 4. The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
 5. Call the host bridge `/health` endpoint.
 6. Call `odt_mcp_ready` through the loopback host API.
 7. Refuse startup if any required ODT tool name is missing.
+8. Do not implicitly choose a workspace. Workspace-scoped tool calls must resolve a workspace from tool input `workspaceId` first, then the startup default.
 
-Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it. In both cases the MCP identifies the workspace with `workspaceId`, and the Rust host resolves that to the current repo path.
+Desktop-managed and standalone MCP clients intentionally use this same host-bridge path. The difference is only how the MCP learns the host URL: desktop mode injects it, while standalone mode usually discovers it. Workspace resolution is request-scoped for workspace-bound tools: tool-input `workspaceId` wins over any startup default, and missing both sources is an error.
 
 ## Public Tools
 
 Public external tools:
 
+- `get_workspaces`
 - `odt_create_task`
 - `odt_search_tasks`
 - `odt_read_task`
@@ -89,6 +107,34 @@ Internal workflow tools remain on the same MCP server:
 - `odt_qa_rejected`
 
 Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `odt_create_task` or `odt_search_tasks` in their tool selection.
+
+## Workspace Discovery And Scoping
+
+Use `get_workspaces` when you start the MCP without a default workspace and need to discover the canonical `workspaceId` values known to the host.
+
+`get_workspaces` takes no input and returns the existing shared workspace record shape:
+
+```json
+[
+  {
+    "workspaceId": "my-workspace",
+    "workspaceName": "My Workspace",
+    "repoPath": "/Users/maxsky5/code/my-repo",
+    "isActive": true,
+    "hasConfig": true,
+    "configuredWorktreeBasePath": null,
+    "defaultWorktreeBasePath": null,
+    "effectiveWorktreeBasePath": null
+  }
+]
+```
+
+Workspace resolution for workspace-scoped tools is deterministic:
+
+1. top-level tool input `workspaceId`
+2. startup default workspace resolved once at process startup from `--workspace-id` or `ODT_WORKSPACE_ID`
+
+If no workspace can be resolved, the MCP rejects the call with an actionable error instead of selecting an active or first workspace.
 
 ## Shared Response Model
 
@@ -134,6 +180,7 @@ Creates a new public task.
 
 Allowed inputs:
 
+- `workspaceId` optional per-call workspace override
 - `title` is required
 - `issueType` is required: `task | feature | bug`
 - `priority` is required: `0 | 1 | 2 | 3 | 4`
@@ -145,6 +192,7 @@ Constraints:
 
 - `epic` is rejected at the MCP schema layer.
 - Input fields mirror the current desktop create form only.
+- When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
 
 Output:
 
@@ -156,7 +204,10 @@ Reads one persisted task summary.
 
 Input:
 
+- `workspaceId` optional per-call workspace override
 - `taskId` required
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
 
 Output:
 
@@ -191,6 +242,7 @@ Searches active tasks only.
 
 Optional filters:
 
+- `workspaceId`
 - `priority`
 - `issueType`
 - `status`
@@ -211,6 +263,8 @@ Excluded statuses:
 
 - `closed`
 - `deferred`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
 
 Output:
 
@@ -250,6 +304,7 @@ Reads only the requested persisted document bodies.
 
 Input:
 
+- `workspaceId` optional per-call workspace override
 - `taskId` required
 - `includeSpec` optional boolean
 - `includePlan` optional boolean
@@ -259,6 +314,7 @@ Constraints:
 
 - Unknown input fields are rejected.
 - At least one include flag must be `true`.
+- When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
 - Requested document keys are returned consistently even when no persisted body exists yet.
 - Missing spec and plan return `{ "markdown": "", "updatedAt": null }`.
 - Missing latest QA report returns `{ "markdown": "", "updatedAt": null, "verdict": "not_reviewed" }`.

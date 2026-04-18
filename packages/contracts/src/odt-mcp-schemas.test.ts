@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { publicTaskSchema, taskSummarySchema } from "./odt-mcp-schemas";
+import {
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+  publicTaskSchema,
+  taskSummarySchema,
+} from "./odt-mcp-schemas";
 
 describe("odt mcp public task schemas", () => {
   test("public task schema parses optional target branches", () => {
@@ -56,5 +60,24 @@ describe("odt mcp public task schemas", () => {
       remote: "origin",
       branch: "main",
     });
+  });
+
+  test("workspace-scoped tool names stay explicit and exclude get_workspaces", () => {
+    expect([...ODT_WORKSPACE_SCOPED_TOOL_NAMES].sort()).toEqual(
+      [
+        "odt_build_blocked",
+        "odt_build_completed",
+        "odt_build_resumed",
+        "odt_create_task",
+        "odt_qa_approved",
+        "odt_qa_rejected",
+        "odt_read_task",
+        "odt_read_task_documents",
+        "odt_search_tasks",
+        "odt_set_plan",
+        "odt_set_pull_request",
+        "odt_set_spec",
+      ].sort(),
+    );
   });
 });

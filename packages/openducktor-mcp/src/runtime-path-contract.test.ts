@@ -14,6 +14,7 @@ describe("runtime path contract", () => {
       "odt-task-store.ts",
       "path-utils.ts",
       "store-context.ts",
+      "tool-results.ts",
     ]);
   });
 });

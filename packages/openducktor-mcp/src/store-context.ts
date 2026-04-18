@@ -3,7 +3,7 @@ import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeRegistryPath } from "./path-utils";
 
 export type OdtStoreOptions = {
-  workspaceId: string;
+  workspaceId?: string;
   hostUrl: string;
 };
 
@@ -52,15 +52,26 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
   );
 };
 
-const validateExplicitHostUrl = async (hostUrl: string, workspaceId: string): Promise<string> => {
+const validateExplicitHostUrl = async (hostUrl: string): Promise<string> => {
   try {
     new URL(hostUrl);
   } catch {
     throw new Error(`Invalid ODT_HOST_URL for OpenDucktor MCP: ${hostUrl}`);
   }
 
-  await new OdtHostBridgeClient({ baseUrl: hostUrl, workspaceId }).ready();
+  await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
   return hostUrl;
+};
+
+const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string): Promise<void> => {
+  const workspaces = await new OdtHostBridgeClient({ baseUrl: hostUrl }).getWorkspaces();
+  if (workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
+    return;
+  }
+
+  throw new Error(
+    `Configured default workspace '${workspaceId}' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.`,
+  );
 };
 
 const parseDiscoveredPorts = (payload: string, registryPath: string): number[] => {
@@ -113,7 +124,7 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
   return discoveredPorts;
 };
 
-const discoverHostUrl = async (workspaceId: string): Promise<string> => {
+const discoverHostUrl = async (workspaceId?: string): Promise<string> => {
   const registryPath = resolveMcpBridgeRegistryPath();
 
   let registryPayload: string;
@@ -143,7 +154,10 @@ const discoverHostUrl = async (workspaceId: string): Promise<string> => {
   for (const port of discoveredPorts) {
     const hostUrl = `http://127.0.0.1:${port}`;
     try {
-      await new OdtHostBridgeClient({ baseUrl: hostUrl, workspaceId }).ready();
+      await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
+      if (workspaceId) {
+        await validateConfiguredWorkspace(hostUrl, workspaceId);
+      }
       return hostUrl;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -152,7 +166,7 @@ const discoverHostUrl = async (workspaceId: string): Promise<string> => {
   }
 
   throw new Error(
-    `No healthy OpenDucktor host was discovered for workspace ${workspaceId}. Checked ${registryPath}. ${failures.join(" | ")} Provide ODT_HOST_URL to override discovery.`,
+    `No healthy OpenDucktor host was discovered. Checked ${registryPath}. ${failures.join(" | ")} Provide ODT_HOST_URL to override discovery.`,
   );
 };
 
@@ -162,20 +176,23 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   const workspaceId =
     normalizeOptionalInput(context.workspaceId) ??
     normalizeOptionalInput(process.env.ODT_WORKSPACE_ID);
-  if (!workspaceId) {
-    throw new Error("Missing workspace ID for OpenDucktor MCP.");
-  }
 
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
   const hostUrl = explicitHostUrl
-    ? await validateExplicitHostUrl(explicitHostUrl, workspaceId)
+    ? await validateExplicitHostUrl(explicitHostUrl)
     : await discoverHostUrl(workspaceId);
 
-  const resolved = {
+  if (!workspaceId) {
+    return { hostUrl };
+  }
+
+  if (explicitHostUrl) {
+    await validateConfiguredWorkspace(hostUrl, workspaceId);
+  }
+
+  return {
     workspaceId,
     hostUrl,
   };
-
-  return resolved;
 };

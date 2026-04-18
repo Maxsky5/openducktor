@@ -5,58 +5,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { ODT_TOOL_SCHEMAS } from "./lib";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
-
-type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-};
-
-const toErrorMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return "Unknown error";
-};
-
-const toToolResult = (payload: unknown): ToolResult => {
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(payload, null, 2),
-      },
-    ],
-    ...(payload && typeof payload === "object"
-      ? { structuredContent: payload as Record<string, unknown> }
-      : {}),
-  };
-};
-
-const toToolError = (error: unknown): ToolResult => {
-  const message = toErrorMessage(error);
-  const code =
-    error instanceof Error && error.name === "ZodError"
-      ? "ODT_TOOL_INPUT_INVALID"
-      : "ODT_TOOL_EXECUTION_ERROR";
-  const errorPayload = {
-    ok: false,
-    error: {
-      code,
-      message,
-    },
-  };
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(errorPayload, null, 2),
-      },
-    ],
-    structuredContent: errorPayload,
-    isError: true,
-  };
-};
+import { toErrorMessage, toToolError, toToolResult } from "./tool-results";
 
 const parseCliArgs = (argv: string[]): OdtStoreContext => {
   const next: OdtStoreContext = {};
@@ -192,6 +141,11 @@ const registerOdtTool = <Name extends RegisteredToolName>(
 };
 
 const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
+  get_workspaces: {
+    description:
+      "List the workspaces currently known to OpenDucktor. Use the returned workspaceId values to scope later workspace-bound tool calls.",
+    execute: (store, input) => store.getWorkspaces(input),
+  },
   odt_read_task: {
     description:
       "Read one OpenDucktor task as a single summary object containing current public task fields plus nested qaVerdict and document presence booleans for spec/plan/latest QA.",
@@ -278,7 +232,7 @@ const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer
     },
     {
       instructions:
-        "OpenDucktor workflow server. Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
+        "OpenDucktor workflow server. Use get_workspaces to discover available workspaces when no startup --workspace-id default is configured. Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Workspace-scoped tools accept an optional top-level workspaceId that overrides the startup default when provided. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
     },
   );
 

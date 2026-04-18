@@ -1008,6 +1008,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invoke_handler_lists_workspaces_through_get_workspaces() {
+        let (fixture, _task_state, repo_path, workspace_id) =
+            test_state_fixture_with_task_store(Vec::new());
+
+        let response = invoke_handler(
+            Path("get_workspaces".to_string()),
+            State(fixture.state.clone()),
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should collect");
+        let payload: Value =
+            serde_json::from_slice(&bytes).expect("response body should deserialize");
+        let expected_repo_path = std::fs::canonicalize(&repo_path)
+            .unwrap_or(repo_path.clone())
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(payload.as_array().map(Vec::len), Some(1));
+        assert_eq!(payload[0]["workspaceId"], json!(workspace_id));
+        assert_eq!(payload[0]["repoPath"], json!(expected_repo_path));
+    }
+
+    #[tokio::test]
     async fn invoke_handler_creates_task_through_flat_odt_mcp_bridge_payload() {
         let (fixture, task_state, repo_path, workspace_id) =
             test_state_fixture_with_task_store(Vec::new());
