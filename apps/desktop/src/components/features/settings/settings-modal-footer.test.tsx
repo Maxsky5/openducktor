@@ -21,8 +21,8 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
       promptValidationState: {
         globalErrors: {},
         globalErrorCount: 0,
-        repoErrorsByPath: {},
-        repoErrorCountByPath: {},
+        repoErrorsByWorkspaceId: {},
+        repoErrorCountByWorkspaceId: {},
         repoTotalErrorCount: 0,
         totalErrorCount: 0,
       },

@@ -5,7 +5,7 @@ describe("isKanbanForegroundLoading", () => {
   test("keeps the initial empty-board load as foreground loading", () => {
     expect(
       isKanbanForegroundLoading({
-        hasActiveRepo: true,
+        hasActiveWorkspace: true,
         isForegroundLoadingTasks: false,
         isSettingsPending: false,
         doneVisibleDays: 1,
@@ -17,7 +17,7 @@ describe("isKanbanForegroundLoading", () => {
   test("ignores background kanban refetches after the board already has data", () => {
     expect(
       isKanbanForegroundLoading({
-        hasActiveRepo: true,
+        hasActiveWorkspace: true,
         isForegroundLoadingTasks: false,
         isSettingsPending: false,
         doneVisibleDays: 1,
@@ -29,7 +29,7 @@ describe("isKanbanForegroundLoading", () => {
   test("keeps manual task refreshes as foreground loading", () => {
     expect(
       isKanbanForegroundLoading({
-        hasActiveRepo: true,
+        hasActiveWorkspace: true,
         isForegroundLoadingTasks: true,
         isSettingsPending: false,
         doneVisibleDays: 1,

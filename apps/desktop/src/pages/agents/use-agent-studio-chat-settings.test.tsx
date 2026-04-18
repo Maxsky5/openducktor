@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -42,7 +43,26 @@ const { useAgentStudioChatSettings } = await import("./use-agent-studio-chat-set
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioChatSettings>[0];
+type LegacyHookArgs = {
+  activeWorkspace?: ActiveWorkspace | null;
+  workspaceRepoPath?: string | null;
+};
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+const useChatSettingsHarness = (props: LegacyHookArgs) =>
+  useAgentStudioChatSettings({
+    activeWorkspace:
+      "workspaceRepoPath" in props
+        ? props.workspaceRepoPath
+          ? createActiveWorkspace(props.workspaceRepoPath)
+          : null
+        : (props.activeWorkspace ?? null),
+  });
 
 const createSettingsSnapshot = (
   showThinkingMessages = false,
@@ -70,8 +90,8 @@ const createSettingsSnapshot = (
   return snapshot as SettingsSnapshot;
 };
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioChatSettings, initialProps);
+const createHookHarness = (initialProps: LegacyHookArgs) =>
+  createSharedHookHarness(useChatSettingsHarness, initialProps);
 
 describe("useAgentStudioChatSettings", () => {
   test("loads chat settings when a repository is active", async () => {
@@ -81,7 +101,7 @@ describe("useAgentStudioChatSettings", () => {
     );
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
     });
 
     await harness.mount();
@@ -100,7 +120,7 @@ describe("useAgentStudioChatSettings", () => {
     );
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
     });
 
     await harness.mount();
@@ -129,7 +149,7 @@ describe("useAgentStudioChatSettings", () => {
     );
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
     });
 
     await harness.mount();
@@ -155,14 +175,14 @@ describe("useAgentStudioChatSettings", () => {
     );
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.showThinkingMessages === true);
     expect(harness.getLatest().showThinkingMessages).toBe(true);
 
-    await harness.update({ activeRepo: null });
+    await harness.update({ workspaceRepoPath: null });
 
     expect(harness.getLatest().showThinkingMessages).toBe(false);
 

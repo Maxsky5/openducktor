@@ -350,7 +350,7 @@ export const executeAutopilotAction = async ({
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspaceState();
-  const activeRepo = activeWorkspace?.repoPath ?? null;
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { tasks } = useTaskDataContext();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
   const { startAgentSession, sendAgentMessage } = useAgentOperationsContext();
@@ -359,15 +359,15 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const previousTasksByIdRef = useRef<Map<string, TaskCard>>(new Map());
 
   useEffect(() => {
-    if (!activeRepo || !activeWorkspace) {
+    if (!workspaceRepoPath || !activeWorkspace) {
       previousRepoRef.current = null;
       previousTasksByIdRef.current = new Map();
       return;
     }
 
     const nextTasksById = toTaskMap(tasks);
-    if (previousRepoRef.current !== activeRepo) {
-      previousRepoRef.current = activeRepo;
+    if (previousRepoRef.current !== workspaceRepoPath) {
+      previousRepoRef.current = workspaceRepoPath;
       previousTasksByIdRef.current = nextTasksById;
       return;
     }
@@ -419,7 +419,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
       }
     })();
   }, [
-    activeRepo,
+    workspaceRepoPath,
     activeWorkspace,
     loadRepoRuntimeCatalog,
     queryClient,

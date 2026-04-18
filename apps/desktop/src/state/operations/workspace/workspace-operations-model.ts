@@ -2,7 +2,7 @@ import type { GitCurrentBranch } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 
 type ProbeBranchChangeParams = {
-  activeRepo: string | null;
+  activeWorkspaceRepoPath: string | null;
   isSwitchingWorkspace: boolean;
   isSwitchingBranch: boolean;
   isLoadingBranches: boolean;
@@ -50,14 +50,14 @@ export const shouldResetBranchStateForRepoChange = (
 ): boolean => previousActiveRepo !== null && previousActiveRepo !== nextActiveRepo;
 
 export const shouldProbeExternalBranchChange = ({
-  activeRepo,
+  activeWorkspaceRepoPath,
   isSwitchingWorkspace,
   isSwitchingBranch,
   isLoadingBranches,
   isSyncInFlight,
 }: ProbeBranchChangeParams): boolean => {
   return Boolean(
-    activeRepo &&
+    activeWorkspaceRepoPath &&
       !isSwitchingWorkspace &&
       !isSwitchingBranch &&
       !isLoadingBranches &&

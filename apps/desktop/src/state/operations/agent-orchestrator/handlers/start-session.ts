@@ -208,8 +208,8 @@ export const createStartAgentSession = ({
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef: repo.repoEpochRef,
-      activeRepoRef: repo.activeRepoRef,
-      previousRepoRef: repo.previousRepoRef,
+      currentWorkspaceRepoPathRef: repo.currentWorkspaceRepoPathRef,
+      ...(repo.activeWorkspaceRef ? { activeWorkspaceRef: repo.activeWorkspaceRef } : {}),
     });
     throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
 
@@ -259,7 +259,7 @@ export const createStartAgentSession = ({
     const inFlightKey = kickoffTargetBranchKey
       ? [...inFlightKeyParts.slice(0, -1), kickoffTargetBranchKey, inFlightKeySuffix].join("::")
       : inFlightKeyParts.join("::");
-    const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
+    const existingInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
     }
@@ -308,13 +308,13 @@ export const createStartAgentSession = ({
       return startResult.ctx.summary.sessionId;
     });
 
-    session.inFlightStartsByRepoTaskRef.current.set(inFlightKey, startPromise);
+    session.inFlightStartsByWorkspaceTaskRef.current.set(inFlightKey, startPromise);
     try {
       return await startPromise;
     } finally {
-      const currentInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
+      const currentInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
       if (currentInFlight === startPromise) {
-        session.inFlightStartsByRepoTaskRef.current.delete(inFlightKey);
+        session.inFlightStartsByWorkspaceTaskRef.current.delete(inFlightKey);
       }
     }
   };

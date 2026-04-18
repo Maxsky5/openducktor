@@ -4,7 +4,7 @@ import { buildDiagnosticsSummary } from "./diagnostics-model";
 describe("buildDiagnosticsSummary", () => {
   test("returns checking state while diagnostics are loading", () => {
     const summary = buildDiagnosticsSummary({
-      hasActiveRepo: true,
+      hasActiveWorkspace: true,
       isChecking: true,
       hasCriticalIssues: false,
       hasSetupIssues: false,
@@ -17,7 +17,7 @@ describe("buildDiagnosticsSummary", () => {
 
   test("keeps no-repository label as highest priority", () => {
     const summary = buildDiagnosticsSummary({
-      hasActiveRepo: false,
+      hasActiveWorkspace: false,
       isChecking: true,
       hasCriticalIssues: true,
       hasSetupIssues: true,
@@ -28,7 +28,7 @@ describe("buildDiagnosticsSummary", () => {
 
   test("returns healthy only when not checking and no issues", () => {
     const summary = buildDiagnosticsSummary({
-      hasActiveRepo: true,
+      hasActiveWorkspace: true,
       isChecking: false,
       hasCriticalIssues: false,
       hasSetupIssues: false,
@@ -39,7 +39,7 @@ describe("buildDiagnosticsSummary", () => {
 
   test("keeps critical issues ahead of retrying state", () => {
     const summary = buildDiagnosticsSummary({
-      hasActiveRepo: true,
+      hasActiveWorkspace: true,
       isChecking: true,
       hasCriticalIssues: true,
       hasSetupIssues: false,

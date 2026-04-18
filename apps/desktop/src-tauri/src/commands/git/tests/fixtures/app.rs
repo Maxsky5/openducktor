@@ -45,12 +45,12 @@ pub(crate) fn setup_command_git_fixture(
     setup_command_git_fixture_with_summary(
         prefix,
         result,
-        WorktreeStatusSummaryResult::Ok(sample_worktree_status_summary_data(
+        WorktreeStatusSummaryResult::Ok(Box::new(sample_worktree_status_summary_data(
             host_domain::GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         authorize_repo,
         false,
     )
@@ -64,12 +64,12 @@ pub(crate) fn setup_command_git_fixture_with_mutations(
     setup_command_git_fixture_with_summary(
         prefix,
         result,
-        WorktreeStatusSummaryResult::Ok(sample_worktree_status_summary_data(
+        WorktreeStatusSummaryResult::Ok(Box::new(sample_worktree_status_summary_data(
             host_domain::GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         authorize_repo,
         true,
     )

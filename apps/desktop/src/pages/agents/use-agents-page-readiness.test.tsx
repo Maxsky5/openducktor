@@ -16,7 +16,14 @@ import {
   type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioReadiness } from "./use-agents-page-readiness";
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 const makeRepoHealth = (
   overrides: RepoRuntimeHealthFixtureOverrides = {},
@@ -45,7 +52,7 @@ describe("useAgentStudioReadiness", () => {
 
     const harness = createSharedHookHarness(Harness, {
       args: {
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
@@ -105,7 +112,7 @@ describe("useAgentStudioReadiness", () => {
 
     const harness = createSharedHookHarness(Harness, {
       args: {
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
@@ -164,7 +171,7 @@ describe("useAgentStudioReadiness", () => {
 
     const harness = createSharedHookHarness(Harness, {
       args: {
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [SECOND_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
@@ -274,7 +281,7 @@ describe("useAgentStudioReadiness", () => {
 
     const Harness = () => {
       const checks = useChecks({
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         checkRepoRuntimeHealth,
         runtimeCheck,
@@ -282,7 +289,7 @@ describe("useAgentStudioReadiness", () => {
         toastApi: testToastApi,
       });
       latest = useAgentStudioReadiness({
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,

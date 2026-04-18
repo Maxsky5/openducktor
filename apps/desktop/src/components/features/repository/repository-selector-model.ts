@@ -3,10 +3,10 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 
 export const toRepositorySelectorOptions = (
   workspaces: WorkspaceRecord[],
-  errorCountByPath: Partial<Record<string, number>> = {},
+  errorCountByWorkspaceId: Partial<Record<string, number>> = {},
 ): ComboboxOption[] => {
   return workspaces.map((workspace) => {
-    const repoErrorCount = errorCountByPath[workspace.repoPath] ?? 0;
+    const repoErrorCount = errorCountByWorkspaceId[workspace.workspaceId] ?? 0;
     return {
       value: workspace.workspaceId,
       label: workspace.workspaceName,

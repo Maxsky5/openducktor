@@ -138,14 +138,14 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
   };
 };
 
-export const pickInitialRepoPath = (
+export const pickInitialWorkspaceId = (
   snapshot: SettingsSnapshot,
-  activeRepo: string | null,
+  workspaceRepoPath: string | null,
 ): string | null => {
   const workspaceIds = Object.keys(snapshot.workspaces).sort();
-  if (activeRepo) {
+  if (workspaceRepoPath) {
     const matchingWorkspaceId = Object.entries(snapshot.workspaces).find(
-      ([, workspace]) => workspace.repoPath === activeRepo,
+      ([, workspace]) => workspace.repoPath === workspaceRepoPath,
     )?.[0];
     if (matchingWorkspaceId) {
       return matchingWorkspaceId;

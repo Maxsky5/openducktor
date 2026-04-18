@@ -14,7 +14,7 @@ enableReactActEnvironment();
 
 const taskDetailsSheetRenderMock = mock(
   (_props: {
-    activeRepo?: string | null;
+    activeWorkspace?: { workspaceId: string; workspaceName: string; repoPath: string } | null;
     task: TaskCard | null;
     allTasks: TaskCard[];
     runs: unknown[];
@@ -57,7 +57,11 @@ describe("TaskDetailsSheetController", () => {
       parentRenderCount += 1;
       return createElement(TaskDetailsSheetController, {
         ref: controllerRef,
-        activeRepo: "/repo-a",
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
         allTasks: [task],
         runs: [],
         taskSessionsByTaskId: new Map(),
@@ -73,7 +77,11 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task: null,
-        activeRepo: "/repo-a",
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
         allTasks: [task],
         runs: [],
         open: false,
@@ -89,7 +97,11 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task,
-        activeRepo: "/repo-a",
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
         allTasks: [task],
         runs: [],
         open: true,
@@ -113,7 +125,11 @@ describe("TaskDetailsSheetController", () => {
     const rendered = render(
       createElement(TaskDetailsSheetController, {
         ref: controllerRef,
-        activeRepo: "/repo-a",
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
         allTasks: [task],
         runs: [],
         taskSessionsByTaskId: new Map(),
@@ -134,7 +150,11 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task,
-        activeRepo: "/repo-a",
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
         open: true,
         runs: [],
         onDetectPullRequest,

@@ -21,10 +21,8 @@ import {
   workspaceQueryKeys,
 } from "../../queries/workspace";
 import { host } from "../shared/host";
-import { requireActiveRepo } from "../tasks/task-operations-model";
 
 type UseRepoSettingsOperationsArgs = {
-  activeRepo: string | null;
   activeWorkspace: WorkspaceRecord | null;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
@@ -40,7 +38,6 @@ type UseRepoSettingsOperationsResult = {
 };
 
 export function useRepoSettingsOperations({
-  activeRepo,
   activeWorkspace,
   applyWorkspaceRecords,
   applyWorkspaceRecord,
@@ -70,7 +67,6 @@ export function useRepoSettingsOperations({
   );
 
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
-    requireActiveRepo(activeRepo);
     const workspaceId = activeWorkspace?.workspaceId;
     if (!workspaceId) {
       throw new Error("Select a workspace first.");
@@ -78,11 +74,10 @@ export function useRepoSettingsOperations({
 
     const config = await loadRepoConfigFromQuery(queryClient, workspaceId);
     return toRepoSettingsInput(config);
-  }, [activeRepo, activeWorkspace, queryClient]);
+  }, [activeWorkspace, queryClient]);
 
   const saveRepoSettings = useCallback(
     async (input: RepoSettingsInput) => {
-      requireActiveRepo(activeRepo);
       const workspaceId = activeWorkspace?.workspaceId;
       if (!workspaceId) {
         throw new Error("Select a workspace first.");
@@ -139,7 +134,6 @@ export function useRepoSettingsOperations({
       applyWorkspaceRecord(workspace);
     },
     [
-      activeRepo,
       activeWorkspace,
       applyWorkspaceRecord,
       queryClient,

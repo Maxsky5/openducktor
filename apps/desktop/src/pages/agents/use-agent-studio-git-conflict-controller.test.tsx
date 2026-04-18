@@ -192,6 +192,45 @@ describe("useAgentStudioGitConflictController", () => {
     }
   });
 
+  test("replaces placeholder conflict metadata when a hydrated conflict arrives with the same files", async () => {
+    const harness = createHookHarness(
+      useAgentStudioGitConflictController,
+      createBaseArgs({
+        detectedConflictedFiles: ["AGENTS.md"],
+        workingDir: "/tmp/worktree/task-10",
+        worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbb",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.update(
+        createBaseArgs({
+          branch: null,
+          detectedConflict: createConflict({
+            currentBranch: null,
+            conflictedFiles: ["AGENTS.md"],
+            output: "interactive rebase in progress; onto main",
+          }),
+          detectedConflictedFiles: ["AGENTS.md"],
+          workingDir: "/tmp/worktree/task-10",
+          worktreeStatusSnapshotKey: "1:cccccccccccccccc:dddddddddddddddd",
+        }),
+      );
+
+      expect(harness.getLatest().activeGitConflict).toEqual(
+        createConflict({
+          currentBranch: null,
+          conflictedFiles: ["AGENTS.md"],
+          output: "interactive rebase in progress; onto main",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("aborts conflicts using the captured working directory", async () => {
     const refreshDiffData = mock(async () => {});
     const abortDeferred = createDeferred<{ output: string }>();

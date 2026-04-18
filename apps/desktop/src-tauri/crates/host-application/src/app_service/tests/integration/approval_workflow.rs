@@ -1029,13 +1029,18 @@ fn task_approval_context_uses_pending_direct_merge_metadata_without_builder_work
         repo_path.as_str(),
         base_repo_config(&worktree_base),
     )?;
-    service.workspace_merge_repo_config(service.workspace_id_for_repo_path(repo_path.as_str())?.as_str(), RepoConfigUpdate {
-        default_target_branch: Some(host_infra_system::GitTargetBranch {
-            remote: Some("origin".to_string()),
-            branch: "beta".to_string(),
-        }),
-        ..RepoConfigUpdate::default()
-    })?;
+    service.workspace_merge_repo_config(
+        service
+            .workspace_id_for_repo_path(repo_path.as_str())?
+            .as_str(),
+        RepoConfigUpdate {
+            default_target_branch: Some(host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "beta".to_string(),
+            }),
+            ..RepoConfigUpdate::default()
+        },
+    )?;
 
     let mut session = make_session("task-1", "session-build");
     session.working_directory = missing_worktree_path.to_string_lossy().to_string();
@@ -1137,6 +1142,7 @@ fn task_approval_context_reports_global_merge_default_and_dirty_worktree() -> Re
                 ahead: 0,
                 behind: 0,
             },
+            git_conflict: None,
         });
     }
 
@@ -1219,6 +1225,7 @@ fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
                 ahead: 0,
                 behind: 0,
             },
+            git_conflict: None,
         });
     }
 

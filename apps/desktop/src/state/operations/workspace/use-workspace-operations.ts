@@ -1,21 +1,32 @@
-import { useCallback, useRef, useState } from "react";
+import type { WorkspaceRecord } from "@openducktor/contracts";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import type {
   PreparedRepoSwitch,
-  UseWorkspaceOperationsArgs,
   UseWorkspaceOperationsResult,
+  WorkspaceOperationsHostClient,
 } from "./workspace-operations-types";
 
+type UseWorkspaceOperationsArgs = {
+  activeWorkspace: ActiveWorkspace | null;
+  setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
+  clearTaskData: () => void;
+  clearActiveBeadsCheck: () => void;
+  hostClient?: WorkspaceOperationsHostClient;
+};
+
 export function useWorkspaceOperations({
-  activeRepo,
-  setActiveRepo,
+  activeWorkspace,
+  setActiveWorkspace,
   clearTaskData,
   clearActiveBeadsCheck,
   hostClient = host,
 }: UseWorkspaceOperationsArgs): UseWorkspaceOperationsResult {
+  const activeRepo = activeWorkspace?.repoPath ?? null;
   const [branchSyncDegraded, setBranchSyncDegraded] = useState(false);
   const preparedRepoSwitchRef = useRef<PreparedRepoSwitch | null>(null);
   const clearBranchSyncDegraded = useCallback((): void => {
@@ -47,8 +58,8 @@ export function useWorkspaceOperations({
     applyWorkspaceRecords,
     applyWorkspaceRecord,
   } = useWorkspaceSelectionOperations({
-    activeRepo,
-    setActiveRepo,
+    activeWorkspace,
+    setActiveWorkspace,
     clearTaskData,
     clearActiveBeadsCheck,
     clearBranchData,
@@ -56,8 +67,13 @@ export function useWorkspaceOperations({
     preparedRepoSwitchRef,
   });
 
+  const resolvedActiveWorkspace = useMemo<WorkspaceRecord | null>(
+    () => workspaces.find((workspace) => workspace.repoPath === activeRepo) ?? null,
+    [activeRepo, workspaces],
+  );
+
   useWorkspaceBranchProbe({
-    activeRepo,
+    activeWorkspace: resolvedActiveWorkspace,
     isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,

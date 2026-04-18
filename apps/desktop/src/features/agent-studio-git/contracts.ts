@@ -13,6 +13,7 @@ export type GitDiffRefresh = (mode?: GitDiffRefreshMode) => Promise<void>;
 
 export type DiffScopeState = {
   branch: string | null;
+  gitConflict?: GitConflict | null;
   fileDiffs: FileDiff[];
   fileStatuses: FileStatus[];
   uncommittedFileCount: number;
@@ -30,6 +31,7 @@ export type DiffDataState = {
   worktreePath: string | null;
   targetBranch: string;
   diffScope: DiffScope;
+  gitConflict?: GitConflict | null;
   scopeStatesByScope: Record<DiffScope, DiffScopeState>;
   loadedScopesByScope: Record<DiffScope, boolean>;
   commitsAheadBehind: CommitsAheadBehind | null;

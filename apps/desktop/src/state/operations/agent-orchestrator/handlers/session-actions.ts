@@ -38,9 +38,9 @@ type SessionActionsDependencies = {
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
-  activeRepoRef?: { current: string | null };
-  previousRepoRef: { current: string | null };
-  inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
+  activeWorkspaceRef?: { current: ActiveWorkspace | null };
+  currentWorkspaceRepoPathRef: { current: string | null };
+  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   unsubscribersRef: { current: Map<string, () => void> };
   turnStartedAtBySessionRef: { current: Record<string, number> };
   turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
@@ -129,9 +129,9 @@ export const createAgentSessionActions = ({
   sessionsRef,
   taskRef,
   repoEpochRef,
-  activeRepoRef,
-  previousRepoRef,
-  inFlightStartsByRepoTaskRef,
+  activeWorkspaceRef,
+  currentWorkspaceRepoPathRef,
+  inFlightStartsByWorkspaceTaskRef,
   unsubscribersRef,
   turnStartedAtBySessionRef,
   turnModelBySessionRef,
@@ -151,12 +151,12 @@ export const createAgentSessionActions = ({
   },
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
-  const activeRepo = activeWorkspace?.repoPath ?? null;
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const ensureSessionReady = createEnsureSessionReady({
     activeWorkspace,
     adapter,
     repoEpochRef,
-    previousRepoRef,
+    currentWorkspaceRepoPathRef,
     sessionsRef,
     taskRef,
     unsubscribersRef,
@@ -164,6 +164,7 @@ export const createAgentSessionActions = ({
     attachSessionListener,
     ensureRuntime,
     loadRepoPromptOverrides,
+    ...(activeWorkspaceRef ? { activeWorkspaceRef } : {}),
   });
 
   const sendAgentMessage = async (
@@ -264,13 +265,13 @@ export const createAgentSessionActions = ({
     repo: {
       activeWorkspace,
       repoEpochRef,
-      previousRepoRef,
-      ...(activeRepoRef ? { activeRepoRef } : {}),
+      currentWorkspaceRepoPathRef,
+      ...(activeWorkspaceRef ? { activeWorkspaceRef } : {}),
     },
     session: {
       setSessionsById,
       sessionsRef,
-      inFlightStartsByRepoTaskRef,
+      inFlightStartsByWorkspaceTaskRef,
       loadAgentSessions,
       persistSessionRecord,
       attachSessionListener,
@@ -377,14 +378,14 @@ export const createAgentSessionActions = ({
       );
     }
 
-    if (activeRepo) {
+    if (workspaceRepoPath) {
       await Promise.all([
         invalidateSessionStopQueries?.({
-          repoPath: activeRepo,
+          repoPath: workspaceRepoPath,
           taskId: session.taskId,
           ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
         }),
-        refreshTaskData(activeRepo),
+        refreshTaskData(workspaceRepoPath),
         loadAgentSessions(session.taskId),
       ]);
     }

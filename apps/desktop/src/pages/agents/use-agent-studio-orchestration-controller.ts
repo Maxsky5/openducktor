@@ -51,7 +51,6 @@ type AgentStudioOrchestrationActionsContext = {
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 type UseAgentStudioOrchestrationControllerArgs = {
-  activeRepo: string | null;
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   selection: AgentStudioOrchestrationSelectionContext;
@@ -206,7 +205,6 @@ export const buildAgentStudioPageModelsArgs = ({
 };
 
 export function useAgentStudioOrchestrationController({
-  activeRepo,
   activeWorkspace,
   branches,
   selection,
@@ -252,10 +250,10 @@ export function useAgentStudioOrchestrationController({
     activeWorkspace,
   });
   const { showThinkingMessages, chatSettingsLoadError, retryChatSettingsLoad } =
-    useAgentStudioChatSettings({ activeRepo });
+    useAgentStudioChatSettings({ activeWorkspace });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
-    activeRepo,
+    activeWorkspace,
     taskId: viewTaskId,
     activeSession: viewActiveSession,
     selectedTask: viewSelectedTask,
@@ -283,7 +281,7 @@ export function useAgentStudioOrchestrationController({
     handleSelectModel,
     handleSelectVariant,
   } = useAgentStudioModelSelection({
-    activeRepo,
+    activeWorkspace,
     activeSession: viewActiveSession,
     role: viewRole,
     repoSettings,

@@ -135,7 +135,6 @@ const createHookHarness = (
     isSwitchingBranch: false,
     branchSyncDegraded: false,
     workspaces: workspaceRecords,
-    activeRepo: "/repo",
     activeWorkspace: workspaceRecords[0] ?? null,
     branches: EMPTY_BRANCHES,
     activeBranch: null,
@@ -298,7 +297,7 @@ describe("useSettingsModalController", () => {
     loadRepoRuntimeCatalog.mockClear();
 
     await harness.run((state) => {
-      state.setSelectedRepoPath("repo-two");
+      state.setSelectedWorkspaceId("repo-two");
     });
     await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
 
@@ -357,7 +356,7 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().selectedRepoEffectiveWorktreeBasePath).toBe(
         "/Users/dev/.openducktor/worktrees/repo",
       );
-      expect(harness.getLatest().selectedRepoWorkspace?.configuredWorktreeBasePath).toBeNull();
+      expect(harness.getLatest().selectedWorkspace?.configuredWorktreeBasePath).toBeNull();
     } finally {
       await harness.unmount();
     }

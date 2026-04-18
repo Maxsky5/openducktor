@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -11,11 +12,17 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioTaskHydration>[0];
 
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioTaskHydration, initialProps);
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: "/repo-a",
+  activeWorkspace: createActiveWorkspace("/repo-a"),
   activeTaskId: "task-1",
   activeSession: null,
   agentStudioReadinessState: "ready",

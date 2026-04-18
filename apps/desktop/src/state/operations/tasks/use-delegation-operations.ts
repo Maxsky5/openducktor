@@ -36,36 +36,36 @@ export function useDelegationOperations({
     [activeWorkspace, refreshTaskData],
   );
 
-  const activeRepo = activeWorkspace?.repoPath ?? null;
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
 
   const delegateRespond = useCallback(
     async (runId: string, input: BuildRespondInput) => {
       await host.buildRespond(runId, input);
-      if (activeRepo) {
-        await refreshTaskData(activeRepo);
+      if (workspaceRepoPath) {
+        await refreshTaskData(workspaceRepoPath);
       }
     },
-    [activeRepo, refreshTaskData],
+    [workspaceRepoPath, refreshTaskData],
   );
 
   const delegateStop = useCallback(
     async (runId: string) => {
       await host.buildStop(runId);
-      if (activeRepo) {
-        await refreshTaskData(activeRepo);
+      if (workspaceRepoPath) {
+        await refreshTaskData(workspaceRepoPath);
       }
     },
-    [activeRepo, refreshTaskData],
+    [workspaceRepoPath, refreshTaskData],
   );
 
   const delegateCleanup = useCallback(
     async (runId: string, mode: "success" | "failure") => {
       await host.buildCleanup(runId, mode);
-      if (activeRepo) {
-        await refreshTaskData(activeRepo);
+      if (workspaceRepoPath) {
+        await refreshTaskData(workspaceRepoPath);
       }
     },
-    [activeRepo, refreshTaskData],
+    [workspaceRepoPath, refreshTaskData],
   );
 
   return {

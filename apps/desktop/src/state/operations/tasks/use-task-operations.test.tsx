@@ -13,6 +13,7 @@ import {
   createBeadsCheckFixture as createSharedBeadsCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
 import { kanbanTaskListQueryOptions, taskQueryKeys } from "../../queries/tasks";
@@ -107,10 +108,25 @@ const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck 
   createSharedBeadsCheckFixture({}, overrides);
 
 type HookArgs = Parameters<typeof useTaskOperations>[0];
+type LegacyHookArgs = Omit<HookArgs, "activeWorkspace"> & {
+  activeWorkspace?: ActiveWorkspace | null;
+  activeRepo?: string | null;
+};
 
-const createHookHarness = (initialArgs: HookArgs) => {
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+const normalizeHookArgs = ({ activeWorkspace, activeRepo, ...rest }: LegacyHookArgs): HookArgs => ({
+  ...rest,
+  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+});
+
+const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let latest: ReturnType<typeof useTaskOperations> | null = null;
-  let currentArgs = initialArgs;
+  let currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useTaskOperations(args);
@@ -127,8 +143,8 @@ const createHookHarness = (initialArgs: HookArgs) => {
     mount: async () => {
       await sharedHarness.mount();
     },
-    updateArgs: async (nextArgs: HookArgs) => {
-      currentArgs = nextArgs;
+    updateArgs: async (nextArgs: LegacyHookArgs) => {
+      currentArgs = normalizeHookArgs(nextArgs);
       await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: ReturnType<typeof useTaskOperations>) => Promise<void> | void) => {
@@ -169,23 +185,24 @@ type ScheduledKanbanRefetchScenario = {
   expectedVisibleTaskId: string | undefined;
 };
 
-const createTaskAndKanbanHarness = (initialArgs: HookArgs, doneVisibleDays = 1) => {
+const createTaskAndKanbanHarness = (initialArgs: LegacyHookArgs, doneVisibleDays = 1) => {
   let latest: TaskAndKanbanHarnessState | null = null;
-  const currentArgs = initialArgs;
+  const currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
     const operations = useTaskOperations(args);
+    const activeRepoPath = args.activeWorkspace?.repoPath ?? null;
     const kanbanTaskListQuery = useQuery({
-      ...kanbanTaskListQueryOptions(args.activeRepo ?? "__disabled__", doneVisibleDays),
-      enabled: args.activeRepo !== null,
+      ...kanbanTaskListQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays),
+      enabled: activeRepoPath !== null,
     });
 
     latest = {
       operations,
-      kanbanTasks: args.activeRepo ? (kanbanTaskListQuery.data ?? []) : [],
-      isPendingKanban: args.activeRepo !== null && kanbanTaskListQuery.isPending,
+      kanbanTasks: activeRepoPath ? (kanbanTaskListQuery.data ?? []) : [],
+      isPendingKanban: activeRepoPath !== null && kanbanTaskListQuery.isPending,
       isFetchingKanban:
-        args.activeRepo !== null &&
+        activeRepoPath !== null &&
         (kanbanTaskListQuery.isPending || kanbanTaskListQuery.isFetching),
     };
 
@@ -300,7 +317,7 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
 
     const latest = harness.getLatest();
     const foregroundLoading = isKanbanForegroundLoading({
-      hasActiveRepo: true,
+      hasActiveWorkspace: true,
       isForegroundLoadingTasks: latest.operations.isForegroundLoadingTasks,
       isSettingsPending: false,
       doneVisibleDays: 1,
@@ -618,7 +635,7 @@ describe("use-task-operations", () => {
       Harness,
       {
         args: {
-          activeRepo: "/repo",
+          activeWorkspace: createActiveWorkspace("/repo"),
           refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
@@ -1424,7 +1441,7 @@ describe("use-task-operations", () => {
       Harness,
       {
         args: {
-          activeRepo: "/repo",
+          activeWorkspace: createActiveWorkspace("/repo"),
           refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
@@ -1524,7 +1541,7 @@ describe("use-task-operations", () => {
 
     const Harness = ({ args }: { args: HookArgs }) => {
       const operations = useTaskOperations(args);
-      const { planDoc } = useTaskDocuments("A", true, args.activeRepo ?? "");
+      const { planDoc } = useTaskDocuments("A", true, args.activeWorkspace?.repoPath ?? "");
       latest = {
         operations,
         planMarkdown: planDoc.markdown,
@@ -1541,7 +1558,7 @@ describe("use-task-operations", () => {
       Harness,
       {
         args: {
-          activeRepo: "/repo",
+          activeWorkspace: createActiveWorkspace("/repo"),
           refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },
@@ -1635,7 +1652,7 @@ describe("use-task-operations", () => {
       Harness,
       {
         args: {
-          activeRepo: "/repo",
+          activeWorkspace: createActiveWorkspace("/repo"),
           refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
         },
       },

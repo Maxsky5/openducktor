@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { GitConflict } from "@/features/agent-studio-git";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createDeferred,
@@ -41,6 +42,16 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   statusHash: "0123456789abcdef",
   diffHash: "fedcba9876543210",
   refreshDiffData: async () => {},
+  ...overrides,
+});
+
+const createDetectedConflict = (overrides: Partial<GitConflict> = {}): GitConflict => ({
+  operation: "rebase",
+  currentBranch: "feature/task-10",
+  targetBranch: "origin/main",
+  conflictedFiles: ["AGENTS.md"],
+  output: "interactive rebase in progress; onto origin/main",
+  workingDir: "/tmp/worktree/task-10",
   ...overrides,
 });
 
@@ -689,6 +700,34 @@ describe("useAgentStudioGitActions", () => {
           "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.",
         workingDir: "/tmp/worktree/task-10",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses rehydrated conflict context after reload when branch is unavailable", async () => {
+    const onResolveGitConflict = mock(async () => true);
+    const detectedConflict = createDetectedConflict();
+    const harness = createHookHarness(
+      createBaseArgs({
+        branch: null,
+        workingDir: "/tmp/worktree/task-10",
+        detectedConflict,
+        detectedConflictedFiles: ["AGENTS.md"],
+        onResolveGitConflict,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().gitConflict).toEqual(detectedConflict);
+
+      await harness.run(async (state) => {
+        await state.askBuilderToResolveGitConflict();
+      });
+
+      expect(onResolveGitConflict).toHaveBeenCalledWith(detectedConflict);
     } finally {
       await harness.unmount();
     }

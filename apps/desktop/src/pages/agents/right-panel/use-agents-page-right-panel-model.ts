@@ -13,6 +13,7 @@ import {
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
 import { buildContinuationTargetQueryOptions } from "@/state/queries/build-runtime";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
   AgentStudioOrchestrationSelectionContext,
@@ -21,7 +22,7 @@ import type {
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 
 export type UseAgentsPageRightPanelModelArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
@@ -67,7 +68,7 @@ function firstNonRepoWorktreePath(repoPath: string, paths: Array<string | null>)
 
 export const resolveAgentStudioGitPanelOpenInTarget = ({
   contextMode,
-  activeRepo,
+  activeWorkspace,
   worktreePath,
   runWorktreePath,
   sessionWorkingDirectory,
@@ -75,14 +76,15 @@ export const resolveAgentStudioGitPanelOpenInTarget = ({
   isContinuationTargetResolving,
 }: {
   contextMode: "repository" | "worktree";
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   worktreePath: string | null;
   runWorktreePath: string | null;
   sessionWorkingDirectory: string | null;
   continuationTargetWorkingDirectory: string | null;
   isContinuationTargetResolving: boolean;
 }): { path: string | null; disabledReason: string | null } => {
-  const repoPath = activeRepo ?? "";
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const repoPath = workspaceRepoPath ?? "";
   const resolvedContextWorkingDirectory = firstNonRepoWorktreePath(repoPath, [
     worktreePath,
     runWorktreePath,
@@ -125,7 +127,7 @@ export const resolveAgentStudioGitPanelOpenInTarget = ({
 };
 
 export function useAgentsPageRightPanelModel({
-  activeRepo,
+  activeWorkspace,
   branches = [],
   activeBranch,
   viewRole,
@@ -144,12 +146,13 @@ export function useAgentsPageRightPanelModel({
   onDetectPullRequest,
   onResolveGitConflict,
 }: UseAgentsPageRightPanelModelArgs) {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const sessionRole = session.role;
   const sessionStatus = session.status;
 
   const { diffData, devServerModel, gitPanelContextMode, resolvedGitPanelBranch } =
     useAgentStudioBuildToolsReadModel({
-      activeRepo,
+      workspaceRepoPath,
       activeBranch,
       viewRole,
       session,
@@ -161,7 +164,7 @@ export function useAgentsPageRightPanelModel({
       runCompletionRecoverySignal,
     });
 
-  const buildContinuationTargetRepoPath = activeRepo ?? "";
+  const buildContinuationTargetRepoPath = workspaceRepoPath ?? "";
   const buildContinuationTargetTaskId = resolveBuildContinuationTargetTaskId({
     viewTaskId,
     viewSelectedTask,
@@ -188,10 +191,11 @@ export function useAgentsPageRightPanelModel({
     enabled: shouldResolveBuildContinuationTarget,
   });
   const gitActions = useAgentStudioGitActions({
-    repoPath: activeRepo,
+    repoPath: workspaceRepoPath,
     workingDir: diffData.worktreePath,
     branch: resolvedGitPanelBranch,
     targetBranch: diffData.targetBranch,
+    detectedConflict: diffData.gitConflict ?? null,
     hashVersion: diffData.hashVersion,
     statusHash: diffData.statusHash,
     diffHash: diffData.diffHash,
@@ -230,7 +234,7 @@ export function useAgentsPageRightPanelModel({
 
     const openInTarget = resolveAgentStudioGitPanelOpenInTarget({
       contextMode: gitPanelContextMode,
-      activeRepo,
+      activeWorkspace,
       worktreePath: diffData.worktreePath,
       runWorktreePath: matchingRunWorktreePath,
       sessionWorkingDirectory: session.workingDirectory,
@@ -285,8 +289,8 @@ export function useAgentsPageRightPanelModel({
         : {}),
     };
   }, [
+    activeWorkspace,
     branches,
-    activeRepo,
     diffData,
     gitActions,
     gitPanelContextMode,

@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { createTaskCardFixture } from "../agent-studio-test-utils";
 import {
   resolveAgentStudioGitPanelOpenInTarget,
   resolveBuildContinuationTargetTaskId,
 } from "./use-agents-page-right-panel-model";
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 describe("resolveBuildContinuationTargetTaskId", () => {
   test("uses the stable tab task id while selected task hydration is still pending", () => {
@@ -30,7 +37,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "repository",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: null,
@@ -47,7 +54,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: "/worktrees/task-24",
         runWorktreePath: null,
         sessionWorkingDirectory: null,
@@ -64,7 +71,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "repository",
-        activeRepo: "  /repo with padded name  ",
+        activeWorkspace: createActiveWorkspace("  /repo with padded name  "),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: null,
@@ -81,7 +88,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: null,
@@ -98,7 +105,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: "/repo/.worktrees/task-24",
@@ -115,7 +122,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: "/repo",
@@ -132,7 +139,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: "/repo/.worktrees/older-task-23",
@@ -149,7 +156,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: null,
         sessionWorkingDirectory: null,
@@ -166,7 +173,7 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
-        activeRepo: "/repo",
+        activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
         runWorktreePath: "/repo/.worktrees/task-24",
         sessionWorkingDirectory: "/repo",

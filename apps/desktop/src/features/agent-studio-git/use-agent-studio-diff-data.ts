@@ -108,6 +108,7 @@ export function useAgentStudioDiffData({
       worktreePath,
       targetBranch,
       diffScope,
+      gitConflict: activeScopeState.gitConflict ?? null,
       scopeStatesByScope: state.byScope,
       loadedScopesByScope: state.loadedByScope,
       commitsAheadBehind: activeScopeState.commitsAheadBehind,

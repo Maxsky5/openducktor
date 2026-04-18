@@ -1,6 +1,7 @@
 import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskDocumentPayload } from "../../../types/task-documents";
 import { resolveLatestDocumentPayload } from "../../queries/document-utils";
 import {
@@ -14,7 +15,7 @@ import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
 type UseSpecOperationsArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
 };
 
 type UseSpecOperationsResult = {
@@ -38,31 +39,34 @@ const setLatestDocumentPayload = (
   });
 };
 
-export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
+export function useSpecOperations({
+  activeWorkspace,
+}: UseSpecOperationsArgs): UseSpecOperationsResult {
   const queryClient = useQueryClient();
+  const activeRepoPath = activeWorkspace?.repoPath ?? null;
 
   const loadSpecDocument = useCallback(
     async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      const repo = requireActiveRepo(activeRepo);
+      const repo = requireActiveRepo(activeRepoPath);
       return loadSpecDocumentFromQuery(queryClient, repo, taskId);
     },
-    [activeRepo, queryClient],
+    [activeRepoPath, queryClient],
   );
 
   const loadPlanDocument = useCallback(
     async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      const repo = requireActiveRepo(activeRepo);
+      const repo = requireActiveRepo(activeRepoPath);
       return loadPlanDocumentFromQuery(queryClient, repo, taskId);
     },
-    [activeRepo, queryClient],
+    [activeRepoPath, queryClient],
   );
 
   const loadQaReportDocument = useCallback(
     async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      const repo = requireActiveRepo(activeRepo);
+      const repo = requireActiveRepo(activeRepoPath);
       return loadQaReportDocumentFromQuery(queryClient, repo, taskId);
     },
-    [activeRepo, queryClient],
+    [activeRepoPath, queryClient],
   );
 
   const loadSpec = useCallback(
@@ -75,7 +79,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
 
   const saveSpec = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      const repo = requireActiveRepo(activeRepo);
+      const repo = requireActiveRepo(activeRepoPath);
 
       const validation = validateSpecMarkdown(markdown);
       if (!validation.valid) {
@@ -96,12 +100,12 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       });
       return saved;
     },
-    [activeRepo, queryClient],
+    [activeRepoPath, queryClient],
   );
 
   const saveSpecDocument = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      const repo = requireActiveRepo(activeRepo);
+      const repo = requireActiveRepo(activeRepoPath);
       const saved = await host.saveSpecDocument({
         repoPath: repo,
         taskId,
@@ -120,12 +124,12 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       });
       return saved;
     },
-    [activeRepo, queryClient],
+    [activeRepoPath, queryClient],
   );
 
   const savePlanDocument = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      const repo = requireActiveRepo(activeRepo);
+      const repo = requireActiveRepo(activeRepoPath);
       const saved = await host.savePlanDocument({
         repoPath: repo,
         taskId,
@@ -144,7 +148,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
       });
       return saved;
     },
-    [activeRepo, queryClient],
+    [activeRepoPath, queryClient],
   );
 
   return {

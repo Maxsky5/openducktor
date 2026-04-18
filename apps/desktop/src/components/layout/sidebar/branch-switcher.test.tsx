@@ -66,9 +66,17 @@ describe("BranchSwitcher", () => {
         throw new Error("useTasksState is not used in this test");
       },
       useWorkspaceState: (() => ({
-        activeRepo: "/repo",
         workspaces: [],
-        activeWorkspace: null,
+        activeWorkspace: {
+          workspaceId: "workspace-repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: null,
+          defaultWorktreeBasePath: "/tmp/default-worktrees",
+          effectiveWorktreeBasePath: "/tmp/default-worktrees",
+        },
         addWorkspace: async () => {},
         selectWorkspace: async () => {},
         refreshBranches: async () => {},

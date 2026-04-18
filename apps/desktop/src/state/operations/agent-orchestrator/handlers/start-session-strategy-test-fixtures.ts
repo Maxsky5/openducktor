@@ -31,7 +31,7 @@ export const createSessionDependenciesFixture = (
 ): SessionDependencies => ({
   setSessionsById: () => {},
   sessionsRef: { current: {} },
-  inFlightStartsByRepoTaskRef: { current: new Map() },
+  inFlightStartsByWorkspaceTaskRef: { current: new Map() },
   loadAgentSessions: async () => {},
   persistSessionRecord: async () => {},
   attachSessionListener: () => {},

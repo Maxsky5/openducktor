@@ -10,7 +10,7 @@ import {
   normalizePromptOverridesForSave,
   normalizeRepoConfigForSave,
   normalizeSnapshotForSave,
-  pickInitialRepoPath,
+  pickInitialWorkspaceId,
   resolveInheritedPromptPreview,
 } from "./settings-modal-normalization";
 
@@ -414,10 +414,10 @@ describe("settings-modal-normalization", () => {
       globalPromptOverrides: {},
     };
 
-    expect(pickInitialRepoPath(snapshot, "/repo-b")).toBe("repo-b");
-    expect(pickInitialRepoPath(snapshot, "/missing")).toBe("repo-a");
+    expect(pickInitialWorkspaceId(snapshot, "/repo-b")).toBe("repo-b");
+    expect(pickInitialWorkspaceId(snapshot, "/missing")).toBe("repo-a");
     expect(
-      pickInitialRepoPath(
+      pickInitialWorkspaceId(
         {
           theme: "light" as const,
           git: {

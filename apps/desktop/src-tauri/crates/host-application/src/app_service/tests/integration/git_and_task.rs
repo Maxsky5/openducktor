@@ -895,6 +895,7 @@ fn git_port_get_worktree_status_returns_configured_payload_from_fake_port() -> R
             ahead: 4,
             behind: 5,
         },
+        git_conflict: None,
     };
 
     {

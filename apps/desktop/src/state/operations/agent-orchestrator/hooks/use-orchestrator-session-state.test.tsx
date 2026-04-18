@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -76,6 +77,12 @@ const createSessionFixture = (): AgentSessionState => ({
   isLoadingModelCatalog: false,
 });
 
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
 type HookArgs = Parameters<typeof useOrchestratorSessionState>[0];
 
 const createHookHarness = (initialArgs: HookArgs) => {
@@ -130,7 +137,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
   test("clears sessions and drains all unsubscribers on repo change", async () => {
     const harness = createHookHarness({
-      activeRepo: "/tmp/repo-a",
+      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
       tasks: [taskFixture],
       runs: [runFixture],
     });
@@ -154,7 +161,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       await harness.update({
-        activeRepo: "/tmp/repo-b",
+        activeWorkspace: createActiveWorkspace("/tmp/repo-b"),
         tasks: [taskFixture],
         runs: [runFixture],
       });
@@ -180,7 +187,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     };
 
     const harness = createHookHarness({
-      activeRepo: "/tmp/repo-a",
+      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
       tasks: [taskFixture],
       runs: [runFixture],
     });
@@ -192,7 +199,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       expect(harness.getLatest().refBridges.runsRef.current).toEqual([runFixture]);
 
       await harness.update({
-        activeRepo: "/tmp/repo-a",
+        activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
         tasks: [nextTask],
         runs: [nextRun],
       });

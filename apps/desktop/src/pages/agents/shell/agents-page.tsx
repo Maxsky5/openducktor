@@ -7,7 +7,7 @@ export function AgentsPage(): ReactElement {
 
   return (
     <AgentsPageLayout
-      activeRepo={shell.activeRepo}
+      activeWorkspace={shell.activeWorkspace}
       navigationPersistenceError={shell.navigationPersistenceError}
       chatSettingsLoadError={shell.chatSettingsLoadError}
       activeTabValue={shell.activeTabValue}

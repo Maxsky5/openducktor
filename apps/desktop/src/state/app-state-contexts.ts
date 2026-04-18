@@ -15,6 +15,7 @@ import type {
 import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
+  ActiveWorkspace,
   AgentOperationsContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
@@ -32,9 +33,9 @@ export const SpecStateContext = createContext<SpecStateContextValue | null>(null
 export const AgentSessionsContext = createContext<AgentSessionsStore | null>(null);
 export const AgentOperationsContext = createContext<AgentOperationsContextValue | null>(null);
 
-export type ActiveRepoContextValue = {
-  activeRepo: string | null;
-  setActiveRepo: Dispatch<SetStateAction<string | null>>;
+export type ActiveWorkspaceContextValue = {
+  activeWorkspace: ActiveWorkspace | null;
+  setActiveWorkspace: Dispatch<SetStateAction<ActiveWorkspace | null>>;
 };
 
 export type RuntimeDefinitionsContextValue = {
@@ -106,7 +107,7 @@ export type DelegationEventsContextValue = {
   setRunCompletionSignal: (runId: string, eventType: RunEvent["type"]) => void;
 };
 
-export const ActiveRepoContext = createContext<ActiveRepoContextValue | null>(null);
+export const ActiveWorkspaceContext = createContext<ActiveWorkspaceContextValue | null>(null);
 export const RuntimeDefinitionsContext = createContext<RuntimeDefinitionsContextValue | null>(null);
 export const ChecksOperationsContext = createContext<ChecksOperationsContextValue | null>(null);
 export const TaskDataContext = createContext<TaskDataContextValue | null>(null);
@@ -124,8 +125,8 @@ export const useRequiredContext = <T>(context: Context<T | null>, name: string):
   return value;
 };
 
-export const useActiveRepoContext = (): ActiveRepoContextValue =>
-  useRequiredContext(ActiveRepoContext, "useActiveRepoContext");
+export const useActiveWorkspaceContext = (): ActiveWorkspaceContextValue =>
+  useRequiredContext(ActiveWorkspaceContext, "useActiveWorkspaceContext");
 
 export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
   useRequiredContext(ChecksOperationsContext, "useChecksOperationsContext");

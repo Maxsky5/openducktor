@@ -3,7 +3,7 @@ import { createElement, type ReactElement, type ReactNode } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { TasksStateContextValue } from "@/types/state-slices";
+import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -99,7 +99,7 @@ type RightPanelState = {
 };
 
 type AgentsPageShellModelState = {
-  activeRepo: string | null;
+  activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
@@ -114,7 +114,16 @@ type AgentsPageShellModelState = {
 };
 
 let workspaceState = {
-  activeRepo: "/repo",
+  activeWorkspace: {
+    workspaceId: "workspace-repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/tmp/default-worktrees",
+    effectiveWorktreeBasePath: "/tmp/default-worktrees",
+  },
   activeBranch: "main",
   branches: [],
 };
@@ -433,7 +442,16 @@ beforeEach(async () => {
   registerModuleMocks();
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
   workspaceState = {
-    activeRepo: "/repo",
+    activeWorkspace: {
+      workspaceId: "workspace-repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/tmp/default-worktrees",
+      effectiveWorktreeBasePath: "/tmp/default-worktrees",
+    },
     activeBranch: "main",
     branches: [],
   };
@@ -633,7 +651,7 @@ describe("useAgentsPageShellModel", () => {
       await harness.mount();
 
       const state = harness.getLatest();
-      expect(state.activeRepo).toBe("/repo");
+      expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.navigationPersistenceError).toBe(querySyncState.navigationPersistenceError);
       expect(state.chatSettingsLoadError).toBe(orchestrationState.chatSettingsLoadError);
       expect(state.onRetryNavigationPersistence).toBe(retryNavigationPersistence);
@@ -707,7 +725,7 @@ describe("useAgentsPageShellModel", () => {
       await harness.mount();
 
       const state = harness.getLatest();
-      expect(state.activeRepo).toBe("/repo");
+      expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.hasSelectedTask).toBe(false);
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.taskDetailsSheet).not.toBeNull();

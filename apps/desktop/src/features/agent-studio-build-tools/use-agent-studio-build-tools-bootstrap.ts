@@ -18,7 +18,7 @@ export type BuildToolsSessionDescriptor = {
 };
 
 type UseAgentStudioBuildToolsBootstrapArgs = {
-  activeRepo: string | null;
+  workspaceRepoPath: string | null;
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
   session: BuildToolsSessionDescriptor;
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
@@ -37,7 +37,7 @@ type BuildToolsBootstrapContext = {
 };
 
 export function useAgentStudioBuildToolsBootstrap({
-  activeRepo,
+  workspaceRepoPath,
   viewRole,
   session,
   viewSelectedTask,
@@ -67,16 +67,16 @@ export function useAgentStudioBuildToolsBootstrap({
     const isBuildSessionContextStable = sessionRole !== "build" || !isViewSessionHistoryHydrating;
 
     return {
-      isEnabled: Boolean(activeRepo) && isBuildSessionContextStable,
-      repoPath: isBuildSessionContextStable ? activeRepo : null,
+      isEnabled: Boolean(workspaceRepoPath) && isBuildSessionContextStable,
+      repoPath: isBuildSessionContextStable ? workspaceRepoPath : null,
       sessionWorkingDirectory: isBuildSessionContextStable ? sessionWorkingDirectory : null,
       sessionRunId: isBuildSessionContextStable ? sessionRunId : null,
       shouldEnableEventPolling:
-        Boolean(activeRepo) && isBuildSessionContextStable && hasActiveSession,
+        Boolean(workspaceRepoPath) && isBuildSessionContextStable && hasActiveSession,
       hasSelectedTask: Boolean(viewSelectedTask),
     };
   }, [
-    activeRepo,
+    workspaceRepoPath,
     hasActiveSession,
     isPanelOpen,
     isViewSessionHistoryHydrating,

@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    GitAheadBehind, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
-    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitAheadBehind, GitConflict, GitConflictOperation, GitCurrentBranch, GitDiffScope, GitFileDiff,
+    GitFileStatus, GitFileStatusCounts, GitUpstreamAheadBehind, GitWorktreeStatusData,
+    GitWorktreeStatusSummaryData,
 };
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::Path;
 
 use super::util::{combine_output, normalize_non_empty};
@@ -12,6 +14,29 @@ use super::GitCliPort;
 const UPSTREAM_TARGET_BRANCH: &str = "@{upstream}";
 const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const EMPTY_TREE_SHA256: &str = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+const REBASE_CONFLICT_OUTPUT_UNAVAILABLE: &str =
+    "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
+const REBASE_CONFLICT_TARGET_UNAVAILABLE: &str = "current rebase target";
+
+fn has_unmerged_files(file_statuses: &[GitFileStatus]) -> bool {
+    file_statuses
+        .iter()
+        .any(|status| status.status == "unmerged")
+}
+
+fn normalize_head_name(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(
+        trimmed
+            .strip_prefix("refs/heads/")
+            .unwrap_or(trimmed)
+            .to_string(),
+    )
+}
 
 fn resolve_effective_target_branch(
     requested_target_branch: &str,
@@ -40,6 +65,100 @@ fn commits_against_target_or_default(
 }
 
 impl GitCliPort {
+    fn resolve_git_path_unchecked(&self, repo_path: &Path, suffix: &str) -> Result<String> {
+        let output = self.run_git(
+            repo_path,
+            &["rev-parse", "--path-format=absolute", "--git-path", suffix],
+        )?;
+        output
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .map(|line| line.to_string())
+            .ok_or_else(|| anyhow!("git rev-parse --git-path {suffix} returned no path"))
+    }
+
+    fn read_git_path_contents_if_exists(
+        &self,
+        repo_path: &Path,
+        suffix: &str,
+    ) -> Result<Option<String>> {
+        let path = self.resolve_git_path_unchecked(repo_path, suffix)?;
+        if !Path::new(path.as_str()).exists() {
+            return Ok(None);
+        }
+
+        let contents = fs::read_to_string(path.as_str())
+            .with_context(|| format!("Failed to read git metadata file at {path}"))?;
+        let trimmed = contents.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(trimmed.to_string()))
+    }
+
+    fn has_git_path(&self, repo_path: &Path, suffix: &str) -> Result<bool> {
+        let path = self.resolve_git_path_unchecked(repo_path, suffix)?;
+        Ok(Path::new(path.as_str()).exists())
+    }
+
+    fn load_rebase_conflict_context(
+        &self,
+        repo_path: &Path,
+        current_branch: &GitCurrentBranch,
+        fallback_target_branch: Option<&str>,
+        file_statuses: &[GitFileStatus],
+    ) -> Result<Option<GitConflict>> {
+        if !has_unmerged_files(file_statuses) {
+            return Ok(None);
+        }
+
+        let is_rebase_in_progress = self.has_git_path(repo_path, "rebase-merge")?
+            || self.has_git_path(repo_path, "rebase-apply")?;
+        if !is_rebase_in_progress {
+            return Ok(None);
+        }
+
+        let merge_head_name =
+            self.read_git_path_contents_if_exists(repo_path, "rebase-merge/head-name")?;
+        let apply_head_name =
+            self.read_git_path_contents_if_exists(repo_path, "rebase-apply/head-name")?;
+        let current_branch_name = current_branch
+            .name
+            .clone()
+            .or_else(|| merge_head_name.as_deref().and_then(normalize_head_name))
+            .or_else(|| apply_head_name.as_deref().and_then(normalize_head_name));
+
+        let target_branch = fallback_target_branch
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| REBASE_CONFLICT_TARGET_UNAVAILABLE.to_string());
+
+        let conflicted_files = file_statuses
+            .iter()
+            .filter(|status| status.status == "unmerged")
+            .map(|status| status.path.clone())
+            .collect::<Vec<_>>();
+        let conflict_output = self
+            .run_git_allow_failure(repo_path, &["status", "--untracked-files=no"])
+            .map(|(_, stdout, stderr)| combine_output(stdout, stderr))
+            .unwrap_or_else(|_| REBASE_CONFLICT_OUTPUT_UNAVAILABLE.to_string());
+        let output = if conflict_output.trim().is_empty() {
+            REBASE_CONFLICT_OUTPUT_UNAVAILABLE.to_string()
+        } else {
+            conflict_output
+        };
+
+        Ok(Some(GitConflict {
+            operation: GitConflictOperation::Rebase,
+            current_branch: current_branch_name,
+            target_branch,
+            conflicted_files,
+            output,
+            working_dir: None,
+        }))
+    }
+
     pub(super) fn get_status_impl(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>> {
         self.ensure_repository(repo_path)?;
         self.get_status_unchecked(repo_path)
@@ -142,6 +261,12 @@ impl GitCliPort {
             None => Vec::new(),
         };
         let target_ahead_behind = target_ahead_behind?;
+        let git_conflict = self.load_rebase_conflict_context(
+            repo_path,
+            &current_branch,
+            effective_target_branch.as_deref(),
+            file_statuses.as_slice(),
+        )?;
 
         let upstream_ahead_behind = match upstream_target_result {
             Ok(Some(upstream_target)) => {
@@ -169,6 +294,7 @@ impl GitCliPort {
             file_diffs,
             target_ahead_behind,
             upstream_ahead_behind,
+            git_conflict,
         })
     }
 
@@ -217,6 +343,12 @@ impl GitCliPort {
         let file_statuses = file_statuses?;
         let file_status_counts = build_file_status_counts(file_statuses.as_slice())?;
         let target_ahead_behind = target_ahead_behind?;
+        let git_conflict = self.load_rebase_conflict_context(
+            repo_path,
+            &current_branch,
+            effective_target_branch.as_deref(),
+            file_statuses.as_slice(),
+        )?;
 
         let upstream_ahead_behind = match upstream_target_result {
             Ok(Some(upstream_target)) => {
@@ -244,6 +376,7 @@ impl GitCliPort {
             file_status_counts,
             target_ahead_behind,
             upstream_ahead_behind,
+            git_conflict,
         })
     }
 

@@ -19,6 +19,7 @@ import {
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
 import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 type TaskDetailsSheetViewModel = {
   taskId: string | null;
@@ -63,7 +64,7 @@ type TaskDetailsSheetViewModel = {
 };
 
 type UseTaskDetailsSheetViewModelOptions = {
-  activeRepo?: string | null;
+  activeWorkspace?: ActiveWorkspace | null;
   task: TaskDetailsSheetProps["task"];
   allTasks: TaskDetailsSheetProps["allTasks"];
   open: TaskDetailsSheetProps["open"];
@@ -91,7 +92,7 @@ type UseTaskDetailsSheetViewModelOptions = {
 };
 
 export function useTaskDetailsSheetViewModel({
-  activeRepo = null,
+  activeWorkspace = null,
   task,
   allTasks,
   open,
@@ -113,11 +114,12 @@ export function useTaskDetailsSheetViewModel({
   taskDocumentsHook = useTaskDocuments,
   taskDeleteImpactHook = useTaskDeleteImpact,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskId = task?.id ?? null;
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = taskDocumentsHook(
     taskId,
     open,
-    activeRepo ?? "",
+    workspaceRepoPath ?? "",
   );
 
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);

@@ -8,6 +8,7 @@ import {
   type BeadsCheckFixtureOverrides,
   createBeadsCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
@@ -43,6 +44,33 @@ const createDeferred = <T,>() => {
 
 const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
   createBeadsCheckFixture({}, overrides);
+
+const createActiveWorkspace = (
+  repoPath: string,
+  workspaceId = repoPath.replace(/^\//, "").replaceAll("/", "-"),
+): ActiveWorkspace => ({
+  workspaceId,
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+type UseAppLifecycleArgs = Parameters<
+  Awaited<typeof import("./use-app-lifecycle")>["useAppLifecycle"]
+>[0];
+
+type LegacyUseAppLifecycleArgs = Omit<UseAppLifecycleArgs, "activeWorkspace"> & {
+  activeWorkspace?: ActiveWorkspace | null;
+  activeRepo?: string | null;
+};
+
+const normalizeHookArgs = ({
+  activeWorkspace,
+  activeRepo,
+  ...rest
+}: LegacyUseAppLifecycleArgs): UseAppLifecycleArgs => ({
+  ...rest,
+  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+});
 beforeEach(() => {
   subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
     subscribedRunListener = listener;
@@ -142,13 +170,13 @@ afterEach(async () => {
 describe("useAppLifecycle", () => {
   test("refreshes active repo task data when a run completion event arrives", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string) => {});
     const setRunCompletionSignal = mock((_runId: string, _eventType) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -192,7 +220,7 @@ describe("useAppLifecycle", () => {
 
   test("cleans up a run-event subscription that resolves after unmount", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const deferred = createDeferred<() => void>();
     let cleanupCalls = 0;
@@ -202,7 +230,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -238,12 +266,12 @@ describe("useAppLifecycle", () => {
 
   test("refreshes active repo task data when an external task event arrives", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -286,7 +314,7 @@ describe("useAppLifecycle", () => {
 
   test("cleans up a task-event subscription that resolves after unmount", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const deferred = createDeferred<() => void>();
     let cleanupCalls = 0;
@@ -296,7 +324,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -332,12 +360,12 @@ describe("useAppLifecycle", () => {
 
   test("ignores external task events for a different repo", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -380,12 +408,12 @@ describe("useAppLifecycle", () => {
 
   test("deduplicates replayed external task events by event id", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -436,7 +464,7 @@ describe("useAppLifecycle", () => {
 
   test("surfaces task refresh failures triggered by external task events", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, taskIdOrIds?: string | string[]) => {
       if (taskIdOrIds === "task-1") {
@@ -445,7 +473,7 @@ describe("useAppLifecycle", () => {
     });
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -490,12 +518,12 @@ describe("useAppLifecycle", () => {
 
   test("resyncs the active repo when the browser-live task stream reconnects", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -537,12 +565,12 @@ describe("useAppLifecycle", () => {
 
   test("surfaces browser-live task stream warnings and triggers a resync", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -587,12 +615,12 @@ describe("useAppLifecycle", () => {
 
   test("loads repo task and diagnostics checks when the active repo changes", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     let currentArgs!: HookArgs;
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -689,12 +717,12 @@ describe("useAppLifecycle", () => {
 
   test("refreshes the repo once for batched task update events", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -738,12 +766,12 @@ describe("useAppLifecycle", () => {
 
   test("does not resync when a replayed batched task update event is duplicated", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, _taskIdOrIds?: string | string[]) => {});
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -794,7 +822,7 @@ describe("useAppLifecycle", () => {
 
   test("surfaces batched task update refresh failures", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const refreshTaskData = mock(async (_repoPath: string, taskIdOrIds?: string | string[]) => {
       if (Array.isArray(taskIdOrIds) && taskIdOrIds.includes("task-1")) {
@@ -803,7 +831,7 @@ describe("useAppLifecycle", () => {
     });
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
     const harness = createSharedHookHarness(Harness, {
@@ -848,7 +876,7 @@ describe("useAppLifecycle", () => {
 
   test("does not block repo diagnostics load on branch refresh completion", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const taskLoadDeferred = createDeferred<void>();
     const runtimeRepoCheckDeferred = createDeferred<unknown>();
@@ -877,7 +905,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -914,7 +942,7 @@ describe("useAppLifecycle", () => {
 
   test("suppresses late repo-load toasts after the repository is deselected", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const taskDeferred = createDeferred<void>();
     const runtimeDeferred = createDeferred<unknown>();
@@ -943,7 +971,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -994,7 +1022,7 @@ describe("useAppLifecycle", () => {
 
   test("shows Beads preparation toasts when repository initialization is slow", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const beadsDeferred = createDeferred<BeadsCheck>();
     const taskDeferred = createDeferred<void>();
@@ -1014,7 +1042,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1058,7 +1086,7 @@ describe("useAppLifecycle", () => {
 
   test("refreshes Beads diagnostics after successful task initialization", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const branchesDeferred = createDeferred<void>();
     const refreshBeadsCheckForRepo = mock(
@@ -1103,7 +1131,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1132,7 +1160,7 @@ describe("useAppLifecycle", () => {
 
   test("does not force a second Beads refresh when the first check is already ready", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
@@ -1154,7 +1182,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1185,7 +1213,7 @@ describe("useAppLifecycle", () => {
 
   test("does not show Beads preparation toast when task loading is slow but Beads is already ready", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const taskDeferred = createDeferred<void>();
     const branchesDeferred = createDeferred<void>();
@@ -1206,7 +1234,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1242,7 +1270,7 @@ describe("useAppLifecycle", () => {
 
   test("clears pending Beads preparation timer when initialization fails before the toast delay", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const beadsDeferred = createDeferred<BeadsCheck>();
     const taskDeferred = createDeferred<void>();
@@ -1262,7 +1290,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1303,7 +1331,7 @@ describe("useAppLifecycle", () => {
 
   test("dismisses the Beads preparation toast when task loading fails after it is shown", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const beadsDeferred = createDeferred<BeadsCheck>();
     const taskDeferred = createDeferred<void>();
@@ -1323,7 +1351,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1368,7 +1396,7 @@ describe("useAppLifecycle", () => {
 
   test("dismisses a shown Beads preparation toast as soon as the first check leaves initializing", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const beadsDeferred = createDeferred<BeadsCheck>();
     const taskDeferred = createDeferred<void>();
@@ -1388,7 +1416,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 
@@ -1432,7 +1460,7 @@ describe("useAppLifecycle", () => {
 
   test("preserves the thrown repo-load error even when repo-store health is blocking", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = Parameters<typeof useAppLifecycle>[0];
+    type HookArgs = LegacyUseAppLifecycleArgs;
 
     const beadsDeferred = createDeferred<BeadsCheck>();
     const taskDeferred = createDeferred<void>();
@@ -1452,7 +1480,7 @@ describe("useAppLifecycle", () => {
     };
 
     const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(args);
+      useAppLifecycle(normalizeHookArgs(args));
       return null;
     };
 

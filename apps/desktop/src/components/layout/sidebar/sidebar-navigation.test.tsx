@@ -10,7 +10,7 @@ describe("SidebarNavigation", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { hasActiveRepo: true }),
+        createElement(SidebarNavigation, { hasActiveWorkspace: true }),
       ),
     );
 
@@ -24,7 +24,7 @@ describe("SidebarNavigation", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { hasActiveRepo: true, compact: true }),
+        createElement(SidebarNavigation, { hasActiveWorkspace: true, compact: true }),
       ),
     );
 
@@ -39,7 +39,7 @@ describe("SidebarNavigation", () => {
       createElement(
         MemoryRouter,
         { initialEntries: ["/kanban"] },
-        createElement(SidebarNavigation, { hasActiveRepo: false }),
+        createElement(SidebarNavigation, { hasActiveWorkspace: false }),
       ),
     );
 

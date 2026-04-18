@@ -27,7 +27,7 @@ const toBuildToolsSession = (
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeRepo: "/repo",
+  workspaceRepoPath: "/repo",
   viewRole: "build",
   session: toBuildToolsSession(null),
   viewSelectedTask: null,

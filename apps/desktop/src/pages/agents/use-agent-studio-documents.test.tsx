@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,
@@ -98,20 +99,44 @@ type UseAgentStudioDocumentsHook =
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
+type LegacyHookArgs = Omit<HookArgs, "activeWorkspace"> & {
+  activeWorkspace?: ActiveWorkspace | null;
+  workspaceRepoPath?: string | null;
+};
 type AgentMessage = AgentChatMessage;
 
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
 const createHookHarness = (
-  initialProps: HookArgs,
+  initialProps: LegacyHookArgs,
   options?: {
     runtimeDefinitionsContext?: ReturnType<typeof createRuntimeDefinitionsContextValue>;
     runtimeDefinitionsContextRef?: {
       current: ReturnType<typeof createRuntimeDefinitionsContextValue>;
     };
   },
-) => createSharedHookHarness(useAgentStudioDocuments, initialProps, options);
+) =>
+  createSharedHookHarness(
+    (props: LegacyHookArgs) =>
+      useAgentStudioDocuments({
+        ...props,
+        activeWorkspace:
+          "workspaceRepoPath" in props
+            ? props.workspaceRepoPath
+              ? createActiveWorkspace(props.workspaceRepoPath)
+              : null
+            : (props.activeWorkspace ?? null),
+      }),
+    initialProps,
+    options,
+  );
 
 const createBaseArgs = (): HookArgs => ({
-  activeRepo: "/repo",
+  activeWorkspace: createActiveWorkspace("/repo"),
   taskId: "task-1",
   activeSession: null,
   selectedTask: createTaskCardFixture({ id: "task-1", updatedAt: "2026-02-22T08:00:00.000Z" }),
@@ -256,7 +281,7 @@ describe("useAgentStudioDocuments", () => {
 
       await harness.update({
         ...baseArgs,
-        activeRepo: "/other-repo",
+        workspaceRepoPath: "/other-repo",
       });
 
       expect(taskDocumentsHookCalls[taskDocumentsHookCalls.length - 1]).toMatchObject({
@@ -557,7 +582,7 @@ describe("useAgentStudioDocuments", () => {
     const baseArgs = {
       ...createBaseArgs(),
       selectedTask: null,
-      activeRepo: null,
+      workspaceRepoPath: null,
       activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
         sessionId: "session-repo-hydration",
@@ -573,7 +598,7 @@ describe("useAgentStudioDocuments", () => {
 
       await harness.update({
         ...baseArgs,
-        activeRepo: "/repo",
+        workspaceRepoPath: "/repo",
       });
 
       expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);

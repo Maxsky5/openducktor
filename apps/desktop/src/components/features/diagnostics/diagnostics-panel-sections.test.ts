@@ -84,7 +84,7 @@ const makeWorkspace = (
 describe("DiagnosticsPanelSections", () => {
   test("renders repository-first empty messages when no repository is selected", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: null,
+      workspaceRepoPath: null,
       activeWorkspace: null,
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
@@ -105,7 +105,7 @@ describe("DiagnosticsPanelSections", () => {
 
   test("renders key-value labels consistently across sections", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/Users/dev/fairnest",
+      workspaceRepoPath: "/Users/dev/fairnest",
       activeWorkspace: makeWorkspace("/Users/dev/fairnest"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
@@ -180,7 +180,7 @@ describe("DiagnosticsPanelSections", () => {
 
   test("renders error rows when section errors are present", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/Users/dev/fairnest",
+      workspaceRepoPath: "/Users/dev/fairnest",
       activeWorkspace: makeWorkspace("/Users/dev/fairnest", {
         hasConfig: false,
         configuredWorktreeBasePath: null,

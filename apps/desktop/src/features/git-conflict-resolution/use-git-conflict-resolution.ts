@@ -8,6 +8,7 @@ import {
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { getGitConflictCopy } from "./conflict-copy";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
 
@@ -31,11 +32,11 @@ type GitConflictTaskContext = {
 };
 
 type UseGitConflictResolutionArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   startConflictResolutionSession: (
     input: StartGitConflictResolutionSessionInput,
   ) => Promise<string | undefined>;
-  loadPromptOverrides?: (repoPath: string) => Promise<RepoPromptOverrides>;
+  loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 type UseGitConflictResolutionResult = {
@@ -71,15 +72,17 @@ const pickDefaultBuilderSession = ({
 };
 
 export function useGitConflictResolution({
-  activeRepo,
+  activeWorkspace,
   startConflictResolutionSession,
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseGitConflictResolutionArgs): UseGitConflictResolutionResult {
   const handleResolveGitConflict = useCallback(
     async (conflict: GitConflict, taskContext: GitConflictTaskContext): Promise<boolean> => {
-      if (!activeRepo) {
+      if (!activeWorkspace) {
         throw new Error("Cannot resolve a git conflict because no repository is selected.");
       }
+
+      const activeWorkspaceId = activeWorkspace.workspaceId;
       const conflictWorkingDirectory = normalizeWorkingDirectory(conflict.workingDir);
       if (!conflictWorkingDirectory) {
         throw new Error(
@@ -96,7 +99,7 @@ export function useGitConflictResolution({
         currentViewSessionId: taskContext.currentViewSessionId,
       });
 
-      const promptOverrides = await loadPromptOverrides(activeRepo);
+      const promptOverrides = await loadPromptOverrides(activeWorkspaceId);
       const message = buildGitConflictResolutionPrompt(taskContext.taskId, {
         overrides: promptOverrides,
         ...(taskContext.task
@@ -140,7 +143,7 @@ export function useGitConflictResolution({
       taskContext.onOpenSession(sessionId);
       return true;
     },
-    [activeRepo, loadPromptOverrides, startConflictResolutionSession],
+    [activeWorkspace, loadPromptOverrides, startConflictResolutionSession],
   );
 
   return {

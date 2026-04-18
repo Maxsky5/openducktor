@@ -4,3 +4,5 @@ set -eu
 bun run lint
 bun run typecheck
 bun run check:rust
+cargo rust-lint-host
+cargo rust-lint-tauri

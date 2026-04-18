@@ -6,13 +6,13 @@ import {
   TaskDataContext,
   type TaskDataContextValue,
   TasksStateContext,
-  useActiveRepoContext,
+  useActiveWorkspaceContext,
   useChecksOperationsContext,
 } from "../app-state-contexts";
 import { useTaskOperations } from "../operations";
 
 export function TasksStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useActiveWorkspaceContext();
   const { refreshBeadsCheckForRepo } = useChecksOperationsContext();
   const {
     tasks,
@@ -45,7 +45,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     humanApproveTask,
     humanRequestChangesTask,
   } = useTaskOperations({
-    activeRepo,
+    activeWorkspace,
     refreshBeadsCheckForRepo,
   });
 

@@ -12,17 +12,11 @@ type WorkspaceStateValueArgs = Omit<WorkspaceStateContextValue, "activeWorkspace
   activeWorkspace?: WorkspaceRecord | null;
 };
 
-export const findActiveWorkspace = (
-  workspaces: WorkspaceRecord[],
-  activeRepo: string | null,
-): WorkspaceRecord | null =>
-  workspaces.find((workspace) => workspace.repoPath === activeRepo) ?? null;
-
 export const buildWorkspaceStateValue = (
   args: WorkspaceStateValueArgs,
 ): WorkspaceStateContextValue => ({
   ...args,
-  activeWorkspace: args.activeWorkspace ?? findActiveWorkspace(args.workspaces, args.activeRepo),
+  activeWorkspace: args.activeWorkspace ?? null,
 });
 
 export const buildChecksStateValue = (value: ChecksStateContextValue): ChecksStateContextValue =>

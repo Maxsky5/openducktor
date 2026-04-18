@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createRepoStaleGuard,
   READ_ONLY_ROLES,
@@ -7,6 +8,12 @@ import {
   throwIfRepoStale,
   toBaseUrl,
 } from "./core";
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 describe("agent-orchestrator/support/core", () => {
   test("exposes expected role and runtime constants", () => {
@@ -25,13 +32,15 @@ describe("agent-orchestrator/support/core", () => {
 
   test("creates a stale-repo guard bound to initial repo epoch", () => {
     const repoEpochRef = { current: 3 };
-    const activeRepoRef = { current: "/repo/a" as string | null };
-    const previousRepoRef = { current: "/repo/a" as string | null };
+    const activeWorkspaceRef = {
+      current: createActiveWorkspace("/repo/a") as ActiveWorkspace | null,
+    };
+    const currentWorkspaceRepoPathRef = { current: "/repo/a" as string | null };
     const isStale = createRepoStaleGuard({
       repoPath: "/repo/a",
       repoEpochRef,
-      activeRepoRef,
-      previousRepoRef,
+      activeWorkspaceRef,
+      currentWorkspaceRepoPathRef,
     });
 
     expect(isStale()).toBe(false);
@@ -39,19 +48,23 @@ describe("agent-orchestrator/support/core", () => {
     expect(isStale()).toBe(true);
   });
 
-  test("prefers the active repo ref over the previous repo marker", () => {
+  test("prefers the stable current workspace repo path ref", () => {
     const repoEpochRef = { current: 1 };
-    const activeRepoRef = { current: "/repo/a" as string | null };
-    const previousRepoRef = { current: null as string | null };
+    const activeWorkspaceRef = {
+      current: createActiveWorkspace("/repo/a") as ActiveWorkspace | null,
+    };
+    const currentWorkspaceRepoPathRef = { current: "/repo/a" as string | null };
     const isStale = createRepoStaleGuard({
       repoPath: "/repo/a",
       repoEpochRef,
-      activeRepoRef,
-      previousRepoRef,
+      activeWorkspaceRef,
+      currentWorkspaceRepoPathRef,
     });
 
     expect(isStale()).toBe(false);
-    activeRepoRef.current = "/repo/b";
+    activeWorkspaceRef.current = createActiveWorkspace("/repo/b");
+    expect(isStale()).toBe(false);
+    currentWorkspaceRepoPathRef.current = "/repo/b";
     expect(isStale()).toBe(true);
   });
 

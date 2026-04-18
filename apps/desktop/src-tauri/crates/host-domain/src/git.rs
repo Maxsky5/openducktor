@@ -302,6 +302,7 @@ pub struct GitWorktreeStatus {
     pub file_diffs: Vec<GitFileDiff>,
     pub target_ahead_behind: GitAheadBehind,
     pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub git_conflict: Option<GitConflict>,
     pub snapshot: GitWorktreeStatusSnapshot,
 }
 
@@ -312,6 +313,7 @@ pub struct GitWorktreeStatusSummary {
     pub file_status_counts: GitFileStatusCounts,
     pub target_ahead_behind: GitAheadBehind,
     pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub git_conflict: Option<GitConflict>,
     pub snapshot: GitWorktreeStatusSnapshot,
 }
 
@@ -323,6 +325,7 @@ pub struct GitWorktreeStatusData {
     pub file_diffs: Vec<GitFileDiff>,
     pub target_ahead_behind: GitAheadBehind,
     pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub git_conflict: Option<GitConflict>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -333,6 +336,7 @@ pub struct GitWorktreeStatusSummaryData {
     pub file_status_counts: GitFileStatusCounts,
     pub target_ahead_behind: GitAheadBehind,
     pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub git_conflict: Option<GitConflict>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

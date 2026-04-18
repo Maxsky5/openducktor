@@ -10,6 +10,7 @@ import {
   loadTaskApprovalContextFromQuery,
   taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -35,7 +36,7 @@ import {
 } from "./task-approval-flow-state";
 
 type UseTaskApprovalFlowArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   refreshTasks: () => Promise<void>;
@@ -59,7 +60,7 @@ const INITIAL_GIT_CONFLICT_STATE: {
 };
 
 export function useTaskApprovalFlow({
-  activeRepo,
+  activeWorkspace,
   tasks,
   requestPullRequestGeneration,
   refreshTasks,
@@ -91,6 +92,7 @@ export function useTaskApprovalFlow({
   ) => void;
 } {
   const queryClient = useQueryClient();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [state, dispatch] = useReducer(taskApprovalFlowReducer, CLOSED_TASK_APPROVAL_STATE);
   const [gitConflictState, setGitConflictState] = useState(INITIAL_GIT_CONFLICT_STATE);
   const approvalRequestVersionRef = useRef(0);
@@ -113,7 +115,7 @@ export function useTaskApprovalFlow({
         errorMessage?: string | null;
       },
     ): void => {
-      if (!activeRepo) {
+      if (!workspaceRepoPath) {
         return;
       }
 
@@ -121,7 +123,7 @@ export function useTaskApprovalFlow({
       const requestVersion = ++approvalRequestVersionRef.current;
 
       const cachedContext = queryClient.getQueryData(
-        taskApprovalQueryKeys.context(activeRepo, taskId),
+        taskApprovalQueryKeys.context(workspaceRepoPath, taskId),
       ) as TaskApprovalContextLoadResult | undefined;
       const cachedApprovalContext =
         cachedContext?.outcome === "ready" ? cachedContext.approvalContext : undefined;
@@ -146,7 +148,7 @@ export function useTaskApprovalFlow({
         try {
           const approvalContextResult = await loadTaskApprovalContextFromQuery(
             queryClient,
-            activeRepo,
+            workspaceRepoPath,
             taskId,
           );
           if (approvalRequestVersionRef.current !== requestVersion) {
@@ -189,7 +191,7 @@ export function useTaskApprovalFlow({
         }
       })();
     },
-    [activeRepo, queryClient, reset, tasks],
+    [workspaceRepoPath, queryClient, reset, tasks],
   );
 
   const confirm = useCallback((): void => {
@@ -216,7 +218,7 @@ export function useTaskApprovalFlow({
       return;
     }
 
-    if (!activeRepo || !isTaskApprovalReady(approvalState)) {
+    if (!workspaceRepoPath || !isTaskApprovalReady(approvalState)) {
       return;
     }
 
@@ -227,7 +229,7 @@ export function useTaskApprovalFlow({
           const directMergeResult = await submitDirectMergeApproval({
             approval: approvalState,
             queryClient,
-            repoPath: activeRepo,
+            repoPath: workspaceRepoPath,
             refreshTasks,
           });
           if (directMergeResult.outcome === "conflicts") {
@@ -259,7 +261,7 @@ export function useTaskApprovalFlow({
 
         const pullRequestResult = await submitPullRequestApproval({
           approval: approvalState,
-          repoPath: activeRepo,
+          repoPath: workspaceRepoPath,
           requestPullRequestGeneration,
           refreshTasks,
         });
@@ -295,7 +297,7 @@ export function useTaskApprovalFlow({
       }
     })();
   }, [
-    activeRepo,
+    workspaceRepoPath,
     humanApproveTask,
     queryClient,
     refreshTasks,
@@ -315,7 +317,7 @@ export function useTaskApprovalFlow({
   }, [openResetImplementation, reset, state]);
 
   const abortGitConflict = useCallback((): void => {
-    if (!activeRepo || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {
+    if (!workspaceRepoPath || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {
       return;
     }
 
@@ -328,7 +330,7 @@ export function useTaskApprovalFlow({
         conflictAction: "abort",
       }));
       try {
-        await abortTaskApprovalGitConflict(activeRepo, conflict);
+        await abortTaskApprovalGitConflict(workspaceRepoPath, conflict);
         toast.success(getGitConflictCopy(conflict.operation).abortedToastTitle);
         closeGitConflict();
         if (taskId) {
@@ -348,7 +350,7 @@ export function useTaskApprovalFlow({
         }));
       }
     })();
-  }, [activeRepo, closeGitConflict, gitConflictState, openTaskApproval]);
+  }, [workspaceRepoPath, closeGitConflict, gitConflictState, openTaskApproval]);
 
   const askBuilderToResolveGitConflict = useCallback((): void => {
     if (
@@ -398,7 +400,7 @@ export function useTaskApprovalFlow({
   }, [closeGitConflict, gitConflictState, onResolveGitConflict, reset]);
 
   const completeDirectMerge = useCallback((): void => {
-    if (!activeRepo || !isTaskApprovalReady(state)) {
+    if (!workspaceRepoPath || !isTaskApprovalReady(state)) {
       return;
     }
 
@@ -409,7 +411,7 @@ export function useTaskApprovalFlow({
       try {
         const result = await completeDirectMergeApproval({
           approval: approvalState,
-          repoPath: activeRepo,
+          repoPath: workspaceRepoPath,
           refreshTasks,
         });
         reset();
@@ -424,7 +426,7 @@ export function useTaskApprovalFlow({
         });
       }
     })();
-  }, [activeRepo, refreshTasks, reset, state]);
+  }, [workspaceRepoPath, refreshTasks, reset, state]);
 
   const taskGitConflictDialog = gitConflictState.conflict
     ? {

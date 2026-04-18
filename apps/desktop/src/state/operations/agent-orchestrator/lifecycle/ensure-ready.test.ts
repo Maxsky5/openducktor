@@ -94,7 +94,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
@@ -157,7 +157,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
@@ -250,7 +250,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
@@ -360,7 +360,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef,
@@ -450,7 +450,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef,
@@ -491,7 +491,7 @@ describe("agent-orchestrator-ensure-ready", () => {
   });
 
   test("stops resumed session when workspace becomes stale after resume", async () => {
-    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;
 
     const adapter = createAdapter();
@@ -503,7 +503,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       stopCalls += 1;
     };
     adapter.resumeSession = async () => {
-      previousRepoRef.current = "/tmp/other";
+      currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -529,7 +529,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef,
+      currentWorkspaceRepoPathRef,
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
@@ -564,7 +564,7 @@ describe("agent-orchestrator-ensure-ready", () => {
   });
 
   test("surfaces stale-resume cleanup failures instead of masking them", async () => {
-    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
@@ -575,7 +575,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       throw new Error("stop boom");
     };
     adapter.resumeSession = async () => {
-      previousRepoRef.current = "/tmp/other";
+      currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
         sessionId: "session-1",
@@ -601,7 +601,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef,
+      currentWorkspaceRepoPathRef,
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
@@ -683,7 +683,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
@@ -738,7 +738,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef: { current: 1 },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef: {
         current: {
           "session-1": buildSession(),
@@ -775,7 +775,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     let runtimeCalls = 0;
     const promptOverridesDeferred = createDeferred<Record<string, string>>();
     const repoEpochRef = { current: 1 };
-    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
@@ -789,7 +789,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       adapter,
       repoEpochRef,
-      previousRepoRef,
+      currentWorkspaceRepoPathRef,
       sessionsRef: {
         current: {
           "session-1": buildSession(),
@@ -815,7 +815,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       const ensurePromise = ensureReady("session-1");
       repoEpochRef.current = 2;
-      previousRepoRef.current = "/tmp/other-repo";
+      currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
       promptOverridesDeferred.resolve({});
 
       await expect(ensurePromise).rejects.toThrow("Workspace changed while preparing session.");

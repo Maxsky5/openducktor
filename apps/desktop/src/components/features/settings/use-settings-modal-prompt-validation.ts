@@ -13,7 +13,7 @@ import {
 
 type UseSettingsModalPromptValidationArgs = {
   snapshotDraft: SettingsSnapshot | null;
-  selectedRepoPath: string | null;
+  selectedWorkspaceId: string | null;
 };
 
 type SettingsModalPromptValidation = {
@@ -28,7 +28,7 @@ type SettingsModalPromptValidation = {
 
 export const useSettingsModalPromptValidation = ({
   snapshotDraft,
-  selectedRepoPath,
+  selectedWorkspaceId,
 }: UseSettingsModalPromptValidationArgs): SettingsModalPromptValidation => {
   const promptValidationState = useMemo<PromptValidationState>(() => {
     if (!snapshotDraft) {
@@ -40,16 +40,19 @@ export const useSettingsModalPromptValidation = ({
     let repoTotalErrorCount = 0;
     let totalErrorCount = globalErrorCount;
 
-    const repoErrorsByPath: Record<string, Partial<Record<AgentPromptTemplateId, string>>> = {};
-    const repoErrorCountByPath: Record<string, number> = {};
+    const repoErrorsByWorkspaceId: Record<
+      string,
+      Partial<Record<AgentPromptTemplateId, string>>
+    > = {};
+    const repoErrorCountByWorkspaceId: Record<string, number> = {};
     for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
       const repoErrors = buildPromptOverrideValidationErrors(repoConfig.promptOverrides);
       const repoErrorCount = Object.keys(repoErrors).length;
       if (repoErrorCount === 0) {
         continue;
       }
-      repoErrorsByPath[workspaceId] = repoErrors;
-      repoErrorCountByPath[workspaceId] = repoErrorCount;
+      repoErrorsByWorkspaceId[workspaceId] = repoErrors;
+      repoErrorCountByWorkspaceId[workspaceId] = repoErrorCount;
       repoTotalErrorCount += repoErrorCount;
       totalErrorCount += repoErrorCount;
     }
@@ -57,8 +60,8 @@ export const useSettingsModalPromptValidation = ({
     return {
       globalErrors,
       globalErrorCount,
-      repoErrorsByPath,
-      repoErrorCountByPath,
+      repoErrorsByWorkspaceId,
+      repoErrorCountByWorkspaceId,
       repoTotalErrorCount,
       totalErrorCount,
     };
@@ -66,12 +69,13 @@ export const useSettingsModalPromptValidation = ({
 
   const selectedRepoPromptValidationErrors = useMemo(
     () =>
-      (selectedRepoPath ? promptValidationState.repoErrorsByPath[selectedRepoPath] : undefined) ??
-      {},
-    [promptValidationState.repoErrorsByPath, selectedRepoPath],
+      (selectedWorkspaceId
+        ? promptValidationState.repoErrorsByWorkspaceId[selectedWorkspaceId]
+        : undefined) ?? {},
+    [promptValidationState.repoErrorsByWorkspaceId, selectedWorkspaceId],
   );
-  const selectedRepoPromptValidationErrorCount = selectedRepoPath
-    ? (promptValidationState.repoErrorCountByPath[selectedRepoPath] ?? 0)
+  const selectedRepoPromptValidationErrorCount = selectedWorkspaceId
+    ? (promptValidationState.repoErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
     : 0;
 
   const hasPromptValidationErrors = promptValidationState.totalErrorCount > 0;

@@ -75,9 +75,9 @@ export function useAgentOrchestratorOperations({
   refreshTaskData,
   agentEngine,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
-  const activeRepo = activeWorkspace?.repoPath ?? null;
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { sessionStore, refBridges, commitSessions } = useOrchestratorSessionState({
-    activeRepo,
+    activeWorkspace,
     tasks,
     runs,
   });
@@ -86,14 +86,14 @@ export function useAgentOrchestratorOperations({
 
   const persistSessionRecord = useCallback(
     async (taskId: string, record: AgentSessionRecord): Promise<void> => {
-      if (!activeRepo) {
+      if (!workspaceRepoPath) {
         return;
       }
-      await host.agentSessionUpsert(activeRepo, taskId, record);
-      upsertAgentSessionRecordInQuery(appQueryClient, activeRepo, taskId, record);
-      upsertAgentSessionInRepoTaskData(appQueryClient, activeRepo, taskId, record);
+      await host.agentSessionUpsert(workspaceRepoPath, taskId, record);
+      upsertAgentSessionRecordInQuery(appQueryClient, workspaceRepoPath, taskId, record);
+      upsertAgentSessionInRepoTaskData(appQueryClient, workspaceRepoPath, taskId, record);
     },
-    [activeRepo],
+    [workspaceRepoPath],
   );
 
   const updateSession = useCallback(
@@ -136,7 +136,7 @@ export function useAgentOrchestratorOperations({
           persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession)),
           {
             tags: {
-              repoPath: activeRepo,
+              repoPath: workspaceRepoPath,
               sessionId,
               taskId: nextSession.taskId,
               role: nextSession.role,
@@ -145,7 +145,7 @@ export function useAgentOrchestratorOperations({
         );
       }
     },
-    [activeRepo, commitSessions, persistSessionRecord, sessionsRef],
+    [workspaceRepoPath, commitSessions, persistSessionRecord, sessionsRef],
   );
 
   const resolveTurnDurationMs = useCallback(
@@ -315,8 +315,8 @@ export function useAgentOrchestratorOperations({
         activeWorkspace,
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
-        activeRepoRef: refBridges.activeRepoRef,
-        previousRepoRef: refBridges.previousRepoRef,
+        activeWorkspaceRef: refBridges.activeWorkspaceRef,
+        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         sessionsRef: refBridges.sessionsRef,
         setSessionsById: commitSessions,
         taskRef: refBridges.taskRef,
@@ -405,7 +405,7 @@ export function useAgentOrchestratorOperations({
   );
 
   const isCurrentActiveRepo = useCallback(
-    (repoPath: string): boolean => refBridges.activeRepoRef.current === repoPath,
+    (repoPath: string): boolean => refBridges.currentWorkspaceRepoPathRef.current === repoPath,
     [refBridges],
   );
 
@@ -414,14 +414,14 @@ export function useAgentOrchestratorOperations({
   }, [repoSessionHydrationService]);
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!workspaceRepoPath) {
       return;
     }
-    repoSessionHydrationService.resetRepo(activeRepo);
-  }, [activeRepo, repoSessionHydrationService]);
+    repoSessionHydrationService.resetRepo(workspaceRepoPath);
+  }, [workspaceRepoPath, repoSessionHydrationService]);
 
   useEffect(() => {
-    if (!activeRepo) {
+    if (!workspaceRepoPath) {
       return;
     }
     // Explicitly reference the retry tick: this effect must rerun when a delayed retry fires.
@@ -431,7 +431,7 @@ export function useAgentOrchestratorOperations({
 
     void (async () => {
       await repoSessionHydrationService.bootstrapPendingTasks({
-        repoPath: activeRepo,
+        repoPath: workspaceRepoPath,
         tasks,
         isCancelled: () => cancelled,
         isCurrentRepo: isCurrentActiveRepo,
@@ -441,10 +441,16 @@ export function useAgentOrchestratorOperations({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, isCurrentActiveRepo, repoSessionHydrationService, sessionRetryTick, tasks]);
+  }, [
+    workspaceRepoPath,
+    isCurrentActiveRepo,
+    repoSessionHydrationService,
+    sessionRetryTick,
+    tasks,
+  ]);
 
   useEffect(() => {
-    if (!activeRepo || tasks.length === 0) {
+    if (!workspaceRepoPath || tasks.length === 0) {
       return;
     }
     // Explicitly reference the retry tick: this effect must rerun when a delayed retry fires.
@@ -453,7 +459,7 @@ export function useAgentOrchestratorOperations({
 
     void (async () => {
       await repoSessionHydrationService.reconcilePendingTasks({
-        repoPath: activeRepo,
+        repoPath: workspaceRepoPath,
         tasks,
         runs,
         isCancelled: () => cancelled,
@@ -464,7 +470,14 @@ export function useAgentOrchestratorOperations({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, isCurrentActiveRepo, runs, repoSessionHydrationService, sessionRetryTick, tasks]);
+  }, [
+    workspaceRepoPath,
+    isCurrentActiveRepo,
+    runs,
+    repoSessionHydrationService,
+    sessionRetryTick,
+    tasks,
+  ]);
 
   const ensureRuntime = useMemo(
     () =>
@@ -515,9 +528,9 @@ export function useAgentOrchestratorOperations({
         sessionsRef: refBridges.sessionsRef,
         taskRef: refBridges.taskRef,
         repoEpochRef: refBridges.repoEpochRef,
-        activeRepoRef: refBridges.activeRepoRef,
-        previousRepoRef: refBridges.previousRepoRef,
-        inFlightStartsByRepoTaskRef: refBridges.inFlightStartsByRepoTaskRef,
+        activeWorkspaceRef: refBridges.activeWorkspaceRef,
+        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
+        inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
         unsubscribersRef: refBridges.unsubscribersRef,
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,

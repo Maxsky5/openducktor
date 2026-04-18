@@ -1,7 +1,8 @@
-import { type PropsWithChildren, type ReactElement, useMemo } from "react";
-import { buildWorkspaceStateValue, findActiveWorkspace } from "../app-state-context-values";
+import type { WorkspaceRecord } from "@openducktor/contracts";
+import { type PropsWithChildren, type ReactElement, useEffect, useMemo, useRef } from "react";
+import { buildWorkspaceStateValue } from "../app-state-context-values";
 import {
-  useActiveRepoContext,
+  useActiveWorkspaceContext,
   useChecksOperationsContext,
   useTaskControlContext,
   WorkspaceOperationsContext,
@@ -11,7 +12,7 @@ import {
 import { useRepoSettingsOperations, useWorkspaceOperations } from "../operations";
 
 export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeRepo, setActiveRepo } = useActiveRepoContext();
+  const { activeWorkspace, setActiveWorkspace } = useActiveWorkspaceContext();
   const { clearTaskData } = useTaskControlContext();
   const { clearActiveBeadsCheck } = useChecksOperationsContext();
 
@@ -32,16 +33,55 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     applyWorkspaceRecords,
     applyWorkspaceRecord,
   } = useWorkspaceOperations({
-    activeRepo,
-    setActiveRepo,
+    activeWorkspace,
+    setActiveWorkspace,
     clearTaskData,
     clearActiveBeadsCheck,
   });
 
-  const activeWorkspace = useMemo(
-    () => findActiveWorkspace(workspaces, activeRepo),
-    [activeRepo, workspaces],
+  const lastResolvedActiveWorkspaceRef = useRef<WorkspaceRecord | null>(null);
+
+  const matchedActiveWorkspace = useMemo(
+    () =>
+      activeWorkspace
+        ? (workspaces.find((workspace) => workspace.workspaceId === activeWorkspace.workspaceId) ??
+          workspaces.find((workspace) => workspace.repoPath === activeWorkspace.repoPath) ??
+          null)
+        : null,
+    [activeWorkspace, workspaces],
   );
+
+  const resolvedActiveWorkspace = useMemo(() => {
+    if (matchedActiveWorkspace) {
+      return matchedActiveWorkspace;
+    }
+
+    if (!activeWorkspace) {
+      return null;
+    }
+
+    const previous = lastResolvedActiveWorkspaceRef.current;
+    if (
+      previous &&
+      (previous.workspaceId === activeWorkspace.workspaceId ||
+        previous.repoPath === activeWorkspace.repoPath)
+    ) {
+      return previous;
+    }
+
+    return null;
+  }, [activeWorkspace, matchedActiveWorkspace]);
+
+  useEffect(() => {
+    if (matchedActiveWorkspace) {
+      lastResolvedActiveWorkspaceRef.current = matchedActiveWorkspace;
+      return;
+    }
+
+    if (!activeWorkspace) {
+      lastResolvedActiveWorkspaceRef.current = null;
+    }
+  }, [activeWorkspace, matchedActiveWorkspace]);
 
   const {
     loadRepoSettings,
@@ -51,8 +91,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     saveGlobalGitConfig,
     saveSettingsSnapshot,
   } = useRepoSettingsOperations({
-    activeRepo,
-    activeWorkspace,
+    activeWorkspace: resolvedActiveWorkspace,
     applyWorkspaceRecords,
     applyWorkspaceRecord,
   });
@@ -65,8 +104,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         isSwitchingBranch,
         branchSyncDegraded,
         workspaces,
-        activeRepo,
-        activeWorkspace,
+        activeWorkspace: resolvedActiveWorkspace,
         branches,
         activeBranch,
         addWorkspace,
@@ -81,9 +119,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         saveSettingsSnapshot,
       }),
     [
-      activeRepo,
       activeBranch,
-      activeWorkspace,
+      resolvedActiveWorkspace,
       addWorkspace,
       branches,
       isLoadingBranches,

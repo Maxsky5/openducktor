@@ -10,9 +10,10 @@ import {
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 type UseSessionStartModalRuntimeStateArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   initialCatalog: AgentModelCatalog | null | undefined;
   isOpen: boolean;
   loadCatalog: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
@@ -29,12 +30,13 @@ type UseSessionStartModalRuntimeStateResult = {
 };
 
 export function useSessionStartModalRuntimeState({
-  activeRepo,
+  activeWorkspace,
   initialCatalog,
   isOpen,
   loadCatalog,
   runtimeDefinitions,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [requestedRuntimeKind, setRequestedRuntimeKindState] =
     useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
 
@@ -62,13 +64,15 @@ export function useSessionStartModalRuntimeState({
   }, []);
 
   const catalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", selectedRuntimeKind, loadCatalog),
-    enabled: initialCatalog === undefined && Boolean(activeRepo) && isOpen,
+    ...repoRuntimeCatalogQueryOptions(workspaceRepoPath ?? "", selectedRuntimeKind, loadCatalog),
+    enabled: initialCatalog === undefined && Boolean(workspaceRepoPath) && isOpen,
   });
 
   const catalog = initialCatalog ?? catalogQuery.data ?? null;
   const isCatalogLoading =
-    initialCatalog === undefined && isOpen && activeRepo !== null ? catalogQuery.isLoading : false;
+    initialCatalog === undefined && isOpen && workspaceRepoPath !== null
+      ? catalogQuery.isLoading
+      : false;
 
   return {
     catalog,

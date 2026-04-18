@@ -110,7 +110,7 @@ const makeWorkspace = (
 describe("buildDiagnosticsPanelModel", () => {
   test("returns no-repository summary and empty-state messages when no repository is selected", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: null,
+      workspaceRepoPath: null,
       activeWorkspace: null,
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -133,7 +133,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("returns checking summary while diagnostics are loading", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -152,7 +152,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("keeps summary in checking state while runtime health is still pending", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -181,7 +181,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("returns setup-needed summary when no effective worktree directory is available", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo", {
         hasConfig: false,
         configuredWorktreeBasePath: null,
@@ -225,7 +225,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("renders first-class repo store diagnostics rows from structured health", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -298,7 +298,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("treats repositories using the default worktree path as healthy", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo", {
         configuredWorktreeBasePath: null,
         effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
@@ -343,7 +343,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("builds keyed rows for repository and runtime mcp sections", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/Users/dev/fairnest",
+      workspaceRepoPath: "/Users/dev/fairnest",
       activeWorkspace: makeWorkspace("/Users/dev/fairnest", {
         configuredWorktreeBasePath: "/Users/dev/worktrees",
         defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
@@ -404,7 +404,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("includes critical reasons and section errors when checks fail", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo", {
         hasConfig: false,
         configuredWorktreeBasePath: null,
@@ -481,7 +481,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("falls back to mcpError when server error is absent", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -524,7 +524,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("shows timeout-specific badges and messages while runtime health is warming up", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -600,7 +600,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("keeps runtime and mcp progress details scoped to the relevant section", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -678,7 +678,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("keeps the summary in checking while a settled runtime health entry is still checking", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -721,7 +721,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("shows timeout-specific cli tools and beads states instead of leaving them checking", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -773,7 +773,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("keeps hard failures ahead of retrying summary state", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -829,7 +829,7 @@ describe("buildDiagnosticsPanelModel", () => {
 
   test("treats GitHub CLI auth failures as CLI issues even without query failure classification", () => {
     const model = buildDiagnosticsPanelModel({
-      activeRepo: "/repo",
+      workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,

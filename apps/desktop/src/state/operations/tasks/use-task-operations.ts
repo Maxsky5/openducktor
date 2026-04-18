@@ -17,6 +17,7 @@ import type { TaskRefreshOptions } from "@/state/app-state-contexts";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { repoTaskDataQueryOptions } from "../../queries/tasks";
 import { host } from "../shared/host";
@@ -28,7 +29,7 @@ import {
 } from "./task-operations-model";
 
 type UseTaskOperationsArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
 };
 
@@ -105,9 +106,10 @@ const collectTaskDeletionIds = (
 };
 
 export function useTaskOperations({
-  activeRepo,
+  activeWorkspace,
   refreshBeadsCheckForRepo,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
+  const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const queryClient = useQueryClient();
   const [isManualLoadingTasks, setIsManualLoadingTasks] = useState(false);
   const manualRefreshTokenRef = useRef(0);
@@ -126,16 +128,16 @@ export function useTaskOperations({
     taskId: string;
     pullRequest: PullRequest;
   } | null>(null);
-  const activeRepoRef = useRef(activeRepo);
+  const currentWorkspaceRepoPathRef = useRef(activeRepoPath);
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepo ?? "__disabled__"),
-    enabled: activeRepo !== null,
+    ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__"),
+    enabled: activeRepoPath !== null,
   });
 
   useEffect(() => {
-    const previousActiveRepo = activeRepoRef.current;
-    activeRepoRef.current = activeRepo;
-    if (previousActiveRepo !== activeRepo) {
+    const previousActiveRepoPath = currentWorkspaceRepoPathRef.current;
+    currentWorkspaceRepoPathRef.current = activeRepoPath;
+    if (previousActiveRepoPath !== activeRepoPath) {
       manualRefreshTokenRef.current += 1;
       setIsManualLoadingTasks(false);
       lastTaskRefreshToastRef.current = null;
@@ -144,7 +146,7 @@ export function useTaskOperations({
       setUnlinkingPullRequestTaskId(null);
       setPendingMergedPullRequest(null);
     }
-  }, [activeRepo]);
+  }, [activeRepoPath]);
 
   const refreshTaskData = useCallback(
     async (repoPath: string, taskIdOrIds?: string | string[]): Promise<void> => {
@@ -232,7 +234,7 @@ export function useTaskOperations({
       failureTitle: string;
     }): Promise<void> => {
       try {
-        const repoPath = requireActiveRepo(activeRepo);
+        const repoPath = requireActiveRepo(activeRepoPath);
         await options.run(repoPath);
         await refreshTaskMutationViews(repoPath, options.refreshStrategy);
         if (options.successTitle) {
@@ -247,16 +249,16 @@ export function useTaskOperations({
         throw error;
       }
     },
-    [activeRepo, refreshTaskMutationViews],
+    [activeRepoPath, refreshTaskMutationViews],
   );
 
   const refreshTasksWithOptions = useCallback(
     async (options?: TaskRefreshOptions): Promise<void> => {
-      if (!activeRepo) {
+      if (!activeRepoPath) {
         return;
       }
 
-      const repoPath = activeRepo;
+      const repoPath = activeRepoPath;
       const trigger = options?.trigger ?? "manual";
       let manualRefreshToken: number | null = null;
       if (trigger === "manual") {
@@ -306,7 +308,7 @@ export function useTaskOperations({
         }
       }
     },
-    [activeRepo, getRepoTaskRefreshPromise],
+    [activeRepoPath, getRepoTaskRefreshPromise],
   );
 
   const refreshTasks = useCallback(async (): Promise<void> => {
@@ -317,7 +319,7 @@ export function useTaskOperations({
     async (taskId: string): Promise<void> => {
       setDetectingPullRequestTaskId(taskId);
       try {
-        const repoPath = requireActiveRepo(activeRepo);
+        const repoPath = requireActiveRepo(activeRepoPath);
         const result = await host.taskPullRequestDetect(repoPath, taskId);
         if (result.outcome === "linked") {
           await refreshTaskData(repoPath, taskId);
@@ -346,7 +348,7 @@ export function useTaskOperations({
         );
       }
     },
-    [activeRepo, refreshTaskData],
+    [activeRepoPath, refreshTaskData],
   );
 
   const cancelLinkMergedPullRequest = useCallback((): void => {
@@ -367,7 +369,7 @@ export function useTaskOperations({
     const { taskId, pullRequest } = pendingMergedPullRequest;
     setLinkingMergedPullRequestTaskId(taskId);
     try {
-      const repoPath = requireActiveRepo(activeRepo);
+      const repoPath = requireActiveRepo(activeRepoPath);
       await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
       setPendingMergedPullRequest((current) => (current?.taskId === taskId ? null : current));
       await refreshTaskData(repoPath, taskId);
@@ -383,7 +385,7 @@ export function useTaskOperations({
         currentTaskId === taskId ? null : currentTaskId,
       );
     }
-  }, [activeRepo, pendingMergedPullRequest, refreshTaskData]);
+  }, [activeRepoPath, pendingMergedPullRequest, refreshTaskData]);
 
   const unlinkPullRequest = useCallback(
     async (taskId: string): Promise<void> => {
@@ -411,7 +413,7 @@ export function useTaskOperations({
 
   const createTask = useCallback(
     async (input: TaskCreateInput): Promise<void> => {
-      requireActiveRepo(activeRepo);
+      requireActiveRepo(activeRepoPath);
 
       const title = toNormalizedTitle(input.title);
       if (!title) {
@@ -431,7 +433,7 @@ export function useTaskOperations({
         failureTitle: "Failed to create task",
       });
     },
-    [activeRepo, runTaskMutation],
+    [activeRepoPath, runTaskMutation],
   );
 
   const updateTask = useCallback(
@@ -485,7 +487,7 @@ export function useTaskOperations({
 
   const resetTaskImplementation = useCallback(
     async (taskId: string): Promise<void> => {
-      const repoPath = requireActiveRepo(activeRepo);
+      const repoPath = requireActiveRepo(activeRepoPath);
       try {
         await host.taskResetImplementation(repoPath, taskId);
         await Promise.all([
@@ -521,12 +523,12 @@ export function useTaskOperations({
         throw error;
       }
     },
-    [activeRepo, queryClient, refreshTaskData],
+    [activeRepoPath, queryClient, refreshTaskData],
   );
 
   const resetTask = useCallback(
     async (taskId: string): Promise<void> => {
-      const repoPath = requireActiveRepo(activeRepo);
+      const repoPath = requireActiveRepo(activeRepoPath);
       try {
         await host.taskReset(repoPath, taskId);
         await Promise.all([
@@ -562,7 +564,7 @@ export function useTaskOperations({
         throw error;
       }
     },
-    [activeRepo, queryClient, refreshTaskData],
+    [activeRepoPath, queryClient, refreshTaskData],
   );
 
   const transitionTask = useCallback(
@@ -649,12 +651,12 @@ export function useTaskOperations({
     setPendingMergedPullRequest(null);
   }, []);
 
-  const tasks = activeRepo ? (repoTaskDataQuery.data?.tasks ?? []) : [];
-  const runs = activeRepo ? (repoTaskDataQuery.data?.runs ?? []) : [];
+  const tasks = activeRepoPath ? (repoTaskDataQuery.data?.tasks ?? []) : [];
+  const runs = activeRepoPath ? (repoTaskDataQuery.data?.runs ?? []) : [];
   const isForegroundLoadingTasks =
-    isManualLoadingTasks || (activeRepo !== null && repoTaskDataQuery.isPending);
+    isManualLoadingTasks || (activeRepoPath !== null && repoTaskDataQuery.isPending);
   const isRefreshingTasksInBackground =
-    activeRepo !== null && repoTaskDataQuery.isFetching && !isForegroundLoadingTasks;
+    activeRepoPath !== null && repoTaskDataQuery.isFetching && !isForegroundLoadingTasks;
   const isLoadingTasks = isForegroundLoadingTasks;
 
   return {

@@ -6,6 +6,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { taskQueryKeys } from "@/state/queries/tasks";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { useSpecOperations } from "./use-spec-operations";
 
@@ -16,10 +17,24 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 type HookArgs = Parameters<typeof useSpecOperations>[0];
 type HookResult = ReturnType<typeof useSpecOperations>;
+type LegacyHookArgs = {
+  activeWorkspace?: ActiveWorkspace | null;
+  activeRepo?: string | null;
+};
 
 const createEmptyDocument = () => ({ markdown: "", updatedAt: null as string | null });
 
 type TaskDocumentSection = "spec" | "plan" | "qa";
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+const normalizeHookArgs = ({ activeWorkspace, activeRepo }: LegacyHookArgs): HookArgs => ({
+  activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
+});
 
 const createTaskDocumentHostReaders = (readers: {
   spec?: (
@@ -62,9 +77,9 @@ const createTaskDocumentHostReaders = (readers: {
   };
 };
 
-const createHookHarness = (initialArgs: HookArgs) => {
+const createHookHarness = (initialArgs: LegacyHookArgs) => {
   let latest: HookResult | null = null;
-  const currentArgs = initialArgs;
+  const currentArgs = normalizeHookArgs(initialArgs);
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useSpecOperations(args);
@@ -349,7 +364,7 @@ describe("use-spec-operations", () => {
 
     const harness = createSharedHookHarness(
       Harness,
-      { args: { activeRepo: "/repo-a" } },
+      { args: normalizeHookArgs({ activeRepo: "/repo-a" }) },
       { wrapper },
     );
 
@@ -497,7 +512,7 @@ describe("use-spec-operations", () => {
 
     const harness = createSharedHookHarness(
       Harness,
-      { args: { activeRepo: "/repo-a" } },
+      { args: normalizeHookArgs({ activeRepo: "/repo-a" }) },
       { wrapper },
     );
 
@@ -608,7 +623,7 @@ describe("use-spec-operations", () => {
 
     const harness = createSharedHookHarness(
       Harness,
-      { args: { activeRepo: "/repo-a" } },
+      { args: normalizeHookArgs({ activeRepo: "/repo-a" }) },
       { wrapper },
     );
 

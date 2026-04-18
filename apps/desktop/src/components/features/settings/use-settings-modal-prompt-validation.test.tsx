@@ -84,7 +84,7 @@ describe("useSettingsModalPromptValidation", () => {
   test("returns empty validation state when snapshot is missing", async () => {
     const harness = createHookHarness({
       snapshotDraft: null,
-      selectedRepoPath: null,
+      selectedWorkspaceId: null,
     });
 
     await harness.mount();
@@ -108,7 +108,7 @@ describe("useSettingsModalPromptValidation", () => {
   test("derives global and repo validation counts with tab-level aggregation", async () => {
     const harness = createHookHarness({
       snapshotDraft: createSnapshot(),
-      selectedRepoPath: "repo-a",
+      selectedWorkspaceId: "repo-a",
     });
 
     await harness.mount();
@@ -116,7 +116,7 @@ describe("useSettingsModalPromptValidation", () => {
 
     expect(latest.hasPromptValidationErrors).toBe(true);
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
-    expect(latest.promptValidationState.repoErrorCountByPath["repo-a"]).toBe(1);
+    expect(latest.promptValidationState.repoErrorCountByWorkspaceId["repo-a"]).toBe(1);
     expect(latest.promptValidationState.totalErrorCount).toBe(2);
     expect(latest.globalPromptRoleTabErrorCounts.spec).toBe(1);
     expect(latest.selectedRepoPromptRoleTabErrorCounts.build).toBe(1);
@@ -148,7 +148,7 @@ describe("useSettingsModalPromptValidation", () => {
 
     const harness = createHookHarness({
       snapshotDraft: snapshot,
-      selectedRepoPath: "/repo-a",
+      selectedWorkspaceId: "repo-a",
     });
 
     await harness.mount();

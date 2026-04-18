@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { type AgentStudioNavigationState, toContextStorageKey } from "./agent-studio-navigation";
 import {
   createMemoryStorage,
@@ -19,10 +20,39 @@ import {
 enableReactActEnvironment();
 
 type HookArgs = {
-  activeRepo: string | null;
-  persistenceWorkspaceId: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   initialNavigation?: AgentStudioNavigationState;
 };
+
+type LegacyHookArgs = {
+  activeWorkspace?: ActiveWorkspace | null;
+  workspaceRepoPath?: string | null;
+  persistenceWorkspaceId?: string | null;
+  initialNavigation?: AgentStudioNavigationState;
+};
+
+const createActiveWorkspace = (
+  repoPath: string,
+  workspaceId = repoPath.replace(/^\//, "").replaceAll("/", "-"),
+): ActiveWorkspace => ({
+  workspaceId,
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
+
+const normalizeHookArgs = ({
+  activeWorkspace,
+  workspaceRepoPath,
+  persistenceWorkspaceId,
+  initialNavigation,
+}: LegacyHookArgs): HookArgs => ({
+  ...(initialNavigation === undefined ? {} : { initialNavigation }),
+  activeWorkspace:
+    activeWorkspace ??
+    (workspaceRepoPath
+      ? createActiveWorkspace(workspaceRepoPath, persistenceWorkspaceId ?? undefined)
+      : null),
+});
 
 const createRecordingStorage = () => {
   const store = new Map<string, string>();
@@ -82,7 +112,8 @@ const createThrowingStorage = (args: {
   };
 };
 
-const useHookHarness = ({ activeRepo, persistenceWorkspaceId, initialNavigation }: HookArgs) => {
+const useHookHarness = (args: LegacyHookArgs) => {
+  const { activeWorkspace, initialNavigation } = normalizeHookArgs(args);
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
     initialNavigation ?? {
       taskId: "",
@@ -94,8 +125,7 @@ const useHookHarness = ({ activeRepo, persistenceWorkspaceId, initialNavigation 
 
   const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
     useRepoNavigationPersistence({
-      activeRepo,
-      persistenceWorkspaceId,
+      activeWorkspace,
       navigation,
       setNavigation,
     });
@@ -109,13 +139,13 @@ const useHookHarness = ({ activeRepo, persistenceWorkspaceId, initialNavigation 
   };
 };
 
-const createHookHarness = (initialProps: HookArgs) =>
+const createHookHarness = (initialProps: LegacyHookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
 const withPersistenceWorkspaceId = (
-  overrides: Partial<HookArgs> & Pick<HookArgs, "activeRepo">,
-): HookArgs => ({
-  persistenceWorkspaceId: overrides.activeRepo ? "workspace-repo" : null,
+  overrides: Partial<LegacyHookArgs> & Pick<LegacyHookArgs, "workspaceRepoPath">,
+): LegacyHookArgs => ({
+  persistenceWorkspaceId: overrides.workspaceRepoPath ? "workspace-repo" : null,
   ...overrides,
 });
 
@@ -123,16 +153,16 @@ describe("useRepoNavigationPersistence", () => {
   test("treats the first render after a repo change as boundary-pending before effects run", () => {
     expect(
       resolveRepoNavigationBoundaryPhase({
-        activeRepo: "/repo-b",
-        lastActiveRepo: "/repo-a",
-        boundaryRepo: null,
+        activeWorkspace: createActiveWorkspace("/repo-b"),
+        lastWorkspaceId: "repo-a",
+        boundaryWorkspaceId: null,
       }),
     ).toBe("detecting");
     expect(
       resolveRepoNavigationBoundaryPhase({
-        activeRepo: "/repo-a",
-        lastActiveRepo: "/repo-a",
-        boundaryRepo: null,
+        activeWorkspace: createActiveWorkspace("/repo-a"),
+        lastWorkspaceId: "repo-a",
+        boundaryWorkspaceId: null,
       }),
     ).toBe("idle");
   });
@@ -157,7 +187,7 @@ describe("useRepoNavigationPersistence", () => {
 
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
         }),
       );
 
@@ -193,7 +223,7 @@ describe("useRepoNavigationPersistence", () => {
 
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
           initialNavigation: {
             taskId: "",
             sessionId: null,
@@ -227,7 +257,7 @@ describe("useRepoNavigationPersistence", () => {
     try {
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
         }),
       );
 
@@ -272,7 +302,7 @@ describe("useRepoNavigationPersistence", () => {
     try {
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
         }),
       );
 
@@ -318,7 +348,7 @@ describe("useRepoNavigationPersistence", () => {
 
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
         }),
       );
 
@@ -374,7 +404,7 @@ describe("useRepoNavigationPersistence", () => {
     try {
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
         }),
       );
 
@@ -417,7 +447,7 @@ describe("useRepoNavigationPersistence", () => {
       );
 
       const harness = createHookHarness({
-        activeRepo: "/repo-a",
+        workspaceRepoPath: "/repo-a",
         persistenceWorkspaceId: "workspace-repo-a",
       });
 
@@ -430,7 +460,7 @@ describe("useRepoNavigationPersistence", () => {
       );
 
       await harness.update({
-        activeRepo: "/repo-b",
+        workspaceRepoPath: "/repo-b",
         persistenceWorkspaceId: "workspace-repo-b",
       });
       await harness.waitFor((state) => state.navigation.taskId === "task-from-repo-b");
@@ -458,7 +488,7 @@ describe("useRepoNavigationPersistence", () => {
       );
 
       const harness = createHookHarness({
-        activeRepo: "/repo-a",
+        workspaceRepoPath: "/repo-a",
         persistenceWorkspaceId: "workspace-repo-a",
         initialNavigation: {
           taskId: "task-a",
@@ -471,7 +501,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.mount();
 
       await harness.update({
-        activeRepo: "/repo-b",
+        workspaceRepoPath: "/repo-b",
         persistenceWorkspaceId: "workspace-repo-b",
       });
 
@@ -504,7 +534,7 @@ describe("useRepoNavigationPersistence", () => {
       });
 
       const harness = createHookHarness({
-        activeRepo: "/repo-a",
+        workspaceRepoPath: "/repo-a",
         persistenceWorkspaceId: "workspace-repo-a",
       });
 
@@ -512,13 +542,13 @@ describe("useRepoNavigationPersistence", () => {
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
 
       await harness.update({
-        activeRepo: "/repo-b",
+        workspaceRepoPath: "/repo-b",
         persistenceWorkspaceId: "workspace-repo-b",
       });
       await harness.waitFor((state) => state.navigation.taskId === "task-b");
 
       await harness.update({
-        activeRepo: "/repo-a",
+        workspaceRepoPath: "/repo-a",
         persistenceWorkspaceId: "workspace-repo-a",
       });
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
@@ -543,15 +573,21 @@ describe("useRepoNavigationPersistence", () => {
       });
 
       const harness = createHookHarness({
-        activeRepo: "/repo-a",
+        workspaceRepoPath: "/repo-a",
         persistenceWorkspaceId: "workspace-repo-a",
       });
 
       await harness.mount();
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
 
-      await harness.update({ activeRepo: "/repo-b", persistenceWorkspaceId: "workspace-repo-b" });
-      await harness.update({ activeRepo: "/repo-a", persistenceWorkspaceId: "workspace-repo-a" });
+      await harness.update({
+        workspaceRepoPath: "/repo-b",
+        persistenceWorkspaceId: "workspace-repo-b",
+      });
+      await harness.update({
+        workspaceRepoPath: "/repo-a",
+        persistenceWorkspaceId: "workspace-repo-a",
+      });
       await harness.waitFor((state) => state.navigation.taskId === "task-a");
 
       expect(harness.getLatest().navigation).toEqual({
@@ -594,7 +630,7 @@ describe("useRepoNavigationPersistence", () => {
     try {
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
-          activeRepo: "/repo",
+          workspaceRepoPath: "/repo",
         }),
       );
 

@@ -157,7 +157,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -182,7 +181,6 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const harness = createHookHarness({
-      activeRepo: null,
       activeWorkspace: null,
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -202,7 +200,6 @@ describe("use-repo-settings-operations", () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const harness = createHookHarness({
-      activeRepo: null,
       activeWorkspace: null,
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -231,7 +228,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceGetRepoConfig = workspaceGetRepoConfig;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -294,7 +290,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -367,7 +362,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -398,7 +392,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -462,7 +455,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -495,7 +487,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -527,7 +518,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -572,7 +562,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -604,7 +593,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -647,7 +635,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -694,7 +681,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -789,7 +775,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceUpdateGlobalGitConfig = workspaceUpdateGlobalGitConfig;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,
@@ -826,7 +811,6 @@ describe("use-repo-settings-operations", () => {
     host.workspaceDetectGithubRepository = workspaceDetectGithubRepository;
 
     const harness = createHookHarness({
-      activeRepo: "/repo-a",
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
       applyWorkspaceRecord,

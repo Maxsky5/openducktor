@@ -14,7 +14,6 @@ import {
   buildSpecStateValue,
   buildTasksStateValue,
   buildWorkspaceStateValue,
-  findActiveWorkspace,
 } from "./app-state-context-values";
 
 const workspace = (path: string, isActive = false): WorkspaceRecord => ({
@@ -29,21 +28,15 @@ const workspace = (path: string, isActive = false): WorkspaceRecord => ({
 });
 
 describe("app-state-context-values", () => {
-  test("finds active workspace by path", () => {
-    const workspaces = [workspace("/repo-a"), workspace("/repo-b", true)];
-    expect(findActiveWorkspace(workspaces, "/repo-b")?.repoPath).toBe("/repo-b");
-    expect(findActiveWorkspace(workspaces, "/missing")).toBeNull();
-    expect(findActiveWorkspace(workspaces, null)).toBeNull();
-  });
-
-  test("builds workspace context and resolves active workspace when omitted", () => {
+  test("builds workspace context with the provided active workspace", () => {
+    const activeWorkspace = workspace("/repo-a", true);
     const value = buildWorkspaceStateValue({
       isSwitchingWorkspace: false,
       isLoadingBranches: false,
       isSwitchingBranch: false,
       branchSyncDegraded: false,
       workspaces: [workspace("/repo-a"), workspace("/repo-b")],
-      activeRepo: "/repo-a",
+      activeWorkspace,
       branches: [],
       activeBranch: null,
       addWorkspace: async () => {},
@@ -85,7 +78,7 @@ describe("app-state-context-values", () => {
       saveSettingsSnapshot: async () => {},
     });
 
-    expect(value.activeWorkspace?.repoPath).toBe("/repo-a");
+    expect(value.activeWorkspace).toEqual(activeWorkspace);
   });
 
   test("returns identity for other context builders", () => {

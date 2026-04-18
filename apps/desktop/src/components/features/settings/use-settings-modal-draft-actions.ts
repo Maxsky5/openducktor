@@ -9,7 +9,7 @@ import { useCallback } from "react";
 import { ensureDraftAgentDefault } from "@/components/features/settings";
 
 type UseSettingsModalDraftActionsArgs = {
-  selectedRepoPath: string | null;
+  selectedWorkspaceId: string | null;
   setSnapshotDraft: Dispatch<SetStateAction<SettingsSnapshot | null>>;
 };
 
@@ -40,17 +40,17 @@ type SettingsModalDraftActions = {
 };
 
 export const useSettingsModalDraftActions = ({
-  selectedRepoPath,
+  selectedWorkspaceId,
   setSnapshotDraft,
 }: UseSettingsModalDraftActionsArgs): SettingsModalDraftActions => {
   const updateSelectedRepoConfig = useCallback(
     (updater: (current: RepoConfig) => RepoConfig): void => {
       setSnapshotDraft((current) => {
-        if (!current || !selectedRepoPath) {
+        if (!current || !selectedWorkspaceId) {
           return current;
         }
 
-        const existingRepo = current.workspaces[selectedRepoPath];
+        const existingRepo = current.workspaces[selectedWorkspaceId];
         if (!existingRepo) {
           return current;
         }
@@ -59,12 +59,12 @@ export const useSettingsModalDraftActions = ({
           ...current,
           workspaces: {
             ...current.workspaces,
-            [selectedRepoPath]: updater(existingRepo),
+            [selectedWorkspaceId]: updater(existingRepo),
           },
         };
       });
     },
-    [selectedRepoPath, setSnapshotDraft],
+    [selectedWorkspaceId, setSnapshotDraft],
   );
 
   const updateGlobalPromptOverrides = useCallback(

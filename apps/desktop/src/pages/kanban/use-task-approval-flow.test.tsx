@@ -250,7 +250,11 @@ const createConflictDirectMergeResult = (
 const createUseTaskApprovalFlowArgs = (
   overrides: Partial<Parameters<typeof useTaskApprovalFlow>[0]>,
 ): Parameters<typeof useTaskApprovalFlow>[0] => ({
-  activeRepo: "/repo",
+  activeWorkspace: {
+    workspaceId: "workspace-repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+  },
   tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
   requestPullRequestGeneration: async () => undefined,
   refreshTasks: async () => {},
@@ -333,7 +337,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [
             createTaskCardFixture({
               id: "TASK-1",
@@ -393,7 +401,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [
             createTaskCardFixture({
               id: "TASK-1",
@@ -455,7 +467,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [
             createTaskCardFixture({
               id: "TASK-1",
@@ -517,7 +533,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -548,7 +568,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -583,7 +607,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -621,7 +649,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -663,7 +695,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -710,7 +746,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -757,7 +797,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -801,7 +845,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -855,7 +903,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [
             createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
             createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
@@ -933,7 +985,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -996,7 +1052,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: refreshTasksMock,
@@ -1042,7 +1102,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -1097,7 +1161,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -1153,7 +1221,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -1211,7 +1283,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -1270,7 +1346,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [
             createTaskCardFixture({
               id: "TASK-1",
@@ -1339,7 +1419,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
           refreshTasks: refreshTasksMock,
@@ -1407,7 +1491,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
           refreshTasks: async () => {},
@@ -1476,7 +1564,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [
             createTaskCardFixture({ id: "TASK-1", title: "Task 1" }),
             createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
@@ -1570,7 +1662,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
           refreshTasks: async () => {},
@@ -1630,7 +1726,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},
@@ -1693,7 +1793,11 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          activeRepo: "/repo",
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           refreshTasks: async () => {},

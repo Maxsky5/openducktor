@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { useMemo, useRef } from "react";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
 import {
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 
 type ProbeHarnessArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
@@ -27,23 +28,23 @@ type ProbeHarnessArgs = {
 };
 
 const ProbeHarness = ({
-  activeRepo,
+  activeWorkspace,
   isSwitchingWorkspace,
   isLoadingBranches,
   isSwitchingBranch,
   setBranchSyncDegraded,
   refreshBranchesForRepo = noopRefreshBranchesForRepo,
 }: ProbeHarnessArgs) => {
-  const activeRepoRef = useRef<string | null>(activeRepo);
+  const currentWorkspaceRepoPathRef = useRef<string | null>(activeWorkspace?.repoPath ?? null);
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const lastKnownRevisionRef = useRef<string | null>(null);
 
-  activeRepoRef.current = activeRepo;
+  currentWorkspaceRepoPathRef.current = activeWorkspace?.repoPath ?? null;
 
   const branchProbeController = useMemo(
     () => ({
-      activeRepoRef,
+      currentWorkspaceRepoPathRef,
       lastKnownBranchNameRef,
       lastKnownDetachedRef,
       lastKnownRevisionRef,
@@ -53,7 +54,7 @@ const ProbeHarness = ({
   );
 
   useWorkspaceBranchProbe({
-    activeRepo,
+    activeWorkspace,
     isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
@@ -64,6 +65,12 @@ const ProbeHarness = ({
 
   return null;
 };
+
+const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
+  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
+  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  repoPath,
+});
 
 describe("use-workspace-branch-probe", () => {
   test("keeps listeners mounted while transient branch flags change", async () => {
@@ -82,7 +89,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeRepo="/repo-a"
+        activeWorkspace={createActiveWorkspace("/repo-a")}
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -94,7 +101,7 @@ describe("use-workspace-branch-probe", () => {
     try {
       rendered.rerender(
         <ProbeHarness
-          activeRepo="/repo-a"
+          activeWorkspace={createActiveWorkspace("/repo-a")}
           isSwitchingWorkspace={false}
           isLoadingBranches
           isSwitchingBranch={false}
@@ -103,7 +110,7 @@ describe("use-workspace-branch-probe", () => {
       );
       rendered.rerender(
         <ProbeHarness
-          activeRepo="/repo-a"
+          activeWorkspace={createActiveWorkspace("/repo-a")}
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch
@@ -134,7 +141,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeRepo="/repo-a"
+        activeWorkspace={createActiveWorkspace("/repo-a")}
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -147,7 +154,7 @@ describe("use-workspace-branch-probe", () => {
       await triggerFocus();
       rendered.rerender(
         <ProbeHarness
-          activeRepo="/repo-b"
+          activeWorkspace={createActiveWorkspace("/repo-b")}
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
@@ -191,7 +198,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeRepo="/repo-a"
+        activeWorkspace={createActiveWorkspace("/repo-a")}
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -206,7 +213,7 @@ describe("use-workspace-branch-probe", () => {
 
       rendered.rerender(
         <ProbeHarness
-          activeRepo="/repo-b"
+          activeWorkspace={createActiveWorkspace("/repo-b")}
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
@@ -252,7 +259,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeRepo="/repo-a"
+        activeWorkspace={createActiveWorkspace("/repo-a")}
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -266,7 +273,7 @@ describe("use-workspace-branch-probe", () => {
       await triggerFocus();
       rendered.rerender(
         <ProbeHarness
-          activeRepo="/repo-b"
+          activeWorkspace={createActiveWorkspace("/repo-b")}
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}
@@ -297,7 +304,7 @@ describe("use-workspace-branch-probe", () => {
 
     const rendered = render(
       <ProbeHarness
-        activeRepo="/repo-a"
+        activeWorkspace={createActiveWorkspace("/repo-a")}
         isSwitchingWorkspace={false}
         isLoadingBranches={false}
         isSwitchingBranch={false}
@@ -311,7 +318,7 @@ describe("use-workspace-branch-probe", () => {
       await triggerFocus();
       rendered.rerender(
         <ProbeHarness
-          activeRepo="/repo-b"
+          activeWorkspace={createActiveWorkspace("/repo-b")}
           isSwitchingWorkspace={false}
           isLoadingBranches={false}
           isSwitchingBranch={false}

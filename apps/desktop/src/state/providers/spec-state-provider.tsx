@@ -1,10 +1,10 @@
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { buildSpecStateValue } from "../app-state-context-values";
-import { SpecStateContext, useActiveRepoContext } from "../app-state-contexts";
+import { SpecStateContext, useActiveWorkspaceContext } from "../app-state-contexts";
 import { useSpecOperations } from "../operations";
 
 export function SpecStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeRepo } = useActiveRepoContext();
+  const { activeWorkspace } = useActiveWorkspaceContext();
   const {
     loadSpec,
     loadSpecDocument,
@@ -14,7 +14,7 @@ export function SpecStateProvider({ children }: PropsWithChildren): ReactElement
     saveSpecDocument,
     savePlanDocument,
   } = useSpecOperations({
-    activeRepo,
+    activeWorkspace,
   });
 
   const specStateValue = useMemo(

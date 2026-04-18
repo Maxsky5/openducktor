@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   gitQueryKeys,
   loadCurrentBranchFromQuery,
@@ -51,10 +52,27 @@ export function useWorkspaceBranchOperations({
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const lastKnownRevisionRef = useRef<string | null>(null);
-  const activeRepoRef = useRef(activeRepo);
+  const currentWorkspaceRepoPathRef = useRef(activeRepo);
+  const activeWorkspaceRef = useRef<ActiveWorkspace | null>(
+    activeRepo
+      ? {
+          workspaceId: "",
+          workspaceName: "",
+          repoPath: activeRepo,
+        }
+      : null,
+  );
   const previousActiveRepoRef = useRef(activeRepo);
 
-  activeRepoRef.current = activeRepo;
+  currentWorkspaceRepoPathRef.current = activeRepo;
+  activeWorkspaceRef.current =
+    activeRepo === null
+      ? null
+      : {
+          workspaceId: "",
+          workspaceName: "",
+          repoPath: activeRepo,
+        };
 
   const applyBranchState = useCallback(
     (current: GitCurrentBranch, allBranches: GitBranch[]): void => {
@@ -131,7 +149,7 @@ export function useWorkspaceBranchOperations({
 
         if (
           branchRequestVersionRef.current !== requestVersion ||
-          activeRepoRef.current !== repoPath
+          currentWorkspaceRepoPathRef.current !== repoPath
         ) {
           return;
         }
@@ -140,7 +158,7 @@ export function useWorkspaceBranchOperations({
       } finally {
         if (
           branchRequestVersionRef.current === requestVersion &&
-          activeRepoRef.current === repoPath
+          currentWorkspaceRepoPathRef.current === repoPath
         ) {
           setIsLoadingBranches(false);
         }
@@ -193,7 +211,7 @@ export function useWorkspaceBranchOperations({
         } catch (error) {
           if (
             branchRequestVersionRef.current !== requestVersion ||
-            activeRepoRef.current !== repoPath
+            currentWorkspaceRepoPathRef.current !== repoPath
           ) {
             return;
           }
@@ -211,7 +229,7 @@ export function useWorkspaceBranchOperations({
 
         if (
           branchRequestVersionRef.current !== requestVersion ||
-          activeRepoRef.current !== repoPath
+          currentWorkspaceRepoPathRef.current !== repoPath
         ) {
           return;
         }
@@ -230,7 +248,7 @@ export function useWorkspaceBranchOperations({
 
           if (
             branchRequestVersionRef.current !== requestVersion ||
-            activeRepoRef.current !== repoPath
+            currentWorkspaceRepoPathRef.current !== repoPath
           ) {
             return;
           }
@@ -240,7 +258,7 @@ export function useWorkspaceBranchOperations({
         } catch (error) {
           if (
             branchRequestVersionRef.current !== requestVersion ||
-            activeRepoRef.current !== repoPath
+            currentWorkspaceRepoPathRef.current !== repoPath
           ) {
             return;
           }
@@ -263,7 +281,8 @@ export function useWorkspaceBranchOperations({
 
   const branchProbeController = useMemo<WorkspaceBranchProbeController>(
     () => ({
-      activeRepoRef,
+      currentWorkspaceRepoPathRef,
+      activeWorkspaceRef,
       lastKnownBranchNameRef,
       lastKnownDetachedRef,
       lastKnownRevisionRef,

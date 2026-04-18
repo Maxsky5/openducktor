@@ -63,6 +63,7 @@ type UseAgentStudioGitActionsInput = {
   statusHash: string | null;
   diffHash: string | null;
   upstreamAheadBehind?: CommitsAheadBehind | null;
+  detectedConflict?: GitConflict | null;
   detectedConflictedFiles?: string[];
   worktreeStatusSnapshotKey?: string | null;
   refreshDiffData: GitDiffRefresh;
@@ -80,6 +81,7 @@ export function useAgentStudioGitActions({
   statusHash,
   diffHash,
   upstreamAheadBehind = null,
+  detectedConflict = null,
   detectedConflictedFiles = [],
   worktreeStatusSnapshotKey = null,
   refreshDiffData,
@@ -115,6 +117,7 @@ export function useAgentStudioGitActions({
     repoPath,
     workingDir,
     branch,
+    detectedConflict,
     detectedConflictedFiles,
     worktreeStatusSnapshotKey,
     isBuilderSessionWorking,

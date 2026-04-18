@@ -14,17 +14,17 @@ export const healthVariant = (
 };
 
 export const buildDiagnosticsSummary = ({
-  hasActiveRepo,
+  hasActiveWorkspace,
   isChecking,
   hasCriticalIssues,
   hasSetupIssues,
 }: {
-  hasActiveRepo: boolean;
+  hasActiveWorkspace: boolean;
   isChecking: boolean;
   hasCriticalIssues: boolean;
   hasSetupIssues: boolean;
 }): DiagnosticsSummary => {
-  if (!hasActiveRepo) {
+  if (!hasActiveWorkspace) {
     return {
       label: "No repository selected",
       toneClass: "text-muted-foreground",

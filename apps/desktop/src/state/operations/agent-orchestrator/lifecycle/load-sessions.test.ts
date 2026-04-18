@@ -96,8 +96,7 @@ describe("agent-orchestrator-load-sessions", () => {
       activeWorkspace: null,
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
-      activeRepoRef: { current: null },
-      previousRepoRef: { current: null },
+      currentWorkspaceRepoPathRef: { current: null },
       sessionsRef: { current: {} },
       setSessionsById: () => {
         setCalled = true;
@@ -122,8 +121,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef: { current: {} },
       setSessionsById: () => {
         setCalled = true;
@@ -173,8 +171,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -297,8 +294,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -449,8 +445,7 @@ describe("agent-orchestrator-load-sessions", () => {
         ],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -591,8 +586,7 @@ describe("agent-orchestrator-load-sessions", () => {
         listLiveAgentSessionSnapshots: async () => [],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -720,8 +714,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -847,8 +840,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1065,8 +1057,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1286,8 +1277,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1325,7 +1315,7 @@ describe("agent-orchestrator-load-sessions", () => {
     let state: Record<string, AgentSessionState> = {};
     let resumeCalls = 0;
     const repoEpochRef = { current: 2 };
-    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const promptOverridesDeferred = createDeferred<Record<string, never>>();
 
     const setSessionsById = (
@@ -1386,8 +1376,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef,
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef,
+      currentWorkspaceRepoPathRef,
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1443,7 +1432,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     repoEpochRef.current = 3;
-    previousRepoRef.current = "/tmp/other-repo";
+    currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
     promptOverridesDeferred.resolve({});
     await loadPromise;
 
@@ -1532,8 +1521,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1637,8 +1625,7 @@ describe("agent-orchestrator-load-sessions", () => {
         ],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById: (updater) => {
         sessionsRef.current =
@@ -1766,8 +1753,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1863,8 +1849,7 @@ describe("agent-orchestrator-load-sessions", () => {
         ],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -1995,8 +1980,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -2082,8 +2066,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -2223,8 +2206,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById: () => {},
       taskRef: { current: [taskFixture] },
@@ -2309,8 +2291,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById: () => {},
       taskRef: { current: [taskFixture] },
@@ -2441,8 +2422,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -2587,8 +2567,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter,
       repoEpochRef: { current: 0 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById: (updater) => {
         if (typeof updater === "function") {
@@ -2688,8 +2667,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -2767,8 +2745,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -2869,8 +2846,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -2979,8 +2955,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3080,8 +3055,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3199,8 +3173,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3353,8 +3326,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3429,7 +3401,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const repoEpochRef = { current: 2 };
-    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const resumeDeferred = createDeferred<void>();
     let attachedListeners = 0;
 
@@ -3489,7 +3461,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef,
-      previousRepoRef,
+      currentWorkspaceRepoPathRef,
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3547,7 +3519,7 @@ describe("agent-orchestrator-load-sessions", () => {
         historyPolicy: "live_if_empty",
       });
       repoEpochRef.current = 3;
-      previousRepoRef.current = "/tmp/other-repo";
+      currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
       resumeDeferred.resolve(undefined);
       await loadPromise;
     } finally {
@@ -3595,8 +3567,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3707,8 +3678,7 @@ describe("agent-orchestrator-load-sessions", () => {
         ],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3841,8 +3811,7 @@ describe("agent-orchestrator-load-sessions", () => {
         ],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -3997,8 +3966,7 @@ describe("agent-orchestrator-load-sessions", () => {
         listLiveAgentSessionSnapshots: async () => [],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -4070,7 +4038,7 @@ describe("agent-orchestrator-load-sessions", () => {
   test("skips hydration when repo epoch changes while loading persisted sessions", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     const repoEpochRef = { current: 2 };
-    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const listDeferred = createDeferred<AgentSessionRecord[]>();
     let setCalls = 0;
     let state: Record<string, AgentSessionState> = {};
@@ -4100,7 +4068,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef,
-      previousRepoRef,
+      currentWorkspaceRepoPathRef,
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -4116,7 +4084,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       const loadPromise = loadAgentSessions("task-1");
       repoEpochRef.current = 3;
-      previousRepoRef.current = "/tmp/other-repo";
+      currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
 
       listDeferred.resolve([
         persistedSessionRecord({
@@ -4183,8 +4151,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -4299,8 +4266,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       }),
       repoEpochRef: { current: 1 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
@@ -4504,8 +4470,7 @@ describe("agent-orchestrator-load-sessions", () => {
         ],
       }),
       repoEpochRef: { current: 2 },
-      activeRepoRef: { current: "/tmp/repo" },
-      previousRepoRef: { current: "/tmp/repo" },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },

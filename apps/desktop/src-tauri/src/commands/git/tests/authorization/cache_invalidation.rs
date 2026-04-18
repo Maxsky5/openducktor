@@ -21,12 +21,12 @@ const WORKSPACE_ID: &str = "repo";
 fn git_create_worktree_invalidates_authorized_worktree_cache() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-command-create-worktree-cache-invalidate",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let repo_path = Path::new(&fixture.repo_path);
@@ -103,12 +103,12 @@ fn git_create_worktree_invalidates_authorized_worktree_cache() {
 fn git_remove_worktree_invalidates_authorized_worktree_cache() {
     let fixture = setup_command_git_fixture_with_mutations(
         "git-command-remove-worktree-cache-invalidate",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let repo_path = Path::new(&fixture.repo_path);
@@ -183,12 +183,12 @@ fn git_remove_worktree_invalidates_authorized_worktree_cache() {
 fn workspace_select_invalidates_authorized_worktree_cache() {
     let fixture = setup_command_git_fixture(
         "workspace-select-cache-invalidate",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let repo_path = Path::new(&fixture.repo_path);
@@ -252,12 +252,12 @@ fn workspace_select_invalidates_authorized_worktree_cache() {
 fn workspace_select_invalidates_only_selected_repo_cache_entry() {
     let fixture = setup_command_git_fixture(
         "workspace-select-cache-invalidate-selected-only",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let selected_repo = Path::new(&fixture.repo_path);
@@ -317,12 +317,12 @@ fn workspace_select_invalidates_only_selected_repo_cache_entry() {
 fn workspace_update_repo_config_invalidates_authorized_worktree_cache() {
     let fixture = setup_command_git_fixture(
         "workspace-update-repo-config-cache-invalidate",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let repo_path = Path::new(&fixture.repo_path);
@@ -403,12 +403,12 @@ fn workspace_update_repo_config_invalidates_authorized_worktree_cache() {
 fn workspace_save_repo_settings_invalidates_authorized_worktree_cache() {
     let fixture = setup_command_git_fixture(
         "workspace-save-repo-settings-cache-invalidate",
-        WorktreeStatusResult::Ok(sample_worktree_status_data(
+        WorktreeStatusResult::Ok(Box::new(sample_worktree_status_data(
             GitUpstreamAheadBehind::Tracking {
                 ahead: 0,
                 behind: 0,
             },
-        )),
+        ))),
         true,
     );
     let repo_path = Path::new(&fixture.repo_path);

@@ -69,7 +69,6 @@ export function useAgentStudioFreshSessionCreation({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
-  const activeRepo = activeWorkspace?.repoPath ?? null;
   const applyFreshSessionSelectionQuery = useCallback(
     (sessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
       updateQuery(
@@ -90,7 +89,7 @@ export function useAgentStudioFreshSessionCreation({
       nextScenario: AgentScenario;
     }): Promise<string | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
-        activeRepo,
+        activeWorkspace,
         taskId,
         role: params.nextRole,
         sessionId: null,
@@ -221,7 +220,6 @@ export function useAgentStudioFreshSessionCreation({
     },
     [
       activeSession,
-      activeRepo,
       activeWorkspace,
       applyFreshSessionSelectionQuery,
       onContextSwitchIntent,

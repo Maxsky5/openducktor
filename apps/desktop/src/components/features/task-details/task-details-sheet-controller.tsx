@@ -39,7 +39,7 @@ export const TaskDetailsSheetController = forwardRef<
   TaskDetailsSheetControllerProps
 >(function TaskDetailsSheetController(
   {
-    activeRepo = null,
+    activeWorkspace = null,
     allTasks,
     runs,
     taskSessionsByTaskId,
@@ -100,7 +100,7 @@ export const TaskDetailsSheetController = forwardRef<
 
   return (
     <TaskDetailsSheet
-      activeRepo={activeRepo}
+      activeWorkspace={activeWorkspace}
       task={task}
       allTasks={allTasks}
       runs={runs}

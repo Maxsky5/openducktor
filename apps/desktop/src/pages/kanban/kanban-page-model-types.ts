@@ -13,6 +13,7 @@ import type {
 } from "@/components/features/kanban/kanban-task-activity";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type KanbanSessionStartIntent = {
   taskId: string;
@@ -137,7 +138,7 @@ export type KanbanPageTaskComposerModel = {
 };
 
 export type KanbanPageTaskDetailsControllerModel = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   allTasks: TaskCard[];
   runs: RunSummary[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;

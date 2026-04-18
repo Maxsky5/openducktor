@@ -54,7 +54,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   });
 
   return {
-    activeRepo: "/repo",
+    activeWorkspace: {
+      workspaceId: "workspace-repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+    },
     selection: {
       viewTaskId: "task-1",
       viewSelectedTask: createTaskCardFixture({

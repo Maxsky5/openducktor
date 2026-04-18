@@ -29,7 +29,7 @@ import {
   repoRuntimeSlashCommandsQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import {
   getAttachedSessionRuntimeConnectionError,
   toAttachedSessionRuntimeConnection,
@@ -52,7 +52,7 @@ import {
 } from "./use-agent-studio-model-selection-model";
 
 type UseAgentStudioModelSelectionArgs = {
-  activeRepo: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   activeSession: AgentSessionState | null;
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
@@ -141,7 +141,7 @@ const toRuntimeQueryInput = (
 };
 
 export function useAgentStudioModelSelection({
-  activeRepo,
+  activeWorkspace,
   activeSession,
   role,
   repoSettings,
@@ -152,6 +152,7 @@ export function useAgentStudioModelSelection({
   readSessionSlashCommands,
   readSessionFileSearch,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
     runtimeDefinitions,
     loadRepoRuntimeCatalog,
@@ -162,8 +163,8 @@ export function useAgentStudioModelSelection({
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
-  const previousActiveRepoRef = useRef<string | null>(activeRepo);
-  const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
+  const previousWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
+  const previousWorkspaceRepoPathForDefaultsRef = useRef<string | null>(workspaceRepoPath);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
   const activeSessionContextUsageCacheRef = useRef<{
     sessionId: string;
@@ -173,8 +174,10 @@ export function useAgentStudioModelSelection({
     key: string;
     value: NonNullable<AgentStudioContextUsage>;
   } | null>(null);
-  const [isAwaitingRepoSettingsForActiveRepo, setIsAwaitingRepoSettingsForActiveRepo] =
-    useState(false);
+  const [
+    isAwaitingRepoSettingsForWorkspaceRepoPath,
+    setIsAwaitingRepoSettingsForWorkspaceRepoPath,
+  ] = useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
   const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
@@ -265,41 +268,47 @@ export function useAgentStudioModelSelection({
   }, [fileSearchRuntimeKind, runtimeDefinitions]);
 
   useEffect(() => {
-    if (previousActiveRepoRef.current === activeRepo) {
+    if (previousWorkspaceRepoPathRef.current === workspaceRepoPath) {
       return;
     }
-    previousActiveRepoRef.current = activeRepo;
+    previousWorkspaceRepoPathRef.current = workspaceRepoPath;
     setDraftSelectionByRole(emptyDraftSelections());
     setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
-  }, [activeRepo]);
+  }, [workspaceRepoPath]);
 
   useEffect(() => {
-    if (previousRepoForDefaultsRef.current !== activeRepo) {
-      previousRepoForDefaultsRef.current = activeRepo;
+    if (previousWorkspaceRepoPathForDefaultsRef.current !== workspaceRepoPath) {
+      previousWorkspaceRepoPathForDefaultsRef.current = workspaceRepoPath;
       previousRepoSettingsRef.current = repoSettings;
-      setIsAwaitingRepoSettingsForActiveRepo(Boolean(activeRepo) && repoSettings == null);
+      setIsAwaitingRepoSettingsForWorkspaceRepoPath(
+        Boolean(workspaceRepoPath) && repoSettings == null,
+      );
       return;
     }
 
-    if (!isAwaitingRepoSettingsForActiveRepo) {
+    if (!isAwaitingRepoSettingsForWorkspaceRepoPath) {
       previousRepoSettingsRef.current = repoSettings;
       return;
     }
 
     if (repoSettings != null) {
       previousRepoSettingsRef.current = repoSettings;
-      setIsAwaitingRepoSettingsForActiveRepo(false);
+      setIsAwaitingRepoSettingsForWorkspaceRepoPath(false);
     }
-  }, [activeRepo, isAwaitingRepoSettingsForActiveRepo, repoSettings]);
+  }, [workspaceRepoPath, isAwaitingRepoSettingsForWorkspaceRepoPath, repoSettings]);
 
   const composerCatalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", composerRuntimeKind, loadCatalogForRepo),
-    enabled: activeRepo !== null && activeSession == null,
+    ...repoRuntimeCatalogQueryOptions(
+      workspaceRepoPath ?? "",
+      composerRuntimeKind,
+      loadCatalogForRepo,
+    ),
+    enabled: workspaceRepoPath !== null && activeSession == null,
     queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!activeRepo) {
+      if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
       }
-      return loadCatalogForRepo(activeRepo, composerRuntimeKind);
+      return loadCatalogForRepo(workspaceRepoPath, composerRuntimeKind);
     },
   });
   const composerCatalog = composerCatalogQuery.data ?? null;
@@ -326,14 +335,15 @@ export function useAgentStudioModelSelection({
   });
   const repoSlashCommandsQuery = useQuery({
     ...repoRuntimeSlashCommandsQueryOptions(
-      activeRepo ?? "",
+      workspaceRepoPath ?? "",
       composerRuntimeKind,
       loadSlashCommandsForRepo,
     ),
-    enabled: supportsSlashCommands && activeRepo !== null && activeSession == null,
+    enabled: supportsSlashCommands && workspaceRepoPath !== null && activeSession == null,
   });
-  const hasDraftSelectionForActiveRepo = previousActiveRepoRef.current === activeRepo;
-  const isDraftSelectionTouched = hasDraftSelectionForActiveRepo
+  const hasDraftSelectionForWorkspaceRepoPath =
+    previousWorkspaceRepoPathRef.current === workspaceRepoPath;
+  const isDraftSelectionTouched = hasDraftSelectionForWorkspaceRepoPath
     ? draftSelectionTouchedByRole[role]
     : false;
 
@@ -400,16 +410,21 @@ export function useAgentStudioModelSelection({
     updateAgentSessionModel,
   ]);
 
-  const draftSelection = hasDraftSelectionForActiveRepo ? draftSelectionByRole[role] : null;
+  const draftSelection = hasDraftSelectionForWorkspaceRepoPath ? draftSelectionByRole[role] : null;
   const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
     if (activeSession) {
       return roleDefaultSelection;
     }
     if (!composerCatalog) {
-      return isAwaitingRepoSettingsForActiveRepo ? null : roleDefaultSelection;
+      return isAwaitingRepoSettingsForWorkspaceRepoPath ? null : roleDefaultSelection;
     }
     return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
-  }, [activeSession, composerCatalog, isAwaitingRepoSettingsForActiveRepo, roleDefaultSelection]);
+  }, [
+    activeSession,
+    composerCatalog,
+    isAwaitingRepoSettingsForWorkspaceRepoPath,
+    roleDefaultSelection,
+  ]);
   const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
   const slashCommandCatalog = activeSession
     ? (activeSessionSlashCommandsQuery.data ?? null)
@@ -453,12 +468,12 @@ export function useAgentStudioModelSelection({
           ),
         );
       }
-      if (!activeRepo) {
+      if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
       }
       return queryClient.fetchQuery(
         repoRuntimeFileSearchQueryOptions(
-          activeRepo,
+          workspaceRepoPath,
           composerRuntimeKind,
           query,
           loadFileSearchForRepo,
@@ -466,7 +481,7 @@ export function useAgentStudioModelSelection({
       );
     },
     [
-      activeRepo,
+      workspaceRepoPath,
       hasActiveSession,
       activeSessionRuntimeQueryInput,
       activeSessionRuntimeQueryError,

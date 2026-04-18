@@ -6,7 +6,7 @@ import type {
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
-import type { DiffScope, DiffScopeState } from "./contracts";
+import type { DiffScope, DiffScopeState, GitConflict } from "./contracts";
 
 export type UseAgentStudioDiffDataInput = {
   repoPath: string | null;
@@ -32,6 +32,7 @@ export type LoadDataMode = "full" | "summary";
 export type ScopeSummaryFields = Pick<
   ScopeSnapshot,
   | "branch"
+  | "gitConflict"
   | "uncommittedFileCount"
   | "commitsAheadBehind"
   | "upstreamAheadBehind"
@@ -53,6 +54,7 @@ const EMPTY_STATUSES: FileStatus[] = [];
 
 const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   branch: null,
+  gitConflict: null,
   fileDiffs: EMPTY_DIFFS,
   fileStatuses: EMPTY_STATUSES,
   uncommittedFileCount: 0,
@@ -124,6 +126,44 @@ const aheadBehindEqual = (
   return left.ahead === right.ahead && left.behind === right.behind;
 };
 
+const toGitConflict = (
+  conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
+): GitConflict | null => {
+  if (!conflict) {
+    return null;
+  }
+
+  return {
+    operation: conflict.operation,
+    currentBranch: conflict.currentBranch ?? null,
+    targetBranch: conflict.targetBranch,
+    conflictedFiles: conflict.conflictedFiles,
+    output: conflict.output,
+    workingDir: conflict.workingDir ?? null,
+  };
+};
+
+const gitConflictEqual = (
+  left: GitConflict | null | undefined,
+  right: GitConflict | null | undefined,
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.operation === right.operation &&
+    left.currentBranch === right.currentBranch &&
+    left.targetBranch === right.targetBranch &&
+    left.output === right.output &&
+    left.workingDir === right.workingDir &&
+    arraysEqual(left.conflictedFiles, right.conflictedFiles, (a, b) => a === b)
+  );
+};
+
 const hashMetadataEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =>
   left.hashVersion === right.hashVersion &&
   left.statusHash === right.statusHash &&
@@ -143,13 +183,19 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
     const hashesMatch = left.statusHash === right.statusHash && left.diffHash === right.diffHash;
     const contentReferencesMatch =
       left.fileDiffs === right.fileDiffs && left.fileStatuses === right.fileStatuses;
-    if (hashesMatch && left.error === right.error && contentReferencesMatch) {
+    if (
+      hashesMatch &&
+      left.error === right.error &&
+      contentReferencesMatch &&
+      gitConflictEqual(left.gitConflict, right.gitConflict)
+    ) {
       return true;
     }
   }
 
   return (
     left.branch === right.branch &&
+    gitConflictEqual(left.gitConflict, right.gitConflict) &&
     arraysEqual(left.fileDiffs, right.fileDiffs, fileDiffEqual) &&
     arraysEqual(left.fileStatuses, right.fileStatuses, fileStatusEqual) &&
     left.uncommittedFileCount === right.uncommittedFileCount &&
@@ -203,6 +249,7 @@ export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
   );
   return {
     branch: snapshot.currentBranch.name ?? null,
+    gitConflict: toGitConflict(snapshot.gitConflict),
     fileDiffs: snapshot.fileDiffs,
     fileStatuses: snapshot.fileStatuses,
     uncommittedFileCount: snapshot.fileStatuses.length,
@@ -222,6 +269,7 @@ export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSu
   );
   return {
     branch: summary.currentBranch.name ?? null,
+    gitConflict: toGitConflict(summary.gitConflict),
     uncommittedFileCount: summary.fileStatusCounts.total,
     commitsAheadBehind: summary.targetAheadBehind,
     upstreamAheadBehind,
@@ -236,6 +284,7 @@ export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSu
 const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): ScopeSnapshot => ({
   ...base,
   branch: source.branch,
+  gitConflict: source.gitConflict ?? null,
   fileStatuses: source.fileStatuses,
   uncommittedFileCount: source.uncommittedFileCount,
   commitsAheadBehind: source.commitsAheadBehind,
@@ -252,6 +301,7 @@ const mergeSharedSummaryFields = (
 ): ScopeSnapshot => ({
   ...base,
   branch: source.branch,
+  gitConflict: source.gitConflict ?? null,
   uncommittedFileCount: source.uncommittedFileCount,
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
