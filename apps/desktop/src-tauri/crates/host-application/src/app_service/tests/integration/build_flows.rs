@@ -903,6 +903,15 @@ fn agent_session_stop_targets_shared_runtime_qa_sessions_without_stopping_the_bu
     let abort_request = fs::read_to_string(aborts_file.as_path())?;
     assert!(abort_request.contains("/session/external-qa-session/abort?directory="));
     assert!(!abort_request.contains("external-build-session"));
+    let stored_run_state = {
+        let runs = service.runs.lock().expect("run lock poisoned");
+        runs.get(run.run_id.as_str())
+            .expect("build run should remain registered")
+            .summary
+            .state
+            .clone()
+    };
+    assert!(matches!(stored_run_state, RunState::Running));
 
     assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
     let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
@@ -1007,6 +1016,465 @@ fn agent_session_stop_propagates_abort_failures_without_marking_build_runs_stopp
     let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
     assert_eq!(runtime.len(), 1);
     assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_supports_workspace_scoped_planner_sessions() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-planner-workspace");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let aborts_file = root.join("aborts.log");
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("planner-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let build_run =
+        service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let build_runtime = service
+        .runtime_list("opencode", Some(repo_path.as_str()))?
+        .into_iter()
+        .next()
+        .expect("build runtime should be present");
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .insert(
+            "runtime-workspace-root".to_string(),
+            AgentRuntimeProcess {
+                summary: RuntimeInstanceSummary {
+                    runtime_id: "runtime-workspace-root".to_string(),
+                    working_directory: repo_path.clone(),
+                    ..build_runtime.clone()
+                },
+                child: None,
+                _runtime_process_guard: None,
+                cleanup_target: None,
+            },
+        );
+    let mut planner_session = make_session("task-1", "planner-session");
+    planner_session.role = "planner".to_string();
+    planner_session.scenario = "planner_initial".to_string();
+    planner_session.working_directory = repo_path.clone();
+    planner_session.external_session_id = Some("external-planner-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", planner_session)?);
+
+    let stopped = service.agent_session_stop(
+        AgentSessionStopRequest {
+            repo_path: repo_path.clone(),
+            task_id: "task-1".to_string(),
+            session_id: "planner-session".to_string(),
+            runtime_kind: AgentRuntimeKind::opencode(),
+            working_directory: repo_path.clone(),
+            external_session_id: Some("external-planner-session".to_string()),
+        },
+        emitter.clone(),
+    )?;
+
+    assert!(stopped);
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let abort_request = fs::read_to_string(aborts_file.as_path())?;
+    assert!(abort_request.contains("/session/external-planner-session/abort?directory="));
+    assert!(service.runtime_stop("runtime-workspace-root")?);
+    assert!(service.build_cleanup(build_run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    assert!(service.runtime_stop(build_runtime.runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_requires_external_session_id_without_marking_build_runs_stopped() -> Result<()>
+{
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-missing-external-id");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.working_directory = run.worktree_path.clone();
+    session.external_session_id = None;
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    let error = service
+        .agent_session_stop(
+            AgentSessionStopRequest {
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                session_id: "build-session".to_string(),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                working_directory: run.worktree_path.clone(),
+                external_session_id: None,
+            },
+            emitter.clone(),
+        )
+        .expect_err("missing external session ids should fail fast");
+    assert!(error
+        .to_string()
+        .contains("Session build-session is missing an external runtime session id"));
+    let stored_run_state = {
+        let runs = service.runs.lock().expect("run lock poisoned");
+        runs.get(run.run_id.as_str())
+            .expect("build run should remain registered")
+            .summary
+            .state
+            .clone()
+    };
+    assert!(matches!(stored_run_state, RunState::Running));
+
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    let runtime = service.runtime_list("opencode", Some(repo_path.as_str()))?;
+    assert_eq!(runtime.len(), 1);
+    assert!(service.runtime_stop(runtime[0].runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_fails_when_no_live_runtime_route_is_resolvable() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-missing-route");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let runtime_id = service.runtime_list("opencode", Some(repo_path.as_str()))?[0]
+        .runtime_id
+        .clone();
+    let original_worktree_path = run.worktree_path.clone();
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.working_directory = run.worktree_path.clone();
+    session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    service
+        .runs
+        .lock()
+        .expect("run lock poisoned")
+        .get_mut(run.run_id.as_str())
+        .expect("build run should exist")
+        .worktree_path = root
+        .join("unmatched-worktree")
+        .to_string_lossy()
+        .to_string();
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .get_mut(runtime_id.as_str())
+        .expect("runtime should exist")
+        .summary
+        .working_directory = root
+        .join("unmatched-runtime-worktree")
+        .to_string_lossy()
+        .to_string();
+
+    let error = service
+        .agent_session_stop(
+            AgentSessionStopRequest {
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                session_id: "build-session".to_string(),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                working_directory: run.worktree_path.clone(),
+                external_session_id: Some("external-build-session".to_string()),
+            },
+            emitter.clone(),
+        )
+        .expect_err("missing runtime routes should fail fast");
+    assert!(error
+        .to_string()
+        .contains("No live runtime route found for session build-session"));
+    let stored_run_state = {
+        let runs = service.runs.lock().expect("run lock poisoned");
+        runs.get(run.run_id.as_str())
+            .expect("build run should remain registered")
+            .summary
+            .state
+            .clone()
+    };
+    assert!(matches!(stored_run_state, RunState::Running));
+
+    service
+        .runs
+        .lock()
+        .expect("run lock poisoned")
+        .get_mut(run.run_id.as_str())
+        .expect("build run should exist")
+        .worktree_path = original_worktree_path;
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    assert!(service.runtime_stop(runtime_id.as_str())?);
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_fails_when_multiple_live_runtime_routes_match() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-multiple-routes");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            dev_servers: Vec::new(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+            ..Default::default()
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    let runtime_summary = service
+        .runtime_list("opencode", Some(repo_path.as_str()))?
+        .into_iter()
+        .next()
+        .expect("build runtime should be present");
+    let mut session = make_session("task-1", "planner-session");
+    session.role = "planner".to_string();
+    session.scenario = "planner_initial".to_string();
+    session.working_directory = repo_path.clone();
+    session.external_session_id = Some("external-planner-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .insert(
+            "runtime-workspace-root-primary".to_string(),
+            AgentRuntimeProcess {
+                summary: RuntimeInstanceSummary {
+                    runtime_id: "runtime-workspace-root-primary".to_string(),
+                    working_directory: repo_path.clone(),
+                    ..runtime_summary.clone()
+                },
+                child: None,
+                _runtime_process_guard: None,
+                cleanup_target: None,
+            },
+        );
+
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .insert(
+            "runtime-workspace-root-secondary".to_string(),
+            AgentRuntimeProcess {
+                summary: RuntimeInstanceSummary {
+                    runtime_id: "runtime-workspace-root-secondary".to_string(),
+                    working_directory: repo_path.clone(),
+                    runtime_route: builtin_opencode_runtime_route(51_234),
+                    ..runtime_summary.clone()
+                },
+                child: None,
+                _runtime_process_guard: None,
+                cleanup_target: None,
+            },
+        );
+
+    let error = service
+        .agent_session_stop(
+            AgentSessionStopRequest {
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                session_id: "planner-session".to_string(),
+                runtime_kind: AgentRuntimeKind::opencode(),
+                working_directory: repo_path.clone(),
+                external_session_id: Some("external-planner-session".to_string()),
+            },
+            emitter.clone(),
+        )
+        .expect_err("ambiguous runtime routes should fail fast");
+    assert!(error
+        .to_string()
+        .contains("Multiple live runtime routes matched session planner-session"));
+    let stored_run_state = {
+        let runs = service.runs.lock().expect("run lock poisoned");
+        runs.get(run.run_id.as_str())
+            .expect("build run should remain registered")
+            .summary
+            .state
+            .clone()
+    };
+    assert!(matches!(stored_run_state, RunState::Running));
+
+    assert!(service.runtime_stop("runtime-workspace-root-secondary")?);
+    assert!(service.runtime_stop("runtime-workspace-root-primary")?);
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+    assert!(service.runtime_stop(runtime_summary.runtime_id.as_str())?);
 
     let _ = fs::remove_dir_all(root);
     Ok(())

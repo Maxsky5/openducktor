@@ -151,7 +151,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     ).rejects.toThrow("Workspace changed while starting session.");
   });
 
-  test("stops known session and clears pending state", async () => {
+  test("stops a workspace-scoped planner session and clears pending state", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => false;
@@ -163,6 +163,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           role: "planner",
           runId: null,
           runtimeId: null,
+          workingDirectory: "/tmp/repo",
           pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
           pendingQuestions: [
             {
@@ -232,7 +233,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           taskId: "task-1",
           sessionId: "session-1",
           runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
+          workingDirectory: "/tmp/repo",
           externalSessionId: "external-1",
         },
       ]);
