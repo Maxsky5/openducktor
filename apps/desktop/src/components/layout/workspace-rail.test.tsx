@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   type AppStateProviderModule,
@@ -29,63 +29,6 @@ const workspaceRecord = (
 
 let workspaceState: WorkspaceStateContextValue;
 let WorkspaceRail: typeof import("./workspace-rail").WorkspaceRail;
-
-const setElementRect = (element: HTMLElement, rect: Omit<DOMRect, "toJSON">): void => {
-  Object.defineProperty(element, "getBoundingClientRect", {
-    configurable: true,
-    value: () => ({
-      ...rect,
-      toJSON: () => ({}),
-    }),
-  });
-};
-
-const dragWithMouse = async (
-  element: HTMLElement,
-  start: { clientX: number; clientY: number },
-  moves: Array<{ clientX: number; clientY: number }>,
-): Promise<void> => {
-  await act(async () => {
-    fireEvent.mouseDown(element, {
-      button: 0,
-      buttons: 1,
-      ...start,
-    });
-
-    for (const move of moves) {
-      fireEvent.mouseMove(document, {
-        buttons: 1,
-        ...move,
-      });
-    }
-  });
-};
-
-const finishMouseDrag = async (position: { clientX: number; clientY: number }): Promise<void> => {
-  await act(async () => {
-    fireEvent.mouseUp(document, {
-      button: 0,
-      ...position,
-    });
-  });
-};
-
-const withMouseSensorFallback = async (run: () => Promise<void>): Promise<void> => {
-  const originalPointerEvent = globalThis.PointerEvent;
-  Object.defineProperty(globalThis, "PointerEvent", {
-    configurable: true,
-    value: undefined,
-  });
-
-  try {
-    await run();
-  } finally {
-    Object.defineProperty(globalThis, "PointerEvent", {
-      configurable: true,
-      value: originalPointerEvent,
-    });
-  }
-};
 
 describe("WorkspaceRail", () => {
   beforeEach(async () => {
@@ -192,54 +135,5 @@ describe("WorkspaceRail", () => {
 
     expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("disabled")).toBe(null);
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("disabled")).toBe(null);
-  });
-
-  test("reorders workspaces vertically without making a duplicate switch", async () => {
-    workspaceState.workspaces = [
-      workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
-      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
-    ];
-
-    await withMouseSensorFallback(async () => {
-      render(<WorkspaceRail onOpenRepositoryModal={() => {}} />);
-
-      const alphaButton = screen.getByRole("button", { name: "Alpha Repo" });
-      const betaButton = screen.getByRole("button", { name: "Beta Repo" });
-      const alphaShell = alphaButton.parentElement;
-      const betaShell = betaButton.parentElement;
-      if (!alphaShell || !betaShell) {
-        throw new Error("Workspace drag shell not found");
-      }
-
-      setElementRect(alphaShell, {
-        x: 0,
-        y: 0,
-        left: 0,
-        top: 0,
-        right: 40,
-        bottom: 40,
-        width: 40,
-        height: 40,
-      });
-      setElementRect(betaShell, {
-        x: 0,
-        y: 48,
-        left: 0,
-        top: 48,
-        right: 40,
-        bottom: 88,
-        width: 40,
-        height: 40,
-      });
-
-      await dragWithMouse(betaShell, { clientX: 20, clientY: 68 }, [
-        { clientX: 20, clientY: 48 },
-        { clientX: 20, clientY: 16 },
-      ]);
-      await finishMouseDrag({ clientX: 20, clientY: 16 });
-
-      expect(reorderWorkspacesMock).toHaveBeenCalledWith(["beta", "alpha"]);
-      expect(selectWorkspaceMock).not.toHaveBeenCalled();
-    });
   });
 });

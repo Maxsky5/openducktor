@@ -1032,9 +1032,9 @@ mod tests {
             .to_string();
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(payload.as_array().map(Vec::len), Some(1));
-        assert_eq!(payload[0]["workspaceId"], json!(workspace_id));
-        assert_eq!(payload[0]["repoPath"], json!(expected_repo_path));
+        assert_eq!(payload["workspaces"].as_array().map(Vec::len), Some(1));
+        assert_eq!(payload["workspaces"][0]["workspaceId"], json!(workspace_id));
+        assert_eq!(payload["workspaces"][0]["repoPath"], json!(expected_repo_path));
     }
 
     #[tokio::test]
