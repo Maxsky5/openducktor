@@ -224,6 +224,49 @@ pub async fn task_direct_merge(
     as_error(result)
 }
 
+#[cfg(test)]
+mod tests {
+    use host_domain::AgentSessionStopRequest;
+    use serde::Deserialize;
+    use serde_json::json;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct AgentSessionStopCommandPayload {
+        request: AgentSessionStopRequest,
+    }
+
+    #[test]
+    fn agent_session_stop_payload_accepts_wrapped_request() {
+        let parsed = serde_json::from_value::<AgentSessionStopCommandPayload>(json!({
+            "request": {
+                "repoPath": "/repo",
+                "taskId": "task-1",
+                "sessionId": "session-1",
+                "runtimeKind": "opencode",
+                "workingDirectory": "/repo/worktrees/task-1",
+                "externalSessionId": "external-session-1"
+            }
+        }))
+        .expect("payload should deserialize");
+
+        assert_eq!(parsed.request.repo_path, "/repo");
+        assert_eq!(parsed.request.task_id, "task-1");
+        assert_eq!(parsed.request.session_id, "session-1");
+    }
+
+    #[test]
+    fn agent_session_stop_payload_rejects_missing_request() {
+        let error = serde_json::from_value::<AgentSessionStopCommandPayload>(json!({
+            "repoPath": "/repo",
+            "taskId": "task-1"
+        }))
+        .expect_err("request envelope should be required at command boundary");
+
+        assert!(error.to_string().contains("request"));
+    }
+}
+
 #[tauri::command]
 pub async fn task_direct_merge_complete(
     state: State<'_, AppState>,

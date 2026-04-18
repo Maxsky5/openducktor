@@ -146,6 +146,46 @@ describe("createBrowserLiveHostClient", () => {
       }),
     );
   });
+
+  test("posts wrapped session stop requests to the browser backend", async () => {
+    const { createBrowserLiveHostClient } = await loadBrowserLiveClient();
+    const fetchMock = mock(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    const client = createBrowserLiveHostClient();
+    const result = await client.agentSessionStop({
+      repoPath: "/repo",
+      taskId: "task-1",
+      sessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/task-1",
+      externalSessionId: "external-session-1",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:14327/invoke/agent_session_stop",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request: {
+            repoPath: "/repo",
+            taskId: "task-1",
+            sessionId: "session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/task-1",
+            externalSessionId: "external-session-1",
+          },
+        }),
+      }),
+    );
+  });
 });
 
 describe("browser live SSE subscriptions", () => {

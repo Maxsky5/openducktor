@@ -42,7 +42,7 @@ use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
     parse_mcp_command_json, read_opencode_version, resolve_mcp_command,
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    validate_parent_relationships_for_update, AgentRuntimeProcess, RunProcess,
+    validate_parent_relationships_for_update, AgentRuntimeProcess, AppService, RunProcess,
 };
 
 fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()> {
@@ -89,6 +89,69 @@ fn assert_branch_missing(repo_path: &Path, branch: &str) -> Result<()> {
         "branch {branch} should have been removed"
     );
     Ok(())
+}
+
+fn session_stop_repo_config(worktree_base: &Path) -> RepoConfig {
+    RepoConfig {
+        default_runtime_kind: "opencode".to_string(),
+        worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+        branch_prefix: "odt".to_string(),
+        default_target_branch: host_infra_system::GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
+        },
+        git: Default::default(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        dev_servers: Vec::new(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(),
+        ..Default::default()
+    }
+}
+
+fn create_session_stop_service(
+    root: &Path,
+    worktree_base_name: &str,
+) -> Result<(AppService, String)> {
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = root.join("repo").to_string_lossy().to_string();
+    let worktree_base = root.join(worktree_base_name);
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path.as_str(),
+        session_stop_repo_config(worktree_base.as_path()),
+    )?;
+    Ok((service, repo_path))
+}
+
+fn make_agent_session_stop_request(
+    repo_path: &str,
+    session_id: &str,
+    working_directory: &str,
+    external_session_id: Option<&str>,
+) -> AgentSessionStopRequest {
+    AgentSessionStopRequest {
+        repo_path: repo_path.to_string(),
+        task_id: "task-1".to_string(),
+        session_id: session_id.to_string(),
+        runtime_kind: AgentRuntimeKind::opencode(),
+        working_directory: working_directory.to_string(),
+        external_session_id: external_session_id.map(str::to_string),
+    }
 }
 
 #[test]
@@ -570,42 +633,7 @@ fn build_stop_aborts_matching_builder_session_on_shared_runtime() -> Result<()> 
         r#"{"external-build-session":{"type":"busy"}}"#,
     );
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
@@ -783,14 +811,12 @@ fn agent_session_stop_marks_the_matching_build_run_stopped() -> Result<()> {
     assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
 
     let stopped = service.agent_session_stop(
-        AgentSessionStopRequest {
-            repo_path: repo_path.clone(),
-            task_id: "task-1".to_string(),
-            session_id: "build-session".to_string(),
-            runtime_kind: AgentRuntimeKind::opencode(),
-            working_directory: run.worktree_path.clone(),
-            external_session_id: Some("external-build-session".to_string()),
-        },
+        make_agent_session_stop_request(
+            repo_path.as_str(),
+            "build-session",
+            run.worktree_path.as_str(),
+            Some("external-build-session"),
+        ),
         emitter.clone(),
     )?;
 
@@ -831,42 +857,7 @@ fn agent_session_stop_targets_shared_runtime_qa_sessions_without_stopping_the_bu
         aborts_file.to_string_lossy().as_ref(),
     );
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
@@ -884,14 +875,12 @@ fn agent_session_stop_targets_shared_runtime_qa_sessions_without_stopping_the_bu
     assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", qa_session)?);
 
     let stopped = service.agent_session_stop(
-        AgentSessionStopRequest {
-            repo_path: repo_path.clone(),
-            task_id: "task-1".to_string(),
-            session_id: "qa-session".to_string(),
-            runtime_kind: AgentRuntimeKind::opencode(),
-            working_directory: run.worktree_path.clone(),
-            external_session_id: Some("external-qa-session".to_string()),
-        },
+        make_agent_session_stop_request(
+            repo_path.as_str(),
+            "qa-session",
+            run.worktree_path.as_str(),
+            Some("external-qa-session"),
+        ),
         emitter.clone(),
     )?;
 
@@ -943,42 +932,7 @@ fn agent_session_stop_propagates_abort_failures_without_marking_build_runs_stopp
         r#"{"external-build-session":{"type":"busy"}}"#,
     );
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
@@ -990,14 +944,12 @@ fn agent_session_stop_propagates_abort_failures_without_marking_build_runs_stopp
 
     let error = service
         .agent_session_stop(
-            AgentSessionStopRequest {
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                session_id: "build-session".to_string(),
-                runtime_kind: AgentRuntimeKind::opencode(),
-                working_directory: run.worktree_path.clone(),
-                external_session_id: Some("external-build-session".to_string()),
-            },
+            make_agent_session_stop_request(
+                repo_path.as_str(),
+                "build-session",
+                run.worktree_path.as_str(),
+                Some("external-build-session"),
+            ),
             emitter.clone(),
         )
         .expect_err("abort failures should surface to the caller");
@@ -1037,42 +989,7 @@ fn agent_session_stop_supports_workspace_scoped_planner_sessions() -> Result<()>
         aborts_file.to_string_lossy().as_ref(),
     );
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("planner-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "planner-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let build_run =
@@ -1107,14 +1024,12 @@ fn agent_session_stop_supports_workspace_scoped_planner_sessions() -> Result<()>
     assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", planner_session)?);
 
     let stopped = service.agent_session_stop(
-        AgentSessionStopRequest {
-            repo_path: repo_path.clone(),
-            task_id: "task-1".to_string(),
-            session_id: "planner-session".to_string(),
-            runtime_kind: AgentRuntimeKind::opencode(),
-            working_directory: repo_path.clone(),
-            external_session_id: Some("external-planner-session".to_string()),
-        },
+        make_agent_session_stop_request(
+            repo_path.as_str(),
+            "planner-session",
+            repo_path.as_str(),
+            Some("external-planner-session"),
+        ),
         emitter.clone(),
     )?;
 
@@ -1145,42 +1060,7 @@ fn agent_session_stop_requires_external_session_id_without_marking_build_runs_st
     let _dolt_guard = install_fake_dolt(&root)?;
     let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
@@ -1192,14 +1072,12 @@ fn agent_session_stop_requires_external_session_id_without_marking_build_runs_st
 
     let error = service
         .agent_session_stop(
-            AgentSessionStopRequest {
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                session_id: "build-session".to_string(),
-                runtime_kind: AgentRuntimeKind::opencode(),
-                working_directory: run.worktree_path.clone(),
-                external_session_id: None,
-            },
+            make_agent_session_stop_request(
+                repo_path.as_str(),
+                "build-session",
+                run.worktree_path.as_str(),
+                None,
+            ),
             emitter.clone(),
         )
         .expect_err("missing external session ids should fail fast");
@@ -1236,42 +1114,7 @@ fn agent_session_stop_fails_when_no_live_runtime_route_is_resolvable() -> Result
     let _dolt_guard = install_fake_dolt(&root)?;
     let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
@@ -1309,14 +1152,12 @@ fn agent_session_stop_fails_when_no_live_runtime_route_is_resolvable() -> Result
 
     let error = service
         .agent_session_stop(
-            AgentSessionStopRequest {
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                session_id: "build-session".to_string(),
-                runtime_kind: AgentRuntimeKind::opencode(),
-                working_directory: run.worktree_path.clone(),
-                external_session_id: Some("external-build-session".to_string()),
-            },
+            make_agent_session_stop_request(
+                repo_path.as_str(),
+                "build-session",
+                run.worktree_path.as_str(),
+                Some("external-build-session"),
+            ),
             emitter.clone(),
         )
         .expect_err("missing runtime routes should fail fast");
@@ -1357,42 +1198,7 @@ fn agent_session_stop_fails_when_multiple_live_runtime_routes_match() -> Result<
     let _dolt_guard = install_fake_dolt(&root)?;
     let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("builder-worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
     let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
     let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
@@ -1447,14 +1253,12 @@ fn agent_session_stop_fails_when_multiple_live_runtime_routes_match() -> Result<
 
     let error = service
         .agent_session_stop(
-            AgentSessionStopRequest {
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                session_id: "planner-session".to_string(),
-                runtime_kind: AgentRuntimeKind::opencode(),
-                working_directory: repo_path.clone(),
-                external_session_id: Some("external-planner-session".to_string()),
-            },
+            make_agent_session_stop_request(
+                repo_path.as_str(),
+                "planner-session",
+                repo_path.as_str(),
+                Some("external-planner-session"),
+            ),
             emitter.clone(),
         )
         .expect_err("ambiguous runtime routes should fail fast");

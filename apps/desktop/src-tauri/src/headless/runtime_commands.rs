@@ -61,12 +61,7 @@ struct BuildStopArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentSessionStopArgs {
-    repo_path: String,
-    task_id: String,
-    session_id: String,
-    runtime_kind: AgentRuntimeKind,
-    working_directory: String,
-    external_session_id: Option<String>,
+    request: AgentSessionStopRequest,
 }
 
 #[derive(Debug, Deserialize)]
@@ -258,24 +253,9 @@ async fn handle_build_stop(state: &HeadlessState, args: Value) -> CommandResult 
 }
 
 async fn handle_agent_session_stop(state: &HeadlessState, args: Value) -> CommandResult {
-    let AgentSessionStopArgs {
-        repo_path,
-        task_id,
-        session_id,
-        runtime_kind,
-        working_directory,
-        external_session_id,
-    } = deserialize_args(args)?;
+    let AgentSessionStopArgs { request } = deserialize_args(args)?;
     let service = state.service.clone();
     let emitter = make_emitter(state.events.clone());
-    let request = AgentSessionStopRequest {
-        repo_path,
-        task_id,
-        session_id,
-        runtime_kind,
-        working_directory,
-        external_session_id,
-    };
     Ok(json!({
         "ok": crate::run_service_blocking_tokio("agent_session_stop", move || {
             service.agent_session_stop(request, emitter)
@@ -556,30 +536,37 @@ mod tests {
     #[test]
     fn agent_session_stop_args_accept_durable_session_target() {
         let parsed = deserialize_args::<AgentSessionStopArgs>(json!({
-            "repoPath": "/repo",
-            "taskId": "task-1",
-            "sessionId": "session-1",
-            "runtimeKind": "opencode",
-            "workingDirectory": "/repo/worktrees/task-1",
-            "externalSessionId": "external-session-1"
+            "request": {
+                "repoPath": "/repo",
+                "taskId": "task-1",
+                "sessionId": "session-1",
+                "runtimeKind": "opencode",
+                "workingDirectory": "/repo/worktrees/task-1",
+                "externalSessionId": "external-session-1"
+            }
         }))
         .expect("payload should deserialize");
 
-        assert_eq!(parsed.repo_path, "/repo");
-        assert_eq!(parsed.task_id, "task-1");
-        assert_eq!(parsed.session_id, "session-1");
-        assert_eq!(parsed.runtime_kind, AgentRuntimeKind::opencode());
-        assert_eq!(parsed.working_directory, "/repo/worktrees/task-1");
-        assert_eq!(parsed.external_session_id.as_deref(), Some("external-session-1"));
+        assert_eq!(parsed.request.repo_path, "/repo");
+        assert_eq!(parsed.request.task_id, "task-1");
+        assert_eq!(parsed.request.session_id, "session-1");
+        assert_eq!(parsed.request.runtime_kind, AgentRuntimeKind::opencode());
+        assert_eq!(parsed.request.working_directory, "/repo/worktrees/task-1");
+        assert_eq!(
+            parsed.request.external_session_id.as_deref(),
+            Some("external-session-1")
+        );
     }
 
     #[test]
     fn agent_session_stop_args_reject_missing_runtime_kind() {
         let error = deserialize_args::<AgentSessionStopArgs>(json!({
-            "repoPath": "/repo",
-            "taskId": "task-1",
-            "sessionId": "session-1",
-            "workingDirectory": "/repo/worktrees/task-1"
+            "request": {
+                "repoPath": "/repo",
+                "taskId": "task-1",
+                "sessionId": "session-1",
+                "workingDirectory": "/repo/worktrees/task-1"
+            }
         }))
         .expect_err("runtime kind should be required at headless transport boundary");
 
