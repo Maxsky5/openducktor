@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
   createTaskCardFixture,
@@ -47,27 +47,26 @@ const createRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
 
 const createHarness = (initialProps: HookArgs) => {
   const sessionStore = createAgentSessionsStore();
+  const queryClient = createQueryClient();
   let renderCount = 0;
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <QueryProvider useIsolatedClient>
+    <QueryClientProvider client={queryClient}>
       <AgentSessionsContext.Provider value={sessionStore}>{children}</AgentSessionsContext.Provider>
-    </QueryProvider>
+    </QueryClientProvider>
   );
 
   const sharedHarness = createSharedHookHarness(
     (props: HookArgs) => {
       renderCount += 1;
-      return {
-        activity: useShellAgentActivity(props.activeWorkspace),
-        queryClient: useQueryClient(),
-      };
+      return useShellAgentActivity(props.activeWorkspace);
     },
     initialProps,
     { wrapper },
   );
 
   return {
+    queryClient,
     sessionStore,
     mount: sharedHarness.mount,
     update: sharedHarness.update,
@@ -83,7 +82,7 @@ const waitForActivity = async (
   harness: ReturnType<typeof createHarness>,
   predicate: (activity: ReturnType<typeof useShellAgentActivity>) => boolean,
 ): Promise<void> => {
-  await harness.waitFor(({ activity }) => predicate(activity), 3000);
+  await harness.waitFor((activity) => predicate(activity), 400);
 };
 
 describe("useShellAgentActivity", () => {
@@ -98,26 +97,20 @@ describe("useShellAgentActivity", () => {
     });
 
     harness.sessionStore.setSessionsById({ [session.sessionId]: session });
+    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+      createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+      createTaskCardFixture({ id: "task-2", title: "Other Task" }),
+    ]);
     await harness.mount();
 
     try {
-      await harness.run(({ queryClient }) => {
-        queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
-          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
-          createTaskCardFixture({ id: "task-2", title: "Other Task" }),
-        ]);
-      });
+      expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Visible Task");
 
-      await waitForActivity(
-        harness,
-        (activity) => activity.activeSessions[0]?.taskTitle === "Visible Task",
-      );
-
-      const baselineActivity = harness.getLatest().activity;
+      const baselineActivity = harness.getLatest();
       const baselineRenderCount = harness.getRenderCount();
 
-      await harness.run(({ queryClient }) => {
-        queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+      await harness.run(() => {
+        harness.queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
           tasks: [
             createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
             createTaskCardFixture({ id: "task-2", title: "Other Task" }),
@@ -126,17 +119,17 @@ describe("useShellAgentActivity", () => {
         });
       });
 
-      expect(harness.getLatest().activity).toBe(baselineActivity);
+      expect(harness.getLatest()).toBe(baselineActivity);
       expect(harness.getRenderCount()).toBe(baselineRenderCount);
 
-      await harness.run(({ queryClient }) => {
-        queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+      await harness.run(() => {
+        harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
           createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
           createTaskCardFixture({ id: "task-2", title: "Renamed Other Task" }),
         ]);
       });
 
-      expect(harness.getLatest().activity).toBe(baselineActivity);
+      expect(harness.getLatest()).toBe(baselineActivity);
       expect(harness.getRenderCount()).toBe(baselineRenderCount);
 
       await harness.run(() => {
@@ -154,7 +147,7 @@ describe("useShellAgentActivity", () => {
         });
       });
 
-      expect(harness.getLatest().activity).toBe(baselineActivity);
+      expect(harness.getLatest()).toBe(baselineActivity);
       expect(harness.getRenderCount()).toBe(baselineRenderCount);
     } finally {
       await harness.unmount();
@@ -172,48 +165,46 @@ describe("useShellAgentActivity", () => {
     });
 
     harness.sessionStore.setSessionsById({ [session.sessionId]: session });
+    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+      createTaskCardFixture({ id: "task-1", title: "Initial Title" }),
+    ]);
     await harness.mount();
 
     try {
-      await harness.run(({ queryClient }) => {
-        queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
-          createTaskCardFixture({ id: "task-1", title: "Initial Title" }),
-        ]);
-      });
-      await waitForActivity(
-        harness,
-        (activity) => activity.activeSessions[0]?.taskTitle === "Initial Title",
-      );
+      expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Initial Title");
 
       const initialRenderCount = harness.getRenderCount();
 
-      await harness.run(({ queryClient }) => {
-        queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+      await harness.run(() => {
+        harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
           createTaskCardFixture({ id: "task-1", title: "Updated Title" }),
         ]);
       });
+
       await waitForActivity(
         harness,
         (activity) => activity.activeSessions[0]?.taskTitle === "Updated Title",
       );
-
+      expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Updated Title");
       expect(harness.getRenderCount()).toBeGreaterThan(initialRenderCount);
 
       await harness.update({ activeWorkspace: null });
-      await waitForActivity(harness, (activity) => activity.activeSessionCount === 0);
-      expect(harness.getLatest().activity.waitingForInputCount).toBe(0);
+      expect(harness.getLatest().activeSessionCount).toBe(0);
+      expect(harness.getLatest().waitingForInputCount).toBe(0);
 
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
       await waitForActivity(
         harness,
         (activity) => activity.activeSessions[0]?.taskTitle === "Updated Title",
       );
+      expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Updated Title");
 
       await harness.run(() => {
         harness.sessionStore.setSessionsById({});
       });
-      await waitForActivity(harness, (activity) => activity.activeSessionCount === 0);
-      expect(harness.getLatest().activity.activeSessions).toHaveLength(0);
+
+      expect(harness.getLatest().activeSessionCount).toBe(0);
+      expect(harness.getLatest().activeSessions).toHaveLength(0);
     } finally {
       await harness.unmount();
     }
@@ -237,37 +228,33 @@ describe("useShellAgentActivity", () => {
     });
 
     harness.sessionStore.setSessionsById({ [repoASession.sessionId]: repoASession });
+    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-a"), [
+      createTaskCardFixture({ id: "task-a", title: "Repo A Task" }),
+    ]);
+    harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-b"), [
+      createTaskCardFixture({ id: "task-b", title: "Repo B Task" }),
+    ]);
     await harness.mount();
 
     try {
-      await harness.run(({ queryClient }) => {
-        queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-a"), [
-          createTaskCardFixture({ id: "task-a", title: "Repo A Task" }),
-        ]);
-        queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-b"), [
-          createTaskCardFixture({ id: "task-b", title: "Repo B Task" }),
-        ]);
-      });
-      await waitForActivity(
-        harness,
-        (activity) => activity.activeSessions[0]?.taskTitle === "Repo A Task",
-      );
+      expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Repo A Task");
 
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
 
-      expect(harness.getLatest().activity.activeSessionCount).toBe(0);
-      expect(harness.getLatest().activity.waitingForInputCount).toBe(0);
-      expect(harness.getLatest().activity.activeSessions).toHaveLength(0);
+      expect(harness.getLatest().activeSessionCount).toBe(0);
+      expect(harness.getLatest().waitingForInputCount).toBe(0);
+      expect(harness.getLatest().activeSessions).toHaveLength(0);
 
       await harness.run(() => {
         harness.sessionStore.setSessionsById({ [repoBSession.sessionId]: repoBSession });
       });
+
       await waitForActivity(
         harness,
         (activity) => activity.activeSessions[0]?.taskTitle === "Repo B Task",
       );
-
-      expect(harness.getLatest().activity.activeSessions[0]).toMatchObject({
+      expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Repo B Task");
+      expect(harness.getLatest().activeSessions[0]).toMatchObject({
         sessionId: "session-b",
         taskTitle: "Repo B Task",
       });
