@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -13,7 +13,7 @@ const openExternalUrlMock = mock(async () => {});
 const toastErrorMock = mock(() => {});
 
 describe("TaskPullRequestLink", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     mock.module("@/lib/open-external-url", () => ({
       openExternalUrl: openExternalUrlMock,
     }));
@@ -27,7 +27,7 @@ describe("TaskPullRequestLink", () => {
     }));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       ["@/lib/open-external-url", () => import("@/lib/open-external-url")],
       ["sonner", () => import("sonner")],

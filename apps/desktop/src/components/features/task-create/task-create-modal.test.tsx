@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactNode } from "react";
@@ -59,7 +59,7 @@ const controllerMock = {
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     mock.module("@/components/features/task-create", () => ({
       TaskCreateDiscardDialog: () => null,
       useTaskCreateModalController: () => controllerMock,
@@ -86,7 +86,7 @@ describe("TaskCreateModal", () => {
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       ["@/components/features/task-create", () => import("@/components/features/task-create")],
       [

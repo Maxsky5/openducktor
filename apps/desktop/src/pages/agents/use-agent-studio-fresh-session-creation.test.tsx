@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -68,7 +68,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
-beforeAll(async () => {
+beforeEach(async () => {
   mock.module("sonner", () => ({
     toast: {
       error: toastErrorMock,
@@ -82,7 +82,7 @@ beforeAll(async () => {
   ));
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([["sonner", () => import("sonner")]]);
 });
 

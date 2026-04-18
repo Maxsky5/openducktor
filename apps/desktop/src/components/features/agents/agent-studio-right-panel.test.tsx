@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -17,7 +17,7 @@ type AgentStudioRightPanelToggleButtonComponent =
 let AgentStudioRightPanel: AgentStudioRightPanelComponent;
 let AgentStudioRightPanelToggleButton: AgentStudioRightPanelToggleButtonComponent;
 
-beforeAll(async () => {
+beforeEach(async () => {
   mock.module("@/contexts/DiffWorkerProvider", () => ({
     DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
   }));
@@ -34,7 +34,7 @@ beforeAll(async () => {
   ));
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([
     ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
     ["@pierre/diffs/react", () => import("@pierre/diffs/react")],

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
@@ -55,7 +55,7 @@ const createDetectedConflict = (overrides: Partial<GitConflict> = {}): GitConfli
   ...overrides,
 });
 
-beforeAll(async () => {
+beforeEach(async () => {
   mock.module("@/state/operations/shared/host", () => ({
     host: {
       gitCommitAll: gitCommitAllMock,
@@ -76,7 +76,7 @@ beforeAll(async () => {
   ({ useAgentStudioGitActions } = await import("./use-agent-studio-git-actions"));
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([
     ["@/state/operations/shared/host", () => import("@/state/operations/shared/host")],
     ["sonner", () => import("sonner")],

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -34,7 +34,7 @@ const model: KanbanPageContentModel = {
 describe("KanbanPageContent", () => {
   let KanbanPageContent: typeof import("./kanban-page-content").KanbanPageContent;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     mock.module("@/components/features/kanban/kanban-column", () => ({
       KanbanColumn: (): ReactElement => <div data-testid="kanban-column" />,
     }));
@@ -42,7 +42,7 @@ describe("KanbanPageContent", () => {
     ({ KanbanPageContent } = await import("./kanban-page-content"));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       [
         "@/components/features/kanban/kanban-column",
