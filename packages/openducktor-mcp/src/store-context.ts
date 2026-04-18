@@ -63,6 +63,17 @@ const validateExplicitHostUrl = async (hostUrl: string): Promise<string> => {
   return hostUrl;
 };
 
+const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string): Promise<void> => {
+  const workspaces = await new OdtHostBridgeClient({ baseUrl: hostUrl }).getWorkspaces();
+  if (workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
+    return;
+  }
+
+  throw new Error(
+    `Configured default workspace '${workspaceId}' was not found on the running OpenDucktor host. Start @openducktor/mcp with a valid --workspace-id or omit it and provide workspaceId per tool call.`,
+  );
+};
+
 const parseDiscoveredPorts = (payload: string, registryPath: string): number[] => {
   let parsed: unknown;
   try {
@@ -172,6 +183,8 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   if (!workspaceId) {
     return { hostUrl };
   }
+
+  await validateConfiguredWorkspace(hostUrl, workspaceId);
 
   return {
     workspaceId,

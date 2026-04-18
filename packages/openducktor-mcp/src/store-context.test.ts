@@ -53,6 +53,20 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
+      if (url.endsWith("/invoke/get_workspaces")) {
+        return jsonResponse([
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ]);
+      }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
@@ -131,6 +145,20 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
+      if (url === "http://127.0.0.1:14327/invoke/get_workspaces") {
+        return jsonResponse([
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ]);
+      }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
@@ -162,6 +190,20 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
+      if (url === "http://127.0.0.1:14328/invoke/get_workspaces") {
+        return jsonResponse([
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ]);
+      }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
@@ -188,6 +230,43 @@ describe("resolveStoreContext", () => {
 
     await expect(resolveStoreContext({})).rejects.toThrow(
       "No running OpenDucktor host was discovered",
+    );
+  });
+
+  test("fails fast when the configured default workspace does not exist", async () => {
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url.endsWith("/health")) {
+        return jsonResponse({ ok: true });
+      }
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        });
+      }
+      if (url.endsWith("/invoke/get_workspaces")) {
+        return jsonResponse([
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    process.env.ODT_WORKSPACE_ID = "missing-repo";
+    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+
+    await expect(resolveStoreContext({})).rejects.toThrow(
+      "Configured default workspace 'missing-repo' was not found",
     );
   });
 });
