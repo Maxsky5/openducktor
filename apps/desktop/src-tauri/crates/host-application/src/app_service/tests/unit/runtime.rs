@@ -326,7 +326,7 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
                     version: None,
                     error: None,
                 },
-                session_probe_behavior: SessionProbeBehavior::ReturnNone,
+                session_probe_behavior: SessionProbeBehavior::ReturnUnsupported,
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -375,5 +375,88 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
         .to_string()
         .contains("Cannot delete tasks with active builder work in progress"));
 
+    Ok(())
+}
+
+#[test]
+fn runs_list_hides_runs_when_runtime_probe_returns_actionable_failure() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition("test-runtime", "Test Runtime"),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::ProbeFailure(
+                    "probe failed for test runtime",
+                ),
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, task_state, _git_state) = build_service_with_runtime_registry(
+        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        runtime_registry,
+    );
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        session_id: "build-session".to_string(),
+        external_session_id: Some("external-build-session".to_string()),
+        role: "build".to_string(),
+        scenario: "build_implementation_start".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "test-runtime".to_string(),
+        working_directory: "/tmp/repo/worktree".to_string(),
+        selected_model: None,
+    }];
+    service
+        .runs
+        .lock()
+        .expect("run state lock poisoned")
+        .insert(
+            "run-1".to_string(),
+            crate::app_service::RunProcess {
+                summary: host_domain::RunSummary {
+                    run_id: "run-1".to_string(),
+                    runtime_kind: AgentRuntimeKind::from("test-runtime"),
+                    runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                        endpoint: "http://127.0.0.1:43123".to_string(),
+                    },
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: "/tmp/repo/worktree".to_string(),
+                    port: Some(43_123),
+                    state: host_domain::RunState::Running,
+                    last_message: None,
+                    started_at: "2026-03-17T11:00:00Z".to_string(),
+                },
+                child: None,
+                _runtime_process_guard: None,
+                repo_path: "/tmp/repo".to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: "/tmp/repo/worktree".to_string(),
+                repo_config: host_infra_system::RepoConfig::default(),
+            },
+        );
+
+    let runs = service.runs_list(Some("/tmp/repo"))?;
+
+    assert!(runs.is_empty());
     Ok(())
 }

@@ -1,7 +1,8 @@
 mod health_http;
 mod open_code;
 use super::{
-    AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusProbeTarget,
+    AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusProbeOutcome,
+    RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeTargetResolution,
     RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
 };
 use anyhow::{anyhow, Result};
@@ -137,16 +138,16 @@ pub(crate) trait AppRuntime: Send + Sync {
         &self,
         runtime_route: &RuntimeRoute,
         working_directory: &str,
-    ) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
-        match runtime_route {
-            RuntimeRoute::LocalHttp { .. } => {
-                Ok(Some(RuntimeSessionStatusProbeTarget::for_runtime_route(
-                    runtime_route,
-                    working_directory,
-                )?))
-            }
-            RuntimeRoute::Stdio => Ok(None),
-        }
+    ) -> Result<RuntimeSessionStatusProbeTargetResolution> {
+        let _ = (runtime_route, working_directory);
+        Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported)
+    }
+
+    fn probe_session_status(
+        &self,
+        _target: &RuntimeSessionStatusProbeTarget,
+    ) -> RuntimeSessionStatusProbeOutcome {
+        RuntimeSessionStatusProbeOutcome::Unsupported
     }
 }
 

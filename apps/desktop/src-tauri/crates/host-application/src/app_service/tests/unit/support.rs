@@ -38,8 +38,9 @@ pub(super) use crate::app_service::{
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     wait_for_local_server_with_process, AgentRuntimeProcess, AppService, DevServerGroupRuntime,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    RuntimeProcessGuard, RuntimeSessionStatusProbeTarget, RuntimeStartupFailureReason,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    RuntimeProcessGuard, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
+    RuntimeSessionStatusProbeTargetResolution, RuntimeStartupFailureReason, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload,
 };
 
 pub(super) fn init_git_repo(path: &std::path::Path) -> Result<()> {
@@ -130,8 +131,9 @@ pub(super) fn insert_workspace_runtime_for_kind(
 #[derive(Clone)]
 pub(super) enum SessionProbeBehavior {
     Default,
-    ReturnNone,
+    ReturnUnsupported,
     ReturnError(&'static str),
+    ProbeFailure(&'static str),
 }
 
 #[derive(Clone)]
@@ -207,19 +209,54 @@ impl AppRuntime for TestRuntimeAdapter {
         &self,
         runtime_route: &host_domain::RuntimeRoute,
         working_directory: &str,
-    ) -> Result<Option<RuntimeSessionStatusProbeTarget>> {
+    ) -> Result<RuntimeSessionStatusProbeTargetResolution> {
         match self.session_probe_behavior {
             SessionProbeBehavior::Default => match runtime_route {
                 host_domain::RuntimeRoute::LocalHttp { .. } => {
-                    Ok(Some(RuntimeSessionStatusProbeTarget::for_runtime_route(
+                    Ok(RuntimeSessionStatusProbeTargetResolution::Target(
+                        RuntimeSessionStatusProbeTarget::new(
+                            self.definition.kind().clone(),
+                            runtime_route,
+                            working_directory,
+                        ),
+                    ))
+                }
+                host_domain::RuntimeRoute::Stdio => {
+                    Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported)
+                }
+            },
+            SessionProbeBehavior::ReturnUnsupported => {
+                Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported)
+            }
+            SessionProbeBehavior::ReturnError(message) => Err(anyhow::anyhow!(message)),
+            SessionProbeBehavior::ProbeFailure(_) => {
+                Ok(RuntimeSessionStatusProbeTargetResolution::Target(
+                    RuntimeSessionStatusProbeTarget::new(
+                        self.definition.kind().clone(),
                         runtime_route,
                         working_directory,
-                    )?))
-                }
-                host_domain::RuntimeRoute::Stdio => Ok(None),
-            },
-            SessionProbeBehavior::ReturnNone => Ok(None),
-            SessionProbeBehavior::ReturnError(message) => Err(anyhow::anyhow!(message)),
+                    ),
+                ))
+            }
+        }
+    }
+
+    fn probe_session_status(
+        &self,
+        _target: &RuntimeSessionStatusProbeTarget,
+    ) -> RuntimeSessionStatusProbeOutcome {
+        match self.session_probe_behavior {
+            SessionProbeBehavior::ProbeFailure(message) => {
+                RuntimeSessionStatusProbeOutcome::ActionableError(
+                    crate::app_service::RuntimeSessionStatusProbeError::ProbeFailed(
+                        message.to_string(),
+                    ),
+                )
+            }
+            SessionProbeBehavior::ReturnUnsupported => {
+                RuntimeSessionStatusProbeOutcome::Unsupported
+            }
+            _ => RuntimeSessionStatusProbeOutcome::Statuses(Default::default()),
         }
     }
 }

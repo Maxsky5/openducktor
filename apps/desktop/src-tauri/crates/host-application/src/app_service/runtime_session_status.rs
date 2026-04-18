@@ -1,24 +1,18 @@
-use super::require_local_http_endpoint;
 use super::service_core::{
-    AppService, CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeError,
-    CachedOpencodeSessionStatusProbeOutcome, OpencodeSessionStatusFlight,
-    OpencodeSessionStatusFlightState, OpencodeSessionStatusProbeLimiter,
+    AppService, CachedRuntimeSessionStatusProbe, RuntimeSessionStatusFlight,
+    RuntimeSessionStatusFlightState, RuntimeSessionStatusProbeLimiter,
 };
-use anyhow::{anyhow, Context, Result};
-use host_domain::RuntimeRoute;
+use anyhow::{anyhow, Result};
+use host_domain::{AgentRuntimeKind, RuntimeRoute};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
-use std::io::ErrorKind;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use url::{form_urlencoded, Url};
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub(crate) enum OpencodeSessionStatus {
+pub(crate) enum RuntimeExternalSessionStatus {
     Idle,
     Retry {
         #[allow(dead_code)]
@@ -31,47 +25,59 @@ pub(crate) enum OpencodeSessionStatus {
     Busy,
 }
 
-pub(crate) type OpencodeSessionStatusMap = HashMap<String, OpencodeSessionStatus>;
+pub(crate) type RuntimeSessionStatusMap = HashMap<String, RuntimeExternalSessionStatus>;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct OpencodeSessionStatusProbeTarget {
-    endpoint: String,
+pub(crate) struct RuntimeSessionStatusProbeTarget {
+    runtime_kind: AgentRuntimeKind,
+    runtime_route: RuntimeRoute,
     working_directory: String,
 }
 
-impl OpencodeSessionStatusProbeTarget {
-    pub(crate) fn for_runtime_route(
+impl RuntimeSessionStatusProbeTarget {
+    pub(crate) fn new(
+        runtime_kind: AgentRuntimeKind,
         runtime_route: &RuntimeRoute,
         working_directory: &str,
-    ) -> Result<Self> {
-        let endpoint = require_local_http_endpoint(runtime_route, "session status probes")?;
-        Ok(Self {
-            endpoint: endpoint.to_string(),
+    ) -> Self {
+        Self {
+            runtime_kind,
+            runtime_route: runtime_route.clone(),
             working_directory: working_directory.to_string(),
-        })
+        }
     }
 
-    fn endpoint(&self) -> &str {
-        self.endpoint.as_str()
+    pub(crate) fn runtime_kind(&self) -> &AgentRuntimeKind {
+        &self.runtime_kind
     }
 
-    fn working_directory(&self) -> &str {
+    pub(crate) fn runtime_route(&self) -> &RuntimeRoute {
+        &self.runtime_route
+    }
+
+    pub(crate) fn working_directory(&self) -> &str {
         self.working_directory.as_str()
     }
 }
 
-struct OpencodeSessionStatusFlightGuard<'a> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeSessionStatusProbeTargetResolution {
+    Unsupported,
+    Target(RuntimeSessionStatusProbeTarget),
+}
+
+struct RuntimeSessionStatusFlightGuard<'a> {
     service: &'a AppService,
-    target: OpencodeSessionStatusProbeTarget,
-    flight: Arc<OpencodeSessionStatusFlight>,
+    target: RuntimeSessionStatusProbeTarget,
+    flight: Arc<RuntimeSessionStatusFlight>,
     completed: bool,
 }
 
-impl<'a> OpencodeSessionStatusFlightGuard<'a> {
+impl<'a> RuntimeSessionStatusFlightGuard<'a> {
     fn new(
         service: &'a AppService,
-        target: &OpencodeSessionStatusProbeTarget,
-        flight: Arc<OpencodeSessionStatusFlight>,
+        target: &RuntimeSessionStatusProbeTarget,
+        flight: Arc<RuntimeSessionStatusFlight>,
     ) -> Self {
         Self {
             service,
@@ -81,39 +87,39 @@ impl<'a> OpencodeSessionStatusFlightGuard<'a> {
         }
     }
 
-    fn complete(&mut self, outcome: &CachedOpencodeSessionStatusProbeOutcome) -> Result<()> {
+    fn complete(&mut self, outcome: &RuntimeSessionStatusProbeOutcome) -> Result<()> {
         self.completed = true;
         self.service
-            .complete_opencode_session_status_flight(&self.target, &self.flight, outcome)
+            .complete_runtime_session_status_flight(&self.target, &self.flight, outcome)
     }
 }
 
-impl Drop for OpencodeSessionStatusFlightGuard<'_> {
+impl Drop for RuntimeSessionStatusFlightGuard<'_> {
     fn drop(&mut self) {
         if self.completed {
             return;
         }
 
-        let aborted = CachedOpencodeSessionStatusProbeOutcome::ActionableError(
-            CachedOpencodeSessionStatusProbeError::ProbeAborted,
+        let aborted = RuntimeSessionStatusProbeOutcome::ActionableError(
+            RuntimeSessionStatusProbeError::ProbeAborted,
         );
-        if let Err(error) = self.service.complete_opencode_session_status_flight(
+        if let Err(error) = self.service.complete_runtime_session_status_flight(
             &self.target,
             &self.flight,
             &aborted,
         ) {
             eprintln!(
-                "OpenDucktor warning: failed completing OpenCode session status flight after abort: {error:#}"
+                "OpenDucktor warning: failed completing runtime session status flight after abort: {error:#}"
             );
         }
     }
 }
 
-struct OpencodeSessionStatusProbePermit {
-    limiter: Arc<OpencodeSessionStatusProbeLimiter>,
+struct RuntimeSessionStatusProbePermit {
+    limiter: Arc<RuntimeSessionStatusProbeLimiter>,
 }
 
-impl Drop for OpencodeSessionStatusProbePermit {
+impl Drop for RuntimeSessionStatusProbePermit {
     fn drop(&mut self) {
         match self.limiter.active.lock() {
             Ok(mut active) => {
@@ -129,163 +135,50 @@ impl Drop for OpencodeSessionStatusProbePermit {
                 }
                 self.limiter.condvar.notify_one();
                 eprintln!(
-                    "OpenDucktor warning: OpenCode session status probe limiter lock poisoned during permit release"
+                    "OpenDucktor warning: runtime session status probe limiter lock poisoned during permit release"
                 );
             }
         }
     }
 }
 
-impl fmt::Display for CachedOpencodeSessionStatusProbeError {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeSessionStatusProbeError {
+    ProbeFailed(String),
+    ProbeAborted,
+}
+
+impl fmt::Display for RuntimeSessionStatusProbeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ProbeFailed(message) => formatter.write_str(message),
             Self::ProbeAborted => {
-                formatter.write_str("OpenCode session status probe aborted unexpectedly")
+                formatter.write_str("Runtime session status probe aborted unexpectedly")
             }
         }
     }
 }
 
-impl CachedOpencodeSessionStatusProbeOutcome {
-    fn to_result(&self) -> Result<OpencodeSessionStatusMap> {
-        match self {
-            Self::Statuses(statuses) => Ok(statuses.clone()),
-            Self::ActionableError(error) => Err(anyhow!(error.to_string())),
-        }
-    }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeSessionStatusProbeOutcome {
+    Statuses(RuntimeSessionStatusMap),
+    Unsupported,
+    ActionableError(RuntimeSessionStatusProbeError),
 }
 
-fn is_unreachable_opencode_session_status_error(error: &anyhow::Error) -> bool {
-    error.chain().any(|cause| {
-        cause
-            .downcast_ref::<std::io::Error>()
-            .is_some_and(|io_error| {
-                matches!(
-                    io_error.kind(),
-                    ErrorKind::ConnectionRefused
-                        | ErrorKind::ConnectionReset
-                        | ErrorKind::ConnectionAborted
-                        | ErrorKind::NotConnected
-                        | ErrorKind::TimedOut
-                        | ErrorKind::UnexpectedEof
-                )
-            })
-    })
-}
-
-pub(crate) fn has_live_opencode_session_status(
-    statuses: &OpencodeSessionStatusMap,
+pub(crate) fn has_live_runtime_session_status(
+    statuses: &RuntimeSessionStatusMap,
     external_session_id: &str,
 ) -> bool {
     matches!(
         statuses.get(external_session_id),
-        Some(OpencodeSessionStatus::Busy | OpencodeSessionStatus::Retry { .. })
+        Some(RuntimeExternalSessionStatus::Busy | RuntimeExternalSessionStatus::Retry { .. })
     )
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn load_opencode_session_statuses(
-    runtime_route: &RuntimeRoute,
-    working_directory: &str,
-) -> Result<OpencodeSessionStatusMap> {
-    let target =
-        OpencodeSessionStatusProbeTarget::for_runtime_route(runtime_route, working_directory)?;
-    load_opencode_session_statuses_for_target(&target)
-}
-
-fn load_opencode_session_statuses_for_target(
-    target: &OpencodeSessionStatusProbeTarget,
-) -> Result<OpencodeSessionStatusMap> {
-    let endpoint = target.endpoint();
-    let working_directory = target.working_directory();
-    let parsed_endpoint = Url::parse(endpoint)
-        .with_context(|| format!("Invalid OpenCode runtime endpoint: {endpoint}"))?;
-    let host = parsed_endpoint
-        .host_str()
-        .ok_or_else(|| anyhow!("OpenCode runtime endpoint is missing a host: {endpoint}"))?;
-    let port = parsed_endpoint
-        .port()
-        .ok_or_else(|| anyhow!("OpenCode runtime route must expose a port: {endpoint}"))?;
-    let request_path = format!(
-        "/session/status?{}",
-        form_urlencoded::Serializer::new(String::new())
-            .append_pair("directory", working_directory)
-            .finish()
-    );
-    let mut stream = TcpStream::connect((host, port)).with_context(|| {
-        format!(
-            "Failed to connect to OpenCode runtime at {endpoint} to inspect session status for {working_directory}"
-        )
-    })?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .context("Failed configuring OpenCode session status read timeout")?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(2)))
-        .context("Failed configuring OpenCode session status write timeout")?;
-
-    let request =
-        format!("GET {request_path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
-    stream.write_all(request.as_bytes()).with_context(|| {
-        format!("Failed sending OpenCode session status request for {working_directory}")
-    })?;
-    stream.flush().with_context(|| {
-        format!("Failed flushing OpenCode session status request for {working_directory}")
-    })?;
-
-    let mut reader = BufReader::new(stream);
-    let mut status_line = String::new();
-    reader.read_line(&mut status_line).with_context(|| {
-        format!("Failed reading OpenCode session status response for {working_directory}")
-    })?;
-    let status_code = parse_http_status_code(status_line.as_str())?;
-
-    let mut response = String::new();
-    reader.read_to_string(&mut response).with_context(|| {
-        format!("Failed reading OpenCode session status body for {working_directory}")
-    })?;
-
-    if !(200..300).contains(&status_code) {
-        let response_body = extract_http_response_body(response.as_str());
-        let detail_suffix = if response_body.is_empty() {
-            String::new()
-        } else {
-            format!(": {response_body}")
-        };
-        return Err(anyhow!(
-            "OpenCode runtime failed to load session status for {working_directory}: HTTP {status_code}{detail_suffix}"
-        ));
-    }
-
-    let body = extract_http_response_body(response.as_str());
-    serde_json::from_str::<OpencodeSessionStatusMap>(body.as_str()).with_context(|| {
-        format!("Failed parsing OpenCode session status response for {working_directory}")
-    })
-}
-
-fn parse_http_status_code(status_line: &str) -> Result<u16> {
-    let trimmed = status_line.trim();
-    let status_code = trimmed
-        .split_whitespace()
-        .nth(1)
-        .ok_or_else(|| anyhow!("OpenCode response missing HTTP status code"))?;
-    status_code
-        .parse::<u16>()
-        .with_context(|| format!("Invalid OpenCode HTTP status code: {status_code}"))
-}
-
-fn extract_http_response_body(response: &str) -> String {
-    response
-        .split_once("\r\n\r\n")
-        .or_else(|| response.split_once("\n\n"))
-        .map(|(_, body)| body.trim().to_string())
-        .unwrap_or_default()
-}
-
-pub(crate) fn dedupe_probe_targets<I>(targets: I) -> Vec<OpencodeSessionStatusProbeTarget>
+pub(crate) fn dedupe_probe_targets<I>(targets: I) -> Vec<RuntimeSessionStatusProbeTarget>
 where
-    I: IntoIterator<Item = OpencodeSessionStatusProbeTarget>,
+    I: IntoIterator<Item = RuntimeSessionStatusProbeTarget>,
 {
     let mut unique_targets = Vec::new();
     let mut seen = HashSet::new();
@@ -298,13 +191,13 @@ where
 }
 
 impl AppService {
-    pub(super) const OPENCODE_SESSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(1);
-    const OPENCODE_SESSION_STATUS_BATCH_WORKER_LIMIT: usize = 16;
+    pub(super) const RUNTIME_SESSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(1);
+    const RUNTIME_SESSION_STATUS_BATCH_WORKER_LIMIT: usize = 16;
 
     pub(super) fn load_cached_runtime_session_statuses_for_targets(
         &self,
-        targets: &[OpencodeSessionStatusProbeTarget],
-    ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
+        targets: &[RuntimeSessionStatusProbeTarget],
+    ) -> Result<HashMap<RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeOutcome>> {
         let unique_targets = dedupe_probe_targets(targets.iter().cloned());
 
         if unique_targets.is_empty() {
@@ -316,11 +209,11 @@ impl AppService {
 
     fn resolve_status_batch(
         &self,
-        unique_targets: Vec<OpencodeSessionStatusProbeTarget>,
-    ) -> Result<HashMap<OpencodeSessionStatusProbeTarget, OpencodeSessionStatusMap>> {
+        unique_targets: Vec<RuntimeSessionStatusProbeTarget>,
+    ) -> Result<HashMap<RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeOutcome>> {
         let worker_count = unique_targets.len().min(
-            Self::OPENCODE_SESSION_STATUS_BATCH_WORKER_LIMIT.max(
-                self.opencode_session_status_probe_limiter
+            Self::RUNTIME_SESSION_STATUS_BATCH_WORKER_LIMIT.max(
+                self.runtime_session_status_probe_limiter
                     .max_concurrent
                     .max(1),
             ),
@@ -346,12 +239,11 @@ impl AppService {
                             return Ok(());
                         };
 
-                        let statuses =
-                            service.resolve_cached_probe_outcome(&target)?.to_result()?;
+                        let outcome = service.resolve_cached_probe_outcome(&target)?;
                         let mut results = results.lock().map_err(|_| {
-                            anyhow!("OpenCode session status batch results lock poisoned")
+                            anyhow!("Runtime session status batch results lock poisoned")
                         })?;
-                        results.insert(target, statuses);
+                        results.insert(target, outcome);
                     }
                 }));
             }
@@ -359,7 +251,7 @@ impl AppService {
             for handle in handles {
                 handle
                     .join()
-                    .map_err(|_| anyhow!("OpenCode session status batch worker panicked"))??;
+                    .map_err(|_| anyhow!("Runtime session status batch worker panicked"))??;
             }
             Ok(())
         })?;
@@ -372,24 +264,24 @@ impl AppService {
     }
 
     #[cfg(test)]
-    fn load_cached_opencode_session_statuses_for_target(
+    fn load_cached_runtime_session_status_outcome_for_target(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-    ) -> Result<OpencodeSessionStatusMap> {
-        self.resolve_cached_probe_outcome(target)?.to_result()
+        target: &RuntimeSessionStatusProbeTarget,
+    ) -> Result<RuntimeSessionStatusProbeOutcome> {
+        self.resolve_cached_probe_outcome(target)
     }
 
     fn resolve_cached_probe_outcome(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-    ) -> Result<CachedOpencodeSessionStatusProbeOutcome> {
-        if let Some(cached) = self.cached_opencode_session_status_outcome(target)? {
+        target: &RuntimeSessionStatusProbeTarget,
+    ) -> Result<RuntimeSessionStatusProbeOutcome> {
+        if let Some(cached) = self.cached_runtime_session_status_outcome(target)? {
             return Ok(cached);
         }
 
-        let (flight, is_leader) = self.acquire_opencode_session_status_flight(target)?;
+        let (flight, is_leader) = self.acquire_runtime_session_status_flight(target)?;
         if !is_leader {
-            return Self::wait_for_opencode_session_status_flight(&flight);
+            return Self::wait_for_runtime_session_status_flight(&flight);
         }
 
         self.resolve_leader_probe_outcome(target, flight)
@@ -397,61 +289,57 @@ impl AppService {
 
     fn resolve_leader_probe_outcome(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-        flight: Arc<OpencodeSessionStatusFlight>,
-    ) -> Result<CachedOpencodeSessionStatusProbeOutcome> {
-        let mut flight_guard = OpencodeSessionStatusFlightGuard::new(self, target, flight);
-        let _permit = self.acquire_opencode_session_status_probe_permit()?;
-        let outcome = Self::probe_uncached_opencode_session_status_target(target);
-        self.update_opencode_session_status_cache(target, &outcome)?;
+        target: &RuntimeSessionStatusProbeTarget,
+        flight: Arc<RuntimeSessionStatusFlight>,
+    ) -> Result<RuntimeSessionStatusProbeOutcome> {
+        let mut flight_guard = RuntimeSessionStatusFlightGuard::new(self, target, flight);
+        let _permit = self.acquire_runtime_session_status_probe_permit()?;
+        let outcome = self.probe_uncached_runtime_session_status_target(target)?;
+        self.update_runtime_session_status_cache(target, &outcome)?;
         flight_guard.complete(&outcome)?;
         Ok(outcome)
     }
 
-    fn probe_uncached_opencode_session_status_target(
-        target: &OpencodeSessionStatusProbeTarget,
-    ) -> CachedOpencodeSessionStatusProbeOutcome {
-        match load_opencode_session_statuses_for_target(target) {
-            Ok(statuses) => CachedOpencodeSessionStatusProbeOutcome::Statuses(statuses),
-            Err(error) if is_unreachable_opencode_session_status_error(&error) => {
-                CachedOpencodeSessionStatusProbeOutcome::Statuses(OpencodeSessionStatusMap::new())
-            }
-            Err(error) => CachedOpencodeSessionStatusProbeOutcome::ActionableError(
-                CachedOpencodeSessionStatusProbeError::ProbeFailed(error.to_string()),
-            ),
-        }
+    fn probe_uncached_runtime_session_status_target(
+        &self,
+        target: &RuntimeSessionStatusProbeTarget,
+    ) -> Result<RuntimeSessionStatusProbeOutcome> {
+        Ok(self
+            .runtime_registry
+            .runtime(target.runtime_kind())?
+            .probe_session_status(target))
     }
 
-    fn cached_opencode_session_status_outcome(
+    fn cached_runtime_session_status_outcome(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-    ) -> Result<Option<CachedOpencodeSessionStatusProbeOutcome>> {
+        target: &RuntimeSessionStatusProbeTarget,
+    ) -> Result<Option<RuntimeSessionStatusProbeOutcome>> {
         let now = Instant::now();
         let mut cache = self
-            .opencode_session_status_cache
+            .runtime_session_status_cache
             .lock()
-            .map_err(|_| anyhow!("OpenCode session status cache lock poisoned"))?;
-        Self::prune_expired_opencode_session_status_cache(&mut cache, now);
+            .map_err(|_| anyhow!("Runtime session status cache lock poisoned"))?;
+        Self::prune_expired_runtime_session_status_cache(&mut cache, now);
         if let Some(entry) = cache.get(target) {
             return Ok(Some(entry.outcome.clone()));
         }
         Ok(None)
     }
 
-    fn update_opencode_session_status_cache(
+    fn update_runtime_session_status_cache(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-        outcome: &CachedOpencodeSessionStatusProbeOutcome,
+        target: &RuntimeSessionStatusProbeTarget,
+        outcome: &RuntimeSessionStatusProbeOutcome,
     ) -> Result<()> {
         let now = Instant::now();
         let mut cache = self
-            .opencode_session_status_cache
+            .runtime_session_status_cache
             .lock()
-            .map_err(|_| anyhow!("OpenCode session status cache lock poisoned"))?;
-        Self::prune_expired_opencode_session_status_cache(&mut cache, now);
+            .map_err(|_| anyhow!("Runtime session status cache lock poisoned"))?;
+        Self::prune_expired_runtime_session_status_cache(&mut cache, now);
         cache.insert(
             target.clone(),
-            CachedOpencodeSessionStatusProbe {
+            CachedRuntimeSessionStatusProbe {
                 checked_at: now,
                 outcome: outcome.clone(),
             },
@@ -459,37 +347,37 @@ impl AppService {
         Ok(())
     }
 
-    fn prune_expired_opencode_session_status_cache(
-        cache: &mut HashMap<OpencodeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>,
+    fn prune_expired_runtime_session_status_cache(
+        cache: &mut HashMap<RuntimeSessionStatusProbeTarget, CachedRuntimeSessionStatusProbe>,
         now: Instant,
     ) {
         cache.retain(|_, entry| {
-            now.duration_since(entry.checked_at) <= Self::OPENCODE_SESSION_STATUS_CACHE_TTL
+            now.duration_since(entry.checked_at) <= Self::RUNTIME_SESSION_STATUS_CACHE_TTL
         });
     }
 
-    fn acquire_opencode_session_status_flight(
+    fn acquire_runtime_session_status_flight(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-    ) -> Result<(Arc<OpencodeSessionStatusFlight>, bool)> {
+        target: &RuntimeSessionStatusProbeTarget,
+    ) -> Result<(Arc<RuntimeSessionStatusFlight>, bool)> {
         let mut flights = self
-            .opencode_session_status_flights
+            .runtime_session_status_flights
             .lock()
-            .map_err(|_| anyhow!("OpenCode session status coordination state lock poisoned"))?;
+            .map_err(|_| anyhow!("Runtime session status coordination state lock poisoned"))?;
         if let Some(existing) = flights.get(target) {
             return Ok((existing.clone(), false));
         }
 
-        let flight = Arc::new(OpencodeSessionStatusFlight::new());
+        let flight = Arc::new(RuntimeSessionStatusFlight::new());
         flights.insert(target.clone(), flight.clone());
         Ok((flight, true))
     }
 
-    fn complete_opencode_session_status_flight(
+    fn complete_runtime_session_status_flight(
         &self,
-        target: &OpencodeSessionStatusProbeTarget,
-        flight: &Arc<OpencodeSessionStatusFlight>,
-        outcome: &CachedOpencodeSessionStatusProbeOutcome,
+        target: &RuntimeSessionStatusProbeTarget,
+        flight: &Arc<RuntimeSessionStatusFlight>,
+        outcome: &RuntimeSessionStatusProbeOutcome,
     ) -> Result<()> {
         let mut poisoned = false;
 
@@ -501,12 +389,12 @@ impl AppService {
                     poisoned_state.into_inner()
                 }
             };
-            *state = OpencodeSessionStatusFlightState::Finished(outcome.clone());
+            *state = RuntimeSessionStatusFlightState::Finished(outcome.clone());
             flight.condvar.notify_all();
         }
 
         {
-            let mut flights = match self.opencode_session_status_flights.lock() {
+            let mut flights = match self.runtime_session_status_flights.lock() {
                 Ok(flights) => flights,
                 Err(poisoned_flights) => {
                     poisoned = true;
@@ -518,67 +406,67 @@ impl AppService {
 
         if poisoned {
             return Err(anyhow!(
-                "OpenCode session status coordination state lock poisoned"
+                "Runtime session status coordination state lock poisoned"
             ));
         }
 
         Ok(())
     }
 
-    fn wait_for_opencode_session_status_flight(
-        flight: &Arc<OpencodeSessionStatusFlight>,
-    ) -> Result<CachedOpencodeSessionStatusProbeOutcome> {
+    fn wait_for_runtime_session_status_flight(
+        flight: &Arc<RuntimeSessionStatusFlight>,
+    ) -> Result<RuntimeSessionStatusProbeOutcome> {
         let mut state = flight
             .state
             .lock()
-            .map_err(|_| anyhow!("OpenCode session status coordination state lock poisoned"))?;
+            .map_err(|_| anyhow!("Runtime session status coordination state lock poisoned"))?;
         loop {
             match &*state {
-                OpencodeSessionStatusFlightState::Finished(outcome) => {
+                RuntimeSessionStatusFlightState::Finished(outcome) => {
                     return Ok(outcome.clone());
                 }
-                OpencodeSessionStatusFlightState::Loading => {
+                RuntimeSessionStatusFlightState::Loading => {
                     state = flight.condvar.wait(state).map_err(|_| {
-                        anyhow!("OpenCode session status coordination state lock poisoned")
+                        anyhow!("Runtime session status coordination state lock poisoned")
                     })?;
                 }
             }
         }
     }
 
-    fn acquire_opencode_session_status_probe_permit(
+    fn acquire_runtime_session_status_probe_permit(
         &self,
-    ) -> Result<OpencodeSessionStatusProbePermit> {
-        let limiter = Arc::clone(&self.opencode_session_status_probe_limiter);
+    ) -> Result<RuntimeSessionStatusProbePermit> {
+        let limiter = Arc::clone(&self.runtime_session_status_probe_limiter);
         let mut active = limiter
             .active
             .lock()
-            .map_err(|_| anyhow!("OpenCode session status probe limiter lock poisoned"))?;
+            .map_err(|_| anyhow!("Runtime session status probe limiter lock poisoned"))?;
         while *active >= limiter.max_concurrent {
             active = limiter
                 .condvar
                 .wait(active)
-                .map_err(|_| anyhow!("OpenCode session status probe limiter lock poisoned"))?;
+                .map_err(|_| anyhow!("Runtime session status probe limiter lock poisoned"))?;
         }
         *active += 1;
         drop(active);
-        Ok(OpencodeSessionStatusProbePermit { limiter })
+        Ok(RuntimeSessionStatusProbePermit { limiter })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        has_live_opencode_session_status, load_opencode_session_statuses, AppService,
-        CachedOpencodeSessionStatusProbe, CachedOpencodeSessionStatusProbeOutcome,
-        OpencodeSessionStatus, OpencodeSessionStatusFlightGuard, OpencodeSessionStatusMap,
-        OpencodeSessionStatusProbeTarget,
+        has_live_runtime_session_status, AppService, CachedRuntimeSessionStatusProbe,
+        RuntimeExternalSessionStatus, RuntimeSessionStatusFlightGuard, RuntimeSessionStatusMap,
+        RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
     };
+    use crate::app_service::runtime_registry::{AppRuntime, OpenCodeRuntime};
     use crate::app_service::test_support::{
         build_service_with_state, builtin_opencode_runtime_route,
     };
-    use anyhow::Result;
-    use host_domain::RuntimeRoute;
+    use anyhow::{anyhow, Result};
+    use host_domain::{AgentRuntimeKind, RuntimeRoute};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -586,8 +474,30 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
+    fn runtime_target(port: u16, working_directory: &str) -> RuntimeSessionStatusProbeTarget {
+        RuntimeSessionStatusProbeTarget::new(
+            AgentRuntimeKind::opencode(),
+            &builtin_opencode_runtime_route(port),
+            working_directory,
+        )
+    }
+
+    fn expect_statuses(outcome: RuntimeSessionStatusProbeOutcome) -> RuntimeSessionStatusMap {
+        match outcome {
+            RuntimeSessionStatusProbeOutcome::Statuses(statuses) => statuses,
+            other => panic!("expected status snapshot, received {other:?}"),
+        }
+    }
+
+    fn expect_actionable_error(outcome: RuntimeSessionStatusProbeOutcome) -> anyhow::Error {
+        match outcome {
+            RuntimeSessionStatusProbeOutcome::ActionableError(error) => anyhow!(error.to_string()),
+            other => panic!("expected actionable error, received {other:?}"),
+        }
+    }
+
     #[test]
-    fn load_opencode_session_statuses_sends_directory_query_and_parses_response() {
+    fn probe_session_status_sends_directory_query_and_parses_response() {
         let listener = TcpListener::bind("127.0.0.1:0").expect("listener should bind");
         let port = listener
             .local_addr()
@@ -620,15 +530,21 @@ mod tests {
             stream.flush().expect("server should flush response");
         });
 
-        let runtime_route = builtin_opencode_runtime_route(port);
+        let target = RuntimeSessionStatusProbeTarget::new(
+            AgentRuntimeKind::opencode(),
+            &builtin_opencode_runtime_route(port),
+            "/tmp/repo path",
+        );
 
-        let statuses = load_opencode_session_statuses(&runtime_route, "/tmp/repo path")
-            .expect("status request should succeed");
+        let outcome = OpenCodeRuntime::default().probe_session_status(&target);
+        let RuntimeSessionStatusProbeOutcome::Statuses(statuses) = outcome else {
+            panic!("status request should succeed");
+        };
         assert!(matches!(
             statuses.get("external-session"),
-            Some(OpencodeSessionStatus::Busy)
+            Some(RuntimeExternalSessionStatus::Busy)
         ));
-        assert!(has_live_opencode_session_status(
+        assert!(has_live_runtime_session_status(
             &statuses,
             "external-session"
         ));
@@ -678,17 +594,15 @@ mod tests {
             stream.flush().expect("server should flush response");
         });
 
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo ",
-        )
-        .expect("local_http route should build a probe target");
+        let target = runtime_target(port, "/tmp/repo ");
         assert_eq!(target.working_directory(), "/tmp/repo ");
 
-        let statuses = service.load_cached_opencode_session_statuses_for_target(&target)?;
+        let statuses = expect_statuses(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
         assert!(matches!(
             statuses.get("external-session"),
-            Some(OpencodeSessionStatus::Busy)
+            Some(RuntimeExternalSessionStatus::Busy)
         ));
 
         server.join().expect("server thread should finish");
@@ -713,14 +627,14 @@ mod tests {
             Duration::ZERO,
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo",
-        )
-        .expect("local_http route should build a probe target");
+        let target = runtime_target(port, "/tmp/repo");
 
-        let first = service.load_cached_opencode_session_statuses_for_target(&target)?;
-        let second = service.load_cached_opencode_session_statuses_for_target(&target)?;
+        let first = expect_statuses(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
+        let second = expect_statuses(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
         server_handle
             .join()
             .expect("status server thread should finish");
@@ -732,12 +646,15 @@ mod tests {
     }
 
     #[test]
-    fn probe_target_rejects_stdio_runtime_routes() {
-        let error =
-            OpencodeSessionStatusProbeTarget::for_runtime_route(&RuntimeRoute::Stdio, "/tmp/repo")
-                .expect_err("stdio routes should not build OpenCode HTTP probe targets");
+    fn opencode_runtime_marks_stdio_session_probe_as_unsupported() -> Result<()> {
+        let resolution = OpenCodeRuntime::default()
+            .session_status_probe_target(&RuntimeRoute::Stdio, "/tmp/repo")?;
 
-        assert!(error.to_string().contains("local_http runtime route"));
+        assert!(matches!(
+            resolution,
+            super::RuntimeSessionStatusProbeTargetResolution::Unsupported
+        ));
+        Ok(())
     }
 
     #[test]
@@ -748,27 +665,23 @@ mod tests {
             Duration::ZERO,
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo",
-        )
-        .expect("local_http route should build a probe target");
+        let target = runtime_target(port, "/tmp/repo");
 
-        service.load_cached_opencode_session_statuses_for_target(&target)?;
+        service.load_cached_runtime_session_status_outcome_for_target(&target)?;
         {
             let mut cache = service
-                .opencode_session_status_cache
+                .runtime_session_status_cache
                 .lock()
                 .expect("status cache lock should be available");
             let entry = cache
                 .get_mut(&target)
                 .expect("fresh cache entry should be present");
             entry.checked_at = Instant::now()
-                - AppService::OPENCODE_SESSION_STATUS_CACHE_TTL
+                - AppService::RUNTIME_SESSION_STATUS_CACHE_TTL
                 - Duration::from_millis(10);
         }
 
-        service.load_cached_opencode_session_statuses_for_target(&target)?;
+        service.load_cached_runtime_session_status_outcome_for_target(&target)?;
         server_handle
             .join()
             .expect("status server thread should finish");
@@ -785,43 +698,37 @@ mod tests {
             Duration::ZERO,
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
-        let live_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo-live",
-        )
-        .expect("local_http route should build a probe target");
-        let stale_target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(9999),
-            "/tmp/repo-stale",
-        )
-        .expect("local_http route should build a probe target");
+        let live_target = runtime_target(port, "/tmp/repo-live");
+        let stale_target = runtime_target(9999, "/tmp/repo-stale");
 
         {
             let mut cache = service
-                .opencode_session_status_cache
+                .runtime_session_status_cache
                 .lock()
                 .expect("status cache lock should be available");
             cache.insert(
                 stale_target.clone(),
-                CachedOpencodeSessionStatusProbe {
+                CachedRuntimeSessionStatusProbe {
                     checked_at: Instant::now()
-                        - AppService::OPENCODE_SESSION_STATUS_CACHE_TTL
+                        - AppService::RUNTIME_SESSION_STATUS_CACHE_TTL
                         - Duration::from_millis(10),
-                    outcome: CachedOpencodeSessionStatusProbeOutcome::Statuses(
-                        OpencodeSessionStatusMap::new(),
+                    outcome: RuntimeSessionStatusProbeOutcome::Statuses(
+                        RuntimeSessionStatusMap::new(),
                     ),
                 },
             );
         }
 
-        let statuses = service.load_cached_opencode_session_statuses_for_target(&live_target)?;
+        let statuses = expect_statuses(
+            service.load_cached_runtime_session_status_outcome_for_target(&live_target)?,
+        );
         server_handle
             .join()
             .expect("status server thread should finish");
 
         assert!(statuses.contains_key("external-build-session"));
         let cache = service
-            .opencode_session_status_cache
+            .runtime_session_status_cache
             .lock()
             .expect("status cache lock should be available");
         assert!(!cache.contains_key(&stale_target));
@@ -837,11 +744,7 @@ mod tests {
             Duration::from_millis(200),
             Ok(r#"{"external-build-session":{"type":"busy"}}"#.to_string()),
         )?;
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo",
-        )
-        .expect("local_http route should build a probe target");
+        let target = runtime_target(port, "/tmp/repo");
         let barrier = Arc::new(Barrier::new(3));
 
         thread::scope(|scope| {
@@ -853,14 +756,15 @@ mod tests {
                 handles.push(scope.spawn(move || {
                     barrier.wait();
                     service
-                        .load_cached_opencode_session_statuses_for_target(&target)
+                        .load_cached_runtime_session_status_outcome_for_target(&target)
                         .expect("concurrent status probe should succeed")
                 }));
             }
 
             barrier.wait();
             for handle in handles {
-                let statuses = handle.join().expect("probe thread should not panic");
+                let statuses =
+                    expect_statuses(handle.join().expect("probe thread should not panic"));
                 assert!(statuses.contains_key("external-build-session"));
             }
         });
@@ -886,13 +790,7 @@ mod tests {
                     r#"{{"external-build-session-{index}":{{"type":"busy"}}}}"#
                 )),
             )?;
-            targets.push(
-                OpencodeSessionStatusProbeTarget::for_runtime_route(
-                    &builtin_opencode_runtime_route(port),
-                    format!("/tmp/repo-{index}").as_str(),
-                )
-                .expect("local_http route should build a probe target"),
-            );
+            targets.push(runtime_target(port, format!("/tmp/repo-{index}").as_str()));
             counters.push(connections);
             handles.push(server_handle);
         }
@@ -924,18 +822,14 @@ mod tests {
             Duration::ZERO,
             Err((500, "session status failed".to_string())),
         )?;
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo",
-        )
-        .expect("local_http route should build a probe target");
+        let target = runtime_target(port, "/tmp/repo");
 
-        let first_error = service
-            .load_cached_opencode_session_statuses_for_target(&target)
-            .expect_err("HTTP failures should remain actionable");
-        let second_error = service
-            .load_cached_opencode_session_statuses_for_target(&target)
-            .expect_err("cached HTTP failures should remain actionable");
+        let first_error = expect_actionable_error(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
+        let second_error = expect_actionable_error(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
         server_handle
             .join()
             .expect("status server thread should finish");
@@ -951,18 +845,14 @@ mod tests {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let (port, connections, server_handle) =
             spawn_counting_status_server(1, Duration::ZERO, Ok("{not-json}".to_string()))?;
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(port),
-            "/tmp/repo",
-        )
-        .expect("local_http route should build a probe target");
+        let target = runtime_target(port, "/tmp/repo");
 
-        let first_error = service
-            .load_cached_opencode_session_statuses_for_target(&target)
-            .expect_err("parse failures should remain actionable");
-        let second_error = service
-            .load_cached_opencode_session_statuses_for_target(&target)
-            .expect_err("cached parse failures should remain actionable");
+        let first_error = expect_actionable_error(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
+        let second_error = expect_actionable_error(
+            service.load_cached_runtime_session_status_outcome_for_target(&target)?,
+        );
         server_handle
             .join()
             .expect("status server thread should finish");
@@ -980,39 +870,29 @@ mod tests {
     #[test]
     fn session_status_flight_guard_finishes_waiters_when_dropped_uncompleted() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(1234),
-            "/tmp/runtime-flight-guard",
-        )
-        .expect("local_http route should build a probe target");
-        let (flight, is_leader) = service.acquire_opencode_session_status_flight(&target)?;
+        let target = runtime_target(1234, "/tmp/runtime-flight-guard");
+        let (flight, is_leader) = service.acquire_runtime_session_status_flight(&target)?;
         assert!(is_leader);
 
         {
-            let _guard = OpencodeSessionStatusFlightGuard::new(&service, &target, flight.clone());
+            let _guard = RuntimeSessionStatusFlightGuard::new(&service, &target, flight.clone());
         }
 
-        let outcome = AppService::wait_for_opencode_session_status_flight(&flight)?;
-        let error = outcome
-            .to_result()
-            .expect_err("dropped leader should finish waiters with an error");
+        let outcome = AppService::wait_for_runtime_session_status_flight(&flight)?;
+        let error = expect_actionable_error(outcome);
         assert!(error
             .to_string()
-            .contains("OpenCode session status probe aborted unexpectedly"));
+            .contains("Runtime session status probe aborted unexpectedly"));
 
         Ok(())
     }
 
     #[test]
-    fn complete_opencode_session_status_flight_recovers_poisoned_state_and_removes_entry(
+    fn complete_runtime_session_status_flight_recovers_poisoned_state_and_removes_entry(
     ) -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let target = OpencodeSessionStatusProbeTarget::for_runtime_route(
-            &builtin_opencode_runtime_route(1235),
-            "/tmp/runtime-flight-poison",
-        )
-        .expect("local_http route should build a probe target");
-        let (flight, is_leader) = service.acquire_opencode_session_status_flight(&target)?;
+        let target = runtime_target(1235, "/tmp/runtime-flight-poison");
+        let (flight, is_leader) = service.acquire_runtime_session_status_flight(&target)?;
         assert!(is_leader);
 
         let poison_handle = thread::spawn({
@@ -1028,18 +908,18 @@ mod tests {
         assert!(poison_handle.join().is_err());
 
         let error = service
-            .complete_opencode_session_status_flight(
+            .complete_runtime_session_status_flight(
                 &target,
                 &flight,
-                &CachedOpencodeSessionStatusProbeOutcome::Statuses(OpencodeSessionStatusMap::new()),
+                &RuntimeSessionStatusProbeOutcome::Statuses(RuntimeSessionStatusMap::new()),
             )
             .expect_err("poisoned completion should surface an error");
         assert!(error
             .to_string()
-            .contains("OpenCode session status coordination state lock poisoned"));
+            .contains("Runtime session status coordination state lock poisoned"));
 
         let flights = service
-            .opencode_session_status_flights
+            .runtime_session_status_flights
             .lock()
             .expect("status flights lock should remain available");
         assert!(flights.is_empty());

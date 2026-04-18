@@ -27,9 +27,9 @@ mod mcp_bridge_process;
 mod mcp_bridge_registry;
 mod odt_mcp;
 mod opencode_runtime;
-mod opencode_session_status;
 mod process_registry;
 mod repo_init;
+mod runtime_session_status;
 mod runtime_orchestrator;
 mod runtime_registry;
 mod runtime_startup;
@@ -67,12 +67,12 @@ pub(crate) use opencode_runtime::{
     wait_for_local_server_with_process as wait_for_runtime_with_process,
     wait_for_process_exit_by_pid, StartupCancelEpoch,
 };
-pub(crate) type RuntimeSessionStatusMap = opencode_session_status::OpencodeSessionStatusMap;
+pub(crate) type RuntimeSessionStatusMap = runtime_session_status::RuntimeSessionStatusMap;
 pub(crate) type RuntimeSessionStatusProbeTarget =
-    opencode_session_status::OpencodeSessionStatusProbeTarget;
-pub(crate) use opencode_session_status::{
-    dedupe_probe_targets as dedupe_runtime_session_probe_targets,
-    has_live_opencode_session_status as has_live_runtime_session_status,
+    runtime_session_status::RuntimeSessionStatusProbeTarget;
+pub(crate) use runtime_session_status::{
+    has_live_runtime_session_status, RuntimeSessionStatusProbeError,
+    RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTargetResolution,
 };
 pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use service_core::{

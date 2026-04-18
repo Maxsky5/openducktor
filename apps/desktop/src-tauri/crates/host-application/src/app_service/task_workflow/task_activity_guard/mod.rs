@@ -2,11 +2,11 @@ use super::cleanup_plans::{
     normalize_path_for_comparison, normalize_path_key, IMPLEMENTATION_SESSION_ROLES,
 };
 use crate::app_service::{
-    has_live_runtime_session_status, service_core::AppService, RuntimeSessionStatusMap,
-    RuntimeSessionStatusProbeTarget,
+    has_live_runtime_session_status, service_core::AppService, RuntimeSessionStatusProbeOutcome,
+    RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeTargetResolution,
 };
 use anyhow::{anyhow, Context, Result};
-use host_domain::{AgentRuntimeKind, AgentSessionDocument, RunState, RuntimeRole, RuntimeRoute};
+use host_domain::{AgentSessionDocument, RunState, RuntimeRoute};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -14,8 +14,8 @@ mod probe_support;
 
 use self::probe_support::{
     build_run_probe_plans, build_session_probe_plans, collect_runtime_routes_by_worktree,
-    resolve_session_statuses, RunProbeCandidate, RunProbePlan, SessionProbePlan,
-    TaskActiveWorkEvidence, TaskActivityProbePlan,
+    RunProbeCandidate, RunProbePlan, SessionProbePlan, TaskActiveWorkEvidence,
+    TaskActivityProbePlan,
 };
 
 pub(super) struct TaskActivityGuard<'a> {
@@ -117,31 +117,22 @@ impl<'a> TaskActivityGuard<'a> {
     ) -> Result<TaskActiveWorkEvidence> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
         let candidate_runs = self.collect_candidate_runs(&normalized_repo, task_id)?;
-        let runtime_routes_by_worktree = collect_runtime_routes_by_worktree(&candidate_runs);
-        let repo_runtime_routes_by_kind = self.collect_repo_runtime_routes_by_kind(repo_path)?;
+        let runtime_routes_by_worktree =
+            self.collect_runtime_routes_by_worktree(repo_path, &candidate_runs)?;
         let probe_plan = self.build_probe_plan(
             &candidate_runs,
             sessions,
             session_roles,
             &runtime_routes_by_worktree,
-            &repo_runtime_routes_by_kind,
         )?;
 
-        let primary_statuses_by_target = self
+        let probe_outcomes_by_target = self
             .service
-            .load_cached_runtime_session_statuses_for_targets(&probe_plan.primary_probe_targets)?;
+            .load_cached_runtime_session_statuses_for_targets(&probe_plan.probe_targets)?;
         let has_active_run =
-            self.evaluate_run_activity(&probe_plan.run_plans, &primary_statuses_by_target)?;
-
-        let fallback_probe_targets = probe_plan.fallback_probe_targets(&primary_statuses_by_target);
-        let fallback_statuses_by_target = self
-            .service
-            .load_cached_runtime_session_statuses_for_targets(&fallback_probe_targets)?;
-        let active_session_roles = self.collect_active_session_roles(
-            &probe_plan.session_plans,
-            &primary_statuses_by_target,
-            &fallback_statuses_by_target,
-        )?;
+            self.evaluate_run_activity(&probe_plan.run_plans, &probe_outcomes_by_target)?;
+        let active_session_roles = self
+            .collect_active_session_roles(&probe_plan.session_plans, &probe_outcomes_by_target)?;
 
         Ok(TaskActiveWorkEvidence {
             has_active_run,
@@ -185,60 +176,70 @@ impl<'a> TaskActivityGuard<'a> {
         sessions: &[AgentSessionDocument],
         session_roles: &[&str],
         runtime_routes_by_worktree: &HashMap<String, RuntimeRoute>,
-        repo_runtime_routes_by_kind: &HashMap<AgentRuntimeKind, RuntimeRoute>,
     ) -> Result<TaskActivityProbePlan> {
-        let mut primary_probe_targets = Vec::new();
-        let run_plans = build_run_probe_plans(
-            self.service,
-            candidate_runs,
-            sessions,
-            &mut primary_probe_targets,
-        )?;
+        let mut probe_targets = Vec::new();
+        let run_plans =
+            build_run_probe_plans(self.service, candidate_runs, sessions, &mut probe_targets)?;
         let session_plans = build_session_probe_plans(
             self.service,
             sessions,
             session_roles,
             runtime_routes_by_worktree,
-            repo_runtime_routes_by_kind,
-            &mut primary_probe_targets,
+            &mut probe_targets,
         )?;
 
         Ok(TaskActivityProbePlan {
             run_plans,
             session_plans,
-            primary_probe_targets,
+            probe_targets,
         })
     }
 
     fn evaluate_run_activity(
         &self,
         run_plans: &[RunProbePlan],
-        primary_statuses_by_target: &HashMap<
+        probe_outcomes_by_target: &HashMap<
             RuntimeSessionStatusProbeTarget,
-            RuntimeSessionStatusMap,
+            RuntimeSessionStatusProbeOutcome,
         >,
     ) -> Result<bool> {
         for run_probe_plan in run_plans {
-            let Some(primary_target) = run_probe_plan.primary_target.as_ref() else {
+            let Some(probe_target_resolution) = run_probe_plan.probe_target_resolution.as_ref()
+            else {
+                continue;
+            };
+
+            let RuntimeSessionStatusProbeTargetResolution::Target(primary_target) =
+                probe_target_resolution
+            else {
                 return Ok(true);
             };
 
-            let statuses = primary_statuses_by_target
+            let probe_outcome = probe_outcomes_by_target
                 .get(primary_target)
                 .ok_or_else(|| {
                     anyhow!(
-                        "Missing cached runtime session statuses for {}",
+                        "Missing cached runtime session status outcome for {}",
                         run_probe_plan.worktree_path
                     )
                 })?;
-            if run_probe_plan
-                .external_session_ids
-                .iter()
-                .any(|external_session_id| {
-                    has_live_runtime_session_status(statuses, external_session_id)
-                })
-            {
-                return Ok(true);
+
+            match probe_outcome {
+                RuntimeSessionStatusProbeOutcome::Statuses(statuses) => {
+                    if run_probe_plan
+                        .external_session_ids
+                        .iter()
+                        .any(|external_session_id| {
+                            has_live_runtime_session_status(statuses, external_session_id)
+                        })
+                    {
+                        return Ok(true);
+                    }
+                }
+                RuntimeSessionStatusProbeOutcome::Unsupported => return Ok(true),
+                RuntimeSessionStatusProbeOutcome::ActionableError(error) => {
+                    return Err(anyhow!(error.to_string()))
+                }
             }
         }
 
@@ -248,33 +249,48 @@ impl<'a> TaskActivityGuard<'a> {
     fn collect_active_session_roles(
         &self,
         session_plans: &[SessionProbePlan],
-        primary_statuses_by_target: &HashMap<
+        probe_outcomes_by_target: &HashMap<
             RuntimeSessionStatusProbeTarget,
-            RuntimeSessionStatusMap,
-        >,
-        fallback_statuses_by_target: &HashMap<
-            RuntimeSessionStatusProbeTarget,
-            RuntimeSessionStatusMap,
+            RuntimeSessionStatusProbeOutcome,
         >,
     ) -> Result<Vec<String>> {
         let mut active_roles = HashSet::new();
         for session_probe_plan in session_plans {
-            if session_probe_plan.primary_target.is_none() {
-                active_roles.insert(session_probe_plan.role.clone());
+            let Some(probe_target_resolution) = session_probe_plan.probe_target_resolution.as_ref()
+            else {
                 continue;
-            }
-            let statuses = resolve_session_statuses(
-                session_probe_plan,
-                primary_statuses_by_target,
-                fallback_statuses_by_target,
-            )?;
-            if statuses.is_some_and(|statuses| {
-                has_live_runtime_session_status(
-                    statuses,
-                    session_probe_plan.external_session_id.as_str(),
-                )
-            }) {
-                active_roles.insert(session_probe_plan.role.clone());
+            };
+            match probe_target_resolution {
+                RuntimeSessionStatusProbeTargetResolution::Unsupported => {
+                    active_roles.insert(session_probe_plan.role.clone());
+                }
+                RuntimeSessionStatusProbeTargetResolution::Target(primary_target) => {
+                    let probe_outcome =
+                        probe_outcomes_by_target
+                            .get(primary_target)
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "Missing cached runtime session status outcome for {}",
+                                    session_probe_plan.worktree_key
+                                )
+                            })?;
+                    match probe_outcome {
+                        RuntimeSessionStatusProbeOutcome::Statuses(statuses) => {
+                            if has_live_runtime_session_status(
+                                statuses,
+                                session_probe_plan.external_session_id.as_str(),
+                            ) {
+                                active_roles.insert(session_probe_plan.role.clone());
+                            }
+                        }
+                        RuntimeSessionStatusProbeOutcome::Unsupported => {
+                            active_roles.insert(session_probe_plan.role.clone());
+                        }
+                        RuntimeSessionStatusProbeOutcome::ActionableError(error) => {
+                            return Err(anyhow!(error.to_string()))
+                        }
+                    }
+                }
             }
         }
 
@@ -283,17 +299,18 @@ impl<'a> TaskActivityGuard<'a> {
         Ok(active_session_roles)
     }
 
-    fn collect_repo_runtime_routes_by_kind(
+    fn collect_runtime_routes_by_worktree(
         &self,
         repo_path: &str,
-    ) -> Result<HashMap<AgentRuntimeKind, RuntimeRoute>> {
+        candidate_runs: &[RunProbeCandidate],
+    ) -> Result<HashMap<String, RuntimeRoute>> {
         let normalized_repo = normalize_path_for_comparison(repo_path);
+        let mut routes_by_worktree = collect_runtime_routes_by_worktree(candidate_runs);
         let runtimes = self
             .service
             .agent_runtimes
             .lock()
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        let mut routes_by_kind = HashMap::new();
 
         for runtime in runtimes.values() {
             if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo
@@ -301,19 +318,13 @@ impl<'a> TaskActivityGuard<'a> {
                 continue;
             }
 
-            if runtime.summary.role == RuntimeRole::Workspace {
-                routes_by_kind.insert(
-                    runtime.summary.kind.clone(),
-                    runtime.summary.runtime_route.clone(),
-                );
-                continue;
-            }
-
-            routes_by_kind
-                .entry(runtime.summary.kind.clone())
+            routes_by_worktree
+                .entry(normalize_path_key(
+                    runtime.summary.working_directory.as_str(),
+                ))
                 .or_insert_with(|| runtime.summary.runtime_route.clone());
         }
 
-        Ok(routes_by_kind)
+        Ok(routes_by_worktree)
     }
 }

@@ -108,32 +108,32 @@ impl RepoRuntimeHealthFlight {
     }
 }
 
-pub(super) struct OpencodeSessionStatusFlight {
-    pub(super) state: Mutex<OpencodeSessionStatusFlightState>,
+pub(super) struct RuntimeSessionStatusFlight {
+    pub(super) state: Mutex<RuntimeSessionStatusFlightState>,
     pub(super) condvar: Condvar,
 }
 
-pub(super) enum OpencodeSessionStatusFlightState {
+pub(super) enum RuntimeSessionStatusFlightState {
     Loading,
-    Finished(CachedOpencodeSessionStatusProbeOutcome),
+    Finished(RuntimeSessionStatusProbeOutcome),
 }
 
-impl OpencodeSessionStatusFlight {
+impl RuntimeSessionStatusFlight {
     pub(super) fn new() -> Self {
         Self {
-            state: Mutex::new(OpencodeSessionStatusFlightState::Loading),
+            state: Mutex::new(RuntimeSessionStatusFlightState::Loading),
             condvar: Condvar::new(),
         }
     }
 }
 
-pub(super) struct OpencodeSessionStatusProbeLimiter {
+pub(super) struct RuntimeSessionStatusProbeLimiter {
     pub(super) active: Mutex<usize>,
     pub(super) condvar: Condvar,
     pub(super) max_concurrent: usize,
 }
 
-impl OpencodeSessionStatusProbeLimiter {
+impl RuntimeSessionStatusProbeLimiter {
     pub(super) fn new(max_concurrent: usize) -> Self {
         Self {
             active: Mutex::new(0),
@@ -157,11 +157,11 @@ pub struct AppService {
         Arc<Mutex<HashMap<String, Arc<RepoRuntimeHealthFlight>>>>,
     pub(super) runtime_startup_status: Arc<Mutex<HashMap<String, RuntimeStartupStatusEntry>>>,
     pub(super) repo_runtime_health_snapshots: Arc<Mutex<HashMap<String, RepoRuntimeHealthCheck>>>,
-    pub(super) opencode_session_status_cache:
-        Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, CachedOpencodeSessionStatusProbe>>>,
-    pub(super) opencode_session_status_flights:
-        Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, Arc<OpencodeSessionStatusFlight>>>>,
-    pub(super) opencode_session_status_probe_limiter: Arc<OpencodeSessionStatusProbeLimiter>,
+    pub(super) runtime_session_status_cache:
+        Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, CachedRuntimeSessionStatusProbe>>>,
+    pub(super) runtime_session_status_flights:
+        Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, Arc<RuntimeSessionStatusFlight>>>>,
+    pub(super) runtime_session_status_probe_limiter: Arc<RuntimeSessionStatusProbeLimiter>,
     pub(super) mcp_bridge_registry_path: PathBuf,
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
@@ -214,21 +214,9 @@ pub(crate) struct CachedOpenInToolList {
     pub(super) tools: Vec<SystemOpenInToolInfo>,
 }
 
-pub(crate) struct CachedOpencodeSessionStatusProbe {
+pub(crate) struct CachedRuntimeSessionStatusProbe {
     pub(super) checked_at: Instant,
-    pub(super) outcome: CachedOpencodeSessionStatusProbeOutcome,
-}
-
-#[derive(Clone)]
-pub(crate) enum CachedOpencodeSessionStatusProbeOutcome {
-    Statuses(RuntimeSessionStatusMap),
-    ActionableError(CachedOpencodeSessionStatusProbeError),
-}
-
-#[derive(Clone)]
-pub(crate) enum CachedOpencodeSessionStatusProbeError {
-    ProbeFailed(String),
-    ProbeAborted,
+    pub(super) outcome: RuntimeSessionStatusProbeOutcome,
 }
 
 pub(crate) struct DevServerGroupRuntime {
@@ -299,11 +287,11 @@ impl AppService {
             repo_runtime_health_flights: Arc::new(Mutex::new(HashMap::new())),
             runtime_startup_status: Arc::new(Mutex::new(HashMap::new())),
             repo_runtime_health_snapshots: Arc::new(Mutex::new(HashMap::new())),
-            opencode_session_status_cache: Arc::new(Mutex::new(HashMap::new())),
-            opencode_session_status_flights: Arc::new(Mutex::new(HashMap::new())),
-            opencode_session_status_probe_limiter: Arc::new(
-                OpencodeSessionStatusProbeLimiter::new(4),
-            ),
+            runtime_session_status_cache: Arc::new(Mutex::new(HashMap::new())),
+            runtime_session_status_flights: Arc::new(Mutex::new(HashMap::new())),
+            runtime_session_status_probe_limiter: Arc::new(RuntimeSessionStatusProbeLimiter::new(
+                4,
+            )),
             mcp_bridge_registry_path,
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
