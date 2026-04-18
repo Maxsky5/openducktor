@@ -94,13 +94,10 @@ describe("useShellAgentActivity", () => {
     await harness.mount();
 
     await harness.run(({ queryClient }) => {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
-        tasks: [
-          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
-          createTaskCardFixture({ id: "task-2", title: "Other Task" }),
-        ],
-        runs: [] satisfies RunSummary[],
-      });
+      queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+        createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+        createTaskCardFixture({ id: "task-2", title: "Other Task" }),
+      ]);
     });
     await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
     await harness.waitFor(
@@ -124,13 +121,10 @@ describe("useShellAgentActivity", () => {
     expect(harness.getRenderCount()).toBe(baselineRenderCount);
 
     await harness.run(({ queryClient }) => {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
-        tasks: [
-          createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
-          createTaskCardFixture({ id: "task-2", title: "Renamed Other Task" }),
-        ],
-        runs: [createRun()],
-      });
+      queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+        createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
+        createTaskCardFixture({ id: "task-2", title: "Renamed Other Task" }),
+      ]);
     });
 
     expect(harness.getLatest().activity).toBe(baselineActivity);
@@ -167,10 +161,9 @@ describe("useShellAgentActivity", () => {
     await harness.mount();
 
     await harness.run(({ queryClient }) => {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
-        tasks: [createTaskCardFixture({ id: "task-1", title: "Initial Title" })],
-        runs: [] satisfies RunSummary[],
-      });
+      queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+        createTaskCardFixture({ id: "task-1", title: "Initial Title" }),
+      ]);
     });
     await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
     await harness.waitFor(
@@ -180,10 +173,9 @@ describe("useShellAgentActivity", () => {
     const initialRenderCount = harness.getRenderCount();
 
     await harness.run(({ queryClient }) => {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
-        tasks: [createTaskCardFixture({ id: "task-1", title: "Updated Title" })],
-        runs: [] satisfies RunSummary[],
-      });
+      queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
+        createTaskCardFixture({ id: "task-1", title: "Updated Title" }),
+      ]);
     });
     await harness.waitFor(
       ({ activity }) => activity.activeSessions[0]?.taskTitle === "Updated Title",
@@ -230,14 +222,12 @@ describe("useShellAgentActivity", () => {
     await harness.mount();
 
     await harness.run(({ queryClient }) => {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
-        tasks: [createTaskCardFixture({ id: "task-a", title: "Repo A Task" })],
-        runs: [] satisfies RunSummary[],
-      });
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), {
-        tasks: [createTaskCardFixture({ id: "task-b", title: "Repo B Task" })],
-        runs: [] satisfies RunSummary[],
-      });
+      queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-a"), [
+        createTaskCardFixture({ id: "task-a", title: "Repo A Task" }),
+      ]);
+      queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-b"), [
+        createTaskCardFixture({ id: "task-b", title: "Repo B Task" }),
+      ]);
     });
     await harness.waitFor(
       ({ activity }) => activity.activeSessions[0]?.taskTitle === "Repo A Task",

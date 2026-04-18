@@ -8,7 +8,7 @@ import {
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentActivitySessions } from "../app-state-provider";
-import { type RepoTaskData, repoTaskDataQueryOptions } from "./tasks";
+import { repoVisibleTasksQueryOptions } from "./tasks";
 
 const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
   activeSessionCount: 0,
@@ -44,9 +44,9 @@ const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
   }
 
   const visibleTaskIds = new Set(taskIds);
-  return (repoTaskData: RepoTaskData): AgentActivityTaskTitleLookup => {
+  return (tasks: ReadonlyArray<{ id: string; title: string }>): AgentActivityTaskTitleLookup => {
     const taskTitleById: Record<string, string> = {};
-    for (const task of repoTaskData.tasks) {
+    for (const task of tasks) {
       if (!visibleTaskIds.has(task.id)) {
         continue;
       }
@@ -71,7 +71,7 @@ export const useShellAgentActivity = (
     [activityTaskIds],
   );
   const taskTitleQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepoPath ?? "__shell-activity-disabled__"),
+    ...repoVisibleTasksQueryOptions(activeRepoPath ?? "__shell-activity-disabled__"),
     enabled: activeRepoPath !== null && activityTaskIds.length > 0,
     select: selectTaskTitles,
   });
