@@ -196,27 +196,25 @@ describe("AgentStudioTaskTabs", () => {
   test("clicking an inactive tab still selects it", async () => {
     const onSelectTab = mock(() => {});
 
-    await withMouseSensorFallback(async () => {
-      render(
-        createElement(
-          Tabs,
-          { value: "task-1", onValueChange: onSelectTab },
-          createElement(AgentStudioTaskTabs, {
-            model: {
-              ...buildModel(),
-              onSelectTab,
-            },
-          }),
-        ),
-      );
+    render(
+      createElement(
+        Tabs,
+        { value: "task-1", onValueChange: onSelectTab },
+        createElement(AgentStudioTaskTabs, {
+          model: {
+            ...buildModel(),
+            onSelectTab,
+          },
+        }),
+      ),
+    );
 
-      const inactiveTab = screen.getByRole("tab", { name: /Ship QA checklist/i });
+    const inactiveTab = screen.getByRole("tab", { name: /Ship QA checklist/i });
 
-      await act(async () => {
-        fireEvent.mouseDown(inactiveTab, { button: 0, buttons: 1 });
-        fireEvent.mouseUp(inactiveTab, { button: 0 });
-        fireEvent.click(inactiveTab, { button: 0 });
-      });
+    await act(async () => {
+      fireEvent.mouseDown(inactiveTab, { button: 0, buttons: 1 });
+      fireEvent.mouseUp(inactiveTab, { button: 0 });
+      fireEvent.click(inactiveTab, { button: 0 });
     });
 
     expect(onSelectTab).toHaveBeenCalledWith("task-2");
