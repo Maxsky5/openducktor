@@ -33,6 +33,10 @@ import {
   validateComposerAttachments,
 } from "./agent-chat-attachments";
 import {
+  createComposerAutofocusState,
+  resolveComposerAutofocus,
+} from "./agent-chat-composer-autofocus";
+import {
   type AgentChatComposerDraft,
   appendAttachmentsToDraft,
   createEmptyComposerDraft,
@@ -249,6 +253,7 @@ export const AgentChatComposer = forwardRef<
 >(function AgentChatComposer({ model }, ref): ReactElement {
   const {
     taskId,
+    displayedSessionId,
     agentStudioReady,
     isReadOnly,
     readOnlyReason,
@@ -379,6 +384,7 @@ export const AgentChatComposer = forwardRef<
       .join("|");
   }, [attachmentErrors, draft.attachments]);
   const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
+  const composerAutofocusStateRef = useRef(createComposerAutofocusState());
 
   const sendDisabled =
     (isSending && !isSessionWorking) ||
@@ -453,6 +459,40 @@ export const AgentChatComposer = forwardRef<
 
     focusComposerEditor();
   }, [focusComposerEditor]);
+
+  const isFocusInsideComposer = useCallback(
+    (activeElement: Element | null): boolean => {
+      const editor = composerEditorRef.current;
+      return Boolean(
+        editor && activeElement && (editor === activeElement || editor.contains(activeElement)),
+      );
+    },
+    [composerEditorRef],
+  );
+
+  useEffect(() => {
+    const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
+    const activeElement = globalThis.document?.activeElement ?? null;
+    const focusInsideComposer = isFocusInsideComposer(activeElement);
+
+    const autofocusResult = resolveComposerAutofocus(composerAutofocusStateRef.current, {
+      displayedSessionId,
+      isComposerInteractive,
+      activeElement,
+      focusInsideComposer,
+    });
+    composerAutofocusStateRef.current = autofocusResult.nextState;
+    if (autofocusResult.shouldFocus) {
+      scheduleComposerFocus();
+    }
+  }, [
+    displayedSessionId,
+    isComposerInputDisabled,
+    // Stable helper over a stable ref; included so the effect deps stay explicit.
+    isFocusInsideComposer,
+    isSubmitting,
+    scheduleComposerFocus,
+  ]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (latestSendDisabledRef.current) {

@@ -51,6 +51,7 @@ export type AgentChatThreadModel = {
 
 export type AgentChatComposerModel = {
   taskId: string;
+  displayedSessionId: string | null;
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;

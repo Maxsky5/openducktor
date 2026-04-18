@@ -12,7 +12,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useRef, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +45,7 @@ type AgentStudioSessionSelectorModel = {
   groups: ComboboxGroup[];
   disabled: boolean;
   onValueChange: (value: string) => void;
+  shouldAutofocusComposerForValue: (value: string) => boolean;
 };
 
 type AgentSessionCreateOption = {
@@ -70,6 +71,18 @@ export type AgentStudioHeaderModel = {
   createSessionDisabled: boolean;
   isCreatingSession: boolean;
   agentStudioReady: boolean;
+};
+
+export const deriveSessionHistorySelectionFocusBehavior = (params: {
+  currentValue: string;
+  nextValue: string;
+  shouldAutofocusComposerForValue: (value: string) => boolean;
+}): "composer" | "trigger" | "none" => {
+  if (params.nextValue === params.currentValue) {
+    return "none";
+  }
+
+  return params.shouldAutofocusComposerForValue(params.nextValue) ? "composer" : "trigger";
 };
 
 const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
@@ -204,6 +217,9 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
 
   const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
+  const sessionHistoryTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const preventSessionTriggerRefocusRef = useRef(false);
+  const restoreSessionTriggerFocusRef = useRef(false);
 
   const normalizedTaskTitle = taskTitle?.trim() ?? "";
   const hasTaskTitle = normalizedTaskTitle.length > 0;
@@ -272,6 +288,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
           <Popover open={isSessionMenuOpen} onOpenChange={setIsSessionMenuOpen}>
             <PopoverTrigger asChild>
               <Button
+                ref={sessionHistoryTriggerRef}
                 type="button"
                 variant="outline"
                 size="icon"
@@ -291,7 +308,33 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 <History className="size-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-0">
+            <PopoverContent
+              align="end"
+              className="w-80 p-0"
+              onCloseAutoFocus={(event) => {
+                if (!preventSessionTriggerRefocusRef.current) {
+                  if (!restoreSessionTriggerFocusRef.current) {
+                    return;
+                  }
+
+                  restoreSessionTriggerFocusRef.current = false;
+                  event.preventDefault();
+                  const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+                  if (typeof requestAnimationFrameFn === "function") {
+                    requestAnimationFrameFn(() => {
+                      sessionHistoryTriggerRef.current?.focus();
+                    });
+                    return;
+                  }
+
+                  sessionHistoryTriggerRef.current?.focus();
+                  return;
+                }
+
+                preventSessionTriggerRefocusRef.current = false;
+                event.preventDefault();
+              }}
+            >
               <Command>
                 <CommandInput placeholder="Search sessions…" className="h-8 text-sm" />
                 <CommandList>
@@ -303,6 +346,14 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                           key={option.value}
                           value={`${group.label} ${option.label} ${option.description ?? ""}`}
                           onSelect={() => {
+                            const focusBehavior = deriveSessionHistorySelectionFocusBehavior({
+                              currentValue: sessionSelector.value,
+                              nextValue: option.value,
+                              shouldAutofocusComposerForValue:
+                                sessionSelector.shouldAutofocusComposerForValue,
+                            });
+                            preventSessionTriggerRefocusRef.current = focusBehavior === "composer";
+                            restoreSessionTriggerFocusRef.current = focusBehavior === "trigger";
                             sessionSelector.onValueChange(option.value);
                             setIsSessionMenuOpen(false);
                           }}

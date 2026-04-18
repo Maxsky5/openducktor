@@ -77,6 +77,7 @@ export const useAgentStudioHeaderModel = ({
         workflowStateByRole: workflow.workflowStateByRole,
         selectedRole: workflow.selectedInteractionRole,
         workflowSessionByRole: workflow.workflowSessionByRole,
+        sessionSelectorAutofocusByValue: workflow.sessionSelectorAutofocusByValue,
         onWorkflowStepSelect,
         onSessionSelectionChange,
         sessionSelectorValue: workflow.sessionSelectorValue,
@@ -102,6 +103,7 @@ export const useAgentStudioHeaderModel = ({
       sessionsForTaskLength,
       workflow.createSessionDisabled,
       workflow.selectedInteractionRole,
+      workflow.sessionSelectorAutofocusByValue,
       workflow.sessionCreateOptions,
       workflow.sessionSelectorGroups,
       workflow.sessionSelectorValue,
@@ -423,6 +425,7 @@ export const useAgentStudioComposerModel = ({
     () =>
       buildAgentChatComposerModel({
         taskId,
+        displayedSessionId: activeSessionId ?? null,
         agentStudioReady,
         isReadOnly: !selectedRoleAvailable,
         readOnlyReason: selectedRoleReadOnlyReason,
@@ -465,6 +468,7 @@ export const useAgentStudioComposerModel = ({
       }),
     [
       activeSessionAgentColors,
+      activeSessionId,
       agentOptions,
       agentStudioReady,
       canStopSession,

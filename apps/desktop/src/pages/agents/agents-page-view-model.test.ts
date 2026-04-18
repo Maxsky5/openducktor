@@ -171,6 +171,9 @@ describe("agents-page-view-model", () => {
       },
       onWorkflowStepSelect,
       onSessionSelectionChange,
+      sessionSelectorAutofocusByValue: {
+        [activeSession.sessionId]: false,
+      },
       sessionSelectorValue: activeSession.sessionId,
       sessionSelectorGroups: [
         { label: "Recent", options: [{ value: activeSession.sessionId, label: "Spec session" }] },
@@ -187,6 +190,9 @@ describe("agents-page-view-model", () => {
     expect(model.workflowSteps).toHaveLength(2);
     expect(typeof model.onOpenTaskDetails).toBe("function");
     expect(model.sessionSelector.disabled).toBe(true);
+    expect(model.sessionSelector.shouldAutofocusComposerForValue(activeSession.sessionId)).toBe(
+      false,
+    );
 
     model.sessionSelector.onValueChange("session-next");
     expect(onSessionSelectionChange).toHaveBeenCalledWith("session-next");
@@ -233,6 +239,7 @@ describe("agents-page-view-model", () => {
       },
       onWorkflowStepSelect: mock(() => {}),
       onSessionSelectionChange: mock(() => {}),
+      sessionSelectorAutofocusByValue: {},
       sessionSelectorValue: "",
       sessionSelectorGroups: [],
       agentStudioReady: true,
@@ -292,6 +299,7 @@ describe("agents-page-view-model", () => {
       isLoadingChecks: false,
       onRefreshChecks,
       taskId: "",
+      displayedSessionId: "session-1",
       canKickoffNewSession: true,
       kickoffLabel: "Start Spec",
       onKickoff,

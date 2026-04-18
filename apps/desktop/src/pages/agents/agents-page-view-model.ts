@@ -58,6 +58,7 @@ export const buildAgentStudioHeaderModel = (args: {
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
+  sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
   sessionSelectorGroups: ComboboxGroup[];
   agentStudioReady: boolean;
@@ -89,6 +90,8 @@ export const buildAgentStudioHeaderModel = (args: {
     groups: args.sessionSelectorGroups,
     disabled: !args.agentStudioReady || args.sessionsForTaskLength === 0,
     onValueChange: args.onSessionSelectionChange,
+    shouldAutofocusComposerForValue: (value) =>
+      args.sessionSelectorAutofocusByValue[value] ?? false,
   },
   sessionCreateOptions: args.sessionCreateOptions,
   onCreateSession: args.onCreateSession,
@@ -137,6 +140,7 @@ type AgentChatThreadModelArgs = {
 
 type AgentChatComposerModelArgs = {
   taskId: string;
+  displayedSessionId: string | null;
   agentStudioReady: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
@@ -216,6 +220,7 @@ export const buildAgentChatComposerModel = (
   args: AgentChatComposerModelArgs,
 ): AgentChatComposerModel => ({
   taskId: args.taskId,
+  displayedSessionId: args.displayedSessionId,
   agentStudioReady: args.agentStudioReady,
   isReadOnly: args.isReadOnly,
   readOnlyReason: args.readOnlyReason,

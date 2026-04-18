@@ -47,6 +47,7 @@ export type WorkflowModelContext = {
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
   sessionSelectorGroups: ComboboxGroup[];
+  sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
   sessionCreateOptions: ReturnType<typeof buildSessionCreateOptions>;
   selectedInteractionRole: AgentRole;
@@ -82,6 +83,14 @@ export const buildWorkflowModelContext = ({
     scenarioLabels: SCENARIO_LABELS,
     roleLabelByRole,
   });
+  const sessionSelectorAutofocusByValue = Object.fromEntries(
+    sessionsForTask.map((session) => [
+      session.sessionId,
+      roleWorkflowsByTask[session.role].available &&
+        session.pendingPermissions.length === 0 &&
+        session.pendingQuestions.length === 0,
+    ]),
+  );
   const fallbackSessionForSelectedRole = latestSessionByRole[selectedInteractionRole];
   const sessionSelectorValue =
     activeSession?.sessionId ?? fallbackSessionForSelectedRole?.sessionId ?? "";
@@ -105,6 +114,7 @@ export const buildWorkflowModelContext = ({
     },
     workflowStateByRole,
     sessionSelectorGroups,
+    sessionSelectorAutofocusByValue,
     sessionSelectorValue,
     sessionCreateOptions,
     selectedInteractionRole,
