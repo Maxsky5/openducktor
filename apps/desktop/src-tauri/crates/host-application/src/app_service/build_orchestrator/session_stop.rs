@@ -1,4 +1,4 @@
-use super::super::{emit_event, AppService, RunEmitter};
+use super::super::{emit_event, has_live_runtime_session_status, AppService, RunEmitter};
 use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, AgentSessionDocument, AgentSessionStopRequest, RunEvent,
@@ -24,6 +24,7 @@ struct LiveSessionStopRouteResolver<'a> {
     service: &'a AppService,
     repo_path: &'a str,
     request: &'a AgentSessionStopRequest,
+    session: &'a AgentSessionDocument,
 }
 
 impl AppService {
@@ -140,10 +141,11 @@ impl AppService {
             service: self,
             repo_path,
             request,
+            session: &session,
         }
         .resolve()?;
         let associated_build_run_id = if session.role.trim() == "build" {
-            Some(self.resolve_build_run_id_for_session_stop(repo_path, request, &runtime_route)?)
+            self.resolve_build_run_id_for_session_stop(repo_path, request, &runtime_route)?
         } else {
             None
         };
@@ -228,7 +230,7 @@ impl AppService {
         repo_path: &str,
         request: &AgentSessionStopRequest,
         runtime_route: &RuntimeRoute,
-    ) -> Result<String> {
+    ) -> Result<Option<String>> {
         let normalized_repo_path = normalize_path_for_comparison(repo_path);
         let normalized_working_directory =
             normalize_path_for_comparison(request.working_directory.as_str());
@@ -253,15 +255,9 @@ impl AppService {
             .collect::<Vec<_>>();
 
         match matching_run_ids.as_slice() {
-            [run_id] => Ok(run_id.clone()),
-            [] => Err(anyhow!(
-                "No active build run matched session {}",
-                request.session_id
-            )),
-            _ => Err(anyhow!(
-                "Multiple active build runs matched session {}",
-                request.session_id
-            )),
+            [run_id] => Ok(Some(run_id.clone())),
+            [] => Ok(None),
+            _ => Ok(None),
         }
     }
 
@@ -290,8 +286,26 @@ impl AppService {
 
 impl LiveSessionStopRouteResolver<'_> {
     fn resolve(&self) -> Result<RuntimeRoute> {
-        let routes = self.collect_unique_routes()?;
-        match routes.as_slice() {
+        let exact_routes = self.collect_exact_routes()?;
+        match exact_routes.as_slice() {
+            [runtime_route] => return Ok(runtime_route.clone()),
+            [] => {}
+            _ => {
+                return Err(anyhow!(
+                    "Multiple live runtime routes matched session {}",
+                    self.request.session_id
+                ))
+            }
+        }
+
+        let repo_routes = self.collect_repo_runtime_routes()?;
+        if let [runtime_route] = repo_routes.as_slice() {
+            return Ok(runtime_route.clone());
+        }
+
+        let probed_routes =
+            self.probe_repo_runtime_routes_for_live_session(repo_routes.as_slice())?;
+        match probed_routes.as_slice() {
             [runtime_route] => Ok(runtime_route.clone()),
             [] => Err(anyhow!(
                 "No live runtime route found for session {}",
@@ -304,7 +318,7 @@ impl LiveSessionStopRouteResolver<'_> {
         }
     }
 
-    fn collect_unique_routes(&self) -> Result<Vec<RuntimeRoute>> {
+    fn collect_exact_routes(&self) -> Result<Vec<RuntimeRoute>> {
         let normalized_repo_path = normalize_path_for_comparison(self.repo_path);
         let normalized_working_directory =
             normalize_path_for_comparison(self.request.working_directory.as_str());
@@ -334,24 +348,111 @@ impl LiveSessionStopRouteResolver<'_> {
         {
             let runtimes = self
                 .service
-                .agent_runtimes
-                .lock()
-                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            for runtime in runtimes.values() {
-                if runtime.summary.kind != self.request.runtime_kind
-                    || normalize_path_for_comparison(runtime.summary.repo_path.as_str())
-                        != normalized_repo_path
-                    || normalize_path_for_comparison(runtime.summary.working_directory.as_str())
-                        != normalized_working_directory
+                .runtime_list(self.request.runtime_kind.as_str(), Some(self.repo_path))?;
+            for runtime in runtimes {
+                if normalize_path_for_comparison(runtime.working_directory.as_str())
+                    != normalized_working_directory
                 {
                     continue;
                 }
 
-                push_unique_runtime_route(&mut routes, runtime.summary.runtime_route.clone());
+                push_unique_runtime_route(&mut routes, runtime.runtime_route);
             }
         }
 
         Ok(routes)
+    }
+
+    fn collect_repo_runtime_routes(&self) -> Result<Vec<RuntimeRoute>> {
+        let normalized_repo_path = normalize_path_for_comparison(self.repo_path);
+        let mut routes = Vec::new();
+
+        {
+            let runs = self
+                .service
+                .runs
+                .lock()
+                .map_err(|_| anyhow!("Run state lock poisoned"))?;
+            for run in runs.values() {
+                if !is_live_stoppable_run_state(&run.summary.state)
+                    || run.summary.runtime_kind != self.request.runtime_kind
+                    || normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo_path
+                {
+                    continue;
+                }
+
+                push_unique_runtime_route(&mut routes, run.summary.runtime_route.clone());
+            }
+        }
+
+        {
+            let runtimes = self
+                .service
+                .runtime_list(self.request.runtime_kind.as_str(), Some(self.repo_path))?;
+            for runtime in runtimes {
+                push_unique_runtime_route(&mut routes, runtime.runtime_route);
+            }
+        }
+
+        Ok(routes)
+    }
+
+    fn probe_repo_runtime_routes_for_live_session(
+        &self,
+        candidate_routes: &[RuntimeRoute],
+    ) -> Result<Vec<RuntimeRoute>> {
+        let external_session_id = self
+            .session
+            .external_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let Some(external_session_id) = external_session_id else {
+            return Ok(Vec::new());
+        };
+
+        let runtime = self
+            .service
+            .runtime_registry
+            .runtime(&self.request.runtime_kind)?;
+        let probe_targets = candidate_routes
+            .iter()
+            .filter_map(|runtime_route| {
+                runtime
+                    .session_status_probe_target(
+                        runtime_route,
+                        self.request.working_directory.as_str(),
+                    )
+                    .transpose()
+                    .map(|target| target.map(|probe_target| (runtime_route.clone(), probe_target)))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if probe_targets.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let statuses_by_target = self
+            .service
+            .load_cached_runtime_session_statuses_for_targets(
+                probe_targets
+                    .iter()
+                    .map(|(_, probe_target)| probe_target.clone())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            )?;
+        let mut matching_routes = Vec::new();
+        for (runtime_route, probe_target) in probe_targets {
+            if statuses_by_target
+                .get(&probe_target)
+                .is_some_and(|statuses| {
+                    has_live_runtime_session_status(statuses, external_session_id)
+                })
+            {
+                push_unique_runtime_route(&mut matching_routes, runtime_route);
+            }
+        }
+
+        Ok(matching_routes)
     }
 }
 

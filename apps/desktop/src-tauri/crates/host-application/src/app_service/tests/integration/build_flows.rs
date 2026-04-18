@@ -912,6 +912,106 @@ fn agent_session_stop_targets_shared_runtime_qa_sessions_without_stopping_the_bu
 }
 
 #[test]
+fn agent_session_stop_stops_recovered_build_sessions_without_active_runs() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-recovered-build");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let aborts_file = root.join("aborts.log");
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
+    let runtime = service.runtime_ensure("opencode", repo_path.as_str())?;
+    let recovered_worktree = root.join("builder-worktrees/recovered-task-1");
+    fs::create_dir_all(&recovered_worktree)?;
+    let mut session = make_session("task-1", "build-session");
+    session.role = "build".to_string();
+    session.working_directory = recovered_worktree.to_string_lossy().to_string();
+    session.external_session_id = Some("external-build-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    let stopped = service.agent_session_stop(
+        make_agent_session_stop_request(
+            repo_path.as_str(),
+            "build-session",
+            recovered_worktree.to_string_lossy().as_ref(),
+            Some("external-build-session"),
+        ),
+        make_emitter(Arc::new(Mutex::new(Vec::new()))),
+    )?;
+
+    assert!(stopped);
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let abort_request = fs::read_to_string(aborts_file.as_path())?;
+    assert!(abort_request.contains("/session/external-build-session/abort?directory="));
+    assert!(service.runtime_stop(runtime.runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn agent_session_stop_stops_recovered_qa_sessions_on_repo_runtime_without_active_runs() -> Result<()>
+{
+    let _env_lock = lock_env();
+    let root = unique_temp_path("agent-session-stop-recovered-qa");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _dolt_guard = install_fake_dolt(&root)?;
+    let aborts_file = root.join("aborts.log");
+    let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
+    let _aborts_guard = set_env_var(
+        "OPENDUCKTOR_TEST_ABORTS_FILE",
+        aborts_file.to_string_lossy().as_ref(),
+    );
+
+    let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
+    let runtime = service.runtime_ensure("opencode", repo_path.as_str())?;
+    let recovered_worktree = root.join("builder-worktrees/recovered-task-1");
+    fs::create_dir_all(&recovered_worktree)?;
+    let mut session = make_session("task-1", "qa-session");
+    session.role = "qa".to_string();
+    session.scenario = "qa_review".to_string();
+    session.working_directory = recovered_worktree.to_string_lossy().to_string();
+    session.external_session_id = Some("external-qa-session".to_string());
+    assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
+
+    let stopped = service.agent_session_stop(
+        make_agent_session_stop_request(
+            repo_path.as_str(),
+            "qa-session",
+            recovered_worktree.to_string_lossy().as_ref(),
+            Some("external-qa-session"),
+        ),
+        make_emitter(Arc::new(Mutex::new(Vec::new()))),
+    )?;
+
+    assert!(stopped);
+    assert!(wait_for_path_exists(
+        aborts_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let abort_request = fs::read_to_string(aborts_file.as_path())?;
+    assert!(abort_request.contains("/session/external-qa-session/abort?directory="));
+    assert!(service.runtime_stop(runtime.runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn agent_session_stop_propagates_abort_failures_without_marking_build_runs_stopped() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("agent-session-stop-abort-failure");
@@ -1116,73 +1216,30 @@ fn agent_session_stop_fails_when_no_live_runtime_route_is_resolvable() -> Result
 
     let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
 
-    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
-    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
-    let runtime_id = service.runtime_list("opencode", Some(repo_path.as_str()))?[0]
-        .runtime_id
-        .clone();
-    let original_worktree_path = run.worktree_path.clone();
+    let runtime = service.runtime_ensure("opencode", repo_path.as_str())?;
+    let recovered_worktree = root.join("builder-worktrees/recovered-task-1");
+    fs::create_dir_all(&recovered_worktree)?;
     let mut session = make_session("task-1", "build-session");
     session.role = "build".to_string();
-    session.working_directory = run.worktree_path.clone();
+    session.working_directory = recovered_worktree.to_string_lossy().to_string();
     session.external_session_id = Some("external-build-session".to_string());
     assert!(service.agent_session_upsert(repo_path.as_str(), "task-1", session)?);
-
-    service
-        .runs
-        .lock()
-        .expect("run lock poisoned")
-        .get_mut(run.run_id.as_str())
-        .expect("build run should exist")
-        .worktree_path = root
-        .join("unmatched-worktree")
-        .to_string_lossy()
-        .to_string();
-    service
-        .agent_runtimes
-        .lock()
-        .expect("runtime lock poisoned")
-        .get_mut(runtime_id.as_str())
-        .expect("runtime should exist")
-        .summary
-        .working_directory = root
-        .join("unmatched-runtime-worktree")
-        .to_string_lossy()
-        .to_string();
+    assert!(service.runtime_stop(runtime.runtime_id.as_str())?);
 
     let error = service
         .agent_session_stop(
             make_agent_session_stop_request(
                 repo_path.as_str(),
                 "build-session",
-                run.worktree_path.as_str(),
+                recovered_worktree.to_string_lossy().as_ref(),
                 Some("external-build-session"),
             ),
-            emitter.clone(),
+            make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("missing runtime routes should fail fast");
     assert!(error
         .to_string()
         .contains("No live runtime route found for session build-session"));
-    let stored_run_state = {
-        let runs = service.runs.lock().expect("run lock poisoned");
-        runs.get(run.run_id.as_str())
-            .expect("build run should remain registered")
-            .summary
-            .state
-            .clone()
-    };
-    assert!(matches!(stored_run_state, RunState::Running));
-
-    service
-        .runs
-        .lock()
-        .expect("run lock poisoned")
-        .get_mut(run.run_id.as_str())
-        .expect("build run should exist")
-        .worktree_path = original_worktree_path;
-    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
-    assert!(service.runtime_stop(runtime_id.as_str())?);
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
