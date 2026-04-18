@@ -25,6 +25,7 @@ const resetInlineComments = (): void => {
 
 const createHookArgs = (showThinkingMessages = false): HookArgs => ({
   threadSession: null,
+  sessionRuntimeDataError: null,
   isSessionWorking: false,
   showThinkingMessages,
   isContextSwitching: false,
@@ -177,6 +178,23 @@ describe("useAgentStudioThreadModel", () => {
     });
     expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
     expect(harness.getLatest().isSessionHistoryLoading).toBe(false);
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("forwards session runtime data errors into the thread model", async () => {
+    const harness = createHookHarness({
+      ...createHookArgs(false),
+      sessionRuntimeDataError:
+        "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
+    });
+
+    await act(async () => {
+      await harness.mount();
+    });
+    expect(harness.getLatest().sessionRuntimeDataError).toContain("local_http is required");
 
     await act(async () => {
       await harness.unmount();

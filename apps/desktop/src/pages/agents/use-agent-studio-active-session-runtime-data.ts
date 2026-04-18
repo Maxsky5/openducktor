@@ -14,7 +14,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   hasAttachedSessionRuntime,
-  toAttachedSessionRuntimeConnection,
+  resolveAttachedSessionRuntimeQueryState,
 } from "./agent-studio-session-runtime";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
@@ -32,19 +32,9 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
   ) => Promise<AgentSessionTodoItem[]>;
 };
 
-const toRuntimeQueryInput = (session: AgentSessionState | null) => {
-  const runtimeKind = session?.runtimeKind ?? null;
-  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
-  const runtimeConnection = session
-    ? toAttachedSessionRuntimeConnection(session, runtimeKind)
-    : null;
-  if (!session || !runtimeKind || !hasRuntimeAttachment || runtimeConnection === null) {
-    return null;
-  }
-  return {
-    runtimeKind,
-    runtimeConnection,
-  };
+export type AgentStudioSessionRuntimeDataState = {
+  session: AgentSessionState | null;
+  runtimeDataError: string | null;
 };
 
 export const useAgentStudioActiveSessionRuntimeData = ({
@@ -52,11 +42,17 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   agentStudioReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
-}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentSessionState | null => {
-  const runtimeQueryInput = toRuntimeQueryInput(session);
+}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentStudioSessionRuntimeDataState => {
+  const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
+    () => resolveAttachedSessionRuntimeQueryState(session, "active session runtime data access"),
+    [session],
+  );
+  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
   const shouldHydrateRuntimeData =
     agentStudioReadinessState === "ready" &&
+    hasRuntimeAttachment &&
     runtimeQueryInput !== null &&
+    runtimeDataSupportError === null &&
     session?.status !== "starting";
   const catalogQuery = useQuery({
     queryKey:
@@ -105,34 +101,54 @@ export const useAgentStudioActiveSessionRuntimeData = ({
 
   return useMemo(() => {
     if (!session) {
-      return null;
+      return {
+        session: null,
+        runtimeDataError: null,
+      };
     }
 
+    const catalogQueryError =
+      catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
+    const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
+    const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
+    const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
     const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
-    const isLoadingModelCatalog = shouldHydrateRuntimeData
-      ? resolvedCatalog === null && catalogQuery.isPending
-      : session.isLoadingModelCatalog && resolvedCatalog === null;
+    const isLoadingModelCatalog =
+      runtimeDataSupportError || catalogQueryError
+        ? false
+        : shouldHydrateRuntimeData
+          ? resolvedCatalog === null && catalogQuery.isPending
+          : session.isLoadingModelCatalog && resolvedCatalog === null;
 
     if (
       resolvedCatalog === session.modelCatalog &&
       resolvedTodos === session.todos &&
       isLoadingModelCatalog === session.isLoadingModelCatalog
     ) {
-      return session;
+      return {
+        session,
+        runtimeDataError,
+      };
     }
 
     return {
-      ...session,
-      modelCatalog: resolvedCatalog,
-      todos: resolvedTodos,
-      isLoadingModelCatalog,
+      session: {
+        ...session,
+        modelCatalog: resolvedCatalog,
+        todos: resolvedTodos,
+        isLoadingModelCatalog,
+      },
+      runtimeDataError,
     };
   }, [
     catalogQuery.data,
+    catalogQuery.error,
     catalogQuery.isPending,
     session,
     shouldHydrateRuntimeData,
     todosQuery.data,
+    todosQuery.error,
+    runtimeDataSupportError,
   ]);
 };

@@ -115,6 +115,7 @@ export const useAgentStudioHeaderModel = ({
 
 type UseAgentStudioThreadModelArgs = {
   threadSession: AgentSessionState | null;
+  sessionRuntimeDataError: string | null;
   isSessionWorking: boolean;
   showThinkingMessages: boolean;
   isContextSwitching: boolean;
@@ -147,6 +148,7 @@ type UseAgentStudioThreadModelArgs = {
 
 export const useAgentStudioThreadModel = ({
   threadSession,
+  sessionRuntimeDataError,
   isSessionWorking,
   showThinkingMessages,
   isContextSwitching,
@@ -218,6 +220,7 @@ export const useAgentStudioThreadModel = ({
         isSubmittingPermissionByRequestId,
         permissionReplyErrorByRequestId,
         onReplyPermission: handlePermissionReply,
+        sessionRuntimeDataError,
         todoPanelCollapsed,
         onToggleTodoPanel,
         messagesContainerRef,
@@ -246,6 +249,7 @@ export const useAgentStudioThreadModel = ({
       messagesContainerRef,
       onSubmitQuestionAnswers,
       permissionReplyErrorByRequestId,
+      sessionRuntimeDataError,
       scrollToBottomOnSendRef,
       selectedRoleAvailable,
       showThinkingMessages,

@@ -132,7 +132,8 @@ pub(super) fn discover_workspace_icon_data_url(repo_path: &str) -> Option<String
                 let Some(mime_type) = workspace_icon_mime_type(&candidate_path) else {
                     continue;
                 };
-                let Some((modified_at, byte_len)) = workspace_icon_signature(&candidate_path) else {
+                let Some((modified_at, byte_len)) = workspace_icon_signature(&candidate_path)
+                else {
                     continue;
                 };
                 let Some(bytes) = read_workspace_icon_bytes(&candidate_path) else {

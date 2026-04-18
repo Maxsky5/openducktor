@@ -42,6 +42,7 @@ const buildBaseModel = () => ({
   permissionReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
   onReplyPermission: async () => {},
+  sessionRuntimeDataError: null,
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
@@ -591,6 +592,35 @@ describe("AgentChatThread", () => {
 
     const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
     expect(bottomStack?.className).toContain("pb-3");
+
+    rendered.unmount();
+  });
+
+  test("renders runtime data errors even when the session has no questions, permissions, or todos", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            pendingQuestions: [],
+            pendingPermissions: [],
+            todos: [],
+            selectedModel: null,
+          }),
+          sessionRuntimeDataError:
+            "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
+        },
+      }),
+    );
+    await act(flush);
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    expect(bottomStack).not.toBeNull();
+    expect(bottomStack?.textContent).toContain("active session runtime data access");
+    expect(bottomStack?.className).toContain("pb-3");
+    expect(screen.getByText(/active session runtime data access/).className).toContain(
+      "border-l border-input",
+    );
 
     rendered.unmount();
   });

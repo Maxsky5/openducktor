@@ -42,6 +42,7 @@ export type AgentChatThreadModel = {
   isSubmittingPermissionByRequestId: Record<string, boolean>;
   permissionReplyErrorByRequestId: Record<string, string>;
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  sessionRuntimeDataError: string | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;

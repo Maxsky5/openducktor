@@ -38,6 +38,7 @@ type AgentStudioCoreContext = {
   sessionsForTask: AgentSessionSummary[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
+  sessionRuntimeDataError: string | null;
   isTaskHydrating: boolean;
   isSessionHistoryHydrating: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -329,6 +330,7 @@ export function useAgentStudioPageModels({
     isContextSwitching,
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
     isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
+    sessionRuntimeDataError: core.sessionRuntimeDataError,
     taskId: core.taskId,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     agentStudioReadinessState: readiness.agentStudioReadinessState,

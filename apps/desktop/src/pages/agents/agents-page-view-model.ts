@@ -131,6 +131,7 @@ type AgentChatThreadModelArgs = {
   isSubmittingPermissionByRequestId: Record<string, boolean>;
   permissionReplyErrorByRequestId: Record<string, string>;
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  sessionRuntimeDataError: string | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -209,6 +210,7 @@ export const buildAgentChatThreadModel = (
   isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
   permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
   onReplyPermission: args.onReplyPermission,
+  sessionRuntimeDataError: args.sessionRuntimeDataError,
   todoPanelCollapsed: args.todoPanelCollapsed,
   onToggleTodoPanel: args.onToggleTodoPanel,
   messagesContainerRef: args.messagesContainerRef,

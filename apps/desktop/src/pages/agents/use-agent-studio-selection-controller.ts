@@ -68,6 +68,7 @@ export type AgentStudioSelectionControllerResult = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   activeSession: AgentSessionState | null;
+  activeSessionRuntimeDataError?: string | null;
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -84,6 +85,7 @@ export type AgentStudioSelectionControllerResult = {
   viewSelectedTask: TaskCard | null;
   viewSessionsForTask: AgentSessionSummary[];
   viewActiveSession: AgentSessionState | null;
+  viewSessionRuntimeDataError?: string | null;
   viewRole: AgentRole;
   viewScenario: AgentScenario;
   isActiveTaskHydrated: boolean;
@@ -261,7 +263,7 @@ export function useAgentStudioSelectionController({
     sessionsForTask,
   ]);
   const activeSession = useAgentSession(activeSessionSummary?.sessionId ?? null);
-  const hydratedActiveSession = useAgentStudioActiveSessionRuntimeData({
+  const activeSessionRuntimeData = useAgentStudioActiveSessionRuntimeData({
     session: activeSession,
     agentStudioReadinessState,
     readSessionModelCatalog,
@@ -362,7 +364,7 @@ export function useAgentStudioSelectionController({
     viewSessionsForTask,
   ]);
   const viewActiveSession = useAgentSession(viewSelection.activeSession?.sessionId ?? null);
-  const hydratedViewActiveSession = useAgentStudioActiveSessionRuntimeData({
+  const viewSessionRuntimeData = useAgentStudioActiveSessionRuntimeData({
     session: viewActiveSession,
     agentStudioReadinessState,
     readSessionModelCatalog,
@@ -374,10 +376,10 @@ export function useAgentStudioSelectionController({
     () =>
       selectRuntimeAttachmentCandidates({
         repoPath: workspaceRepoPath ?? "",
-        session: hydratedViewActiveSession,
+        session: viewSessionRuntimeData.session,
         runtimeSources: runtimeAttachmentSources,
       }),
-    [workspaceRepoPath, hydratedViewActiveSession, runtimeAttachmentSources],
+    [workspaceRepoPath, viewSessionRuntimeData.session, runtimeAttachmentSources],
   );
 
   const {
@@ -390,7 +392,7 @@ export function useAgentStudioSelectionController({
   } = useAgentStudioTaskHydration({
     activeWorkspace,
     activeTaskId: viewTaskId,
-    activeSession: hydratedViewActiveSession,
+    activeSession: viewSessionRuntimeData.session,
     agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
     retrySessionRuntimeAttachment,
@@ -403,7 +405,8 @@ export function useAgentStudioSelectionController({
     taskId,
     selectedTask,
     sessionsForTask,
-    activeSession: hydratedActiveSession,
+    activeSession: activeSessionRuntimeData.session,
+    activeSessionRuntimeDataError: activeSessionRuntimeData.runtimeDataError,
     isLoadingTasks,
     activeTaskTabId,
     availableTabTasks,
@@ -415,7 +418,8 @@ export function useAgentStudioSelectionController({
     viewTaskId,
     viewSelectedTask,
     viewSessionsForTask,
-    viewActiveSession: hydratedViewActiveSession,
+    viewActiveSession: viewSessionRuntimeData.session,
+    viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
     viewRole,
     viewScenario,
     isActiveTaskHydrated,

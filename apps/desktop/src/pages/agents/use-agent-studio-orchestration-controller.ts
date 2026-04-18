@@ -91,7 +91,7 @@ type AgentStudioPageModelsViewContext = Pick<
 
 type AgentStudioPageModelsSessionsContext = Pick<
   AgentStudioOrchestrationSelectionContext,
-  "viewSessionsForTask" | "viewActiveSession"
+  "viewSessionsForTask" | "viewActiveSession" | "viewSessionRuntimeDataError"
 >;
 
 type AgentStudioPageModelsTabsContext = Pick<
@@ -185,6 +185,7 @@ export const buildAgentStudioPageModelsArgs = ({
       sessionsForTask: sessions.viewSessionsForTask,
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
+      sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
       isTaskHydrating: Boolean(
         view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
       ),
@@ -230,6 +231,7 @@ export function useAgentStudioOrchestrationController({
     viewSelectedTask,
     viewSessionsForTask,
     viewActiveSession,
+    viewSessionRuntimeDataError = null,
     activeTaskTabId,
     taskTabs,
     availableTabTasks,
@@ -371,6 +373,7 @@ export function useAgentStudioOrchestrationController({
     sessions: {
       viewSessionsForTask,
       viewActiveSession,
+      viewSessionRuntimeDataError,
     },
     tabs: {
       activeTaskTabId,
