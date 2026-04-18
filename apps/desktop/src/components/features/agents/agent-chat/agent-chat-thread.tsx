@@ -663,7 +663,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     session &&
       (session.pendingQuestions.length > 0 ||
         session.pendingPermissions.length > 0 ||
-        hasVisibleTodo),
+        hasVisibleTodo ||
+        sessionRuntimeDataError),
   );
 
   const resolveRowRef = useCallback(
