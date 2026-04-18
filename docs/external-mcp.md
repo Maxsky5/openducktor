@@ -132,8 +132,7 @@ Use `get_workspaces` when you start the MCP without a default workspace and need
 Workspace resolution for workspace-scoped tools is deterministic:
 
 1. top-level tool input `workspaceId`
-2. startup default from `--workspace-id`
-3. startup default from `ODT_WORKSPACE_ID`
+2. startup default workspace resolved once at process startup from `--workspace-id` or `ODT_WORKSPACE_ID`
 
 If no workspace can be resolved, the MCP rejects the call with an actionable error instead of selecting an active or first workspace.
 

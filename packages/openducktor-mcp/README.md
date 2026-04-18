@@ -182,7 +182,22 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
 
 Use `odt_read_task` first to discover the task summary object, including task state, optional `targetBranch`, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
 
-`odt_read_task` and `odt_read_task_documents` also accept an optional top-level `workspaceId`. When the MCP started without a default workspace, provide that field explicitly.
+`odt_read_task` input:
+
+- `workspaceId?` optional per-call workspace override
+- `taskId`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
+
+`odt_read_task_documents` input:
+
+- `workspaceId?` optional per-call workspace override
+- `taskId`
+- `includeSpec?`
+- `includePlan?`
+- `includeQaReport?`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
 
 Use `odt_read_task_documents` only when you need document bodies:
 

@@ -6,7 +6,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const inheritedEnv = Object.fromEntries(
   Object.entries(process.env).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
+    (entry): entry is [string, string] =>
+      typeof entry[1] === "string" &&
+      !entry[0].startsWith("ODT_") &&
+      !entry[0].startsWith("OPENDUCKTOR_"),
   ),
 );
 

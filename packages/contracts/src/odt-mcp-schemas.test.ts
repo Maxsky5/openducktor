@@ -63,9 +63,21 @@ describe("odt mcp public task schemas", () => {
   });
 
   test("workspace-scoped tool names stay explicit and exclude get_workspaces", () => {
-    expect(ODT_WORKSPACE_SCOPED_TOOL_NAMES).toContain("odt_read_task");
-    expect(ODT_WORKSPACE_SCOPED_TOOL_NAMES).toContain("odt_create_task");
-    expect(ODT_WORKSPACE_SCOPED_TOOL_NAMES).toContain("odt_search_tasks");
-    expect(ODT_WORKSPACE_SCOPED_TOOL_NAMES).not.toContain("get_workspaces");
+    expect([...ODT_WORKSPACE_SCOPED_TOOL_NAMES].sort()).toEqual(
+      [
+        "odt_build_blocked",
+        "odt_build_completed",
+        "odt_build_resumed",
+        "odt_create_task",
+        "odt_qa_approved",
+        "odt_qa_rejected",
+        "odt_read_task",
+        "odt_read_task_documents",
+        "odt_search_tasks",
+        "odt_set_plan",
+        "odt_set_pull_request",
+        "odt_set_spec",
+      ].sort(),
+    );
   });
 });

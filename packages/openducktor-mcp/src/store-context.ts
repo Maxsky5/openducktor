@@ -124,7 +124,7 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
   return discoveredPorts;
 };
 
-const discoverHostUrl = async (): Promise<string> => {
+const discoverHostUrl = async (workspaceId?: string): Promise<string> => {
   const registryPath = resolveMcpBridgeRegistryPath();
 
   let registryPayload: string;
@@ -155,6 +155,9 @@ const discoverHostUrl = async (): Promise<string> => {
     const hostUrl = `http://127.0.0.1:${port}`;
     try {
       await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
+      if (workspaceId) {
+        await validateConfiguredWorkspace(hostUrl, workspaceId);
+      }
       return hostUrl;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -178,13 +181,15 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
   const hostUrl = explicitHostUrl
     ? await validateExplicitHostUrl(explicitHostUrl)
-    : await discoverHostUrl();
+    : await discoverHostUrl(workspaceId);
 
   if (!workspaceId) {
     return { hostUrl };
   }
 
-  await validateConfiguredWorkspace(hostUrl, workspaceId);
+  if (explicitHostUrl) {
+    await validateConfiguredWorkspace(hostUrl, workspaceId);
+  }
 
   return {
     workspaceId,

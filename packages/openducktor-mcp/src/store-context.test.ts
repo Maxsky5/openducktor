@@ -213,6 +213,62 @@ describe("resolveStoreContext", () => {
     });
   });
 
+  test("skips healthy discovered hosts that do not contain the configured workspace", async () => {
+    const configDir = await createDiscoveryRegistry([14327, 14328]);
+    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    process.env.ODT_WORKSPACE_ID = "repo";
+
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url === "http://127.0.0.1:14327/health" || url === "http://127.0.0.1:14328/health") {
+        return jsonResponse({ ok: true });
+      }
+      if (
+        url === "http://127.0.0.1:14327/invoke/odt_mcp_ready" ||
+        url === "http://127.0.0.1:14328/invoke/odt_mcp_ready"
+      ) {
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        });
+      }
+      if (url === "http://127.0.0.1:14327/invoke/get_workspaces") {
+        return jsonResponse([
+          {
+            workspaceId: "other-repo",
+            workspaceName: "Other Repo",
+            repoPath: "/other-repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ]);
+      }
+      if (url === "http://127.0.0.1:14328/invoke/get_workspaces") {
+        return jsonResponse([
+          {
+            workspaceId: "repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: null,
+            effectiveWorktreeBasePath: null,
+          },
+        ]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    await expect(resolveStoreContext({})).resolves.toEqual({
+      workspaceId: "repo",
+      hostUrl: "http://127.0.0.1:14328",
+    });
+  });
+
   test("rejects legacy metadata namespace configuration", async () => {
     process.env.ODT_WORKSPACE_ID = "repo";
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
