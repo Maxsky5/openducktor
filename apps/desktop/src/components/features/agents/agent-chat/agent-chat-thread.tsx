@@ -99,6 +99,7 @@ type AgentChatBottomStackProps = {
   pendingQuestions: AgentSessionState["pendingQuestions"];
   pendingPermissions: AgentSessionState["pendingPermissions"];
   todos: AgentSessionState["todos"];
+  sessionRuntimeDataError: string | null;
   agentStudioReady: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
@@ -350,6 +351,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   pendingQuestions,
   pendingPermissions,
   todos,
+  sessionRuntimeDataError,
   agentStudioReady,
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
@@ -393,6 +395,20 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         </div>
       ))}
 
+      {sessionRuntimeDataError ? (
+        <div className="border border-input border-b-0 border-l-0 bg-card">
+          <div
+            className={cn(
+              "border-l-4 px-3 py-2 text-sm text-destructive",
+              !sessionAccentColor && "border-l-0",
+            )}
+            style={sessionAccentColor ? { borderLeftColor: sessionAccentColor } : undefined}
+          >
+            {sessionRuntimeDataError}
+          </div>
+        </div>
+      ) : null}
+
       <AgentSessionTodoPanel
         todos={todos}
         collapsed={todoPanelCollapsed}
@@ -428,6 +444,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingPermissionByRequestId,
     permissionReplyErrorByRequestId,
     onReplyPermission,
+    sessionRuntimeDataError,
     isSessionWorking,
     todoPanelCollapsed,
     onToggleTodoPanel,
@@ -769,6 +786,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             isSubmittingPermissionByRequestId={isSubmittingPermissionByRequestId}
             permissionReplyErrorByRequestId={permissionReplyErrorByRequestId}
             onReplyPermission={onReplyPermission}
+            sessionRuntimeDataError={sessionRuntimeDataError}
             todoPanelCollapsed={todoPanelCollapsed}
             isSessionWorking={isSessionWorking}
             sessionAccentColor={sessionAccentColor}

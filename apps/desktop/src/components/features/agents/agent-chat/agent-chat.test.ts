@@ -38,6 +38,7 @@ const buildModel = () => ({
     permissionReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
     onReplyPermission: async () => {},
+    sessionRuntimeDataError: null,
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
@@ -156,5 +157,27 @@ describe("AgentChat", () => {
     expect(html).toContain("Keep todo anchored");
     expect(html).toContain("border-left-color:#123456");
     expect(html.indexOf("agent-chat-bottom-stack")).toBeLessThan(html.indexOf("<form"));
+  });
+
+  test("renders session runtime data errors in the bottom stack above the composer", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChat, {
+        model: {
+          ...buildModel(),
+          thread: {
+            ...buildModel().thread,
+            session: buildSession({
+              status: "idle",
+              todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
+            }),
+            sessionRuntimeDataError:
+              "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("active session runtime data access");
+    expect(html.indexOf("active session runtime data access")).toBeLessThan(html.indexOf("<form"));
   });
 });

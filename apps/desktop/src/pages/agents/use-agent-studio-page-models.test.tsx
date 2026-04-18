@@ -83,6 +83,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     taskId: "task-1",
     role: "spec",
     selectedTask: createTask(),
+    sessionRuntimeDataError: null,
     isTaskHydrating: false,
     isSessionHistoryHydrating: false,
     isWaitingForRuntimeReadiness: false,
@@ -237,7 +238,7 @@ describe("useAgentStudioPageModels", () => {
   test("forwards session runtime data errors into the composer model", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        modelSelection: {
+        core: {
           sessionRuntimeDataError:
             "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
         },
@@ -246,7 +247,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.composer.sessionRuntimeDataError).toContain(
+    expect(harness.getLatest().agentChatModel.thread.sessionRuntimeDataError).toContain(
       "local_http is required",
     );
 

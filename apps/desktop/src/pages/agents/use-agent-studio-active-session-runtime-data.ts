@@ -13,9 +13,8 @@ import {
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  getAttachedSessionRuntimeConnectionError,
   hasAttachedSessionRuntime,
-  toAttachedSessionRuntimeConnection,
+  resolveAttachedSessionRuntimeQueryState,
 } from "./agent-studio-session-runtime";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
@@ -33,22 +32,9 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
   ) => Promise<AgentSessionTodoItem[]>;
 };
 
-type ActiveSessionRuntimeDataResult = {
+export type AgentStudioSessionRuntimeDataState = {
   session: AgentSessionState | null;
   runtimeDataError: string | null;
-};
-
-const toRuntimeQueryInput = (session: AgentSessionState | null) => {
-  const runtimeKind = session?.runtimeKind ?? null;
-  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
-  const runtimeConnection = session ? toAttachedSessionRuntimeConnection(session) : null;
-  if (!session || !runtimeKind || !hasRuntimeAttachment || runtimeConnection === null) {
-    return null;
-  }
-  return {
-    runtimeKind,
-    runtimeConnection,
-  };
 };
 
 export const useAgentStudioActiveSessionRuntimeData = ({
@@ -56,21 +42,15 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   agentStudioReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
-}: UseAgentStudioActiveSessionRuntimeDataArgs): ActiveSessionRuntimeDataResult => {
-  const runtimeQueryInput = toRuntimeQueryInput(session);
-  const runtimeDataSupportError = useMemo(() => {
-    if (!session) {
-      return null;
-    }
-
-    return getAttachedSessionRuntimeConnectionError(
-      session,
-      session.runtimeKind,
-      "active session runtime data access",
-    );
-  }, [session]);
+}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentStudioSessionRuntimeDataState => {
+  const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
+    () => resolveAttachedSessionRuntimeQueryState(session, "active session runtime data access"),
+    [session],
+  );
+  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
   const shouldHydrateRuntimeData =
     agentStudioReadinessState === "ready" &&
+    hasRuntimeAttachment &&
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";

@@ -311,6 +311,7 @@ describe("agents-page-view-model", () => {
       permissionReplyErrorByRequestId: {},
       onReplyPermission,
       onSubmitQuestionAnswers,
+      sessionRuntimeDataError: null,
       todoPanelCollapsed: false,
       onToggleTodoPanel,
       messagesContainerRef: { current: null },

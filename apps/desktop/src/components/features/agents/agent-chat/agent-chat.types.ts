@@ -42,6 +42,7 @@ export type AgentChatThreadModel = {
   isSubmittingPermissionByRequestId: Record<string, boolean>;
   permissionReplyErrorByRequestId: Record<string, string>;
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  sessionRuntimeDataError: string | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -73,7 +74,6 @@ export type AgentChatComposerModel = {
   slashCommandCatalog: AgentSlashCommandCatalog | null;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
-  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];

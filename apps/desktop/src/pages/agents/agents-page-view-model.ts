@@ -131,6 +131,7 @@ type AgentChatThreadModelArgs = {
   isSubmittingPermissionByRequestId: Record<string, boolean>;
   permissionReplyErrorByRequestId: Record<string, string>;
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  sessionRuntimeDataError: string | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -162,7 +163,6 @@ type AgentChatComposerModelArgs = {
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
-  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
@@ -210,6 +210,7 @@ export const buildAgentChatThreadModel = (
   isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
   permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
   onReplyPermission: args.onReplyPermission,
+  sessionRuntimeDataError: args.sessionRuntimeDataError,
   todoPanelCollapsed: args.todoPanelCollapsed,
   onToggleTodoPanel: args.onToggleTodoPanel,
   messagesContainerRef: args.messagesContainerRef,
@@ -245,7 +246,6 @@ export const buildAgentChatComposerModel = (
   slashCommandCatalog: args.slashCommandCatalog,
   slashCommands: args.slashCommands,
   slashCommandsError: args.slashCommandsError,
-  sessionRuntimeDataError: args.sessionRuntimeDataError ?? null,
   isSlashCommandsLoading: args.isSlashCommandsLoading,
   searchFiles: args.searchFiles,
   agentOptions: args.agentOptions,

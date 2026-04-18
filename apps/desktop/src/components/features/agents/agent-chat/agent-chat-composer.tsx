@@ -274,7 +274,6 @@ export const AgentChatComposer = forwardRef<
     supportsFileSearch,
     slashCommands,
     slashCommandsError,
-    sessionRuntimeDataError = null,
     isSlashCommandsLoading,
     searchFiles,
     agentOptions,
@@ -617,11 +616,6 @@ export const AgentChatComposer = forwardRef<
               : undefined
           }
         >
-          {sessionRuntimeDataError ? (
-            <div className="border-b border-border px-3 py-2 text-sm text-destructive">
-              {sessionRuntimeDataError}
-            </div>
-          ) : null}
           <AgentChatComposerEditor
             draft={draft}
             onDraftChange={handleDraftChange}

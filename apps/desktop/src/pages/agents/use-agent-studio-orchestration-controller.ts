@@ -91,7 +91,7 @@ type AgentStudioPageModelsViewContext = Pick<
 
 type AgentStudioPageModelsSessionsContext = Pick<
   AgentStudioOrchestrationSelectionContext,
-  "viewSessionsForTask" | "viewActiveSession"
+  "viewSessionsForTask" | "viewActiveSession" | "viewSessionRuntimeDataError"
 >;
 
 type AgentStudioPageModelsTabsContext = Pick<
@@ -136,9 +136,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "handleSelectAgent"
   | "handleSelectModel"
   | "handleSelectVariant"
-> & {
-  sessionRuntimeDataError?: string | null;
-};
+>;
 
 type BuildAgentStudioPageModelsArgsInput = {
   view: AgentStudioPageModelsViewContext;
@@ -187,6 +185,7 @@ export const buildAgentStudioPageModelsArgs = ({
       sessionsForTask: sessions.viewSessionsForTask,
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
+      sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
       isTaskHydrating: Boolean(
         view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
       ),
@@ -374,6 +373,7 @@ export function useAgentStudioOrchestrationController({
     sessions: {
       viewSessionsForTask,
       viewActiveSession,
+      viewSessionRuntimeDataError,
     },
     tabs: {
       activeTaskTabId,
@@ -419,7 +419,6 @@ export function useAgentStudioOrchestrationController({
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,
-      sessionRuntimeDataError: viewSessionRuntimeDataError,
       isSlashCommandsLoading,
       searchFiles,
       agentOptions,

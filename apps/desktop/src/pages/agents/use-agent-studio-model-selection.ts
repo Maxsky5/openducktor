@@ -30,10 +30,7 @@ import {
 } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
-import {
-  getAttachedSessionRuntimeConnectionError,
-  toAttachedSessionRuntimeConnection,
-} from "./agent-studio-session-runtime";
+import { resolveAttachedSessionRuntimeQueryState } from "./agent-studio-session-runtime";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
@@ -108,33 +105,6 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   qa: false,
 });
 
-const toRuntimeQueryInput = (
-  session: {
-    runtimeKind: RuntimeKind | null;
-    runtimeRoute: AgentSessionState["runtimeRoute"];
-    workingDirectory: string;
-  } | null,
-  runtimeKind: RuntimeKind | null,
-): {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
-} | null => {
-  const runtimeConnection =
-    session === null
-      ? null
-      : toAttachedSessionRuntimeConnection({
-          runtimeRoute: session.runtimeRoute,
-          workingDirectory: session.workingDirectory,
-        });
-  if (!session || runtimeKind == null || runtimeConnection === null) {
-    return null;
-  }
-  return {
-    runtimeKind,
-    runtimeConnection,
-  };
-};
-
 export function useAgentStudioModelSelection({
   activeWorkspace,
   activeSession,
@@ -207,9 +177,9 @@ export function useAgentStudioModelSelection({
     role,
     roleDefaultSelection?.runtimeKind,
   ]);
-  const activeSessionRuntimeQueryInput = useMemo(
+  const activeSessionRuntimeQueryState = useMemo(
     () =>
-      toRuntimeQueryInput(
+      resolveAttachedSessionRuntimeQueryState(
         hasActiveSession
           ? {
               runtimeKind: activeSessionRuntimeKind,
@@ -217,7 +187,7 @@ export function useAgentStudioModelSelection({
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
-        activeSessionRuntimeKind,
+        "active session runtime queries",
       ),
     [
       activeSessionRuntimeKind,
@@ -226,25 +196,8 @@ export function useAgentStudioModelSelection({
       hasActiveSession,
     ],
   );
-  const activeSessionRuntimeQueryError = useMemo(
-    () =>
-      hasActiveSession
-        ? getAttachedSessionRuntimeConnectionError(
-            {
-              runtimeRoute: activeSessionRuntimeRoute,
-              workingDirectory: activeSessionWorkingDirectory,
-            },
-            activeSessionRuntimeKind,
-            "active session runtime queries",
-          )
-        : null,
-    [
-      activeSessionRuntimeKind,
-      activeSessionRuntimeRoute,
-      activeSessionWorkingDirectory,
-      hasActiveSession,
-    ],
-  );
+  const activeSessionRuntimeQueryInput = activeSessionRuntimeQueryState.runtimeQueryInput;
+  const activeSessionRuntimeQueryError = activeSessionRuntimeQueryState.runtimeQueryError;
   const slashCommandRuntimeKind =
     activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
   const supportsSlashCommands = useMemo(() => {

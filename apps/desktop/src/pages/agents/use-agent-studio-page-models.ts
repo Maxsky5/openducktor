@@ -38,6 +38,7 @@ type AgentStudioCoreContext = {
   sessionsForTask: AgentSessionSummary[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
+  sessionRuntimeDataError: string | null;
   isTaskHydrating: boolean;
   isSessionHistoryHydrating: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -92,7 +93,6 @@ type AgentStudioModelSelectionContext = {
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
-  sessionRuntimeDataError?: string | null;
   isSlashCommandsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
@@ -330,6 +330,7 @@ export function useAgentStudioPageModels({
     isContextSwitching,
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
     isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
+    sessionRuntimeDataError: core.sessionRuntimeDataError,
     taskId: core.taskId,
     activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
@@ -379,7 +380,6 @@ export function useAgentStudioPageModels({
     slashCommandCatalog: modelSelection.slashCommandCatalog,
     slashCommands: modelSelection.slashCommands,
     slashCommandsError: modelSelection.slashCommandsError,
-    sessionRuntimeDataError: modelSelection.sessionRuntimeDataError ?? null,
     isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
     searchFiles: modelSelection.searchFiles,
     agentOptions: modelSelection.agentOptions,
