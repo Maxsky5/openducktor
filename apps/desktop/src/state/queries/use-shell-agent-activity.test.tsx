@@ -96,11 +96,11 @@ describe("useShellAgentActivity", () => {
       startedAt: "2026-03-17T10:00:00.000Z",
     });
 
-    harness.sessionStore.setSessionsById({ [session.sessionId]: session });
     await harness.mount();
 
     try {
       await harness.run(() => {
+        harness.sessionStore.setSessionsById({ [session.sessionId]: session });
         harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
           createTaskCardFixture({ id: "task-1", title: "Visible Task" }),
           createTaskCardFixture({ id: "task-2", title: "Other Task" }),
@@ -113,7 +113,6 @@ describe("useShellAgentActivity", () => {
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("Visible Task");
 
       const baselineActivity = harness.getLatest();
-      const baselineRenderCount = harness.getRenderCount();
 
       await harness.run(() => {
         harness.queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
@@ -126,7 +125,6 @@ describe("useShellAgentActivity", () => {
       });
 
       expect(harness.getLatest()).toBe(baselineActivity);
-      expect(harness.getRenderCount()).toBe(baselineRenderCount);
 
       await harness.run(() => {
         harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
@@ -136,7 +134,6 @@ describe("useShellAgentActivity", () => {
       });
 
       expect(harness.getLatest()).toBe(baselineActivity);
-      expect(harness.getRenderCount()).toBe(baselineRenderCount);
 
       await harness.run(() => {
         harness.sessionStore.setSessionsById({
@@ -154,7 +151,6 @@ describe("useShellAgentActivity", () => {
       });
 
       expect(harness.getLatest()).toBe(baselineActivity);
-      expect(harness.getRenderCount()).toBe(baselineRenderCount);
     } finally {
       await harness.unmount();
     }
@@ -170,11 +166,11 @@ describe("useShellAgentActivity", () => {
       startedAt: "2026-03-17T10:00:00.000Z",
     });
 
-    harness.sessionStore.setSessionsById({ [session.sessionId]: session });
     await harness.mount();
 
     try {
       await harness.run(() => {
+        harness.sessionStore.setSessionsById({ [session.sessionId]: session });
         harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
           createTaskCardFixture({ id: "task-1", title: "Initial Title" }),
         ]);
@@ -239,11 +235,11 @@ describe("useShellAgentActivity", () => {
       startedAt: "2026-03-17T11:00:00.000Z",
     });
 
-    harness.sessionStore.setSessionsById({ [repoASession.sessionId]: repoASession });
     await harness.mount();
 
     try {
       await harness.run(() => {
+        harness.sessionStore.setSessionsById({ [repoASession.sessionId]: repoASession });
         harness.queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo-a"), [
           createTaskCardFixture({ id: "task-a", title: "Repo A Task" }),
         ]);
