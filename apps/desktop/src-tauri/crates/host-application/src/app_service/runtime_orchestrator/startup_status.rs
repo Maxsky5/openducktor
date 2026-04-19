@@ -168,8 +168,7 @@ impl AppService {
             .get(status_key.as_str())
             .cloned()
         {
-            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady || existing_runtime.is_some()
-            {
+            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady && existing_runtime.is_none() {
                 return Ok(snapshot.to_public_status());
             }
         }
@@ -209,6 +208,8 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::{RuntimeStartupFailure, RuntimeStartupProgress};
+    use crate::AppService;
+    use crate::app_service::service_core::AgentRuntimeProcess;
     use crate::app_service::test_support::{
         build_service_with_state, builtin_opencode_runtime_descriptor,
     };
@@ -217,6 +218,25 @@ mod tests {
         AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RuntimeRole,
     };
     use std::time::Instant;
+
+    fn insert_workspace_runtime(
+        service: &AppService,
+        runtime: host_domain::RuntimeInstanceSummary,
+    ) {
+        service
+            .agent_runtimes
+            .lock()
+            .expect("agent runtimes lock poisoned")
+            .insert(
+                runtime.runtime_id.clone(),
+                AgentRuntimeProcess {
+                    summary: runtime,
+                    child: None,
+                    _runtime_process_guard: None,
+                    cleanup_target: None,
+                },
+            );
+    }
 
     #[test]
     fn runtime_startup_status_tracks_waiting_and_failure_stages() -> Result<()> {
@@ -400,6 +420,51 @@ mod tests {
 
         assert_eq!(status.stage, RepoRuntimeStartupStage::Idle);
         assert!(status.runtime.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_startup_status_prefers_live_runtime_over_stale_waiting_snapshot() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let repo_path = "/tmp/runtime-live-over-waiting";
+        let started_at_instant = Instant::now();
+        let started_at = "2026-04-04T16:00:00Z";
+
+        service.mark_runtime_startup_waiting(
+            &AgentRuntimeKind::opencode(),
+            repo_path,
+            &RuntimeStartupProgress {
+                started_at_instant,
+                started_at: started_at.to_string(),
+                attempts: Some(2),
+                elapsed_ms: None,
+            },
+        )?;
+
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::opencode(),
+            runtime_id: "runtime-live".to_string(),
+            repo_path: repo_path.to_string(),
+            task_id: None,
+            role: RuntimeRole::Workspace,
+            working_directory: repo_path.to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: "http://127.0.0.1:9999".to_string(),
+            },
+            started_at: started_at.to_string(),
+            descriptor: builtin_opencode_runtime_descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone());
+
+        let status = service.runtime_startup_status("opencode", repo_path)?;
+
+        assert_eq!(status.stage, RepoRuntimeStartupStage::RuntimeReady);
+        assert_eq!(
+            status.runtime.as_ref().map(|value| value.runtime_id.as_str()),
+            Some("runtime-live")
+        );
+
+        service.runtime_stop("runtime-live")?;
         Ok(())
     }
 }
