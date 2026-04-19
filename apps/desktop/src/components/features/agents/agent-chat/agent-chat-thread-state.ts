@@ -14,7 +14,11 @@ type BuildAgentChatThreadStateArgs = Pick<
 export type AgentChatThreadState = {
   isTranscriptLoading: boolean;
   hideTranscriptWhileHydrating: boolean;
-  showRuntimeCheckingOverlay: boolean;
+  statusOverlay: {
+    kind: "runtime_waiting" | "session_loading";
+    title: string;
+    description: string;
+  } | null;
   showRuntimeBlockedCard: boolean;
 };
 
@@ -29,12 +33,39 @@ export const getAgentChatThreadState = ({
   const isTranscriptLoading =
     isSessionViewLoading || isSessionHistoryLoading || isTranscriptRenderDeferred;
   const hideTranscriptWhileHydrating = isSessionHistoryLoading || isTranscriptRenderDeferred;
+  const statusOverlay = (() => {
+    if (
+      isWaitingForRuntimeReadiness &&
+      (readinessState === "checking" || readinessState === "ready")
+    ) {
+      return {
+        kind: "runtime_waiting" as const,
+        title:
+          readinessState === "ready" ? "Session runtime is reconnecting" : "Runtime is starting",
+        description:
+          readinessState === "ready"
+            ? "Waiting for the selected session runtime to become available before loading this session."
+            : "Waiting for runtime and MCP health before loading this session.",
+      };
+    }
+
+    if (!isTranscriptLoading) {
+      return null;
+    }
+
+    return {
+      kind: "session_loading" as const,
+      title: "Loading session",
+      description: hideTranscriptWhileHydrating
+        ? "Loading the selected session transcript."
+        : "Preparing the selected session view.",
+    };
+  })();
 
   return {
     isTranscriptLoading,
     hideTranscriptWhileHydrating,
-    showRuntimeCheckingOverlay:
-      isWaitingForRuntimeReadiness && (readinessState === "checking" || readinessState === "ready"),
+    statusOverlay,
     showRuntimeBlockedCard: readinessState === "blocked" && Boolean(blockedReason),
   };
 };

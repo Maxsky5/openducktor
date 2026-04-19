@@ -57,7 +57,6 @@ type AgentChatThreadMotionRowProps = {
 type AgentChatTranscriptProps = {
   activeStreamingAssistantMessageId: string | null;
   hasSession: boolean;
-  readinessState: AgentChatThreadModel["readinessState"];
   taskSelected: boolean;
   canKickoffNewSession: boolean;
   kickoffLabel: string;
@@ -74,13 +73,39 @@ type AgentChatTranscriptProps = {
   renderedTurns: AgentChatRenderedTurn[];
   allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  showRuntimeCheckingOverlay: boolean;
+  statusOverlay: {
+    kind: "runtime_waiting" | "session_loading";
+    title: string;
+    description: string;
+  } | null;
   showRuntimeBlockedCard: boolean;
   blockedReason: string | null;
   isLoadingChecks: boolean;
   onRefreshChecks: () => void;
-  showLoadingOverlay: boolean;
+  showSessionLoadingOverlay: boolean;
 };
+
+const AgentChatStatusOverlay = memo(function AgentChatStatusOverlay({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}): ReactElement {
+  return (
+    <div className="sticky top-0 z-20 mb-4">
+      <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 text-sm shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
+        <div className="mt-0.5 rounded-full bg-muted p-2 text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-foreground">{title}</p>
+          <p className="text-muted-foreground">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 type AgentChatRenderedTurn = {
   key: string;
@@ -219,7 +244,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 const AgentChatTranscript = memo(function AgentChatTranscript({
   activeStreamingAssistantMessageId,
   hasSession,
-  readinessState,
   taskSelected,
   canKickoffNewSession,
   kickoffLabel,
@@ -236,37 +260,29 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   renderedTurns,
   allowTurnContainment,
   resolveRowRef,
-  showRuntimeCheckingOverlay,
+  statusOverlay,
   showRuntimeBlockedCard,
   blockedReason,
   isLoadingChecks,
   onRefreshChecks,
-  showLoadingOverlay,
+  showSessionLoadingOverlay,
 }: AgentChatTranscriptProps): ReactElement {
-  const runtimeWaitingTitle =
-    readinessState === "ready" ? "Session runtime is reconnecting" : "Runtime is starting";
-  const runtimeWaitingDescription =
-    readinessState === "ready"
-      ? "Waiting for the selected session runtime to become available before loading this session."
-      : "Waiting for runtime and MCP health before loading this session.";
+  const visibleStatusOverlay =
+    statusOverlay !== null &&
+    (statusOverlay.kind === "runtime_waiting" || showSessionLoadingOverlay)
+      ? statusOverlay
+      : null;
 
   return (
     <div
       ref={messagesContainerRef}
       className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
     >
-      {showRuntimeCheckingOverlay ? (
-        <div className="sticky top-0 z-20 mb-4">
-          <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 text-sm shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
-            <div className="mt-0.5 rounded-full bg-muted p-2 text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-foreground">{runtimeWaitingTitle}</p>
-              <p className="text-muted-foreground">{runtimeWaitingDescription}</p>
-            </div>
-          </div>
-        </div>
+      {visibleStatusOverlay ? (
+        <AgentChatStatusOverlay
+          title={visibleStatusOverlay.title}
+          description={visibleStatusOverlay.description}
+        />
       ) : null}
 
       {showRuntimeBlockedCard ? (
@@ -334,14 +350,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
             ))
           : null}
       </div>
-      {showLoadingOverlay ? (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted/85">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
-            <LoaderCircle className="size-3.5 animate-spin" />
-            Loading session...
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 });
@@ -455,11 +463,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const activeSessionId = session?.sessionId ?? null;
   const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
     activeSessionId,
+    shouldDefer: isSessionViewLoading || isSessionHistoryLoading,
   });
   const {
     isTranscriptLoading,
     hideTranscriptWhileHydrating,
-    showRuntimeCheckingOverlay,
+    statusOverlay,
     showRuntimeBlockedCard,
   } = getAgentChatThreadState({
     isSessionViewLoading,
@@ -622,9 +631,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef.current = scrollToBottomOnSend;
   }, [scrollToBottomOnSend, scrollToBottomOnSendRef]);
 
-  const showLoadingOverlay = useAgentChatLoadingOverlay({
+  const showSessionLoadingOverlay = useAgentChatLoadingOverlay({
     sessionId: activeSessionId,
-    isSessionViewLoading: isTranscriptLoading,
+    isSessionViewLoading: statusOverlay?.kind === "session_loading",
   });
   const sessionRole = session?.role ?? null;
   const sessionRuntimeKind = session?.runtimeKind ?? null;
@@ -749,7 +758,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <AgentChatTranscript
         activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
         hasSession={session !== null}
-        readinessState={readinessState}
         taskSelected={taskSelected}
         canKickoffNewSession={canKickoffNewSession}
         kickoffLabel={kickoffLabel}
@@ -766,12 +774,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         renderedTurns={rows.length > 0 && !hideTranscriptWhileHydrating ? renderedTurns : []}
         allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
-        showRuntimeCheckingOverlay={showRuntimeCheckingOverlay}
+        statusOverlay={statusOverlay}
         showRuntimeBlockedCard={showRuntimeBlockedCard}
         blockedReason={blockedReason}
         isLoadingChecks={isLoadingChecks}
         onRefreshChecks={onRefreshChecks}
-        showLoadingOverlay={showLoadingOverlay}
+        showSessionLoadingOverlay={showSessionLoadingOverlay}
       />
 
       {hasBottomStack && session ? (

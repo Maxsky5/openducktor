@@ -6,16 +6,17 @@ import type {
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
+  type AgentSessionViewLifecyclePhase,
+  deriveAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
   SESSION_MODEL_CATALOG_STALE_TIME_MS,
   SESSION_TODOS_STALE_TIME_MS,
   sessionModelCatalogQueryOptions,
   sessionTodosQueryOptions,
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  hasAttachedSessionRuntime,
-  resolveAttachedSessionRuntimeQueryState,
-} from "./agent-studio-session-runtime";
+import { resolveAttachedSessionRuntimeQueryState } from "./agent-studio-session-runtime";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
 type UseAgentStudioActiveSessionRuntimeDataArgs = {
@@ -35,6 +36,7 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
 export type AgentStudioSessionRuntimeDataState = {
   session: AgentSessionState | null;
   runtimeDataError: string | null;
+  sessionViewLifecyclePhase: AgentSessionViewLifecyclePhase;
 };
 
 export const useAgentStudioActiveSessionRuntimeData = ({
@@ -47,10 +49,16 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     () => resolveAttachedSessionRuntimeQueryState(session, "active session runtime data access"),
     [session],
   );
-  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
+  const sessionViewLifecycle = useMemo(
+    () =>
+      deriveAgentSessionViewLifecycle({
+        session,
+        repoReadinessState: agentStudioReadinessState,
+      }),
+    [agentStudioReadinessState, session],
+  );
   const shouldHydrateRuntimeData =
-    agentStudioReadinessState === "ready" &&
-    hasRuntimeAttachment &&
+    sessionViewLifecycle.canReadRuntimeData &&
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";
@@ -104,6 +112,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
       return {
         session: null,
         runtimeDataError: null,
+        sessionViewLifecyclePhase: sessionViewLifecycle.phase,
       };
     }
 
@@ -129,6 +138,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
       return {
         session,
         runtimeDataError,
+        sessionViewLifecyclePhase: sessionViewLifecycle.phase,
       };
     }
 
@@ -140,6 +150,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         isLoadingModelCatalog,
       },
       runtimeDataError,
+      sessionViewLifecyclePhase: sessionViewLifecycle.phase,
     };
   }, [
     catalogQuery.data,
@@ -150,5 +161,6 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     todosQuery.data,
     todosQuery.error,
     runtimeDataSupportError,
+    sessionViewLifecycle.phase,
   ]);
 };

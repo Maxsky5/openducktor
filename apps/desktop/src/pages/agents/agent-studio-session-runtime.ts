@@ -6,10 +6,6 @@ import {
 } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-const WORKTREE_RUNTIME_ROLES = new Set<AgentSessionState["role"]>(["build", "qa"]);
-
-type RuntimeAttachmentState = Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeRoute">;
-type WorktreeRuntimeRole = Pick<AgentSessionState, "role">;
 type SessionRuntimeAccessState = {
   runtimeKind?: AgentSessionState["runtimeKind"] | null;
   runtimeRoute: AgentSessionState["runtimeRoute"];
@@ -24,22 +20,6 @@ export type AgentStudioSessionRuntimeQueryInput = {
 export type AgentStudioSessionRuntimeQueryState = {
   runtimeQueryInput: AgentStudioSessionRuntimeQueryInput | null;
   runtimeQueryError: string | null;
-};
-
-export const requiresLiveWorktreeRuntime = (
-  session: WorktreeRuntimeRole | null | undefined,
-): boolean => {
-  return Boolean(session && WORKTREE_RUNTIME_ROLES.has(session.role));
-};
-
-export const hasAttachedSessionRuntime = (
-  session: RuntimeAttachmentState | null | undefined,
-): boolean => {
-  if (!session) {
-    return false;
-  }
-
-  return session.runId !== null || session.runtimeId !== null || session.runtimeRoute !== null;
 };
 
 export const toAttachedSessionRuntimeConnection = (
@@ -93,10 +73,4 @@ export const resolveAttachedSessionRuntimeQueryState = (
         : null,
     runtimeQueryError: getAttachedSessionRuntimeConnectionError(session, runtimeKind, action),
   };
-};
-
-export const isWaitingForAttachedWorktreeRuntime = (
-  session: (WorktreeRuntimeRole & RuntimeAttachmentState) | null | undefined,
-): boolean => {
-  return requiresLiveWorktreeRuntime(session) && !hasAttachedSessionRuntime(session);
 };

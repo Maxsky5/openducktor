@@ -42,9 +42,10 @@ type UseAgentStudioSelectionControllerArgs = {
     taskId: string;
     sessionId: string;
   }) => Promise<void>;
-  retrySessionRuntimeAttachment: (input: {
+  ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
+    repoReadinessState: AgentStudioReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   runtimeAttachmentSources: RuntimeAttachmentSource[];
@@ -183,8 +184,8 @@ export function useAgentStudioSelectionController({
   roleFromQuery,
   scenarioFromQuery,
   updateQuery,
-  hydrateRequestedTaskSessionHistory,
-  retrySessionRuntimeAttachment,
+  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
+  ensureSessionReadyForView,
   runtimeAttachmentSources,
   refreshRuntimeAttachmentSources,
   readSessionModelCatalog,
@@ -394,8 +395,7 @@ export function useAgentStudioSelectionController({
     activeTaskId: viewTaskId,
     activeSession: viewSessionRuntimeData.session,
     agentStudioReadinessState,
-    hydrateRequestedTaskSessionHistory,
-    retrySessionRuntimeAttachment,
+    ensureSessionReadyForView,
     refreshRuntimeAttachmentSources,
     runtimeAttachmentCandidates,
   });

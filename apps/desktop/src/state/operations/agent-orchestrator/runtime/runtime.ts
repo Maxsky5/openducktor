@@ -18,6 +18,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { MISSING_BUILD_TARGET_ERROR } from "../handlers/start-session-constants";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { normalizeWorkingDirectory, runningStates } from "../support/core";
@@ -327,7 +328,12 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           });
         }
 
-        const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
+        const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+          repoPath,
+          runtimeKind,
+          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+        });
         const { runtimeConnection } = resolveRuntimeRouteConnection(
           runtime.runtimeRoute,
           targetWorkingDirectory,
@@ -399,7 +405,12 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         });
       }
 
-      const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
+      const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+        repoPath,
+        runtimeKind,
+        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+          host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+      });
       const { runtimeConnection } = resolveRuntimeRouteConnection(
         runtime.runtimeRoute,
         workingDirectory,
@@ -413,7 +424,12 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       });
     }
 
-    const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
+    const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+      repoPath,
+      runtimeKind,
+      ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+        host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+    });
     const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
     const { runtimeConnection } = resolveRuntimeRouteConnection(
       runtime.runtimeRoute,

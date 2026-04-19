@@ -13,6 +13,7 @@ import type {
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
 import { host } from "../../shared/host";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { resolveRuntimeRouteConnection } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import {
@@ -206,7 +207,12 @@ export const createRepoSessionHydrationService = ({
           (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
         );
       if (needsRepoRootRuntime) {
-        const ensuredRuntime = await host.runtimeEnsure(repoPath, runtimeKind);
+        const ensuredRuntime = await ensureRuntimeAndInvalidateReadinessQueries({
+          repoPath,
+          runtimeKind,
+          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+        });
         await invalidateRuntimeList(runtimeKind, repoPath);
         if (isCancelled()) {
           return {
@@ -264,7 +270,12 @@ export const createRepoSessionHydrationService = ({
           (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
         ) ??
         runtimeEntries[0] ??
-        (await host.runtimeEnsure(repoPath, runtimeKind));
+        (await ensureRuntimeAndInvalidateReadinessQueries({
+          repoPath,
+          runtimeKind,
+          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+        }));
       if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
         await invalidateRuntimeList(runtimeKind, repoPath);
       }

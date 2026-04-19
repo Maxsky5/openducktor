@@ -10,6 +10,7 @@ import {
   loadWorkspaceListFromQuery,
   workspaceQueryKeys,
 } from "../../queries/workspace";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "../shared/runtime-readiness-publication";
 import { normalizeRepoPath } from "./workspace-operations-model";
 import type {
   PreparedRepoSwitchRef,
@@ -284,10 +285,13 @@ export function useWorkspaceSelectionOperations({
               return;
             }
 
-            return hostClient.runtimeEnsure(
-              selectedWorkspace.repoPath,
-              repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-            );
+            return ensureRuntimeAndInvalidateReadinessQueries({
+              repoPath: selectedWorkspace.repoPath,
+              runtimeKind: repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
+              ensureRuntime: (repoPath, runtimeKind) =>
+                hostClient.runtimeEnsure(repoPath, runtimeKind),
+              queryClient,
+            });
           })
           .catch((error) => {
             if (workspaceSwitchVersionRef.current !== switchVersion) {

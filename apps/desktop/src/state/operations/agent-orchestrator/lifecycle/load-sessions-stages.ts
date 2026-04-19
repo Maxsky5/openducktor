@@ -8,7 +8,7 @@ import type {
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
-import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
+import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type {
   AgentSessionHistoryHydrationPolicy,
   AgentSessionLoadMode,
@@ -16,6 +16,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { requireRuntimeConnectionSupport, runtimeRouteToConnection } from "../runtime/runtime";
 import { DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE } from "../support/history-hydration";
 import {
@@ -452,13 +453,12 @@ export const createRuntimeResolutionPlannerStage = async ({
     if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
       return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
     }
-    const runtime = await host.runtimeEnsure(intent.repoPath, runtimeKind);
-    ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
-    await appQueryClient.invalidateQueries({
-      queryKey: runtimeQueryKeys.list(runtimeKind, intent.repoPath),
-      exact: true,
-      refetchType: "none",
+    const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+      repoPath: intent.repoPath,
+      runtimeKind,
+      ensureRuntime: (repoPath, nextRuntimeKind) => host.runtimeEnsure(repoPath, nextRuntimeKind),
     });
+    ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
     return runtime;
   };
 

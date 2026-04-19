@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
-import {
-  getAgentSessionHistoryHydrationState,
-  requiresHydratedAgentSessionHistory,
-} from "@/state/operations/agent-orchestrator/support/history-hydration";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type AgentStudioReadinessState,
-  getAgentStudioTaskHydrationDecision,
+  deriveAgentStudioTaskHydrationState,
 } from "./agent-studio-task-hydration-state";
 import {
   type RuntimeAttachmentCandidate,
@@ -19,13 +15,10 @@ type UseAgentStudioTaskHydrationParams = {
   activeTaskId: string;
   activeSession: AgentSessionState | null;
   agentStudioReadinessState: AgentStudioReadinessState;
-  hydrateRequestedTaskSessionHistory: (input: {
+  ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
-  }) => Promise<void>;
-  retrySessionRuntimeAttachment: (input: {
-    taskId: string;
-    sessionId: string;
+    repoReadinessState: AgentStudioReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
@@ -46,8 +39,7 @@ export function useAgentStudioTaskHydration({
   activeTaskId,
   activeSession,
   agentStudioReadinessState,
-  hydrateRequestedTaskSessionHistory,
-  retrySessionRuntimeAttachment,
+  ensureSessionReadyForView,
   refreshRuntimeAttachmentSources,
   runtimeAttachmentCandidates,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
@@ -56,36 +48,29 @@ export function useAgentStudioTaskHydration({
     sessionId: string | null;
     status: "idle" | "pending" | "failed";
   }>({ sessionId: null, status: "idle" });
-  const historyHydrationState = getAgentSessionHistoryHydrationState(activeSession);
-  const sessionNeedsHydration = requiresHydratedAgentSessionHistory(activeSession);
-  const {
-    activeRuntimeAttachmentKey,
-    shouldWaitForSessionRuntime,
-    isWaitingForRuntimeReadiness,
-    isRecoveringWaitingSession,
-    shouldHydrateSessionHistory,
-  } = getAgentStudioTaskHydrationDecision({
-    activeWorkspace,
-    activeTaskId,
+  const activeRuntimeAttachmentKey =
+    activeWorkspace && activeTaskId && activeSessionId
+      ? `${activeWorkspace.repoPath}::${activeTaskId}::${activeSessionId}`
+      : null;
+  const lifecycle = deriveAgentStudioTaskHydrationState({
     activeSession,
-    historyHydrationState,
-    sessionNeedsHydration,
     agentStudioReadinessState,
   });
 
   useAgentStudioRuntimeAttachmentRetry({
     activeTaskId,
     activeSessionId,
-    shouldWaitForSessionRuntime,
+    shouldWaitForSessionRuntime: lifecycle.shouldWaitForRuntimeAttachment,
     activeRuntimeAttachmentKey,
     runtimeAttachmentCandidates,
-    retrySessionRuntimeAttachment,
+    ensureSessionReadyForView,
     refreshRuntimeAttachmentSources,
+    repoReadinessState: agentStudioReadinessState,
   });
 
   const isRequestFailed =
     requestState.sessionId === activeSessionId && requestState.status === "failed";
-  const shouldRequestHydration = shouldHydrateSessionHistory && !isRequestFailed;
+  const shouldEnsureSessionReady = lifecycle.shouldEnsureReadyForView && !isRequestFailed;
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -93,7 +78,7 @@ export function useAgentStudioTaskHydration({
       return;
     }
 
-    if (!shouldRequestHydration) {
+    if (!shouldEnsureSessionReady || lifecycle.phase === "waiting_for_runtime_attachment") {
       setRequestState((current) =>
         current.sessionId === activeSessionId && current.status === "pending"
           ? { sessionId: activeSessionId, status: "idle" }
@@ -103,9 +88,10 @@ export function useAgentStudioTaskHydration({
     }
 
     setRequestState({ sessionId: activeSessionId, status: "pending" });
-    void hydrateRequestedTaskSessionHistory({
+    void ensureSessionReadyForView({
       taskId: activeTaskId,
       sessionId: activeSessionId,
+      repoReadinessState: agentStudioReadinessState,
     })
       .then(() => {
         setRequestState((current) =>
@@ -121,27 +107,29 @@ export function useAgentStudioTaskHydration({
             : current,
         );
       });
-  }, [activeSessionId, activeTaskId, hydrateRequestedTaskSessionHistory, shouldRequestHydration]);
+  }, [
+    activeSessionId,
+    activeTaskId,
+    agentStudioReadinessState,
+    ensureSessionReadyForView,
+    lifecycle.phase,
+    shouldEnsureSessionReady,
+  ]);
 
-  const isRequestPending =
-    requestState.sessionId === activeSessionId && requestState.status === "pending";
-  const shouldShowPendingHydrationState = shouldRequestHydration;
+  const shouldShowPendingHydrationState = shouldEnsureSessionReady;
 
   return {
     isActiveTaskHydrated: Boolean(activeWorkspace && activeTaskId),
     isActiveTaskHydrationFailed: false,
-    isActiveSessionHistoryHydrated: activeSessionId ? historyHydrationState === "hydrated" : false,
+    isActiveSessionHistoryHydrated: activeSessionId ? lifecycle.canRenderHistory : false,
     isActiveSessionHistoryHydrationFailed: activeSessionId
-      ? (historyHydrationState === "failed" &&
-          !isWaitingForRuntimeReadiness &&
-          !isRecoveringWaitingSession) ||
-        isRequestFailed
+      ? lifecycle.isHistoryHydrationFailed || isRequestFailed
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? shouldShowPendingHydrationState || historyHydrationState === "hydrating" || isRequestPending
+      ? shouldShowPendingHydrationState || lifecycle.isHydratingHistory
       : false,
     isWaitingForRuntimeReadiness: activeSessionId
-      ? isWaitingForRuntimeReadiness && !isRequestFailed
+      ? lifecycle.isWaitingForRuntimeReadiness && !isRequestFailed
       : false,
   };
 }

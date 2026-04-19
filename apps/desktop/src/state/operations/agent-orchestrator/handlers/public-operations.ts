@@ -16,6 +16,7 @@ import type {
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -41,9 +42,10 @@ type CreatePublicOperationsArgs = {
     sessionId: string;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
-  retrySessionRuntimeAttachment: (input: {
+  ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
+    repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuns?: RunSummary[];
@@ -96,7 +98,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 export const createOrchestratorPublicOperations = ({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
-  retrySessionRuntimeAttachment,
+  ensureSessionReadyForView,
   reconcileLiveTaskSessions,
   loadAgentSessions,
   readSessionModelCatalog,
@@ -114,10 +116,8 @@ export const createOrchestratorPublicOperations = ({
     withErrorToast("Failed to hydrate session history", () =>
       hydrateRequestedTaskSessionHistory(input),
     ),
-  retrySessionRuntimeAttachment: (input) =>
-    withErrorToast("Failed to reconnect session runtime", () =>
-      retrySessionRuntimeAttachment(input),
-    ),
+  ensureSessionReadyForView: (input) =>
+    withErrorToast("Failed to prepare session", () => ensureSessionReadyForView(input)),
   reconcileLiveTaskSessions: (input) =>
     withErrorToast("Failed to reconcile live sessions", () => reconcileLiveTaskSessions(input)),
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>

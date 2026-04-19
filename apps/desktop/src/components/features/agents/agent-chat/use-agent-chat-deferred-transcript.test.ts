@@ -112,19 +112,56 @@ describe("useAgentChatDeferredTranscript", () => {
   test("cancels stale deferred session switches during rapid A to B to A changes", async () => {
     const harness = createSharedHookHarness(useAgentChatDeferredTranscript, {
       activeSessionId: "session-a",
+      shouldDefer: true,
     });
 
     await harness.mount();
     expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
 
-    await harness.update({ activeSessionId: "session-b" });
+    await harness.update({ activeSessionId: "session-b", shouldDefer: true });
     expect(harness.getLatest().isTranscriptRenderDeferred).toBe(true);
 
-    await harness.update({ activeSessionId: "session-a" });
+    await harness.update({ activeSessionId: "session-a", shouldDefer: true });
     expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
 
     await flushDeferredWork();
 
+    expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("switches immediately when the next session is already ready", async () => {
+    const harness = createSharedHookHarness(useAgentChatDeferredTranscript, {
+      activeSessionId: "session-a",
+      shouldDefer: false,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
+
+    await harness.update({ activeSessionId: "session-b", shouldDefer: false });
+    expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("cancels a pending deferred switch when the target session becomes immediately renderable", async () => {
+    const harness = createSharedHookHarness(useAgentChatDeferredTranscript, {
+      activeSessionId: "session-a",
+      shouldDefer: true,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
+
+    await harness.update({ activeSessionId: "session-b", shouldDefer: true });
+    expect(harness.getLatest().isTranscriptRenderDeferred).toBe(true);
+
+    await harness.update({ activeSessionId: "session-b", shouldDefer: false });
+    expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
+
+    await flushDeferredWork();
     expect(harness.getLatest().isTranscriptRenderDeferred).toBe(false);
 
     await harness.unmount();

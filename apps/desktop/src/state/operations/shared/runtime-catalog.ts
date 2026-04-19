@@ -18,6 +18,7 @@ import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { resolveRuntimeRouteConnection } from "../agent-orchestrator/runtime/runtime";
 import { host } from "./host";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "./runtime-readiness-publication";
 
 type ListCatalogInput = {
   runtimeKind: RuntimeKind;
@@ -246,7 +247,13 @@ export const createHostRuntimeCatalogOperations = (
     repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
     repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
       host.repoRuntimeHealthStatus(repoPath, runtimeKind),
-    ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(repoPath, runtimeKind),
+    ensureRuntime: (runtimeKind, repoPath) =>
+      ensureRuntimeAndInvalidateReadinessQueries({
+        repoPath,
+        runtimeKind,
+        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+          host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+      }),
     listRuntimesForRepo: (runtimeKind, repoPath) =>
       ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     listAvailableModels: (input) =>

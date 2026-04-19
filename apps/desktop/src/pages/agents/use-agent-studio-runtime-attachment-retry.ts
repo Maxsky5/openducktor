@@ -1,5 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import { useEffect, useRef } from "react";
+import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { normalizeWorkingDirectory } from "@/state/operations/agent-orchestrator/support/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -99,20 +100,23 @@ export function useAgentStudioRuntimeAttachmentRetry({
   shouldWaitForSessionRuntime,
   activeRuntimeAttachmentKey,
   runtimeAttachmentCandidates,
-  retrySessionRuntimeAttachment,
+  ensureSessionReadyForView,
   refreshRuntimeAttachmentSources,
+  repoReadinessState,
 }: {
   activeTaskId: string;
   activeSessionId: string | null;
   shouldWaitForSessionRuntime: boolean;
   activeRuntimeAttachmentKey: string | null;
   runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
-  retrySessionRuntimeAttachment: (input: {
+  ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
+    repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
+  repoReadinessState: SessionRepoReadinessState;
 }): void {
   const lastAttachmentAttemptRef = useRef<{
     sessionId: string;
@@ -157,9 +161,10 @@ export function useAgentStudioRuntimeAttachmentRetry({
       candidates: cloneRuntimeAttachmentCandidates(runtimeAttachmentCandidates),
     };
 
-    void retrySessionRuntimeAttachment({
+    void ensureSessionReadyForView({
       taskId: activeTaskId,
       sessionId: activeSessionId,
+      repoReadinessState,
       recoveryDedupKey,
     }).catch(() => {
       // The operation layer surfaces actionable errors.
@@ -168,7 +173,8 @@ export function useAgentStudioRuntimeAttachmentRetry({
     activeRuntimeAttachmentKey,
     activeSessionId,
     activeTaskId,
-    retrySessionRuntimeAttachment,
+    ensureSessionReadyForView,
+    repoReadinessState,
     runtimeAttachmentCandidates,
     shouldWaitForSessionRuntime,
   ]);
@@ -177,6 +183,10 @@ export function useAgentStudioRuntimeAttachmentRetry({
     if (!activeSessionId || !shouldWaitForSessionRuntime) {
       return;
     }
+
+    void refreshRuntimeAttachmentSources().catch(() => {
+      // The refresh path is best-effort; attachment attempts surface actionable failures.
+    });
 
     const intervalId = window.setInterval(() => {
       void refreshRuntimeAttachmentSources().catch(() => {
