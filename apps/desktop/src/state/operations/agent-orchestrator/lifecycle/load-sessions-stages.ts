@@ -16,6 +16,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { requireRuntimeConnectionSupport, runtimeRouteToConnection } from "../runtime/runtime";
 import { DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE } from "../support/history-hydration";
 import {
@@ -452,7 +453,11 @@ export const createRuntimeResolutionPlannerStage = async ({
     if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
       return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
     }
-    const runtime = await host.runtimeEnsure(intent.repoPath, runtimeKind);
+    const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+      repoPath: intent.repoPath,
+      runtimeKind,
+      ensureRuntime: (repoPath, nextRuntimeKind) => host.runtimeEnsure(repoPath, nextRuntimeKind),
+    });
     ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
     await appQueryClient.invalidateQueries({
       queryKey: runtimeQueryKeys.list(runtimeKind, intent.repoPath),
