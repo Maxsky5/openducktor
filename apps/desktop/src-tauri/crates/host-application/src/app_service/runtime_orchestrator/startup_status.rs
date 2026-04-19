@@ -168,7 +168,8 @@ impl AppService {
             .get(status_key.as_str())
             .cloned()
         {
-            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady && existing_runtime.is_none() {
+            if snapshot.stage != RepoRuntimeStartupStage::RuntimeReady && existing_runtime.is_none()
+            {
                 return Ok(snapshot.to_public_status());
             }
         }
@@ -208,11 +209,11 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::{RuntimeStartupFailure, RuntimeStartupProgress};
-    use crate::AppService;
     use crate::app_service::service_core::AgentRuntimeProcess;
     use crate::app_service::test_support::{
         build_service_with_state, builtin_opencode_runtime_descriptor,
     };
+    use crate::AppService;
     use anyhow::Result;
     use host_domain::{
         AgentRuntimeKind, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RuntimeRole,
@@ -460,7 +461,10 @@ mod tests {
 
         assert_eq!(status.stage, RepoRuntimeStartupStage::RuntimeReady);
         assert_eq!(
-            status.runtime.as_ref().map(|value| value.runtime_id.as_str()),
+            status
+                .runtime
+                .as_ref()
+                .map(|value| value.runtime_id.as_str()),
             Some("runtime-live")
         );
 

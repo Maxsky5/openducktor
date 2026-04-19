@@ -11,6 +11,7 @@ import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
 import { basename, isAbsolutePath, toProjectRelativePath } from "./path-utils";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
+import type { OpencodeRuntimeClientInput } from "./runtime-connection";
 import type { ClientFactory, McpServerStatus } from "./types";
 
 const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
@@ -19,6 +20,14 @@ const OPENCODE_DEFAULT_AGENT_COLORS: Record<string, string> = {
 };
 
 const FILE_SEARCH_LIMIT = 20;
+
+type OpencodeFileSearchInput = OpencodeRuntimeClientInput & {
+  query: string;
+};
+
+type OpencodeMcpConnectInput = OpencodeRuntimeClientInput & {
+  name: string;
+};
 
 type FindFilesClient = {
   find?: {
@@ -102,10 +111,7 @@ const toFileSearchResults = (
 
 export const listAvailableModels = async (
   createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  },
+  input: OpencodeRuntimeClientInput,
 ): Promise<AgentModelCatalog> => {
   const client = createClient({
     runtimeEndpoint: input.runtimeEndpoint,
@@ -173,10 +179,7 @@ export const listAvailableModels = async (
 
 export const listAvailableSlashCommands = async (
   createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  },
+  input: OpencodeRuntimeClientInput,
 ): Promise<AgentSlashCommandCatalog> => {
   try {
     const client = createClient({
@@ -240,11 +243,7 @@ export const listAvailableSlashCommands = async (
 
 export const searchFiles = async (
   createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-    query: string;
-  },
+  input: OpencodeFileSearchInput,
 ): Promise<AgentFileSearchResult[]> => {
   try {
     const client = createClient({
@@ -270,10 +269,7 @@ export const searchFiles = async (
 
 export const listAvailableToolIds = async (
   createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  },
+  input: OpencodeRuntimeClientInput,
 ): Promise<string[]> => {
   const client = createClient({
     runtimeEndpoint: input.runtimeEndpoint,
@@ -288,10 +284,7 @@ export const listAvailableToolIds = async (
 
 export const getMcpStatus = async (
   createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  },
+  input: OpencodeRuntimeClientInput,
 ): Promise<Record<string, McpServerStatus>> => {
   try {
     const client = createClient({
@@ -325,11 +318,7 @@ export const getMcpStatus = async (
 
 export const connectMcpServer = async (
   createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-    name: string;
-  },
+  input: OpencodeMcpConnectInput,
 ): Promise<void> => {
   const client = createClient({
     runtimeEndpoint: input.runtimeEndpoint,

@@ -1,7 +1,7 @@
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import type { AgentRuntimeConnection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
-import { requireRuntimeConnectionSupport, resolveRuntimeRouteConnection } from "../runtime/runtime";
+import { requireRuntimeConnectionSupport, resolveRuntimeConnection } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
@@ -20,7 +20,7 @@ import {
   rollbackStartedSessionBeforeRegistration,
   stopSessionOnStaleAndThrow,
 } from "./start-session-rollback";
-import { resolveRuntimeAndModel } from "./start-session-runtime";
+import { resolveScenarioAndPrompt } from "./start-session-runtime";
 
 // Match the requested-history hydration cap so newly forked child sessions load
 // enough history to render immediately without pulling an unbounded transcript.
@@ -30,6 +30,41 @@ type ForkStrategyInput = {
   ctx: StartSessionContext;
   input: Extract<StartSessionCreationInput, { startMode: "fork" }>;
   deps: StartSessionExecutionDependencies;
+};
+
+const requireForkSourceRuntime = (
+  sourceSessionId: string,
+  sourceSession: AgentSessionState,
+): {
+  runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
+  runtimeConnection: AgentRuntimeConnection;
+} => {
+  const sourceRuntimeKind = sourceSession.runtimeKind;
+  if (!sourceRuntimeKind) {
+    throw new Error(
+      `Session "${sourceSessionId}" is missing runtime kind metadata required for forking.`,
+    );
+  }
+
+  const sourceRuntime: RuntimeInfo = {
+    runtimeKind: sourceRuntimeKind,
+    runtimeId: sourceSession.runtimeId,
+    runId: sourceSession.runId,
+    runtimeRoute: sourceSession.runtimeRoute,
+    workingDirectory: sourceSession.workingDirectory,
+  };
+
+  try {
+    return {
+      runtimeKind: sourceRuntimeKind,
+      runtimeConnection: resolveRuntimeConnection(sourceRuntime),
+    };
+  } catch (error) {
+    throw new Error(
+      `Session "${sourceSessionId}" is missing live runtime context required for forking.`,
+      { cause: error },
+    );
+  }
 };
 
 export const executeForkStart = async ({
@@ -42,51 +77,34 @@ export const executeForkStart = async ({
     deps,
     sourceSessionId: input.sourceSessionId,
   });
+  const { runtimeKind: sourceRuntimeKind, runtimeConnection: sourceRuntimeConnection } =
+    requireForkSourceRuntime(input.sourceSessionId, sourceSession);
   const taskCard = resolveStartTask({ ctx, task: deps.task });
-  const resolved = await resolveRuntimeAndModel({
+  const selectedModel = input.selectedModel;
+
+  if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
+    throw new Error(
+      `Session "${input.sourceSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
+    );
+  }
+
+  const promptContext = await resolveScenarioAndPrompt({
     ctx,
     scenario: input.scenario,
-    requestedRuntimeKind: input.selectedModel.runtimeKind,
-    targetWorkingDirectory: sourceSession.workingDirectory,
     taskCard,
     deps,
   });
-  const selectedModel = input.selectedModel;
-
-  if (
-    sourceSession.runtimeKind &&
-    selectedModel.runtimeKind &&
-    sourceSession.runtimeKind !== selectedModel.runtimeKind
-  ) {
-    throw new Error(
-      `Session "${input.sourceSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceSession.runtimeKind}".`,
-    );
-  }
 
   assertScenarioStartPolicy({
     role: ctx.role,
-    scenario: resolved.resolvedScenario,
+    scenario: promptContext.resolvedScenario,
     startMode: input.startMode,
   });
 
-  const runtimeKind =
-    sourceSession.runtimeKind ??
-    resolved.runtime.runtimeKind ??
-    selectedModel?.runtimeKind ??
-    DEFAULT_RUNTIME_KIND;
-  const sourceRuntimeRoute = sourceSession.runtimeRoute ?? resolved.runtime.runtimeRoute;
-  if (!sourceRuntimeRoute) {
-    throw new Error(
-      `Session "${input.sourceSessionId}" is missing a live runtime route required for forking.`,
-    );
-  }
-  const runtimeConnection = resolveRuntimeRouteConnection(
-    sourceRuntimeRoute,
-    sourceSession.workingDirectory,
-  ).runtimeConnection;
+  const runtimeKind = sourceRuntimeKind;
   const supportedRuntimeConnection = requireRuntimeConnectionSupport(
     runtimeKind,
-    runtimeConnection,
+    sourceRuntimeConnection,
     "fork session",
   );
 
@@ -97,8 +115,8 @@ export const executeForkStart = async ({
     workingDirectory: sourceSession.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
-    scenario: resolved.resolvedScenario,
-    systemPrompt: resolved.systemPrompt,
+    scenario: promptContext.resolvedScenario,
+    systemPrompt: promptContext.systemPrompt,
     ...(sourceSession.runtimeId ? { runtimeId: sourceSession.runtimeId } : {}),
     ...(selectedModel ? { model: selectedModel } : {}),
     parentExternalSessionId: sourceSession.externalSessionId,
@@ -106,7 +124,7 @@ export const executeForkStart = async ({
 
   const startedCtx = {
     ...ctx,
-    resolvedScenario: resolved.resolvedScenario,
+    resolvedScenario: promptContext.resolvedScenario,
     summary,
   };
 
@@ -152,8 +170,8 @@ export const executeForkStart = async ({
           messages: buildSessionHeaderMessages({
             sessionId: summary.sessionId,
             role: ctx.role,
-            scenario: resolved.resolvedScenario,
-            systemPrompt: resolved.systemPrompt,
+            scenario: promptContext.resolvedScenario,
+            systemPrompt: promptContext.systemPrompt,
             startedAt: summary.startedAt,
             eventLabel: "forked",
           }),
@@ -169,23 +187,22 @@ export const executeForkStart = async ({
 
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,
-    runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
-    runId: sourceSession.runId ?? resolved.runtime.runId,
-    runtimeRoute: sourceRuntimeRoute,
+    runtimeId: sourceSession.runtimeId,
+    runId: sourceSession.runId,
+    runtimeRoute: sourceSession.runtimeRoute,
     runtimeConnection: supportedRuntimeConnection,
     workingDirectory: sourceSession.workingDirectory,
-    ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
   };
 
   return registerStartedSession({
     ctx,
     startedCtx,
     runtimeInfo: forkedRuntime,
-    systemPrompt: resolved.systemPrompt,
-    promptOverrides: resolved.promptOverrides,
+    systemPrompt: promptContext.systemPrompt,
+    promptOverrides: promptContext.promptOverrides,
     selectedModel,
     initialMessages,
     deps,
-    taskCard: resolved.taskCard,
+    taskCard,
   });
 };

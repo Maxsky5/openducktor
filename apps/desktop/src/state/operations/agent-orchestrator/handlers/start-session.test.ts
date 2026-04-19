@@ -1648,6 +1648,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
     };
     adapter.loadSessionHistory = async (input) => {
       expect(input.runtimeKind).toBe("opencode");
+      expect(input.runtimeConnection).toEqual({
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
       expect(input.externalSessionId).toBe("external-forked-pr-session");
       return [
         {
@@ -1685,7 +1690,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         kind: "opencode",
         runtimeId: "runtime-1",
         runId: "run-2",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -1712,6 +1717,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionId).toBe("forked-pr-session");
       expect(sessionsById["forked-pr-session"]?.scenario).toBe("build_pull_request_generation");
       expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
+      expect(sessionsById["forked-pr-session"]?.runtimeRoute).toEqual({
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+      });
       expect(
         sessionsById["forked-pr-session"]
           ? sessionMessagesToArray(sessionsById["forked-pr-session"])
@@ -1916,6 +1925,198 @@ describe("agent-orchestrator/handlers/start-session", () => {
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
+    }
+  });
+
+  test("fails when the hydrated source session has no live runtime context even if ensureRuntime resolves one", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const forkCalls: unknown[] = [];
+    let sessionsById: Record<string, AgentSessionState> = {
+      "source-build": {
+        runtimeKind: "opencode",
+        sessionId: "source-build",
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        repoPath: "/tmp/repo",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeRoute: null,
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        pendingPermissions: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: BUILD_SELECTION,
+        isLoadingModelCatalog: false,
+      },
+    };
+
+    adapter.forkSession = async (input) => {
+      forkCalls.push(input);
+      return {
+        runtimeKind: "opencode",
+        sessionId: "forked-from-runtime-connection",
+        externalSessionId: "external-forked-from-runtime-connection",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = { current: sessionsById };
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+        sessionsRef.current = sessionsById;
+      },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeRoute: null,
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:5555",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          startMode: "fork",
+          selectedModel: BUILD_SELECTION,
+          sourceSessionId: "source-build",
+        }),
+      ).rejects.toThrow(
+        'Session "source-build" is missing live runtime context required for forking.',
+      );
+      expect(forkCalls).toHaveLength(0);
+    } finally {
+      adapter.forkSession = originalForkSession;
+    }
+  });
+
+  test("fails explicitly when fork source runtime context cannot be resolved", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const forkCalls: unknown[] = [];
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "source-build": {
+          runtimeKind: "opencode",
+          sessionId: "source-build",
+          externalSessionId: "external-source-build",
+          taskId: "task-1",
+          repoPath: "/tmp/repo",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          runtimeId: null,
+          runId: null,
+          runtimeRoute: null,
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: BUILD_SELECTION,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+    adapter.forkSession = async (input) => {
+      forkCalls.push(input);
+      return {
+        runtimeKind: "opencode",
+        sessionId: "unexpected-fork",
+        externalSessionId: "unexpected-external-fork",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        role: "build",
+        scenario: "build_pull_request_generation",
+        status: "idle",
+      };
+    };
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeRoute: null,
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          startMode: "fork",
+          selectedModel: BUILD_SELECTION,
+          sourceSessionId: "source-build",
+        }),
+      ).rejects.toThrow(
+        'Session "source-build" is missing live runtime context required for forking.',
+      );
+      expect(forkCalls).toHaveLength(0);
+    } finally {
+      adapter.forkSession = originalForkSession;
     }
   });
 
