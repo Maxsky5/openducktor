@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
@@ -32,12 +32,10 @@ const createSnapshot = (): SettingsSnapshot => ({
 });
 
 describe("useSettingsModalDirtyState", () => {
-  test("marks sections dirty, calls the dirty callback, and resets when the modal closes", async () => {
-    const onDirtyChange = mock(() => {});
+  test("marks sections dirty and resets when the modal closes", async () => {
     const harness = createHookHarness({
       open: true,
       loadedSnapshot: createSnapshot(),
-      onDirtyChange,
     });
 
     await harness.mount();
@@ -48,7 +46,6 @@ describe("useSettingsModalDirtyState", () => {
       state.markDirty("chat");
     });
 
-    expect(onDirtyChange).toHaveBeenCalledTimes(3);
     expect(harness.getLatest().dirtySections).toEqual({
       chat: true,
       globalGit: false,
@@ -61,7 +58,6 @@ describe("useSettingsModalDirtyState", () => {
     await harness.update({
       open: false,
       loadedSnapshot: createSnapshot(),
-      onDirtyChange,
     });
 
     expect(harness.getLatest().dirtySections).toEqual({

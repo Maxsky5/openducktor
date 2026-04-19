@@ -11,7 +11,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import {
   ChecksStateContext,
@@ -23,6 +23,7 @@ import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-consta
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
+import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
@@ -202,11 +203,9 @@ export const useSettingsModalController = ({
     setSnapshotDraft,
   });
 
-  const clearSaveErrorRef = useRef<() => void>(() => {});
   const { dirtySections, markDirty } = useSettingsModalDirtyState({
     open,
     loadedSnapshot,
-    onDirtyChange: () => clearSaveErrorRef.current(),
   });
 
   const selectedRepoDefaultWorktreeBasePath = selectedWorkspace?.defaultWorktreeBasePath ?? null;
@@ -249,83 +248,31 @@ export const useSettingsModalController = ({
     saveGlobalGitConfig,
     saveSettingsSnapshot,
   });
-  clearSaveErrorRef.current = clearSaveError;
-
-  const updateSelectedRepoConfig = useCallback(
-    (updater: (current: RepoConfig) => RepoConfig): void => {
-      markDirty("repoSettings");
-      applySelectedRepoConfigUpdate(updater);
+  const {
+    updateSelectedRepoConfig,
+    updateGlobalGitConfig,
+    updateGlobalChatSettings,
+    updateGlobalKanbanSettings,
+    updateGlobalAutopilotSettings,
+    updateGlobalPromptOverrides,
+    updateRepoPromptOverrides,
+    updateSelectedRepoAgentDefault,
+    clearSelectedRepoAgentDefault,
+  } = useSettingsModalDirtyDraftActions({
+    clearSaveError,
+    markDirty,
+    draftActions: {
+      updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
+      updateGlobalGitConfig: applyGlobalGitConfigUpdate,
+      updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
+      updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
+      updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
+      updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
+      updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
+      clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
     },
-    [applySelectedRepoConfigUpdate, markDirty],
-  );
-
-  const updateGlobalGitConfig = useCallback(
-    (updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"]): void => {
-      markDirty("globalGit");
-      applyGlobalGitConfigUpdate(updater);
-    },
-    [applyGlobalGitConfigUpdate, markDirty],
-  );
-
-  const updateGlobalChatSettings = useCallback(
-    (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
-      markDirty("chat");
-      applyGlobalChatSettingsUpdate(updater);
-    },
-    [applyGlobalChatSettingsUpdate, markDirty],
-  );
-
-  const updateGlobalKanbanSettings = useCallback(
-    (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
-      markDirty("kanban");
-      applyGlobalKanbanSettingsUpdate(updater);
-    },
-    [applyGlobalKanbanSettingsUpdate, markDirty],
-  );
-
-  const updateGlobalPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      markDirty("globalPromptOverrides");
-      applyGlobalPromptOverridesUpdate(updater);
-    },
-    [applyGlobalPromptOverridesUpdate, markDirty],
-  );
-
-  const updateGlobalAutopilotSettings = useCallback(
-    (updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"]): void => {
-      markDirty("autopilot");
-      applyGlobalAutopilotSettingsUpdate(updater);
-    },
-    [applyGlobalAutopilotSettingsUpdate, markDirty],
-  );
-
-  const updateRepoPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      markDirty("repoSettings");
-      applyRepoPromptOverridesUpdate(updater);
-    },
-    [applyRepoPromptOverridesUpdate, markDirty],
-  );
-
-  const updateSelectedRepoAgentDefault = useCallback(
-    (
-      role: "spec" | "planner" | "build" | "qa",
-      field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
-      value: string,
-    ): void => {
-      markDirty("repoSettings");
-      applySelectedRepoAgentDefaultUpdate(role, field, value);
-    },
-    [applySelectedRepoAgentDefaultUpdate, markDirty],
-  );
-
-  const clearSelectedRepoAgentDefault = useCallback(
-    (role: "spec" | "planner" | "build" | "qa"): void => {
-      markDirty("repoSettings");
-      applyClearSelectedRepoAgentDefault(role);
-    },
-    [applyClearSelectedRepoAgentDefault, markDirty],
-  );
+  });
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
     selectedRepoPath: selectedWorkspaceRepoPath,

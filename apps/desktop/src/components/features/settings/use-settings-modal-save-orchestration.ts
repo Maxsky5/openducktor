@@ -7,6 +7,13 @@ import {
   normalizeGlobalGitConfigForSave,
   normalizeSnapshotForSave,
 } from "./settings-modal-normalization";
+import {
+  buildPromptValidationSaveError,
+  buildRepoScriptValidationSaveError,
+  hasAnyDirtySections,
+  hasSameNormalizedGlobalGitConfig,
+  isGlobalGitOnlySave,
+} from "./settings-modal-save-policy";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 type UseSettingsModalSaveOrchestrationArgs = {
@@ -32,22 +39,6 @@ type SettingsModalSaveOrchestration = {
   markRepoScriptSaveAttempt: () => void;
   submit: () => Promise<boolean>;
 };
-
-const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
-  dirtySections.chat ||
-  dirtySections.globalGit ||
-  dirtySections.kanban ||
-  dirtySections.autopilot ||
-  dirtySections.globalPromptOverrides ||
-  dirtySections.repoSettings;
-
-const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
-  dirtySections.globalGit &&
-  !dirtySections.chat &&
-  !dirtySections.kanban &&
-  !dirtySections.autopilot &&
-  !dirtySections.globalPromptOverrides &&
-  !dirtySections.repoSettings;
 
 export const useSettingsModalSaveOrchestration = ({
   open,
@@ -102,8 +93,7 @@ export const useSettingsModalSaveOrchestration = ({
     }
 
     if (hasPromptValidationErrors) {
-      const suffix = promptValidationState.totalErrorCount > 1 ? "s" : "";
-      const reason = `Fix ${promptValidationState.totalErrorCount} prompt placeholder error${suffix} before saving.`;
+      const reason = buildPromptValidationSaveError(promptValidationState.totalErrorCount);
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
@@ -113,13 +103,11 @@ export const useSettingsModalSaveOrchestration = ({
 
     if (hasRepoScriptValidationErrors) {
       setHasAttemptedRepoScriptSubmit(true);
-      const suffix = repoScriptValidationErrorCount > 1 ? "s" : "";
-      const invalidRepoSummary = invalidRepoPathsWithDevServerErrors
-        .map((workspaceId) =>
-          workspaceId === selectedWorkspaceId ? "the selected repository" : `\`${workspaceId}\``,
-        )
-        .join(", ");
-      const reason = `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
+      const reason = buildRepoScriptValidationSaveError({
+        invalidRepoPathsWithDevServerErrors,
+        repoScriptValidationErrorCount,
+        selectedWorkspaceId,
+      });
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
@@ -137,10 +125,7 @@ export const useSettingsModalSaveOrchestration = ({
 
       if (isGlobalGitOnlySave(dirtySections)) {
         const normalizedGit = normalizeGlobalGitConfigForSave(snapshotDraft.git);
-        const loadedGit = loadedSnapshot
-          ? normalizeGlobalGitConfigForSave(loadedSnapshot.git)
-          : null;
-        if (loadedGit && loadedGit.defaultMergeMethod === normalizedGit.defaultMergeMethod) {
+        if (hasSameNormalizedGlobalGitConfig(loadedSnapshot, normalizedGit)) {
           return true;
         }
 

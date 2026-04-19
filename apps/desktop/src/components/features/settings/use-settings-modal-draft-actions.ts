@@ -13,7 +13,7 @@ type UseSettingsModalDraftActionsArgs = {
   setSnapshotDraft: Dispatch<SetStateAction<SettingsSnapshot | null>>;
 };
 
-type SettingsModalDraftActions = {
+export type SettingsModalDraftActions = {
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (updater: (current: GlobalGitConfig) => GlobalGitConfig) => void;
   updateGlobalChatSettings: (

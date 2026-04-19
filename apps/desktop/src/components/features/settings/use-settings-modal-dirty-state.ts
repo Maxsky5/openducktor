@@ -22,7 +22,6 @@ export const EMPTY_DIRTY_SECTIONS: DirtySections = {
 type UseSettingsModalDirtyStateArgs = {
   open: boolean;
   loadedSnapshot: SettingsSnapshot | null;
-  onDirtyChange?: () => void;
 };
 
 type SettingsModalDirtyState = {
@@ -33,26 +32,21 @@ type SettingsModalDirtyState = {
 export const useSettingsModalDirtyState = ({
   open,
   loadedSnapshot,
-  onDirtyChange,
 }: UseSettingsModalDirtyStateArgs): SettingsModalDirtyState => {
   const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
 
-  const markDirty = useCallback(
-    (section: keyof DirtySections): void => {
-      onDirtyChange?.();
-      setDirtySections((current) => {
-        if (current[section]) {
-          return current;
-        }
+  const markDirty = useCallback((section: keyof DirtySections): void => {
+    setDirtySections((current) => {
+      if (current[section]) {
+        return current;
+      }
 
-        return {
-          ...current,
-          [section]: true,
-        };
-      });
-    },
-    [onDirtyChange],
-  );
+      return {
+        ...current,
+        [section]: true,
+      };
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) {
