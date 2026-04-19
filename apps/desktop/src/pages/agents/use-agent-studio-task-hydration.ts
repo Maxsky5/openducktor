@@ -116,8 +116,6 @@ export function useAgentStudioTaskHydration({
     shouldEnsureSessionReady,
   ]);
 
-  const isRequestPending =
-    requestState.sessionId === activeSessionId && requestState.status === "pending";
   const shouldShowPendingHydrationState = shouldEnsureSessionReady;
 
   return {
@@ -128,7 +126,7 @@ export function useAgentStudioTaskHydration({
       ? lifecycle.isHistoryHydrationFailed || isRequestFailed
       : false,
     isActiveSessionHistoryHydrating: activeSessionId
-      ? shouldShowPendingHydrationState || lifecycle.isHydratingHistory || isRequestPending
+      ? shouldShowPendingHydrationState || lifecycle.isHydratingHistory
       : false,
     isWaitingForRuntimeReadiness: activeSessionId
       ? lifecycle.isWaitingForRuntimeReadiness && !isRequestFailed

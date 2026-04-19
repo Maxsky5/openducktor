@@ -268,7 +268,10 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   showSessionLoadingOverlay,
 }: AgentChatTranscriptProps): ReactElement {
   const visibleStatusOverlay =
-    statusOverlay?.kind === "runtime_waiting" || showSessionLoadingOverlay ? statusOverlay : null;
+    statusOverlay !== null &&
+    (statusOverlay.kind === "runtime_waiting" || showSessionLoadingOverlay)
+      ? statusOverlay
+      : null;
 
   return (
     <div

@@ -117,7 +117,7 @@ export const deriveAgentSessionViewLifecycle = ({
     return {
       phase: "ready",
       canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-      canRenderHistory: hasTranscript,
+      canRenderHistory: true,
       isWaitingForRuntimeReadiness: false,
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
