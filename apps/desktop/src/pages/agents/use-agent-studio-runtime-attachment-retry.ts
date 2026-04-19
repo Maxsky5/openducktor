@@ -99,20 +99,23 @@ export function useAgentStudioRuntimeAttachmentRetry({
   shouldWaitForSessionRuntime,
   activeRuntimeAttachmentKey,
   runtimeAttachmentCandidates,
-  retrySessionRuntimeAttachment,
+  ensureSessionReadyForView,
   refreshRuntimeAttachmentSources,
+  repoReadinessState,
 }: {
   activeTaskId: string;
   activeSessionId: string | null;
   shouldWaitForSessionRuntime: boolean;
   activeRuntimeAttachmentKey: string | null;
   runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
-  retrySessionRuntimeAttachment: (input: {
+  ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
+    repoReadinessState: "ready" | "checking" | "blocked";
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
+  repoReadinessState: "ready" | "checking" | "blocked";
 }): void {
   const lastAttachmentAttemptRef = useRef<{
     sessionId: string;
@@ -157,9 +160,10 @@ export function useAgentStudioRuntimeAttachmentRetry({
       candidates: cloneRuntimeAttachmentCandidates(runtimeAttachmentCandidates),
     };
 
-    void retrySessionRuntimeAttachment({
+    void ensureSessionReadyForView({
       taskId: activeTaskId,
       sessionId: activeSessionId,
+      repoReadinessState,
       recoveryDedupKey,
     }).catch(() => {
       // The operation layer surfaces actionable errors.
@@ -168,7 +172,8 @@ export function useAgentStudioRuntimeAttachmentRetry({
     activeRuntimeAttachmentKey,
     activeSessionId,
     activeTaskId,
-    retrySessionRuntimeAttachment,
+    ensureSessionReadyForView,
+    repoReadinessState,
     runtimeAttachmentCandidates,
     shouldWaitForSessionRuntime,
   ]);
@@ -177,6 +182,10 @@ export function useAgentStudioRuntimeAttachmentRetry({
     if (!activeSessionId || !shouldWaitForSessionRuntime) {
       return;
     }
+
+    void refreshRuntimeAttachmentSources().catch(() => {
+      // The refresh path is best-effort; attachment attempts surface actionable failures.
+    });
 
     const intervalId = window.setInterval(() => {
       void refreshRuntimeAttachmentSources().catch(() => {
