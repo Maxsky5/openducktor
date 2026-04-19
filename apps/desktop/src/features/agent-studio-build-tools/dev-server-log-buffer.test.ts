@@ -257,7 +257,7 @@ describe("dev-server-log-buffer", () => {
     ).toBe(true);
   });
 
-  test("preserves live-only chunks when a later empty snapshot no longer mirrors them", () => {
+  test("drops a stale snapshot prefix while preserving a newer live-only suffix", () => {
     const store = createDevServerTerminalBufferStore();
     replaceDevServerTerminalBuffer(store, "frontend", [
       {
@@ -274,12 +274,68 @@ describe("dev-server-log-buffer", () => {
       timestamp: "2026-03-25T10:00:01.000Z",
     });
 
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [buildScript({ bufferedTerminalChunks: [] })],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([
+      {
+        scriptId: "frontend",
+        sequence: 1,
+        data: "live-only\r\n",
+        timestamp: "2026-03-25T10:00:01.000Z",
+      },
+    ]);
     expect(
       shouldReplaceDevServerTerminalBufferFromScript(
         getDevServerTerminalBufferReplacementContext(store, "frontend"),
         buildScript({ bufferedTerminalChunks: [] }),
       ),
     ).toBe(false);
+    expect(getDevServerTerminalBufferReplacementContext(store, "frontend")?.snapshot).toEqual({
+      count: 0,
+      firstSequence: null,
+      lastSequence: null,
+    });
+  });
+
+  test("derives snapshot metadata from the stored buffer after replacement", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 2,
+        data: "latest\r\n",
+        timestamp: "2026-03-25T10:00:02.000Z",
+      },
+      {
+        scriptId: "frontend",
+        sequence: 1,
+        data: "older\r\n",
+        timestamp: "2026-03-25T10:00:01.000Z",
+      },
+    ]);
+
+    expect(getDevServerTerminalBufferReplacementContext(store, "frontend")?.snapshot).toEqual({
+      count: 1,
+      firstSequence: 2,
+      lastSequence: 2,
+    });
+  });
+
+  test("does not bump reset token when replacing an empty buffer with another empty replay", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    replaceDevServerTerminalBuffer(store, "frontend", []);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(0);
+
+    replaceDevServerTerminalBuffer(store, "frontend", []);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(0);
   });
 
   test("reconciles the store with authoritative snapshots while pruning removed scripts", () => {

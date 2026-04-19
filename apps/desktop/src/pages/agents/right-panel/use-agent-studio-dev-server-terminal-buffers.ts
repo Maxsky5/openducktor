@@ -3,9 +3,11 @@ import { useCallback, useRef, useState } from "react";
 import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
+  applyDevServerTerminalBufferReplacement,
   createDevServerTerminalBufferStore,
   type DevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
+  getDevServerTerminalBufferReplacement,
   getDevServerTerminalBufferReplacementContext,
   reconcileDevServerTerminalBufferStore,
   replaceDevServerTerminalBuffer,
@@ -125,22 +127,32 @@ export const useAgentStudioDevServerTerminalBuffers =
           const currentLastSequence = currentBuffer?.lastSequence ?? null;
           const baselineLastSequence =
             pendingReplaySync.baselineByScriptId.get(script.scriptId) ?? null;
+          const currentContext = getDevServerTerminalBufferReplacementContext(
+            terminalBuffersRef.current,
+            script.scriptId,
+          );
+          // Replace if no live replay was observed, if we only re-observed the baseline,
+          // or if the authoritative replay window proves the local buffer is stale.
           const shouldReplaceReplay =
             !pendingReplaySync.observedScriptIds.has(script.scriptId) ||
             currentLastSequence === baselineLastSequence ||
-            shouldReplaceDevServerTerminalBufferFromScript(
-              getDevServerTerminalBufferReplacementContext(
-                terminalBuffersRef.current,
-                script.scriptId,
-              ),
-              script,
-            );
+            shouldReplaceDevServerTerminalBufferFromScript(currentContext, script);
 
           if (shouldReplaceReplay) {
-            replaceDevServerTerminalBuffer(
+            const replacement =
+              !pendingReplaySync.observedScriptIds.has(script.scriptId) ||
+              currentLastSequence === baselineLastSequence
+                ? getDevServerTerminalBufferReplacement(null, script)
+                : getDevServerTerminalBufferReplacement(currentContext, script);
+            if (replacement === null) {
+              continue;
+            }
+
+            // Mutation success replaces the replay baseline when no new live output arrived yet.
+            applyDevServerTerminalBufferReplacement(
               terminalBuffersRef.current,
               script.scriptId,
-              script.bufferedTerminalChunks,
+              replacement,
             );
           }
         }

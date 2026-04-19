@@ -22,7 +22,13 @@ type DevServerTerminalSequenceWindow = {
 
 export type DevServerTerminalBufferReplacementContext = {
   current: DevServerTerminalSequenceWindow;
+  currentEntries: readonly AgentStudioDevServerTerminalChunkEntry[];
   snapshot: DevServerTerminalSequenceWindow;
+};
+
+export type DevServerTerminalBufferReplacement = {
+  snapshotWindow: DevServerTerminalSequenceWindow;
+  terminalChunks: readonly DevServerTerminalChunk[];
 };
 
 type DevServerTerminalBufferState = {
@@ -69,6 +75,25 @@ const readCurrentBufferWindow = (
         : (buffer.entries[buffer.head % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS]?.sequence ?? null),
     lastSequence: buffer.lastSequence,
   };
+};
+
+const readCurrentBufferEntries = (
+  buffer: DevServerTerminalBufferState,
+): AgentStudioDevServerTerminalChunkEntry[] => {
+  return Array.from({ length: buffer.size }, (_, offset) => {
+    const entry = buffer.entries[(buffer.head + offset) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS];
+    if (!entry) {
+      throw new Error(`Missing dev server terminal chunk at logical offset ${offset}.`);
+    }
+
+    return entry;
+  });
+};
+
+const EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW: DevServerTerminalSequenceWindow = {
+  count: 0,
+  firstSequence: null,
+  lastSequence: null,
 };
 
 const readSnapshotBufferWindow = (
@@ -136,6 +161,7 @@ export const replaceDevServerTerminalBuffer = (
 ): void => {
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
   const trimmedChunks = trimDevServerTerminalChunks(terminalChunks);
+  const shouldResetTerminal = buffer.size > 0 || trimmedChunks.length > 0;
 
   buffer.entries.length = 0;
   buffer.head = 0;
@@ -143,16 +169,32 @@ export const replaceDevServerTerminalBuffer = (
   buffer.lastSequence = null;
   buffer.firstSnapshotSequence = null;
   buffer.lastSnapshotSequence = null;
-  buffer.resetToken += 1;
+  if (shouldResetTerminal) {
+    buffer.resetToken += 1;
+  }
   buffer.snapshotEntryCount = 0;
 
   for (const terminalChunk of trimmedChunks) {
     appendDevServerTerminalChunk(store, terminalChunk);
   }
 
-  buffer.firstSnapshotSequence = trimmedChunks[0]?.sequence ?? null;
-  buffer.lastSnapshotSequence = trimmedChunks.at(-1)?.sequence ?? null;
-  buffer.snapshotEntryCount = trimmedChunks.length;
+  const snapshotWindow = readCurrentBufferWindow(buffer);
+  buffer.firstSnapshotSequence = snapshotWindow.firstSequence;
+  buffer.lastSnapshotSequence = snapshotWindow.lastSequence;
+  buffer.snapshotEntryCount = snapshotWindow.count;
+};
+
+export const applyDevServerTerminalBufferReplacement = (
+  store: DevServerTerminalBufferStore,
+  scriptId: string,
+  replacement: DevServerTerminalBufferReplacement,
+): void => {
+  replaceDevServerTerminalBuffer(store, scriptId, [...replacement.terminalChunks]);
+
+  const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
+  buffer.firstSnapshotSequence = replacement.snapshotWindow.firstSequence;
+  buffer.lastSnapshotSequence = replacement.snapshotWindow.lastSequence;
+  buffer.snapshotEntryCount = replacement.snapshotWindow.count;
 };
 
 export const syncDevServerTerminalBufferStore = (
@@ -187,6 +229,7 @@ export const getDevServerTerminalBufferReplacementContext = (
 
   return {
     current: readCurrentBufferWindow(buffer),
+    currentEntries: readCurrentBufferEntries(buffer),
     snapshot: readSnapshotBufferWindow(buffer),
   };
 };
@@ -205,18 +248,91 @@ export const getDevServerTerminalBuffer = (
   }
 
   return {
-    entries: Array.from({ length: buffer.size }, (_, offset) => {
-      const entry =
-        buffer.entries[(buffer.head + offset) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS];
-      if (!entry) {
-        throw new Error(`Missing dev server terminal chunk at logical offset ${offset}.`);
-      }
-
-      return entry;
-    }),
+    entries: readCurrentBufferEntries(buffer),
     lastSequence: buffer.lastSequence,
     resetToken: buffer.resetToken,
   };
+};
+
+export const getDevServerTerminalBufferReplacement = (
+  currentContext: DevServerTerminalBufferReplacementContext | null,
+  script: DevServerScriptState,
+  force = false,
+): DevServerTerminalBufferReplacement | null => {
+  const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
+  const nextWindow = readBufferedSequenceWindow(nextChunks);
+
+  if (force || currentContext === null) {
+    return {
+      snapshotWindow: nextWindow,
+      terminalChunks: nextChunks,
+    };
+  }
+
+  const currentWindow = currentContext.current;
+  const currentBufferMirrorsSnapshot =
+    currentWindow.count === currentContext.snapshot.count &&
+    currentWindow.firstSequence === currentContext.snapshot.firstSequence &&
+    currentWindow.lastSequence === currentContext.snapshot.lastSequence;
+
+  if (nextWindow.lastSequence === null) {
+    if (currentWindow.count === 0 || currentContext.snapshot.lastSequence === null) {
+      return null;
+    }
+
+    const snapshotLastSequence = currentContext.snapshot.lastSequence;
+    const liveOnlyChunks = currentContext.currentEntries.filter(
+      (chunk) => chunk.sequence > snapshotLastSequence,
+    );
+    if (liveOnlyChunks.length > 0) {
+      return {
+        snapshotWindow: EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW,
+        terminalChunks: trimDevServerTerminalChunks([...liveOnlyChunks]),
+      };
+    }
+
+    if (!currentBufferMirrorsSnapshot) {
+      return {
+        snapshotWindow: EMPTY_DEV_SERVER_TERMINAL_SEQUENCE_WINDOW,
+        terminalChunks: [],
+      };
+    }
+
+    return {
+      snapshotWindow: nextWindow,
+      terminalChunks: nextChunks,
+    };
+  }
+
+  if (currentWindow.lastSequence === null) {
+    return {
+      snapshotWindow: nextWindow,
+      terminalChunks: nextChunks,
+    };
+  }
+
+  if (nextWindow.lastSequence > currentWindow.lastSequence) {
+    return {
+      snapshotWindow: nextWindow,
+      terminalChunks: nextChunks,
+    };
+  }
+
+  if (nextWindow.lastSequence < currentWindow.lastSequence) {
+    return null;
+  }
+
+  if (
+    nextWindow.count !== currentWindow.count ||
+    nextWindow.firstSequence !== currentWindow.firstSequence
+  ) {
+    return {
+      snapshotWindow: nextWindow,
+      terminalChunks: nextChunks,
+    };
+  }
+
+  return null;
 };
 
 export const shouldReplaceDevServerTerminalBufferFromScript = (
@@ -224,38 +340,7 @@ export const shouldReplaceDevServerTerminalBufferFromScript = (
   script: DevServerScriptState,
   force = false,
 ): boolean => {
-  if (force || currentContext === null) {
-    return true;
-  }
-
-  const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
-  const currentWindow = currentContext.current;
-  const nextWindow = readBufferedSequenceWindow(nextChunks);
-  const currentBufferMirrorsSnapshot =
-    currentWindow.count === currentContext.snapshot.count &&
-    currentWindow.firstSequence === currentContext.snapshot.firstSequence &&
-    currentWindow.lastSequence === currentContext.snapshot.lastSequence;
-
-  if (nextWindow.lastSequence === null) {
-    return currentWindow.count > 0 && currentBufferMirrorsSnapshot;
-  }
-
-  if (currentWindow.lastSequence === null) {
-    return true;
-  }
-
-  if (nextWindow.lastSequence > currentWindow.lastSequence) {
-    return true;
-  }
-
-  if (nextWindow.lastSequence < currentWindow.lastSequence) {
-    return false;
-  }
-
-  return (
-    nextWindow.count !== currentWindow.count ||
-    nextWindow.firstSequence !== currentWindow.firstSequence
-  );
+  return getDevServerTerminalBufferReplacement(currentContext, script, force) !== null;
 };
 
 export const reconcileDevServerTerminalBufferStore = (
@@ -276,12 +361,16 @@ export const reconcileDevServerTerminalBufferStore = (
   }
 
   for (const script of state.scripts) {
-    const currentContext = getDevServerTerminalBufferReplacementContext(store, script.scriptId);
-    if (!shouldReplaceDevServerTerminalBufferFromScript(currentContext, script, force)) {
+    const replacement = getDevServerTerminalBufferReplacement(
+      getDevServerTerminalBufferReplacementContext(store, script.scriptId),
+      script,
+      force,
+    );
+    if (replacement === null) {
       continue;
     }
 
-    replaceDevServerTerminalBuffer(store, script.scriptId, script.bufferedTerminalChunks);
+    applyDevServerTerminalBufferReplacement(store, script.scriptId, replacement);
     didChange = true;
   }
 
