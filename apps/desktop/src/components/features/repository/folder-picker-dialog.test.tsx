@@ -7,6 +7,8 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 const actualHostOperationsModule = await import("@/state/operations/host");
+const actualDialogModule = await import("@/components/ui/dialog");
+const actualScrollAreaModule = await import("@/components/ui/scroll-area");
 
 enableReactActEnvironment();
 
@@ -90,8 +92,8 @@ describe("FolderPickerDialog", () => {
   afterEach(async () => {
     await restoreMockedModules([
       ["@/state/operations/host", async () => actualHostOperationsModule],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
-      ["@/components/ui/scroll-area", () => import("@/components/ui/scroll-area")],
+      ["@/components/ui/dialog", async () => actualDialogModule],
+      ["@/components/ui/scroll-area", async () => actualScrollAreaModule],
     ]);
   });
 

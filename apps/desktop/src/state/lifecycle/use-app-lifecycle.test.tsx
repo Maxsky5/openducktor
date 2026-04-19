@@ -11,6 +11,7 @@ import {
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const actualHostClientModule = await import("@/lib/host-client");
+const actualSonnerModule = await import("sonner");
 
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
@@ -165,7 +166,7 @@ afterEach(() => {
 afterEach(async () => {
   await restoreMockedModules([
     ["@/lib/host-client", async () => actualHostClientModule],
-    ["sonner", () => import("sonner")],
+    ["sonner", async () => actualSonnerModule],
   ]);
 });
 

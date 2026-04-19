@@ -8,6 +8,7 @@ import {
 } from "./agent-studio-test-utils";
 
 const actualSharedHostModule = await import("@/state/operations/shared/host");
+const actualSonnerModule = await import("sonner");
 
 enableReactActEnvironment();
 
@@ -81,7 +82,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await restoreMockedModules([
     ["@/state/operations/shared/host", async () => actualSharedHostModule],
-    ["sonner", () => import("sonner")],
+    ["sonner", async () => actualSonnerModule],
   ]);
 });
 

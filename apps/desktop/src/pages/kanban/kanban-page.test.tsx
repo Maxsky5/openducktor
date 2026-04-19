@@ -840,9 +840,12 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(latestLocation).toContain("/agents?task=TASK-123");
     await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.", {
-      description: "config unavailable",
-    });
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Session started, but the kickoff prompt failed to send.",
+      {
+        description: "config unavailable",
+      },
+    );
     expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
 
     await act(async () => {
@@ -906,10 +909,13 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.", {
-      description:
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
-    });
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Session started, but the kickoff prompt failed to send.",
+      {
+        description:
+          'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
+      },
+    );
     expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
 
     await act(async () => {

@@ -58,7 +58,7 @@ export const startKanbanSessionFlow = async ({
     onPostStartActionError: (action, error) => {
       const failureMessage =
         action === "kickoff"
-          ? "Session started, but kickoff message failed."
+          ? "Session started, but the kickoff prompt failed to send."
           : "Session started, but feedback message failed.";
       toast.error(failureMessage, {
         description: error.message,
