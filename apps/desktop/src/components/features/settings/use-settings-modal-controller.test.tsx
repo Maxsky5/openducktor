@@ -424,6 +424,15 @@ describe("useSettingsModalController", () => {
         "Fix 1 dev server field error in the selected repository before saving.",
       );
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+      await harness.run((state) => {
+        state.updateSelectedRepoConfig((repoConfig) => ({
+          ...repoConfig,
+          devServers: [{ id: "frontend", name: "Frontend", command: "pnpm dev" }],
+        }));
+      });
+
+      expect(harness.getLatest().saveError).toBeNull();
     } finally {
       await harness.unmount();
     }

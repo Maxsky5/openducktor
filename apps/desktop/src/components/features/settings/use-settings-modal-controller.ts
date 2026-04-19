@@ -11,14 +11,8 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import {
-  buildDevServerDraftValidationMap,
-  countDevServerDraftValidationErrors,
-  getNeededCatalogRuntimeKinds,
-} from "@/components/features/settings";
-import { errorMessage } from "@/lib/errors";
+import { useEffect, useMemo } from "react";
+import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import {
   ChecksStateContext,
   useRequiredContext,
@@ -27,33 +21,16 @@ import {
 } from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
-import {
-  normalizeGlobalGitConfigForSave,
-  normalizeSnapshotForSave,
-} from "./settings-modal-normalization";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
+import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
+import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
+import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-script-validation";
+import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
+import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
-
-type DirtySections = {
-  chat: boolean;
-  globalGit: boolean;
-  kanban: boolean;
-  autopilot: boolean;
-  globalPromptOverrides: boolean;
-  repoSettings: boolean;
-};
-
-const EMPTY_DIRTY_SECTIONS: DirtySections = {
-  chat: false,
-  globalGit: false,
-  kanban: false,
-  autopilot: false,
-  globalPromptOverrides: false,
-  repoSettings: false,
-};
 
 export type SettingsModalController = {
   isLoadingSettings: boolean;
@@ -146,11 +123,6 @@ export const useSettingsModalController = ({
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
-  const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
-
   const {
     loadedSnapshot,
     snapshotDraft,
@@ -231,6 +203,11 @@ export const useSettingsModalController = ({
     setSnapshotDraft,
   });
 
+  const { dirtySections, markDirty } = useSettingsModalDirtyState({
+    open,
+    loadedSnapshot,
+  });
+
   const selectedRepoDefaultWorktreeBasePath = selectedWorkspace?.defaultWorktreeBasePath ?? null;
   const selectedRepoEffectiveWorktreeBasePath = useMemo(() => {
     const draftWorktreeBasePath = selectedRepoConfig?.worktreeBasePath?.trim();
@@ -240,295 +217,88 @@ export const useSettingsModalController = ({
 
     return selectedRepoDefaultWorktreeBasePath;
   }, [selectedRepoConfig?.worktreeBasePath, selectedRepoDefaultWorktreeBasePath]);
-  const selectedRepoDevServerValidationErrors = useMemo(() => {
-    if (!selectedRepoConfig) {
-      return {};
-    }
-
-    return buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []);
-  }, [selectedRepoConfig]);
-  const repoScriptValidationSummary = useMemo(() => {
-    if (!snapshotDraft) {
-      return {
-        invalidRepoPathsWithDevServerErrors: [] as string[],
-        repoScriptValidationErrorCount: 0,
-      };
-    }
-
-    const invalidRepoPathsWithDevServerErrors: string[] = [];
-    let repoScriptValidationErrorCount = 0;
-
-    for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
-      const errorCount = countDevServerDraftValidationErrors(repoConfig.devServers ?? []);
-      if (errorCount > 0) {
-        invalidRepoPathsWithDevServerErrors.push(workspaceId);
-        repoScriptValidationErrorCount += errorCount;
-      }
-    }
-
-    invalidRepoPathsWithDevServerErrors.sort();
-
-    return {
-      invalidRepoPathsWithDevServerErrors,
-      repoScriptValidationErrorCount,
-    };
-  }, [snapshotDraft]);
-  const { invalidRepoPathsWithDevServerErrors, repoScriptValidationErrorCount } =
-    repoScriptValidationSummary;
-  const hasRepoScriptValidationErrors = repoScriptValidationErrorCount > 0;
-  const showRepoScriptValidationErrors =
-    hasAttemptedRepoScriptSubmit && hasRepoScriptValidationErrors;
-
-  const markRepoScriptSaveAttempt = useCallback((): void => {
-    setHasAttemptedRepoScriptSubmit(true);
-  }, []);
-
-  const markDirty = useCallback((section: keyof DirtySections): void => {
-    setSaveError(null);
-    setDirtySections((current) => {
-      if (current[section]) {
-        return current;
-      }
-      return {
-        ...current,
-        [section]: true,
-      };
-    });
-  }, []);
-
-  const updateSelectedRepoConfig = useCallback(
-    (updater: (current: RepoConfig) => RepoConfig): void => {
-      markDirty("repoSettings");
-      applySelectedRepoConfigUpdate(updater);
-    },
-    [applySelectedRepoConfigUpdate, markDirty],
-  );
-
-  const updateGlobalGitConfig = useCallback(
-    (updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"]): void => {
-      markDirty("globalGit");
-      applyGlobalGitConfigUpdate(updater);
-    },
-    [applyGlobalGitConfigUpdate, markDirty],
-  );
-
-  const updateGlobalChatSettings = useCallback(
-    (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
-      markDirty("chat");
-      applyGlobalChatSettingsUpdate(updater);
-    },
-    [applyGlobalChatSettingsUpdate, markDirty],
-  );
-
-  const updateGlobalKanbanSettings = useCallback(
-    (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
-      markDirty("kanban");
-      applyGlobalKanbanSettingsUpdate(updater);
-    },
-    [applyGlobalKanbanSettingsUpdate, markDirty],
-  );
-
-  const updateGlobalPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      markDirty("globalPromptOverrides");
-      applyGlobalPromptOverridesUpdate(updater);
-    },
-    [applyGlobalPromptOverridesUpdate, markDirty],
-  );
-
-  const updateGlobalAutopilotSettings = useCallback(
-    (updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"]): void => {
-      markDirty("autopilot");
-      applyGlobalAutopilotSettingsUpdate(updater);
-    },
-    [applyGlobalAutopilotSettingsUpdate, markDirty],
-  );
-
-  const updateRepoPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      markDirty("repoSettings");
-      applyRepoPromptOverridesUpdate(updater);
-    },
-    [applyRepoPromptOverridesUpdate, markDirty],
-  );
-
-  const updateSelectedRepoAgentDefault = useCallback(
-    (
-      role: "spec" | "planner" | "build" | "qa",
-      field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
-      value: string,
-    ): void => {
-      markDirty("repoSettings");
-      applySelectedRepoAgentDefaultUpdate(role, field, value);
-    },
-    [applySelectedRepoAgentDefaultUpdate, markDirty],
-  );
-
-  const clearSelectedRepoAgentDefault = useCallback(
-    (role: "spec" | "planner" | "build" | "qa"): void => {
-      markDirty("repoSettings");
-      applyClearSelectedRepoAgentDefault(role);
-    },
-    [applyClearSelectedRepoAgentDefault, markDirty],
-  );
-
-  useEffect(() => {
-    if (!open) {
-      setDirtySections(EMPTY_DIRTY_SECTIONS);
-      setSaveError(null);
-      setHasAttemptedRepoScriptSubmit(false);
-      clearSettingsError();
-    }
-  }, [clearSettingsError, open]);
-
-  useEffect(() => {
-    if (!open || !loadedSnapshot) {
-      return;
-    }
-    setDirtySections(EMPTY_DIRTY_SECTIONS);
-    setHasAttemptedRepoScriptSubmit(false);
-  }, [loadedSnapshot, open]);
-
-  useEffect(() => {
-    if (!hasRepoScriptValidationErrors) {
-      setHasAttemptedRepoScriptSubmit(false);
-    }
-  }, [hasRepoScriptValidationErrors]);
-
-  const detectSelectedRepoGithubRepository = useCallback(async () => {
-    if (!selectedWorkspaceRepoPath) {
-      return null;
-    }
-
-    const detected = await detectGithubRepository(selectedWorkspaceRepoPath);
-    if (!detected) {
-      return null;
-    }
-
-    updateSelectedRepoConfig((repoConfig) => {
-      const currentGithub = repoConfig.git.providers.github ?? {
-        enabled: false,
-        autoDetected: false,
-      };
-      const hasExistingRepository = Boolean(currentGithub.repository);
-
-      return {
-        ...repoConfig,
-        git: {
-          ...repoConfig.git,
-          providers: {
-            ...repoConfig.git.providers,
-            github: {
-              enabled: hasExistingRepository ? currentGithub.enabled : true,
-              autoDetected: true,
-              repository: detected,
-            },
-          },
-        },
-      };
-    });
-
-    return detected;
-  }, [detectGithubRepository, selectedWorkspaceRepoPath, updateSelectedRepoConfig]);
-
-  const submit = useCallback(async (): Promise<boolean> => {
-    if (!snapshotDraft) {
-      return false;
-    }
-
-    if (hasPromptValidationErrors) {
-      const suffix = promptValidationState.totalErrorCount > 1 ? "s" : "";
-      const reason = `Fix ${promptValidationState.totalErrorCount} prompt placeholder error${suffix} before saving.`;
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (hasRepoScriptValidationErrors) {
-      setHasAttemptedRepoScriptSubmit(true);
-      const suffix = repoScriptValidationErrorCount > 1 ? "s" : "";
-      const invalidRepoSummary = invalidRepoPathsWithDevServerErrors
-        .map((workspaceId) =>
-          workspaceId === selectedWorkspaceId ? "the selected repository" : `\`${workspaceId}\``,
-        )
-        .join(", ");
-      const reason = `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      if (
-        !dirtySections.chat &&
-        !dirtySections.globalGit &&
-        !dirtySections.kanban &&
-        !dirtySections.autopilot &&
-        !dirtySections.globalPromptOverrides &&
-        !dirtySections.repoSettings
-      ) {
-        return true;
-      }
-
-      const shouldUseGlobalGitSave =
-        dirtySections.globalGit &&
-        !dirtySections.chat &&
-        !dirtySections.kanban &&
-        !dirtySections.autopilot &&
-        !dirtySections.globalPromptOverrides &&
-        !dirtySections.repoSettings;
-
-      if (shouldUseGlobalGitSave) {
-        const normalizedGit = normalizeGlobalGitConfigForSave(snapshotDraft.git);
-        const loadedGit = loadedSnapshot
-          ? normalizeGlobalGitConfigForSave(loadedSnapshot.git)
-          : null;
-        if (loadedGit && loadedGit.defaultMergeMethod === normalizedGit.defaultMergeMethod) {
-          return true;
-        }
-
-        await saveGlobalGitConfig(normalizedGit);
-      } else {
-        const normalizedSnapshot = normalizeSnapshotForSave(snapshotDraft);
-        await saveSettingsSnapshot(normalizedSnapshot);
-      }
-
-      return true;
-    } catch (error: unknown) {
-      const reason = errorMessage(error);
-      setSaveError(reason);
-      toast.error("Failed to save workspace settings", {
-        description: reason,
-      });
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [
-    dirtySections.chat,
-    dirtySections.globalGit,
-    dirtySections.kanban,
-    dirtySections.autopilot,
-    dirtySections.globalPromptOverrides,
-    dirtySections.repoSettings,
-    hasPromptValidationErrors,
-    hasRepoScriptValidationErrors,
+  const {
+    selectedRepoDevServerValidationErrors,
     invalidRepoPathsWithDevServerErrors,
-    loadedSnapshot,
-    promptValidationState.totalErrorCount,
     repoScriptValidationErrorCount,
+    hasRepoScriptValidationErrors,
+  } = useSettingsModalRepoScriptValidation({
+    snapshotDraft,
+    selectedRepoConfig,
+  });
+
+  const {
+    isSaving,
+    saveError,
+    showRepoScriptValidationErrors,
+    clearSaveError,
+    markRepoScriptSaveAttempt,
+    submit,
+  } = useSettingsModalSaveOrchestration({
+    open,
+    loadedSnapshot,
+    snapshotDraft,
+    dirtySections,
+    hasPromptValidationErrors,
+    promptValidationState,
+    hasRepoScriptValidationErrors,
+    repoScriptValidationErrorCount,
+    invalidRepoPathsWithDevServerErrors,
     selectedWorkspaceId,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
-    snapshotDraft,
-  ]);
+  });
+  const draftActions = useMemo(
+    () => ({
+      updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
+      updateGlobalGitConfig: applyGlobalGitConfigUpdate,
+      updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
+      updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
+      updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
+      updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
+      updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
+      clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
+    }),
+    [
+      applySelectedRepoConfigUpdate,
+      applyGlobalGitConfigUpdate,
+      applyGlobalChatSettingsUpdate,
+      applyGlobalKanbanSettingsUpdate,
+      applyGlobalAutopilotSettingsUpdate,
+      applyGlobalPromptOverridesUpdate,
+      applyRepoPromptOverridesUpdate,
+      applySelectedRepoAgentDefaultUpdate,
+      applyClearSelectedRepoAgentDefault,
+    ],
+  );
+  const {
+    updateSelectedRepoConfig,
+    updateGlobalGitConfig,
+    updateGlobalChatSettings,
+    updateGlobalKanbanSettings,
+    updateGlobalAutopilotSettings,
+    updateGlobalPromptOverrides,
+    updateRepoPromptOverrides,
+    updateSelectedRepoAgentDefault,
+    clearSelectedRepoAgentDefault,
+  } = useSettingsModalDirtyDraftActions({
+    clearSaveError,
+    markDirty,
+    draftActions,
+  });
+
+  const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
+    selectedRepoPath: selectedWorkspaceRepoPath,
+    detectGithubRepository,
+    updateSelectedRepoConfig,
+  });
+
+  useEffect(() => {
+    if (!open) {
+      clearSettingsError();
+    }
+  }, [clearSettingsError, open]);
 
   return {
     isLoadingSettings,
