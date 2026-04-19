@@ -48,6 +48,14 @@ type CreatePublicOperationsArgs = {
     persistedRecords?: AgentSessionRecord[];
     preloadedRuns?: RunSummary[];
   }) => Promise<boolean>;
+  ensureSessionReadyForView: (input: {
+    taskId: string;
+    sessionId: string;
+    repoReadinessState: "ready" | "checking" | "blocked";
+    recoveryDedupKey?: string | null;
+    persistedRecords?: AgentSessionRecord[];
+    preloadedRuns?: RunSummary[];
+  }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
@@ -97,6 +105,7 @@ export const createOrchestratorPublicOperations = ({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
   retrySessionRuntimeAttachment,
+  ensureSessionReadyForView,
   reconcileLiveTaskSessions,
   loadAgentSessions,
   readSessionModelCatalog,
@@ -118,6 +127,8 @@ export const createOrchestratorPublicOperations = ({
     withErrorToast("Failed to reconnect session runtime", () =>
       retrySessionRuntimeAttachment(input),
     ),
+  ensureSessionReadyForView: (input) =>
+    withErrorToast("Failed to prepare session", () => ensureSessionReadyForView(input)),
   reconcileLiveTaskSessions: (input) =>
     withErrorToast("Failed to reconcile live sessions", () => reconcileLiveTaskSessions(input)),
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>

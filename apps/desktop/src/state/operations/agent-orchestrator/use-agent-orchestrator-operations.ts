@@ -33,6 +33,7 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { LiveAgentSessionStore } from "./lifecycle/live-agent-session-store";
 import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydration-service";
 import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
+import { deriveAgentSessionViewLifecycle } from "./lifecycle/session-view-lifecycle";
 import { findLastUserSessionMessage } from "./support/messages";
 
 const hasAttachedRuntime = (
@@ -340,8 +341,9 @@ export function useAgentOrchestratorOperations({
     () =>
       createSessionHydrationOperations({
         loadAgentSessions,
+        getSessionSnapshot: (sessionId) => sessionsRef.current[sessionId],
       }),
-    [loadAgentSessions],
+    [loadAgentSessions, sessionsRef],
   );
 
   const retrySessionRuntimeAttachment = useCallback(
@@ -364,30 +366,81 @@ export function useAgentOrchestratorOperations({
         { persist: false },
       );
 
-      await sessionHydration
-        .retrySessionRuntimeAttachment({
+      let attached = false;
+      try {
+        attached = await sessionHydration.recoverSessionRuntimeAndHydrateRequestedTaskSession({
           taskId,
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
           ...(preloadedRuns ? { preloadedRuns } : {}),
-        })
-        .catch((error) => {
-          updateSession(sessionId, (current) => withRuntimeRecoveryState(current, "failed"), {
-            persist: false,
-          });
-          throw error;
         });
+      } catch (error) {
+        attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
+        updateSession(
+          sessionId,
+          (current) => withRuntimeRecoveryState(current, attached ? "idle" : "failed"),
+          { persist: false },
+        );
+        throw error;
+      }
 
-      const attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
+      attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
       updateSession(
         sessionId,
         (current) => withRuntimeRecoveryState(current, attached ? "idle" : "waiting_for_runtime"),
         { persist: false },
       );
+
       return attached;
     },
     [sessionHydration, sessionsRef, updateSession],
+  );
+
+  const ensureSessionReadyForView = useCallback(
+    async ({
+      taskId,
+      sessionId,
+      repoReadinessState,
+      recoveryDedupKey,
+      persistedRecords,
+      preloadedRuns,
+    }: {
+      taskId: string;
+      sessionId: string;
+      repoReadinessState: "ready" | "checking" | "blocked";
+      recoveryDedupKey?: string | null;
+      persistedRecords?: AgentSessionRecord[];
+      preloadedRuns?: RunSummary[];
+    }): Promise<boolean> => {
+      const session = sessionsRef.current[sessionId] ?? null;
+      const lifecycle = deriveAgentSessionViewLifecycle({
+        session,
+        repoReadinessState,
+      });
+
+      if (!session || !lifecycle.shouldEnsureReadyForView) {
+        return lifecycle.phase === "ready";
+      }
+
+      if (lifecycle.phase === "waiting_for_runtime_attachment") {
+        return retrySessionRuntimeAttachment({
+          taskId,
+          sessionId,
+          ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
+          ...(persistedRecords ? { persistedRecords } : {}),
+          ...(preloadedRuns ? { preloadedRuns } : {}),
+        });
+      }
+
+      await sessionHydration.hydrateRequestedTaskSession({
+        taskId,
+        sessionId,
+        ...(persistedRecords ? { persistedRecords } : {}),
+      });
+      return true;
+    },
+    [retrySessionRuntimeAttachment, sessionHydration, sessionsRef],
   );
 
   const repoSessionHydrationService = useMemo(
@@ -571,6 +624,7 @@ export function useAgentOrchestratorOperations({
       bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
       retrySessionRuntimeAttachment,
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
       loadAgentSessions,
       readSessionModelCatalog,
@@ -596,6 +650,7 @@ export function useAgentOrchestratorOperations({
     readSessionModelCatalog,
     readSessionTodos,
     retrySessionRuntimeAttachment,
+    ensureSessionReadyForView,
     readSessionSlashCommands,
     readSessionFileSearch,
     removeAgentSessions,

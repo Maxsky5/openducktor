@@ -184,6 +184,14 @@ export type AgentStateContextValue = {
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
     preloadedRuns?: import("@openducktor/contracts").RunSummary[];
   }) => Promise<boolean>;
+  ensureSessionReadyForView: (input: {
+    taskId: string;
+    sessionId: string;
+    repoReadinessState: "ready" | "checking" | "blocked";
+    recoveryDedupKey?: string | null;
+    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+    preloadedRuns?: import("@openducktor/contracts").RunSummary[];
+  }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];

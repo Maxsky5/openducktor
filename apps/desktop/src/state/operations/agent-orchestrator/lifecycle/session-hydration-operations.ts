@@ -5,7 +5,12 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
-import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  getAgentSessionHistoryHydrationState,
+  requiresHydratedAgentSessionHistory,
+} from "../support/history-hydration";
+import { getSessionMessageCount } from "../support/messages";
 
 type LoadAgentSessions = (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
 
@@ -16,6 +21,13 @@ export type SessionHydrationOperations = {
     sessionId: string;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
+  recoverSessionRuntimeAndHydrateRequestedTaskSession: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+    persistedRecords?: AgentSessionRecord[];
+    preloadedRuns?: RunSummary[];
+  }) => Promise<boolean>;
   retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
@@ -37,8 +49,10 @@ export type SessionHydrationOperations = {
 
 export const createSessionHydrationOperations = ({
   loadAgentSessions,
+  getSessionSnapshot,
 }: {
   loadAgentSessions: LoadAgentSessions;
+  getSessionSnapshot: (sessionId: string) => AgentSessionState | undefined;
 }): SessionHydrationOperations => {
   const withPersistedRecords = (
     options: AgentSessionLoadOptions,
@@ -60,6 +74,55 @@ export const createSessionHydrationOperations = ({
           persistedRecords,
         ),
       ),
+    recoverSessionRuntimeAndHydrateRequestedTaskSession: async ({
+      taskId,
+      sessionId,
+      recoveryDedupKey,
+      persistedRecords,
+      preloadedRuns,
+    }) => {
+      await loadAgentSessions(
+        taskId,
+        withPersistedRecords(
+          {
+            mode: "recover_runtime_attachment",
+            targetSessionId: sessionId,
+            ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
+            ...(preloadedRuns ? { preloadedRuns } : {}),
+            historyPolicy: "none",
+          },
+          persistedRecords,
+        ),
+      );
+
+      const recoveredSession = getSessionSnapshot(sessionId);
+      const attached = Boolean(recoveredSession?.runtimeRoute || recoveredSession?.runtimeId);
+      const historyHydrationState = getAgentSessionHistoryHydrationState(recoveredSession);
+      const shouldHydrateAfterRecovery =
+        recoveredSession !== undefined &&
+        attached &&
+        requiresHydratedAgentSessionHistory(recoveredSession) &&
+        historyHydrationState !== "hydrating" &&
+        getSessionMessageCount(recoveredSession) === 0;
+
+      if (!shouldHydrateAfterRecovery) {
+        return attached;
+      }
+
+      await loadAgentSessions(
+        taskId,
+        withPersistedRecords(
+          {
+            mode: "requested_history",
+            targetSessionId: sessionId,
+            historyPolicy: "requested_only",
+          },
+          persistedRecords,
+        ),
+      );
+
+      return true;
+    },
     retrySessionRuntimeAttachment: ({
       taskId,
       sessionId,

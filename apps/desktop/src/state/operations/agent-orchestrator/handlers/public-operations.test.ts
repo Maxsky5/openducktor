@@ -25,6 +25,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
 };
 
 const retrySessionRuntimeAttachment = async (): Promise<boolean> => false;
+const ensureSessionReadyForView = async (): Promise<boolean> => false;
 
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
@@ -36,6 +37,7 @@ describe("agent-orchestrator-public-operations", () => {
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       retrySessionRuntimeAttachment,
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {
         throw new Error("load failed");
@@ -73,6 +75,7 @@ describe("agent-orchestrator-public-operations", () => {
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       retrySessionRuntimeAttachment,
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -117,6 +120,7 @@ describe("agent-orchestrator-public-operations", () => {
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       retrySessionRuntimeAttachment,
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -158,6 +162,7 @@ describe("agent-orchestrator-public-operations", () => {
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       retrySessionRuntimeAttachment,
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -199,6 +204,7 @@ describe("agent-orchestrator-public-operations", () => {
       retrySessionRuntimeAttachment: async () => {
         throw new Error("retry failed");
       },
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -227,12 +233,57 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
+  test("shows toast and rethrows session view readiness errors", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "");
+    toast.error = toastError;
+
+    const operations = createOrchestratorPublicOperations({
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      retrySessionRuntimeAttachment,
+      ensureSessionReadyForView: async () => {
+        throw new Error("prepare failed");
+      },
+      reconcileLiveTaskSessions: async () => {},
+      loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
+      readSessionTodos: async () => [],
+      removeAgentSessions: () => {},
+      sessionActions: createSessionActions(),
+    });
+
+    try {
+      await expect(
+        operations.ensureSessionReadyForView({
+          taskId: "task-1",
+          sessionId: "session-1",
+          repoReadinessState: "ready",
+        }),
+      ).rejects.toThrow("prepare failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to prepare session", {
+        description: "prepare failed",
+      });
+    } finally {
+      toast.error = originalToastError;
+    }
+  });
+
   test("forwards explicit session removals without toast wrapping", () => {
     const removeAgentSessions = mock(() => {});
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
       retrySessionRuntimeAttachment,
+      ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
