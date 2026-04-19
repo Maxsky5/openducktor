@@ -59,9 +59,10 @@ const requireForkSourceRuntime = (
       runtimeKind: sourceRuntimeKind,
       runtimeConnection: resolveRuntimeConnection(sourceRuntime),
     };
-  } catch {
+  } catch (error) {
     throw new Error(
       `Session "${sourceSessionId}" is missing live runtime context required for forking.`,
+      { cause: error },
     );
   }
 };
