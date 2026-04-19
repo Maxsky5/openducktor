@@ -7,8 +7,8 @@ import {
   type DevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
   getLatestBufferedTerminalSequence,
+  reconcileDevServerTerminalBufferStore,
   replaceDevServerTerminalBuffer,
-  shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
@@ -77,35 +77,7 @@ export const useAgentStudioDevServerTerminalBuffers =
           return;
         }
 
-        let didChange = false;
-        const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
-        for (const scriptId of terminalBuffersRef.current.keys()) {
-          if (nextScriptIds.has(scriptId)) {
-            continue;
-          }
-
-          terminalBuffersRef.current.delete(scriptId);
-          didChange = true;
-        }
-
-        for (const script of state.scripts) {
-          const currentBuffer = getDevServerTerminalBuffer(
-            terminalBuffersRef.current,
-            script.scriptId,
-          );
-          if (!shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, script)) {
-            continue;
-          }
-
-          replaceDevServerTerminalBuffer(
-            terminalBuffersRef.current,
-            script.scriptId,
-            script.bufferedTerminalChunks,
-          );
-          didChange = true;
-        }
-
-        if (didChange) {
+        if (reconcileDevServerTerminalBufferStore(terminalBuffersRef.current, state)) {
           syncSelectedScriptTerminalBuffer(selectedScriptId);
         }
       },

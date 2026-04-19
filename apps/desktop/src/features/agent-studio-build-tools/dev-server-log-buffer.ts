@@ -11,10 +11,18 @@ export type AgentStudioDevServerTerminalChunkEntry = DevServerTerminalChunk;
 export type AgentStudioDevServerTerminalBuffer = {
   entries: readonly AgentStudioDevServerTerminalChunkEntry[];
   lastSequence: number | null;
-  firstSnapshotSequence?: number | null;
-  lastSnapshotSequence?: number | null;
   resetToken: number;
-  snapshotEntryCount?: number;
+};
+
+type DevServerTerminalSequenceWindow = {
+  count: number;
+  firstSequence: number | null;
+  lastSequence: number | null;
+};
+
+export type DevServerTerminalBufferReplacementContext = {
+  current: DevServerTerminalSequenceWindow;
+  snapshot: DevServerTerminalSequenceWindow;
 };
 
 type DevServerTerminalBufferState = {
@@ -42,15 +50,34 @@ export const trimDevServerTerminalChunks = (
 
 const readBufferedSequenceWindow = (
   chunks: readonly DevServerTerminalChunk[],
-): {
-  count: number;
-  firstSequence: number | null;
-  lastSequence: number | null;
-} => {
+): DevServerTerminalSequenceWindow => {
   return {
     count: chunks.length,
     firstSequence: chunks[0]?.sequence ?? null,
     lastSequence: chunks.at(-1)?.sequence ?? null,
+  };
+};
+
+const readCurrentBufferWindow = (
+  buffer: DevServerTerminalBufferState,
+): DevServerTerminalSequenceWindow => {
+  return {
+    count: buffer.size,
+    firstSequence:
+      buffer.size === 0
+        ? null
+        : (buffer.entries[buffer.head % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS]?.sequence ?? null),
+    lastSequence: buffer.lastSequence,
+  };
+};
+
+const readSnapshotBufferWindow = (
+  buffer: DevServerTerminalBufferState,
+): DevServerTerminalSequenceWindow => {
+  return {
+    count: buffer.snapshotEntryCount,
+    firstSequence: buffer.firstSnapshotSequence,
+    lastSequence: buffer.lastSnapshotSequence,
   };
 };
 
@@ -149,6 +176,21 @@ export const syncDevServerTerminalBufferStore = (
   }
 };
 
+export const getDevServerTerminalBufferReplacementContext = (
+  store: DevServerTerminalBufferStore,
+  scriptId: string,
+): DevServerTerminalBufferReplacementContext | null => {
+  const buffer = store.get(scriptId);
+  if (!buffer) {
+    return null;
+  }
+
+  return {
+    current: readCurrentBufferWindow(buffer),
+    snapshot: readSnapshotBufferWindow(buffer),
+  };
+};
+
 export const getDevServerTerminalBuffer = (
   store: DevServerTerminalBufferStore,
   scriptId: string | null,
@@ -172,35 +214,27 @@ export const getDevServerTerminalBuffer = (
 
       return entry;
     }),
-    firstSnapshotSequence: buffer.firstSnapshotSequence,
     lastSequence: buffer.lastSequence,
-    lastSnapshotSequence: buffer.lastSnapshotSequence,
     resetToken: buffer.resetToken,
-    snapshotEntryCount: buffer.snapshotEntryCount,
   };
 };
 
 export const shouldReplaceDevServerTerminalBufferFromScript = (
-  currentBuffer: AgentStudioDevServerTerminalBuffer | null,
+  currentContext: DevServerTerminalBufferReplacementContext | null,
   script: DevServerScriptState,
   force = false,
 ): boolean => {
-  if (force || currentBuffer === null) {
+  if (force || currentContext === null) {
     return true;
   }
 
   const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
-  const currentWindow = readBufferedSequenceWindow(currentBuffer.entries);
+  const currentWindow = currentContext.current;
   const nextWindow = readBufferedSequenceWindow(nextChunks);
-  const currentSnapshotEntryCount = currentBuffer.snapshotEntryCount ?? currentWindow.count;
-  const currentFirstSnapshotSequence =
-    currentBuffer.firstSnapshotSequence ?? currentWindow.firstSequence;
-  const currentLastSnapshotSequence =
-    currentBuffer.lastSnapshotSequence ?? currentWindow.lastSequence;
   const currentBufferMirrorsSnapshot =
-    currentWindow.count === currentSnapshotEntryCount &&
-    currentWindow.firstSequence === currentFirstSnapshotSequence &&
-    currentWindow.lastSequence === currentLastSnapshotSequence;
+    currentWindow.count === currentContext.snapshot.count &&
+    currentWindow.firstSequence === currentContext.snapshot.firstSequence &&
+    currentWindow.lastSequence === currentContext.snapshot.lastSequence;
 
   if (nextWindow.lastSequence === null) {
     return currentWindow.count > 0 && currentBufferMirrorsSnapshot;
@@ -222,6 +256,36 @@ export const shouldReplaceDevServerTerminalBufferFromScript = (
     nextWindow.count !== currentWindow.count ||
     nextWindow.firstSequence !== currentWindow.firstSequence
   );
+};
+
+export const reconcileDevServerTerminalBufferStore = (
+  store: DevServerTerminalBufferStore,
+  state: DevServerGroupState,
+  force = false,
+): boolean => {
+  let didChange = false;
+  const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
+
+  for (const scriptId of store.keys()) {
+    if (nextScriptIds.has(scriptId)) {
+      continue;
+    }
+
+    store.delete(scriptId);
+    didChange = true;
+  }
+
+  for (const script of state.scripts) {
+    const currentContext = getDevServerTerminalBufferReplacementContext(store, script.scriptId);
+    if (!shouldReplaceDevServerTerminalBufferFromScript(currentContext, script, force)) {
+      continue;
+    }
+
+    replaceDevServerTerminalBuffer(store, script.scriptId, script.bufferedTerminalChunks);
+    didChange = true;
+  }
+
+  return didChange;
 };
 
 export const getLatestBufferedTerminalSequence = (script: DevServerScriptState): number | null => {

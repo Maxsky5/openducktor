@@ -4,7 +4,9 @@ import {
   appendDevServerTerminalChunk,
   createDevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
+  getDevServerTerminalBufferReplacementContext,
   MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
+  reconcileDevServerTerminalBufferStore,
   replaceDevServerTerminalBuffer,
   shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
@@ -185,7 +187,6 @@ describe("dev-server-log-buffer", () => {
       },
     ]);
 
-    const currentBuffer = getDevServerTerminalBuffer(store, "frontend");
     const nextScript = buildScript({
       bufferedTerminalChunks: [
         {
@@ -197,7 +198,12 @@ describe("dev-server-log-buffer", () => {
       ],
     });
 
-    expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, nextScript)).toBe(true);
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        nextScript,
+      ),
+    ).toBe(true);
   });
 
   test("keeps a populated buffer when the local stream is newer than the snapshot", () => {
@@ -211,7 +217,6 @@ describe("dev-server-log-buffer", () => {
       },
     ]);
 
-    const currentBuffer = getDevServerTerminalBuffer(store, "frontend");
     const staleScript = buildScript({
       bufferedTerminalChunks: [
         {
@@ -223,7 +228,12 @@ describe("dev-server-log-buffer", () => {
       ],
     });
 
-    expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, staleScript)).toBe(false);
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        staleScript,
+      ),
+    ).toBe(false);
   });
 
   test("replaces a populated buffer when an authoritative snapshot clears replay", () => {
@@ -237,9 +247,80 @@ describe("dev-server-log-buffer", () => {
       },
     ]);
 
-    const currentBuffer = getDevServerTerminalBuffer(store, "frontend");
     const clearedScript = buildScript({ bufferedTerminalChunks: [] });
 
-    expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, clearedScript)).toBe(true);
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        clearedScript,
+      ),
+    ).toBe(true);
+  });
+
+  test("preserves live-only chunks when a later empty snapshot no longer mirrors them", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 0,
+        data: "snapshot\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 1,
+      data: "live-only\r\n",
+      timestamp: "2026-03-25T10:00:01.000Z",
+    });
+
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        buildScript({ bufferedTerminalChunks: [] }),
+      ),
+    ).toBe(false);
+  });
+
+  test("reconciles the store with authoritative snapshots while pruning removed scripts", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 0,
+        data: "stale\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+    replaceDevServerTerminalBuffer(store, "removed", [
+      {
+        scriptId: "removed",
+        sequence: 0,
+        data: "removed\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            bufferedTerminalChunks: [
+              {
+                scriptId: "frontend",
+                sequence: 2,
+                data: "fresh\r\n",
+                timestamp: "2026-03-25T10:02:00.000Z",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(getDevServerTerminalBuffer(store, "removed")).toBeNull();
+    expect(getDevServerTerminalBuffer(store, "frontend")?.entries[0]?.data).toBe("fresh\r\n");
   });
 });
