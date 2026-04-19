@@ -1,11 +1,6 @@
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
-import {
-  requireRuntimeConnectionSupport,
-  resolveRuntimeConnection,
-  resolveRuntimeRoute,
-} from "../runtime/runtime";
+import { requireRuntimeConnectionSupport, resolveRuntimeConnection } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
@@ -46,50 +41,28 @@ export const executeForkStart = async ({
     deps,
     sourceSessionId: input.sourceSessionId,
   });
+  const sourceRuntimeKind = sourceSession.runtimeKind;
+  if (!sourceRuntimeKind) {
+    throw new Error(
+      `Session "${input.sourceSessionId}" is missing runtime kind metadata required for forking.`,
+    );
+  }
   const taskCard = resolveStartTask({ ctx, task: deps.task });
-  const resolved = await resolveRuntimeAndModel({
-    ctx,
-    scenario: input.scenario,
-    requestedRuntimeKind: input.selectedModel.runtimeKind,
-    targetWorkingDirectory: sourceSession.workingDirectory,
-    taskCard,
-    deps,
-  });
   const selectedModel = input.selectedModel;
 
-  if (
-    sourceSession.runtimeKind &&
-    selectedModel.runtimeKind &&
-    sourceSession.runtimeKind !== selectedModel.runtimeKind
-  ) {
+  if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
     throw new Error(
-      `Session "${input.sourceSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceSession.runtimeKind}".`,
+      `Session "${input.sourceSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
     );
   }
 
-  assertScenarioStartPolicy({
-    role: ctx.role,
-    scenario: resolved.resolvedScenario,
-    startMode: input.startMode,
-  });
-
-  const runtimeKind =
-    sourceSession.runtimeKind ??
-    resolved.runtime.runtimeKind ??
-    selectedModel?.runtimeKind ??
-    DEFAULT_RUNTIME_KIND;
   const sourceRuntime: RuntimeInfo = {
-    runtimeKind,
-    runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
-    runId: sourceSession.runId ?? resolved.runtime.runId,
-    runtimeRoute: sourceSession.runtimeRoute ?? resolved.runtime.runtimeRoute,
+    runtimeKind: sourceRuntimeKind,
+    runtimeId: sourceSession.runtimeId,
+    runId: sourceSession.runId,
+    runtimeRoute: sourceSession.runtimeRoute,
     workingDirectory: sourceSession.workingDirectory,
-    ...(sourceSession.runtimeRoute
-      ? {}
-      : { runtimeConnection: resolved.runtime.runtimeConnection }),
-    ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
   };
-
   const runtimeConnection = (() => {
     try {
       return resolveRuntimeConnection(sourceRuntime);
@@ -99,6 +72,23 @@ export const executeForkStart = async ({
       );
     }
   })();
+
+  const resolved = await resolveRuntimeAndModel({
+    ctx,
+    scenario: input.scenario,
+    requestedRuntimeKind: selectedModel.runtimeKind,
+    targetWorkingDirectory: sourceSession.workingDirectory,
+    taskCard,
+    deps,
+  });
+
+  assertScenarioStartPolicy({
+    role: ctx.role,
+    scenario: resolved.resolvedScenario,
+    startMode: input.startMode,
+  });
+
+  const runtimeKind = sourceRuntimeKind;
   const supportedRuntimeConnection = requireRuntimeConnectionSupport(
     runtimeKind,
     runtimeConnection,
@@ -184,15 +174,12 @@ export const executeForkStart = async ({
 
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,
-    runtimeId: sourceRuntime.runtimeId,
-    runId: sourceRuntime.runId,
-    runtimeRoute: resolveRuntimeRoute({
-      ...sourceRuntime,
-      runtimeConnection: supportedRuntimeConnection,
-    }),
+    runtimeId: sourceSession.runtimeId,
+    runId: sourceSession.runId,
+    runtimeRoute: sourceSession.runtimeRoute,
     runtimeConnection: supportedRuntimeConnection,
     workingDirectory: sourceSession.workingDirectory,
-    ...(sourceRuntime.kind ? { kind: sourceRuntime.kind } : {}),
+    ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
   };
 
   return registerStartedSession({

@@ -1685,7 +1685,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         kind: "opencode",
         runtimeId: "runtime-1",
         runId: "run-2",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -1919,11 +1919,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("forks from resolved live runtime connection when the hydrated source session has no route", async () => {
+  test("fails when the hydrated source session has no live runtime context even if ensureRuntime resolves one", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
-    const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const forkCalls: Array<{ runtimeConnection: unknown }> = [];
+    const forkCalls: unknown[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
       "source-build": {
         runtimeKind: "opencode",
@@ -1954,7 +1953,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     };
 
     adapter.forkSession = async (input) => {
-      forkCalls.push({ runtimeConnection: input.runtimeConnection });
+      forkCalls.push(input);
       return {
         runtimeKind: "opencode",
         sessionId: "forked-from-runtime-connection",
@@ -1965,7 +1964,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
       };
     };
-    adapter.loadSessionHistory = async () => [];
 
     const sessionsRef = { current: sessionsById };
     const start = createStartAgentSessionWithFlatDeps({
@@ -2003,32 +2001,21 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      const sessionId = await start({
-        taskId: "task-1",
-        role: "build",
-        scenario: "build_pull_request_generation",
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSessionId: "source-build",
-      });
-
-      expect(sessionId).toBe("forked-from-runtime-connection");
-      expect(forkCalls).toEqual([
-        {
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:5555",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        },
-      ]);
-      expect(sessionsById["forked-from-runtime-connection"]?.runtimeRoute).toEqual({
-        type: "local_http",
-        endpoint: "http://127.0.0.1:5555",
-      });
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_pull_request_generation",
+          startMode: "fork",
+          selectedModel: BUILD_SELECTION,
+          sourceSessionId: "source-build",
+        }),
+      ).rejects.toThrow(
+        'Session "source-build" is missing live runtime context required for forking.',
+      );
+      expect(forkCalls).toHaveLength(0);
     } finally {
       adapter.forkSession = originalForkSession;
-      adapter.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 
