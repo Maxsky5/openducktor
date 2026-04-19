@@ -30,6 +30,7 @@ import type {
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
 } from "@openducktor/core";
+import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
@@ -177,17 +178,10 @@ export type AgentStateContextValue = {
     sessionId: string;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   }) => Promise<void>;
-  retrySessionRuntimeAttachment: (input: {
-    taskId: string;
-    sessionId: string;
-    recoveryDedupKey?: string | null;
-    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
-    preloadedRuns?: import("@openducktor/contracts").RunSummary[];
-  }) => Promise<boolean>;
   ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
-    repoReadinessState: "ready" | "checking" | "blocked";
+    repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
     preloadedRuns?: import("@openducktor/contracts").RunSummary[];

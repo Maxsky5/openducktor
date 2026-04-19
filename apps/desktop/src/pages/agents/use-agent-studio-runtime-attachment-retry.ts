@@ -1,5 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import { useEffect, useRef } from "react";
+import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { normalizeWorkingDirectory } from "@/state/operations/agent-orchestrator/support/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -111,11 +112,11 @@ export function useAgentStudioRuntimeAttachmentRetry({
   ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
-    repoReadinessState: "ready" | "checking" | "blocked";
+    repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
-  repoReadinessState: "ready" | "checking" | "blocked";
+  repoReadinessState: SessionRepoReadinessState;
 }): void {
   const lastAttachmentAttemptRef = useRef<{
     sessionId: string;

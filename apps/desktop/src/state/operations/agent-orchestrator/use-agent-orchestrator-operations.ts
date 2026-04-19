@@ -33,7 +33,10 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { LiveAgentSessionStore } from "./lifecycle/live-agent-session-store";
 import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydration-service";
 import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
-import { deriveAgentSessionViewLifecycle } from "./lifecycle/session-view-lifecycle";
+import {
+  deriveAgentSessionViewLifecycle,
+  type SessionRepoReadinessState,
+} from "./lifecycle/session-view-lifecycle";
 import { findLastUserSessionMessage } from "./support/messages";
 
 const hasAttachedRuntime = (
@@ -64,6 +67,18 @@ type UseAgentOrchestratorOperationsArgs = {
 };
 
 type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
+  commitSessions: (
+    updater:
+      | Record<string, AgentSessionState>
+      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+  ) => void;
+  retrySessionRuntimeAttachment: (input: {
+    taskId: string;
+    sessionId: string;
+    recoveryDedupKey?: string | null;
+    persistedRecords?: AgentSessionRecord[];
+    preloadedRuns?: RunSummary[];
+  }) => Promise<boolean>;
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
 };
@@ -408,7 +423,7 @@ export function useAgentOrchestratorOperations({
     }: {
       taskId: string;
       sessionId: string;
-      repoReadinessState: "ready" | "checking" | "blocked";
+      repoReadinessState: SessionRepoReadinessState;
       recoveryDedupKey?: string | null;
       persistedRecords?: AgentSessionRecord[];
       preloadedRuns?: RunSummary[];
@@ -623,7 +638,6 @@ export function useAgentOrchestratorOperations({
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView,
       reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
       loadAgentSessions,
@@ -640,12 +654,15 @@ export function useAgentOrchestratorOperations({
         return sessionStore.getSessionsSnapshot();
       },
       ...operations,
+      commitSessions,
+      retrySessionRuntimeAttachment,
       sessionStore,
       operations,
     };
   }, [
     sessionStore,
     sessionHydration,
+    commitSessions,
     loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,

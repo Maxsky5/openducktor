@@ -8,7 +8,7 @@ import type {
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
-import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
+import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type {
   AgentSessionHistoryHydrationPolicy,
   AgentSessionLoadMode,
@@ -459,11 +459,6 @@ export const createRuntimeResolutionPlannerStage = async ({
       ensureRuntime: (repoPath, nextRuntimeKind) => host.runtimeEnsure(repoPath, nextRuntimeKind),
     });
     ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
-    await appQueryClient.invalidateQueries({
-      queryKey: runtimeQueryKeys.list(runtimeKind, intent.repoPath),
-      exact: true,
-      refetchType: "none",
-    });
     return runtime;
   };
 
