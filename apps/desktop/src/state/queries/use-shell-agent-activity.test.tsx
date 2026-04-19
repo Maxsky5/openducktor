@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { hostClient as host } from "@/lib/host-client";
@@ -14,13 +14,15 @@ import {
   type AgentSessionsStore,
   toAgentActivitySessionSummary,
 } from "@/state/agent-sessions-store";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useShellAgentActivity } from "./use-shell-agent-activity";
 
 enableReactActEnvironment();
+
+const actualAppStateProviderModule = await import("../app-state-provider");
+const actualShellAgentActivityModule = await import("./use-shell-agent-activity");
 
 type HookArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -75,16 +77,17 @@ const createActivityStore = (
 };
 
 let currentVisibleTasks: Array<{ id: string; title: string }> = [];
+let currentActivitySessions: AgentActivitySessionSummary[] = [];
+let useShellAgentActivity: typeof import("./use-shell-agent-activity").useShellAgentActivity;
 const originalTasksList = host.tasksList;
 
 const createHarness = (initialProps: HookArgs, initialSessions: AgentActivitySessionSummary[]) => {
   const queryClient = createQueryClient();
   const sessionStore = createActivityStore(initialSessions);
+  currentActivitySessions = initialSessions;
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <QueryClientProvider client={queryClient}>
-      <AgentSessionsContext.Provider value={sessionStore}>{children}</AgentSessionsContext.Provider>
-    </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 
   const sharedHarness = createSharedHookHarness(
@@ -101,11 +104,22 @@ const createHarness = (initialProps: HookArgs, initialSessions: AgentActivitySes
 
 beforeEach(async () => {
   currentVisibleTasks = [];
+  currentActivitySessions = [];
   host.tasksList = async () => currentVisibleTasks as never;
+  mock.module("../app-state-provider", () => ({
+    ...actualAppStateProviderModule,
+    useAgentActivitySessions: () => currentActivitySessions,
+  }));
+  ({ useShellAgentActivity } = await import("./use-shell-agent-activity"));
 });
 
 afterEach(async () => {
   host.tasksList = originalTasksList;
+  currentActivitySessions = [];
+  await restoreMockedModules([
+    ["../app-state-provider", async () => actualAppStateProviderModule],
+    ["./use-shell-agent-activity", async () => actualShellAgentActivityModule],
+  ]);
 });
 
 describe("useShellAgentActivity", () => {
@@ -180,6 +194,7 @@ describe("useShellAgentActivity", () => {
 
       await harness.run(() => {
         harness.sessionStore.setActivitySessions([]);
+        currentActivitySessions = [];
       });
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
       expect(harness.getLatest()).toEqual({
@@ -217,14 +232,16 @@ describe("useShellAgentActivity", () => {
       });
 
       await harness.run(() => {
-        harness.sessionStore.setActivitySessions([
+        const nextSessions = [
           createActivitySession({
             sessionId: "session-b",
             taskId: "task-b",
             repoPath: "/repo-b",
             startedAt: "2026-03-17T11:00:00.000Z",
           }),
-        ]);
+        ];
+        harness.sessionStore.setActivitySessions(nextSessions);
+        currentActivitySessions = nextSessions;
       });
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
 
