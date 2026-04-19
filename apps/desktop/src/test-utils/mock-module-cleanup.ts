@@ -7,6 +7,6 @@ export const restoreMockedModules = async (
 ): Promise<void> => {
   for (const [moduleId, loadActual] of entries) {
     const actualModule = await loadActual();
-    mock.module(moduleId, () => actualModule);
+    mock.module(moduleId, () => ({ ...(actualModule as Record<string, unknown>) }));
   }
 };

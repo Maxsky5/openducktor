@@ -1,17 +1,21 @@
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
-mock.module("@pierre/diffs/react", () => ({
-  FileDiff: () => null,
-  Virtualizer: ({ children }: { children: React.ReactNode }) => children,
-  useWorkerPool: () => null,
-}));
+let pierreViewerModule: typeof import("./pierre-diff-viewer");
 
-afterAll(async () => {
-  await restoreMockedModules([["@pierre/diffs/react", () => import("@pierre/diffs/react")]]);
+beforeEach(async () => {
+  mock.module("@pierre/diffs/react", () => ({
+    FileDiff: () => null,
+    Virtualizer: ({ children }: { children: React.ReactNode }) => children,
+    useWorkerPool: () => null,
+  }));
+
+  pierreViewerModule = await import("./pierre-diff-viewer");
 });
 
-const pierreViewerModule = await import("./pierre-diff-viewer");
+afterEach(async () => {
+  await restoreMockedModules([["@pierre/diffs/react", () => import("@pierre/diffs/react")]]);
+});
 
 const requireFileDiff = (
   fileDiff: ReturnType<typeof import("./pierre-diff-viewer")["getRenderableFileDiff"]>["fileDiff"],

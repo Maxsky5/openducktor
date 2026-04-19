@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -62,7 +62,7 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
 describe("SessionStartModal", () => {
   let SessionStartModal: typeof import("./session-start-modal").SessionStartModal;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     mock.module("@/components/features/agents/agent-runtime-combobox", () => ({
       AgentRuntimeCombobox: (props: Record<string, unknown>) =>
         createElement("agent-runtime-combobox", props),
@@ -94,7 +94,7 @@ describe("SessionStartModal", () => {
     ({ SessionStartModal } = await import("./session-start-modal"));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       [
         "@/components/features/agents/agent-runtime-combobox",

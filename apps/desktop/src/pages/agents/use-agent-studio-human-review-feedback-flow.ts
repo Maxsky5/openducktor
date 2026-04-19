@@ -10,6 +10,7 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import type {
   SessionStartExistingSessionOption,
+  SessionStartLaunchRequest,
   SessionStartPostAction,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -19,21 +20,16 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   taskId: string;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  startSessionRequest: (request: {
-    taskId: string;
-    role: "build";
-    scenario: "build_after_human_request_changes";
-    reason: "create_session";
-    existingSessionOptions: SessionStartExistingSessionOption[];
-    initialSourceSessionId?: string | null;
-    initialStartMode?: "fresh" | "reuse" | "fork";
-    postStartAction: SessionStartPostAction;
-    message?: string;
-    beforeStartAction?: {
-      action: "human_request_changes";
-      note: string;
-    };
-  }) => Promise<string | undefined>;
+  startSessionRequest: (
+    request: SessionStartLaunchRequest & {
+      role: "build";
+      scenario: "build_after_human_request_changes";
+      reason: "create_session";
+      existingSessionOptions: SessionStartExistingSessionOption[];
+      initialSourceSessionId?: string | null;
+      postStartAction: SessionStartPostAction;
+    },
+  ) => Promise<string | undefined>;
 };
 
 type UseAgentStudioHumanReviewFeedbackFlowResult = {
@@ -103,7 +99,9 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             scenario: request.scenario,
             reason: "create_session" as const,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.sourceSessionId ? { initialSourceSessionId: request.sourceSessionId } : {}),
+            ...(request.initialSourceSessionId !== undefined
+              ? { initialSourceSessionId: request.initialSourceSessionId }
+              : {}),
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             postStartAction: request.postStartAction,
             message: request.message,

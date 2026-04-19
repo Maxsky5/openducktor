@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -7,6 +7,9 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+
+const actualHostOperationsModule = await import("@/state/operations/host");
+const actualHostClientModule = await import("@/lib/host-client");
 
 enableReactActEnvironment();
 if (typeof document === "undefined") {
@@ -92,24 +95,6 @@ const gitGetWorktreeStatusSummaryMock = mock(
     return toWorktreeStatusSummary(fullStatus);
   },
 );
-
-mock.module("@/state/operations/host", () => ({
-  host: {
-    runsList: runsListMock,
-    gitFetchRemote: gitFetchRemoteMock,
-    gitGetWorktreeStatus: gitGetWorktreeStatusMock,
-    gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
-  },
-}));
-
-mock.module("@/lib/host-client", () => ({
-  hostClient: {
-    runsList: runsListMock,
-    gitFetchRemote: gitFetchRemoteMock,
-    gitGetWorktreeStatus: gitGetWorktreeStatusMock,
-    gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
-  },
-}));
 
 type UseAgentStudioDiffDataHook =
   typeof import("./use-agent-studio-diff-data")["useAgentStudioDiffData"];
@@ -203,18 +188,26 @@ const dispatchScheduledRefresh = (): void => {
   globalThis.dispatchEvent(new Event("focus"));
 };
 
-beforeAll(async () => {
-  ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
-});
-
-afterAll(async () => {
-  await restoreMockedModules([
-    ["@/state/operations/host", () => import("@/state/operations/host")],
-    ["@/lib/host-client", () => import("@/lib/host-client")],
-  ]);
-});
-
 beforeEach(async () => {
+  mock.module("@/state/operations/host", () => ({
+    host: {
+      runsList: runsListMock,
+      gitFetchRemote: gitFetchRemoteMock,
+      gitGetWorktreeStatus: gitGetWorktreeStatusMock,
+      gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
+    },
+  }));
+
+  mock.module("@/lib/host-client", () => ({
+    hostClient: {
+      runsList: runsListMock,
+      gitFetchRemote: gitFetchRemoteMock,
+      gitGetWorktreeStatus: gitGetWorktreeStatusMock,
+      gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
+    },
+  }));
+
+  ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
   await clearAppQueryClient();
   runsListMock.mockClear();
   gitFetchRemoteMock.mockClear();
@@ -288,6 +281,13 @@ beforeEach(async () => {
       return toWorktreeStatusSummary(fullStatus);
     },
   );
+});
+
+afterEach(async () => {
+  await restoreMockedModules([
+    ["@/state/operations/host", async () => actualHostOperationsModule],
+    ["@/lib/host-client", async () => actualHostClientModule],
+  ]);
 });
 
 describe("useAgentStudioDiffData", () => {

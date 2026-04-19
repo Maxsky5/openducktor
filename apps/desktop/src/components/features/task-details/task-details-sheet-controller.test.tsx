@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
@@ -27,7 +27,7 @@ const taskDetailsSheetRenderMock = mock(
 );
 
 describe("TaskDetailsSheetController", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     mock.module("./task-details-sheet", () => ({
       TaskDetailsSheet: (
         props: Parameters<typeof taskDetailsSheetRenderMock>[0],
@@ -38,7 +38,7 @@ describe("TaskDetailsSheetController", () => {
     }));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([["./task-details-sheet", () => import("./task-details-sheet")]]);
   });
 

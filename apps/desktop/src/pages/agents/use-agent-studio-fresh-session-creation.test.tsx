@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -68,7 +68,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
-beforeAll(async () => {
+beforeEach(async () => {
   mock.module("sonner", () => ({
     toast: {
       error: toastErrorMock,
@@ -82,7 +82,7 @@ beforeAll(async () => {
   ));
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([["sonner", () => import("sonner")]]);
 });
 
@@ -238,6 +238,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
         input.startMode === "reuse" ? (input.sourceSessionId ?? "session-existing") : "session-new",
     );
     const sendAgentMessage = mock(async () => {});
+    const onContextSwitchIntent = mock(() => {});
     const harness = createHookHarness(
       createBaseArgs({
         role: "build",
@@ -249,6 +250,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
         }),
         startAgentSession,
         sendAgentMessage,
+        onContextSwitchIntent,
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
@@ -282,6 +284,49 @@ describe("useAgentStudioFreshSessionCreation", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
       expect.objectContaining({ kind: "text", text: expect.stringContaining("task-1") }),
     ]);
+    expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+  });
+
+  test("does not switch context when reuse start fails", async () => {
+    const startAgentSession = mock(async () => {
+      throw new Error("start failed");
+    });
+    const onContextSwitchIntent = mock(() => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        role: "build",
+        activeSession: createAgentSessionFixture({
+          sessionId: "active-spec",
+          role: "spec",
+          scenario: "spec_initial",
+          taskId: "task-1",
+        }),
+        startAgentSession,
+        onContextSwitchIntent,
+        executeRequestedSessionStart: async (_request, executeWithDecision) =>
+          executeWithDecision({
+            startMode: "reuse",
+            sourceSessionId: "session-existing",
+          }),
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "build:build_implementation_start:reuse",
+        role: "build",
+        scenario: "build_implementation_start",
+        label: "Builder · Continue",
+        description: "Reuse latest builder session",
+        disabled: false,
+      });
+    });
+    await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
+
+    expect(onContextSwitchIntent).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

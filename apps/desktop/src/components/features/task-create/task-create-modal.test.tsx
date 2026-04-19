@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactNode } from "react";
@@ -59,9 +59,11 @@ const controllerMock = {
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
-  beforeAll(async () => {
-    mock.module("@/components/features/task-create", () => ({
+  beforeEach(async () => {
+    mock.module("@/components/features/task-create/task-create-discard-dialog", () => ({
       TaskCreateDiscardDialog: () => null,
+    }));
+    mock.module("@/components/features/task-create/use-task-create-modal-controller", () => ({
       useTaskCreateModalController: () => controllerMock,
     }));
     mock.module("@/components/features/task-composer/task-document-editor", () => ({
@@ -86,9 +88,16 @@ describe("TaskCreateModal", () => {
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
-      ["@/components/features/task-create", () => import("@/components/features/task-create")],
+      [
+        "@/components/features/task-create/task-create-discard-dialog",
+        () => import("./task-create-discard-dialog"),
+      ],
+      [
+        "@/components/features/task-create/use-task-create-modal-controller",
+        () => import("./use-task-create-modal-controller"),
+      ],
       [
         "@/components/features/task-composer/task-document-editor",
         () => import("@/components/features/task-composer/task-document-editor"),

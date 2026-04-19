@@ -3,13 +3,13 @@ import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type {
-  NewSessionStartDecision,
-  NewSessionStartRequest,
+  ResolvedSessionStartDecision,
+  SessionStartFlowRequest,
   SessionStartPostAction,
   SessionStartRequestReason,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { startSessionWorkflow } from "@/features/session-start";
+import { executeSessionStartFromDecision } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import {
@@ -21,8 +21,6 @@ import {
   incrementActivityCountRecord,
   type QueryUpdate,
 } from "../use-agent-studio-session-action-helpers";
-
-type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
 type UseAgentStudioSessionStartSessionArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -41,7 +39,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   updateQuery: (updates: QueryUpdate) => void;
   onPostStartActionError?: (action: SessionStartPostAction, error: Error) => void;
   executeRequestedSessionStart: <T>(
-    request: Omit<NewSessionStartRequest, "selectedModel">,
+    request: SessionStartFlowRequest,
     executeWithDecision: (decision: ResolvedSessionStartDecision) => Promise<T | undefined>,
   ) => Promise<T | undefined>;
 };
@@ -88,30 +86,21 @@ export function useAgentStudioSessionStartSession({
           incrementActivityCountRecord(current, startContextKey),
         );
         try {
-          const workflow = await startSessionWorkflow({
+          const workflow = await executeSessionStartFromDecision({
             activeWorkspace,
             queryClient,
-            intent: {
+            request: {
               taskId,
               role,
               scenario,
-              startMode: decision.startMode,
-              ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
-              ...(decision.startMode === "reuse" || decision.startMode === "fork"
-                ? { sourceSessionId: decision.sourceSessionId }
-                : {}),
               postStartAction: params.postStartAction,
             },
-            selection: decision.startMode === "reuse" ? null : decision.selectedModel,
+            decision,
             task: selectedTask,
             ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
             startAgentSession,
             sendAgentMessage,
-            postStartExecution: params.postStartAction === "none" ? "await" : "detached",
-            onDetachedPostStartError:
-              params.postStartAction === "none" || !onPostStartActionError
-                ? undefined
-                : (error) => onPostStartActionError(params.postStartAction, error),
+            onPostStartActionError,
           });
 
           applyAgentStudioSelectionQuery(updateQuery, {
@@ -132,7 +121,7 @@ export function useAgentStudioSessionStartSession({
           taskId,
           role,
           scenario,
-          reason: params.reason,
+          postStartAction: params.postStartAction,
           initialTargetBranch: selectedTask?.targetBranch ?? null,
           initialTargetBranchError: selectedTask?.targetBranchError ?? null,
         },

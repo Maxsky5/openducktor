@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useRef, useState } from "react";
@@ -63,7 +63,7 @@ const getCaretOffsetWithinElementMock = mock(
     (element.textContent ?? "").replace(/\u200B/g, "").length,
 );
 
-beforeAll(async () => {
+beforeEach(async () => {
   actualComposerSelectionModule = await import("./agent-chat-composer-selection");
 
   mock.module("./agent-chat-composer-selection", () => ({
@@ -88,7 +88,7 @@ beforeAll(async () => {
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([
     ["./agent-chat-composer-selection", () => import("./agent-chat-composer-selection")],
   ]);

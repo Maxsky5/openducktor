@@ -10,6 +10,9 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
+const actualHostClientModule = await import("@/lib/host-client");
+const actualSonnerModule = await import("sonner");
+
 let subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
 let subscribeRunEventsImpl: ((listener: (payload: unknown) => void) => Promise<() => void>) | null =
@@ -162,8 +165,8 @@ afterEach(() => {
 
 afterEach(async () => {
   await restoreMockedModules([
-    ["@/lib/host-client", () => import("@/lib/host-client")],
-    ["sonner", () => import("sonner")],
+    ["@/lib/host-client", async () => actualHostClientModule],
+    ["sonner", async () => actualSonnerModule],
   ]);
 });
 

@@ -423,6 +423,7 @@ describe("KanbanPage session start modal flow", () => {
         loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
       }),
       useAgentSessionSummaries: () => currentSessionsFixture,
+      useAgentActivitySessions: () => [],
       useAgentOperations: () => ({
         bootstrapTaskSessions: bootstrapTaskSessionsMock,
         hydrateRequestedTaskSessionHistory: hydrateRequestedTaskSessionHistoryMock,
@@ -574,15 +575,11 @@ describe("KanbanPage session start modal flow", () => {
     tasksListMock.mockImplementation(async () => [currentTaskFixture]);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.tasksList = originalTasksList;
     host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
-  });
-
-  afterAll(async () => {
-    console.error = originalConsoleError;
     await restoreMockedModules([
       ["sonner", () => import("sonner")],
       [
@@ -599,8 +596,12 @@ describe("KanbanPage session start modal flow", () => {
         "@/features/human-review-feedback/human-review-feedback-modal",
         () => import("@/features/human-review-feedback/human-review-feedback-modal"),
       ],
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
+  });
+
+  afterAll(async () => {
+    console.error = originalConsoleError;
   });
 
   test("delegate action opens modal and foreground confirm navigates to Agent Studio", async () => {
@@ -839,9 +840,12 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(latestLocation).toContain("/agents?task=TASK-123");
     await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.", {
-      description: "config unavailable",
-    });
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Session started, but the kickoff prompt failed to send.",
+      {
+        description: "config unavailable",
+      },
+    );
     expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
 
     await act(async () => {
@@ -905,10 +909,13 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     await waitForMockCall(toastErrorMock);
-    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.", {
-      description:
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
-    });
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Session started, but the kickoff prompt failed to send.",
+      {
+        description:
+          'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
+      },
+    );
     expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
 
     await act(async () => {

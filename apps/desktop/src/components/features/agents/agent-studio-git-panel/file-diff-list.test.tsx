@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -91,7 +91,7 @@ const resetInlineComments = (): void => {
   useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
 };
 
-beforeAll(async () => {
+beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
   mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
@@ -100,13 +100,6 @@ beforeAll(async () => {
   }));
 
   ({ FileDiffList } = await import("./file-diff-list"));
-
-  await restoreMockedModules([
-    [
-      "@/components/features/agents/pierre-diff-viewer",
-      () => import("@/components/features/agents/pierre-diff-viewer"),
-    ],
-  ]);
 });
 
 afterEach(() => {
@@ -114,6 +107,15 @@ afterEach(() => {
   preloaderMock.mockClear();
   viewerMock.mockClear();
   resetInlineComments();
+});
+
+afterEach(async () => {
+  await restoreMockedModules([
+    [
+      "@/components/features/agents/pierre-diff-viewer",
+      () => import("@/components/features/agents/pierre-diff-viewer"),
+    ],
+  ]);
 });
 
 afterAll(() => {

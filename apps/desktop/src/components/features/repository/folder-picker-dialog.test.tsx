@@ -6,6 +6,10 @@ import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
+const actualHostOperationsModule = await import("@/state/operations/host");
+const actualDialogModule = await import("@/components/ui/dialog");
+const actualScrollAreaModule = await import("@/components/ui/scroll-area");
+
 enableReactActEnvironment();
 
 const omitDialogDomProps = (props: Record<string, unknown>): Record<string, unknown> => {
@@ -87,9 +91,9 @@ describe("FolderPickerDialog", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/operations/host", () => import("@/state/operations/host")],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
-      ["@/components/ui/scroll-area", () => import("@/components/ui/scroll-area")],
+      ["@/state/operations/host", async () => actualHostOperationsModule],
+      ["@/components/ui/dialog", async () => actualDialogModule],
+      ["@/components/ui/scroll-area", async () => actualScrollAreaModule],
     ]);
   });
 

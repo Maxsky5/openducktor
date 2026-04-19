@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { FileEditData } from "./agent-chat-message-card-model";
@@ -35,7 +35,7 @@ const buildFileEditData = (overrides: Partial<FileEditData> = {}): FileEditData 
   ...overrides,
 });
 
-beforeAll(async () => {
+beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
   mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
@@ -60,7 +60,7 @@ afterAll(() => {
   }
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await restoreMockedModules([
     [
       "@/components/features/agents/pierre-diff-viewer",

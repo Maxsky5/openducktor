@@ -85,7 +85,7 @@ describe("human-review-feedback-flow", () => {
         taskId: "TASK-1",
         role: "build",
         scenario: "build_after_human_request_changes",
-        sourceSessionId: "builder-session-2",
+        initialSourceSessionId: "builder-session-2",
         postStartAction: "kickoff",
         message: "Use the standard request-changes workflow.",
         beforeStartAction: {

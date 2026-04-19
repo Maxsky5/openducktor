@@ -1,6 +1,13 @@
 export { executeSessionStart } from "./session-start-execution";
 export { resolveScenarioStartMode } from "./session-start-mode";
 export {
+  buildSessionStartModalRequest,
+  executeSessionStartFromDecision,
+  type ResolvedSessionStartDecision,
+  type SessionStartFlowRequest,
+  type SessionStartLaunchRequest,
+} from "./session-start-orchestration";
+export {
   buildGitConflictResolutionPrompt,
   firstScenario,
   isScenario,

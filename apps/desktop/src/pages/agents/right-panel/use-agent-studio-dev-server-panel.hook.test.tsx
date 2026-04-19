@@ -1,10 +1,12 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
 import { act, render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { RepoSettingsInput } from "@/types/state-slices";
+
+const actualHostClientModule = await import("@/lib/host-client");
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
@@ -75,22 +77,21 @@ let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevSe
   buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
 
-mock.module("@/lib/host-client", () => ({
-  hostClient: {
-    devServerGetState: (...args: [string, string]) => devServerGetState(...args),
-    devServerStart: (...args: [string, string]) => devServerStart(...args),
-    devServerStop: (...args: [string, string]) => devServerStop(...args),
-    devServerRestart: (...args: [string, string]) => devServerRestart(...args),
-  },
-  subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
-    devServerEventListener = listener;
-    return () => {
-      devServerEventListener = null;
-    };
-  },
-}));
-
 beforeEach(() => {
+  mock.module("@/lib/host-client", () => ({
+    hostClient: {
+      devServerGetState: (...args: [string, string]) => devServerGetState(...args),
+      devServerStart: (...args: [string, string]) => devServerStart(...args),
+      devServerStop: (...args: [string, string]) => devServerStop(...args),
+      devServerRestart: (...args: [string, string]) => devServerRestart(...args),
+    },
+    subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
+      devServerEventListener = listener;
+      return () => {
+        devServerEventListener = null;
+      };
+    },
+  }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -102,8 +103,8 @@ beforeEach(() => {
   devServerEventListener = null;
 });
 
-afterAll(async () => {
-  await restoreMockedModules([["@/lib/host-client", () => import("@/lib/host-client")]]);
+afterEach(async () => {
+  await restoreMockedModules([["@/lib/host-client", async () => actualHostClientModule]]);
 });
 
 describe("useAgentStudioDevServerPanel", () => {

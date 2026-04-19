@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -91,7 +91,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioSelectionController", () => {
-  beforeAll(async () => {
+  beforeEach(async () => {
     mock.module("@/state/app-state-provider", () => ({
       AppStateProvider: ({ children }: { children: unknown }) => children,
       useAgentState: () => {
@@ -105,6 +105,9 @@ describe("useAgentStudioSelectionController", () => {
       },
       useAgentSessionSummaries: () => {
         throw new Error("useAgentSessionSummaries is not used in this test");
+      },
+      useAgentActivitySessions: () => {
+        throw new Error("useAgentActivitySessions is not used in this test");
       },
       useWorkspaceState: () => {
         throw new Error("useWorkspaceState is not used in this test");
@@ -127,9 +130,9 @@ describe("useAgentStudioSelectionController", () => {
     ));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
   });
 

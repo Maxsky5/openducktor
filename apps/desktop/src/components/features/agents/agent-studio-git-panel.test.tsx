@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   fireEvent,
   type RenderResult,
@@ -279,7 +279,7 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 };
 
 describe("AgentStudioGitPanel", () => {
-  beforeAll(async () => {
+  beforeEach(async () => {
     mock.module("@/components/ui/tooltip", () => ({
       TooltipProvider: ({ children }: { children: React.ReactNode }) =>
         createElement("div", null, children),
@@ -355,7 +355,7 @@ describe("AgentStudioGitPanel", () => {
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await restoreMockedModules([
       ["@/components/ui/tooltip", () => import("@/components/ui/tooltip")],
       ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
