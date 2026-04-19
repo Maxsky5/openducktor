@@ -78,6 +78,16 @@ export const useAgentStudioDevServerTerminalBuffers =
         }
 
         let didChange = false;
+        const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
+        for (const scriptId of terminalBuffersRef.current.keys()) {
+          if (nextScriptIds.has(scriptId)) {
+            continue;
+          }
+
+          terminalBuffersRef.current.delete(scriptId);
+          didChange = true;
+        }
+
         for (const script of state.scripts) {
           const currentBuffer = getDevServerTerminalBuffer(
             terminalBuffersRef.current,

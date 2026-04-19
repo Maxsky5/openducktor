@@ -225,4 +225,21 @@ describe("dev-server-log-buffer", () => {
 
     expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, staleScript)).toBe(false);
   });
+
+  test("replaces a populated buffer when an authoritative snapshot clears replay", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 2,
+        data: "stale\r\n",
+        timestamp: "2026-03-25T10:02:00.000Z",
+      },
+    ]);
+
+    const currentBuffer = getDevServerTerminalBuffer(store, "frontend");
+    const clearedScript = buildScript({ bufferedTerminalChunks: [] });
+
+    expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, clearedScript)).toBe(true);
+  });
 });

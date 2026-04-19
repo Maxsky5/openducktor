@@ -1002,6 +1002,105 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("clears stale terminal replay when a normal state refetch reports an empty authoritative buffer", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "stale output\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const refreshedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [],
+        }),
+      ],
+    });
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return getStateCalls === 1 ? initialState : refreshedState;
+    };
+
+    let latest: HookResult | null = null;
+    let queryClient: ReturnType<typeof useQueryClient> | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const CaptureQueryClient = () => {
+      queryClient = useQueryClient();
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <CaptureQueryClient />
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("stale output\r\n");
+      });
+
+      if (queryClient === null) {
+        throw new Error("Expected query client to be captured");
+      }
+
+      await act(async () => {
+        await queryClient?.refetchQueries({
+          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          exact: true,
+          type: "active",
+        });
+      });
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(0);
+      });
+      expect(getLatest().selectedScript?.bufferedTerminalChunks).toHaveLength(0);
+      expect(getStateCalls).toBe(2);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("clears stale task state when switching to another task while enabled", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

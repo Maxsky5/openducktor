@@ -11,15 +11,21 @@ export type AgentStudioDevServerTerminalChunkEntry = DevServerTerminalChunk;
 export type AgentStudioDevServerTerminalBuffer = {
   entries: readonly AgentStudioDevServerTerminalChunkEntry[];
   lastSequence: number | null;
+  firstSnapshotSequence?: number | null;
+  lastSnapshotSequence?: number | null;
   resetToken: number;
+  snapshotEntryCount?: number;
 };
 
 type DevServerTerminalBufferState = {
   entries: AgentStudioDevServerTerminalChunkEntry[];
+  firstSnapshotSequence: number | null;
   head: number;
+  lastSnapshotSequence: number | null;
   size: number;
   lastSequence: number | null;
   resetToken: number;
+  snapshotEntryCount: number;
 };
 
 export type DevServerTerminalBufferStore = Map<string, DevServerTerminalBufferState>;
@@ -50,10 +56,13 @@ const readBufferedSequenceWindow = (
 
 const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => ({
   entries: [],
+  firstSnapshotSequence: null,
   head: 0,
+  lastSnapshotSequence: null,
   size: 0,
   lastSequence: null,
   resetToken: 0,
+  snapshotEntryCount: 0,
 });
 
 const getOrCreateDevServerTerminalBufferState = (
@@ -105,11 +114,18 @@ export const replaceDevServerTerminalBuffer = (
   buffer.head = 0;
   buffer.size = 0;
   buffer.lastSequence = null;
+  buffer.firstSnapshotSequence = null;
+  buffer.lastSnapshotSequence = null;
   buffer.resetToken += 1;
+  buffer.snapshotEntryCount = 0;
 
   for (const terminalChunk of trimmedChunks) {
     appendDevServerTerminalChunk(store, terminalChunk);
   }
+
+  buffer.firstSnapshotSequence = trimmedChunks[0]?.sequence ?? null;
+  buffer.lastSnapshotSequence = trimmedChunks.at(-1)?.sequence ?? null;
+  buffer.snapshotEntryCount = trimmedChunks.length;
 };
 
 export const syncDevServerTerminalBufferStore = (
@@ -156,8 +172,11 @@ export const getDevServerTerminalBuffer = (
 
       return entry;
     }),
+    firstSnapshotSequence: buffer.firstSnapshotSequence,
     lastSequence: buffer.lastSequence,
+    lastSnapshotSequence: buffer.lastSnapshotSequence,
     resetToken: buffer.resetToken,
+    snapshotEntryCount: buffer.snapshotEntryCount,
   };
 };
 
@@ -173,9 +192,18 @@ export const shouldReplaceDevServerTerminalBufferFromScript = (
   const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
   const currentWindow = readBufferedSequenceWindow(currentBuffer.entries);
   const nextWindow = readBufferedSequenceWindow(nextChunks);
+  const currentSnapshotEntryCount = currentBuffer.snapshotEntryCount ?? currentWindow.count;
+  const currentFirstSnapshotSequence =
+    currentBuffer.firstSnapshotSequence ?? currentWindow.firstSequence;
+  const currentLastSnapshotSequence =
+    currentBuffer.lastSnapshotSequence ?? currentWindow.lastSequence;
+  const currentBufferMirrorsSnapshot =
+    currentWindow.count === currentSnapshotEntryCount &&
+    currentWindow.firstSequence === currentFirstSnapshotSequence &&
+    currentWindow.lastSequence === currentLastSnapshotSequence;
 
   if (nextWindow.lastSequence === null) {
-    return false;
+    return currentWindow.count > 0 && currentBufferMirrorsSnapshot;
   }
 
   if (currentWindow.lastSequence === null) {
