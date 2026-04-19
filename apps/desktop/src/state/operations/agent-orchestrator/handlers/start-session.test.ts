@@ -1648,6 +1648,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
     };
     adapter.loadSessionHistory = async (input) => {
       expect(input.runtimeKind).toBe("opencode");
+      expect(input.runtimeConnection).toEqual({
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
       expect(input.externalSessionId).toBe("external-forked-pr-session");
       return [
         {
@@ -1712,6 +1717,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionId).toBe("forked-pr-session");
       expect(sessionsById["forked-pr-session"]?.scenario).toBe("build_pull_request_generation");
       expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
+      expect(sessionsById["forked-pr-session"]?.runtimeRoute).toEqual({
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+      });
       expect(
         sessionsById["forked-pr-session"]
           ? sessionMessagesToArray(sessionsById["forked-pr-session"])

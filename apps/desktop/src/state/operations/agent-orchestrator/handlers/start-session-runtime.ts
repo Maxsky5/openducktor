@@ -11,6 +11,42 @@ import type {
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
 
+export const resolveScenarioAndPrompt = async ({
+  ctx,
+  scenario,
+  taskCard,
+  deps,
+}: {
+  ctx: StartSessionContext;
+  scenario: AgentScenario | undefined;
+  taskCard: TaskCard;
+  deps: Pick<StartSessionExecutionDependencies, "model">;
+}): Promise<
+  Pick<ResolvedRuntimeAndModel, "resolvedScenario" | "systemPrompt" | "promptOverrides">
+> => {
+  const { promptOverrides } = await loadSessionPromptInputs({
+    workspaceId: ctx.workspaceId,
+    loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
+  });
+  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+  const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard);
+  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+  const { systemPrompt } = createSessionPromptContext({
+    role: ctx.role,
+    scenario: resolvedScenario,
+    task: taskCard,
+    promptOverrides,
+  });
+
+  return {
+    resolvedScenario,
+    systemPrompt,
+    promptOverrides,
+  };
+};
+
 export const resolveRuntimeAndModel = async ({
   ctx,
   scenario,
@@ -26,15 +62,12 @@ export const resolveRuntimeAndModel = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
-  const { promptOverrides } = await loadSessionPromptInputs({
-    workspaceId: ctx.workspaceId,
-    loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
+  const promptContext = await resolveScenarioAndPrompt({
+    ctx,
+    scenario,
+    taskCard,
+    deps,
   });
-  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
-
-  const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard);
-  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
-
   const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
     workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
@@ -42,19 +75,10 @@ export const resolveRuntimeAndModel = async ({
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  const { systemPrompt } = createSessionPromptContext({
-    role: ctx.role,
-    scenario: resolvedScenario,
-    task: taskCard,
-    promptOverrides,
-  });
-
   return {
     taskCard,
     runtime: runtimeInfo,
-    resolvedScenario,
-    systemPrompt,
-    promptOverrides,
+    ...promptContext,
   };
 };
 
