@@ -9,6 +9,35 @@ import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+const installFakeTimers = () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let nextTimeoutId = 1;
+  const timeoutCallbacks = new Map<number, () => void>();
+
+  globalThis.setTimeout = ((callback: TimerHandler) => {
+    const timeoutId = nextTimeoutId;
+    nextTimeoutId += 1;
+    timeoutCallbacks.set(timeoutId, () => {
+      if (typeof callback === "function") {
+        callback();
+      }
+    });
+    return timeoutId as unknown as ReturnType<typeof setTimeout>;
+  }) as unknown as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = ((timeoutId: ReturnType<typeof setTimeout>) => {
+    timeoutCallbacks.delete(Number(timeoutId));
+  }) as unknown as typeof globalThis.clearTimeout;
+
+  return {
+    timeoutCallbacks,
+    restore: () => {
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+    },
+  };
+};
+
 describe("useAgentChatLoadingOverlay", () => {
   test("keeps the overlay visible until session loading settles", async () => {
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
@@ -74,24 +103,7 @@ describe("useAgentChatLoadingOverlay", () => {
   });
 
   test("does not flash the overlay for short same-session hydration", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    let nextTimeoutId = 1;
-    const timeoutCallbacks = new Map<number, () => void>();
-
-    globalThis.setTimeout = ((callback: TimerHandler) => {
-      const timeoutId = nextTimeoutId;
-      nextTimeoutId += 1;
-      timeoutCallbacks.set(timeoutId, () => {
-        if (typeof callback === "function") {
-          callback();
-        }
-      });
-      return timeoutId as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = ((timeoutId: ReturnType<typeof setTimeout>) => {
-      timeoutCallbacks.delete(Number(timeoutId));
-    }) as unknown as typeof globalThis.clearTimeout;
+    const { timeoutCallbacks, restore } = installFakeTimers();
 
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
       sessionId: "session-1",
@@ -109,31 +121,13 @@ describe("useAgentChatLoadingOverlay", () => {
       expect(harness.getLatest()).toBe(false);
       expect(timeoutCallbacks.size).toBe(0);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
+      restore();
       await harness.unmount();
     }
   });
 
   test("shows the overlay after the same-session hydration threshold elapses", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    let nextTimeoutId = 1;
-    const timeoutCallbacks = new Map<number, () => void>();
-
-    globalThis.setTimeout = ((callback: TimerHandler) => {
-      const timeoutId = nextTimeoutId;
-      nextTimeoutId += 1;
-      timeoutCallbacks.set(timeoutId, () => {
-        if (typeof callback === "function") {
-          callback();
-        }
-      });
-      return timeoutId as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = ((timeoutId: ReturnType<typeof setTimeout>) => {
-      timeoutCallbacks.delete(Number(timeoutId));
-    }) as unknown as typeof globalThis.clearTimeout;
+    const { timeoutCallbacks, restore } = installFakeTimers();
 
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
       sessionId: "session-1",
@@ -156,8 +150,7 @@ describe("useAgentChatLoadingOverlay", () => {
       await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
       expect(harness.getLatest()).toBe(false);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
+      restore();
       await harness.unmount();
     }
   });

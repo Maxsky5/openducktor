@@ -24,7 +24,6 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
-const retrySessionRuntimeAttachment = async (): Promise<boolean> => false;
 const ensureSessionReadyForView = async (): Promise<boolean> => false;
 
 describe("agent-orchestrator-public-operations", () => {
@@ -36,7 +35,6 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {
@@ -74,7 +72,6 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
@@ -119,7 +116,6 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
@@ -161,7 +157,6 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
@@ -193,46 +188,6 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("shows toast and rethrows runtime recovery errors", async () => {
-    const originalToastError = toast.error;
-    const toastError = mock(() => "");
-    toast.error = toastError;
-
-    const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment: async () => {
-        throw new Error("retry failed");
-      },
-      ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
-      loadAgentSessions: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      removeAgentSessions: () => {},
-      sessionActions: createSessionActions(),
-    });
-
-    try {
-      await expect(
-        operations.retrySessionRuntimeAttachment({ taskId: "task-1", sessionId: "session-1" }),
-      ).rejects.toThrow("retry failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to reconnect session runtime", {
-        description: "retry failed",
-      });
-    } finally {
-      toast.error = originalToastError;
-    }
-  });
-
   test("shows toast and rethrows session view readiness errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
@@ -241,7 +196,6 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView: async () => {
         throw new Error("prepare failed");
       },
@@ -282,7 +236,6 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
-      retrySessionRuntimeAttachment,
       ensureSessionReadyForView,
       reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},

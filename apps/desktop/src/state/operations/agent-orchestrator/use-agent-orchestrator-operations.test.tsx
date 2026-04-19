@@ -11,6 +11,7 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { host } from "../shared/host";
+import { createSessionMessagesState } from "./support/messages";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -2534,19 +2535,28 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
 
-      const session = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
+      const sessionsById = harness.getLatest().sessionStore.getSessionsByIdSnapshot();
+      const session = sessionsById["session-1"];
       if (!session) {
         throw new Error("Expected session-1 to exist after bootstrapping persisted sessions");
       }
-      session.historyHydrationState = "failed";
-      session.messages = [
-        {
-          id: "local-message-1",
-          role: "assistant",
-          content: "Local transcript still present",
-          timestamp: "2026-02-22T08:00:03.000Z",
-        },
-      ];
+      await harness.run(async () => {
+        harness.getLatest().commitSessions({
+          ...sessionsById,
+          "session-1": {
+            ...session,
+            historyHydrationState: "failed",
+            messages: createSessionMessagesState("session-1", [
+              {
+                id: "local-message-1",
+                role: "assistant",
+                content: "Local transcript still present",
+                timestamp: "2026-02-22T08:00:03.000Z",
+              },
+            ]),
+          },
+        });
+      });
       await clearAppQueryClient();
 
       await harness.run(async () => {
