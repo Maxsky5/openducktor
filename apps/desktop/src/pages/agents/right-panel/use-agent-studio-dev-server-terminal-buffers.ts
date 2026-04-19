@@ -6,9 +6,10 @@ import {
   createDevServerTerminalBufferStore,
   type DevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
-  getLatestBufferedTerminalSequence,
+  getDevServerTerminalBufferReplacementContext,
   reconcileDevServerTerminalBufferStore,
   replaceDevServerTerminalBuffer,
+  shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
@@ -124,12 +125,16 @@ export const useAgentStudioDevServerTerminalBuffers =
           const currentLastSequence = currentBuffer?.lastSequence ?? null;
           const baselineLastSequence =
             pendingReplaySync.baselineByScriptId.get(script.scriptId) ?? null;
-          const nextLastSequence = getLatestBufferedTerminalSequence(script);
           const shouldReplaceReplay =
             !pendingReplaySync.observedScriptIds.has(script.scriptId) ||
             currentLastSequence === baselineLastSequence ||
-            (nextLastSequence !== null &&
-              (currentLastSequence === null || nextLastSequence > currentLastSequence));
+            shouldReplaceDevServerTerminalBufferFromScript(
+              getDevServerTerminalBufferReplacementContext(
+                terminalBuffersRef.current,
+                script.scriptId,
+              ),
+              script,
+            );
 
           if (shouldReplaceReplay) {
             replaceDevServerTerminalBuffer(

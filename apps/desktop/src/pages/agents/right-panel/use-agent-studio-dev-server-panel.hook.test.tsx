@@ -781,6 +781,121 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("replaces mixed old and new replay when mutation state returns the reset window", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 3,
+              data: "old run output\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const restartedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4343,
+          startedAt: "2026-03-19T15:31:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 4,
+              data: "new run output\r\n",
+              timestamp: "2026-03-19T15:31:01.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+
+    devServerGetState = async () => initialState;
+    const restartDeferred = createDeferred<DevServerGroupState>();
+    devServerRestart = async () => restartDeferred.promise;
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "old run output\r\n",
+        );
+      });
+
+      await act(async () => {
+        getLatest().onRestart();
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      await act(async () => {
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 4,
+            data: "new run output\r\n",
+            timestamp: "2026-03-19T15:31:01.000Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(2);
+      });
+
+      restartDeferred.resolve(restartedState);
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(1);
+      });
+      expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("new run output\r\n");
+      expect(getLatest().isRestartPending).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reopens in loading mode until a fresh dev-server refetch completes", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
