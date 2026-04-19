@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/lib/query-provider";
+import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
@@ -895,6 +897,111 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
+  test("reconciles terminal replay from a normal state refetch when local buffers are already populated", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "stale output\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const refreshedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 1,
+              data: "fresh output\r\n",
+              timestamp: "2026-03-19T15:31:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return getStateCalls === 1 ? initialState : refreshedState;
+    };
+
+    let latest: HookResult | null = null;
+    let queryClient: ReturnType<typeof useQueryClient> | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const CaptureQueryClient = () => {
+      queryClient = useQueryClient();
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <CaptureQueryClient />
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("stale output\r\n");
+      });
+
+      if (queryClient === null) {
+        throw new Error("Expected query client to be captured");
+      }
+
+      await act(async () => {
+        await queryClient?.refetchQueries({
+          queryKey: devServerQueryKeys.state("/repo", "task-7"),
+          exact: true,
+          type: "active",
+        });
+      });
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("fresh output\r\n");
+      });
+      expect(getStateCalls).toBe(2);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("clears stale task state when switching to another task while enabled", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
@@ -1068,6 +1175,104 @@ describe("useAgentStudioDevServerPanel", () => {
       });
       expect(getStateCalls).toBe(2);
       restartDeferred.resolve(refreshedState);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "stale output\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const refreshedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 2,
+              data: "reconnected output\r\n",
+              timestamp: "2026-03-19T15:31:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return getStateCalls === 1 ? initialState : refreshedState;
+    };
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("stale output\r\n");
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      await act(async () => {
+        devServerEventListener?.({
+          __openducktorBrowserLive: true,
+          kind: "reconnected",
+        });
+      });
+
+      await waitFor(() => {
+        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "reconnected output\r\n",
+        );
+      });
+      expect(getStateCalls).toBe(2);
     } finally {
       view.unmount();
     }

@@ -8,6 +8,7 @@ import {
   getDevServerTerminalBuffer,
   getLatestBufferedTerminalSequence,
   replaceDevServerTerminalBuffer,
+  shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
@@ -64,13 +65,41 @@ export const useAgentStudioDevServerTerminalBuffers =
 
     const hydrateTerminalBuffersFromState = useCallback(
       (state: DevServerGroupState | null, selectedScriptId: string | null, force = false): void => {
-        if (!force && terminalBuffersRef.current.size > 0) {
+        if (state === null) {
+          if (force) {
+            replaceTerminalBuffersFromState(null, selectedScriptId);
+          }
           return;
         }
 
-        replaceTerminalBuffersFromState(state, selectedScriptId);
+        if (force || terminalBuffersRef.current.size === 0) {
+          replaceTerminalBuffersFromState(state, selectedScriptId);
+          return;
+        }
+
+        let didChange = false;
+        for (const script of state.scripts) {
+          const currentBuffer = getDevServerTerminalBuffer(
+            terminalBuffersRef.current,
+            script.scriptId,
+          );
+          if (!shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, script)) {
+            continue;
+          }
+
+          replaceDevServerTerminalBuffer(
+            terminalBuffersRef.current,
+            script.scriptId,
+            script.bufferedTerminalChunks,
+          );
+          didChange = true;
+        }
+
+        if (didChange) {
+          syncSelectedScriptTerminalBuffer(selectedScriptId);
+        }
       },
-      [replaceTerminalBuffersFromState],
+      [replaceTerminalBuffersFromState, syncSelectedScriptTerminalBuffer],
     );
 
     const beginMutationReplaySync = useCallback((state: DevServerGroupState | null): void => {

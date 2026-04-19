@@ -6,6 +6,7 @@ import {
   getDevServerTerminalBuffer,
   MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
   replaceDevServerTerminalBuffer,
+  shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
   trimDevServerTerminalChunks,
 } from "./dev-server-log-buffer";
@@ -171,5 +172,57 @@ describe("dev-server-log-buffer", () => {
     const replacedBuffer = getDevServerTerminalBuffer(store, "frontend");
     expect(replacedBuffer?.entries[0]?.data).toBe("restarted\r\n");
     expect(replacedBuffer?.resetToken).toBe(2);
+  });
+
+  test("replaces a populated buffer when an authoritative snapshot is newer", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 0,
+        data: "stale\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+
+    const currentBuffer = getDevServerTerminalBuffer(store, "frontend");
+    const nextScript = buildScript({
+      bufferedTerminalChunks: [
+        {
+          scriptId: "frontend",
+          sequence: 1,
+          data: "fresh\r\n",
+          timestamp: "2026-03-25T10:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, nextScript)).toBe(true);
+  });
+
+  test("keeps a populated buffer when the local stream is newer than the snapshot", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 2,
+        data: "local-live\r\n",
+        timestamp: "2026-03-25T10:02:00.000Z",
+      },
+    ]);
+
+    const currentBuffer = getDevServerTerminalBuffer(store, "frontend");
+    const staleScript = buildScript({
+      bufferedTerminalChunks: [
+        {
+          scriptId: "frontend",
+          sequence: 1,
+          data: "stale\r\n",
+          timestamp: "2026-03-25T10:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(shouldReplaceDevServerTerminalBufferFromScript(currentBuffer, staleScript)).toBe(false);
   });
 });

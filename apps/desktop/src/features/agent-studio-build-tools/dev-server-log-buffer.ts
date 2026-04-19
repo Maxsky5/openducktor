@@ -34,6 +34,20 @@ export const trimDevServerTerminalChunks = (
   return chunks.slice(-MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS);
 };
 
+const readBufferedSequenceWindow = (
+  chunks: readonly DevServerTerminalChunk[],
+): {
+  count: number;
+  firstSequence: number | null;
+  lastSequence: number | null;
+} => {
+  return {
+    count: chunks.length,
+    firstSequence: chunks[0]?.sequence ?? null,
+    lastSequence: chunks.at(-1)?.sequence ?? null,
+  };
+};
+
 const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => ({
   entries: [],
   head: 0,
@@ -145,6 +159,41 @@ export const getDevServerTerminalBuffer = (
     lastSequence: buffer.lastSequence,
     resetToken: buffer.resetToken,
   };
+};
+
+export const shouldReplaceDevServerTerminalBufferFromScript = (
+  currentBuffer: AgentStudioDevServerTerminalBuffer | null,
+  script: DevServerScriptState,
+  force = false,
+): boolean => {
+  if (force || currentBuffer === null) {
+    return true;
+  }
+
+  const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
+  const currentWindow = readBufferedSequenceWindow(currentBuffer.entries);
+  const nextWindow = readBufferedSequenceWindow(nextChunks);
+
+  if (nextWindow.lastSequence === null) {
+    return false;
+  }
+
+  if (currentWindow.lastSequence === null) {
+    return true;
+  }
+
+  if (nextWindow.lastSequence > currentWindow.lastSequence) {
+    return true;
+  }
+
+  if (nextWindow.lastSequence < currentWindow.lastSequence) {
+    return false;
+  }
+
+  return (
+    nextWindow.count !== currentWindow.count ||
+    nextWindow.firstSequence !== currentWindow.firstSequence
+  );
 };
 
 export const getLatestBufferedTerminalSequence = (script: DevServerScriptState): number | null => {

@@ -1,5 +1,6 @@
 use super::processes::{
-    spawn_dev_server_parent_death_watcher, stop_process_group, DEV_SERVER_STOP_TIMEOUT,
+    configure_dev_server_command_environment, spawn_dev_server_parent_death_watcher,
+    stop_process_group, DEV_SERVER_STOP_TIMEOUT,
 };
 use super::state::{build_group_state, dev_server_group_key, sync_group_state};
 use super::terminal::{
@@ -24,6 +25,7 @@ use host_infra_system::{AppConfigStore, RepoConfig, RepoDevServerScript};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{self, Read};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -366,6 +368,34 @@ fn spawn_terminal_forwarder_skips_invalid_utf8_and_continues_streaming() {
         "Dev server terminal output contained invalid UTF-8 bytes and could not be fully rendered."
     ));
     assert!(captured.contains("ready\r\n"));
+}
+
+#[test]
+fn configure_dev_server_command_environment_sets_terminal_capabilities() {
+    let mut command = Command::new("/bin/sh");
+
+    configure_dev_server_command_environment(&mut command, "Frontend")
+        .expect("environment should configure");
+
+    let envs = command
+        .get_envs()
+        .map(|(key, value)| {
+            (
+                key.to_string_lossy().into_owned(),
+                value.map(|entry| entry.to_string_lossy().into_owned()),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    assert!(matches!(envs.get("PATH"), Some(Some(path)) if !path.is_empty()));
+    assert_eq!(
+        envs.get("TERM").and_then(|value| value.as_deref()),
+        Some("xterm-256color")
+    );
+    assert_eq!(
+        envs.get("COLORTERM").and_then(|value| value.as_deref()),
+        Some("truecolor")
+    );
 }
 
 #[test]
