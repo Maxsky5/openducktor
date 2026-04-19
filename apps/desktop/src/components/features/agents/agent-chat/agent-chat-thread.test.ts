@@ -714,7 +714,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Loading session...");
+    expect(html).toContain("Loading session");
+    expect(html).toContain("Preparing the selected session view.");
   });
 
   test("hides transcript rows while session history is hydrating", () => {
@@ -731,7 +732,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Loading session...");
+    expect(html).toContain("Loading session");
+    expect(html).toContain("Loading the selected session transcript.");
     expect(html).not.toContain("Old cached message");
   });
 

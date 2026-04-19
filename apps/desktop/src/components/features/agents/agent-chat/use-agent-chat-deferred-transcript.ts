@@ -1,7 +1,8 @@
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type UseAgentChatDeferredTranscriptArgs = {
   activeSessionId: string | null;
+  shouldDefer: boolean;
 };
 
 type UseAgentChatDeferredTranscriptResult = {
@@ -10,6 +11,7 @@ type UseAgentChatDeferredTranscriptResult = {
 
 export function useAgentChatDeferredTranscript({
   activeSessionId,
+  shouldDefer,
 }: UseAgentChatDeferredTranscriptArgs): UseAgentChatDeferredTranscriptResult {
   const [renderedSessionId, setRenderedSessionId] = useState<string | null>(activeSessionId);
   const frameRef = useRef<number | null>(null);
@@ -26,7 +28,24 @@ export function useAgentChatDeferredTranscript({
     }
   }, []);
 
+  useLayoutEffect(() => {
+    if (shouldDefer) {
+      return;
+    }
+
+    cancelPendingDeferral();
+    if (renderedSessionId === activeSessionId) {
+      return;
+    }
+
+    setRenderedSessionId(activeSessionId);
+  }, [activeSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
+
   useEffect(() => {
+    if (!shouldDefer) {
+      return;
+    }
+
     cancelPendingDeferral();
 
     if (renderedSessionId === activeSessionId) {
@@ -35,7 +54,7 @@ export function useAgentChatDeferredTranscript({
 
     if (activeSessionId === null) {
       startTransition(() => {
-        setRenderedSessionId(null);
+        setRenderedSessionId(activeSessionId);
       });
       return;
     }
@@ -50,7 +69,7 @@ export function useAgentChatDeferredTranscript({
         });
       }, 0);
     });
-  }, [activeSessionId, cancelPendingDeferral, renderedSessionId]);
+  }, [activeSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
 
   useEffect(() => {
     return () => {
@@ -59,6 +78,6 @@ export function useAgentChatDeferredTranscript({
   }, [cancelPendingDeferral]);
 
   return {
-    isTranscriptRenderDeferred: renderedSessionId !== activeSessionId,
+    isTranscriptRenderDeferred: shouldDefer && renderedSessionId !== activeSessionId,
   };
 }

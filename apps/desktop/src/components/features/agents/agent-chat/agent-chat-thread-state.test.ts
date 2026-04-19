@@ -12,7 +12,8 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
 
-    expect(state.showRuntimeCheckingOverlay).toBe(true);
+    expect(state.statusOverlay?.kind).toBe("runtime_waiting");
+    expect(state.statusOverlay?.title).toBe("Runtime is starting");
     expect(state.hideTranscriptWhileHydrating).toBe(false);
     expect(state.isTranscriptLoading).toBe(false);
   });
@@ -29,7 +30,8 @@ describe("getAgentChatThreadState", () => {
 
     expect(state.isTranscriptLoading).toBe(true);
     expect(state.hideTranscriptWhileHydrating).toBe(true);
-    expect(state.showRuntimeCheckingOverlay).toBe(false);
+    expect(state.statusOverlay?.kind).toBe("session_loading");
+    expect(state.statusOverlay?.description).toBe("Loading the selected session transcript.");
   });
 
   test("shows blocked card only for explicit blocked reason", () => {
