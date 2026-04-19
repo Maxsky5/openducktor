@@ -1,7 +1,11 @@
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
-import { requireRuntimeConnectionSupport, resolveRuntimeRouteConnection } from "../runtime/runtime";
+import {
+  requireRuntimeConnectionSupport,
+  resolveRuntimeConnection,
+  resolveRuntimeRoute,
+} from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
@@ -74,16 +78,27 @@ export const executeForkStart = async ({
     resolved.runtime.runtimeKind ??
     selectedModel?.runtimeKind ??
     DEFAULT_RUNTIME_KIND;
-  const sourceRuntimeRoute = sourceSession.runtimeRoute ?? resolved.runtime.runtimeRoute;
-  if (!sourceRuntimeRoute) {
-    throw new Error(
-      `Session "${input.sourceSessionId}" is missing a live runtime route required for forking.`,
-    );
-  }
-  const runtimeConnection = resolveRuntimeRouteConnection(
-    sourceRuntimeRoute,
-    sourceSession.workingDirectory,
-  ).runtimeConnection;
+  const sourceRuntime: RuntimeInfo = {
+    runtimeKind,
+    runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
+    runId: sourceSession.runId ?? resolved.runtime.runId,
+    runtimeRoute: sourceSession.runtimeRoute ?? resolved.runtime.runtimeRoute,
+    workingDirectory: sourceSession.workingDirectory,
+    ...(sourceSession.runtimeRoute
+      ? {}
+      : { runtimeConnection: resolved.runtime.runtimeConnection }),
+    ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
+  };
+
+  const runtimeConnection = (() => {
+    try {
+      return resolveRuntimeConnection(sourceRuntime);
+    } catch {
+      throw new Error(
+        `Session "${input.sourceSessionId}" is missing live runtime context required for forking.`,
+      );
+    }
+  })();
   const supportedRuntimeConnection = requireRuntimeConnectionSupport(
     runtimeKind,
     runtimeConnection,
@@ -169,12 +184,15 @@ export const executeForkStart = async ({
 
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,
-    runtimeId: sourceSession.runtimeId ?? resolved.runtime.runtimeId,
-    runId: sourceSession.runId ?? resolved.runtime.runId,
-    runtimeRoute: sourceRuntimeRoute,
+    runtimeId: sourceRuntime.runtimeId,
+    runId: sourceRuntime.runId,
+    runtimeRoute: resolveRuntimeRoute({
+      ...sourceRuntime,
+      runtimeConnection: supportedRuntimeConnection,
+    }),
     runtimeConnection: supportedRuntimeConnection,
     workingDirectory: sourceSession.workingDirectory,
-    ...(resolved.runtime.kind ? { kind: resolved.runtime.kind } : {}),
+    ...(sourceRuntime.kind ? { kind: sourceRuntime.kind } : {}),
   };
 
   return registerStartedSession({
