@@ -68,6 +68,18 @@ const createArgs = (
   ...overrides,
 });
 
+const createDeferred = <TValue,>() => {
+  let resolve!: (value: TValue | PromiseLike<TValue>) => void;
+  const promise = new Promise<TValue>((innerResolve) => {
+    resolve = innerResolve;
+  });
+
+  return {
+    promise,
+    resolve,
+  };
+};
+
 describe("useSettingsModalSaveOrchestration", () => {
   test("returns false when no draft exists", async () => {
     const harness = createHookHarness(
@@ -175,6 +187,53 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(didSave).toBe(true);
     expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("rejects concurrent submit attempts while a save is already in flight", async () => {
+    const deferredSave = createDeferred<void>();
+    const saveSettingsSnapshot = mock(async () => {
+      await deferredSave.promise;
+    });
+    const harness = createHookHarness(
+      createArgs(
+        {
+          saveSettingsSnapshot,
+        },
+        {
+          ...EMPTY_DIRTY_SECTIONS,
+          chat: true,
+        },
+      ),
+    );
+
+    await harness.mount();
+
+    let firstSubmit: Promise<boolean> | undefined;
+    let secondResult = true;
+    await harness.run(async (state) => {
+      firstSubmit = state.submit();
+      secondResult = await state.submit();
+    });
+
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+    expect(secondResult).toBe(false);
+    expect(harness.getLatest().isSaving).toBe(true);
+
+    deferredSave.resolve();
+    if (!firstSubmit) {
+      throw new Error("Expected first submit promise");
+    }
+    await harness.run(async () => {
+      deferredSave.resolve();
+      await firstSubmit;
+    });
+    const firstResult = await firstSubmit;
+    await harness.waitFor((state) => !state.isSaving);
+
+    expect(firstResult).toBe(true);
+    expect(harness.getLatest().isSaving).toBe(false);
 
     await harness.unmount();
   });

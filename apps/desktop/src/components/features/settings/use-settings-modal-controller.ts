@@ -248,6 +248,30 @@ export const useSettingsModalController = ({
     saveGlobalGitConfig,
     saveSettingsSnapshot,
   });
+  const draftActions = useMemo(
+    () => ({
+      updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
+      updateGlobalGitConfig: applyGlobalGitConfigUpdate,
+      updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
+      updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
+      updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
+      updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
+      updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
+      clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
+    }),
+    [
+      applySelectedRepoConfigUpdate,
+      applyGlobalGitConfigUpdate,
+      applyGlobalChatSettingsUpdate,
+      applyGlobalKanbanSettingsUpdate,
+      applyGlobalAutopilotSettingsUpdate,
+      applyGlobalPromptOverridesUpdate,
+      applyRepoPromptOverridesUpdate,
+      applySelectedRepoAgentDefaultUpdate,
+      applyClearSelectedRepoAgentDefault,
+    ],
+  );
   const {
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
@@ -261,17 +285,7 @@ export const useSettingsModalController = ({
   } = useSettingsModalDirtyDraftActions({
     clearSaveError,
     markDirty,
-    draftActions: {
-      updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
-      updateGlobalGitConfig: applyGlobalGitConfigUpdate,
-      updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
-      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
-      updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
-      updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
-      updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
-      updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
-      clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
-    },
+    draftActions,
   });
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({

@@ -1,5 +1,5 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -57,6 +57,7 @@ export const useSettingsModalSaveOrchestration = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
+  const saveInFlightRef = useRef(false);
 
   const clearSaveError = useCallback((): void => {
     setSaveError(null);
@@ -88,7 +89,7 @@ export const useSettingsModalSaveOrchestration = ({
   }, [hasRepoScriptValidationErrors]);
 
   const submit = useCallback(async (): Promise<boolean> => {
-    if (!snapshotDraft) {
+    if (saveInFlightRef.current || !snapshotDraft) {
       return false;
     }
 
@@ -115,20 +116,24 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
-    setIsSaving(true);
     setSaveError(null);
 
+    if (!hasAnyDirtySections(dirtySections)) {
+      return true;
+    }
+
+    const normalizedGit = isGlobalGitOnlySave(dirtySections)
+      ? normalizeGlobalGitConfigForSave(snapshotDraft.git)
+      : null;
+    if (normalizedGit && hasSameNormalizedGlobalGitConfig(loadedSnapshot, normalizedGit)) {
+      return true;
+    }
+
+    saveInFlightRef.current = true;
+    setIsSaving(true);
+
     try {
-      if (!hasAnyDirtySections(dirtySections)) {
-        return true;
-      }
-
-      if (isGlobalGitOnlySave(dirtySections)) {
-        const normalizedGit = normalizeGlobalGitConfigForSave(snapshotDraft.git);
-        if (hasSameNormalizedGlobalGitConfig(loadedSnapshot, normalizedGit)) {
-          return true;
-        }
-
+      if (normalizedGit) {
         await saveGlobalGitConfig(normalizedGit);
       } else {
         const normalizedSnapshot = normalizeSnapshotForSave(snapshotDraft);
@@ -144,6 +149,7 @@ export const useSettingsModalSaveOrchestration = ({
       });
       return false;
     } finally {
+      saveInFlightRef.current = false;
       setIsSaving(false);
     }
   }, [
