@@ -3,11 +3,15 @@ import { useCallback, useRef, useState } from "react";
 import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
+  applyDevServerTerminalBufferReplacement,
   createDevServerTerminalBufferStore,
   type DevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
-  getLatestBufferedTerminalSequence,
+  getDevServerTerminalBufferReplacement,
+  getDevServerTerminalBufferReplacementContext,
+  reconcileDevServerTerminalBufferStore,
   replaceDevServerTerminalBuffer,
+  shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
@@ -64,13 +68,23 @@ export const useAgentStudioDevServerTerminalBuffers =
 
     const hydrateTerminalBuffersFromState = useCallback(
       (state: DevServerGroupState | null, selectedScriptId: string | null, force = false): void => {
-        if (!force && terminalBuffersRef.current.size > 0) {
+        if (state === null) {
+          if (force) {
+            replaceTerminalBuffersFromState(null, selectedScriptId);
+          }
           return;
         }
 
-        replaceTerminalBuffersFromState(state, selectedScriptId);
+        if (force || terminalBuffersRef.current.size === 0) {
+          replaceTerminalBuffersFromState(state, selectedScriptId);
+          return;
+        }
+
+        if (reconcileDevServerTerminalBufferStore(terminalBuffersRef.current, state)) {
+          syncSelectedScriptTerminalBuffer(selectedScriptId);
+        }
       },
-      [replaceTerminalBuffersFromState],
+      [replaceTerminalBuffersFromState, syncSelectedScriptTerminalBuffer],
     );
 
     const beginMutationReplaySync = useCallback((state: DevServerGroupState | null): void => {
@@ -113,18 +127,32 @@ export const useAgentStudioDevServerTerminalBuffers =
           const currentLastSequence = currentBuffer?.lastSequence ?? null;
           const baselineLastSequence =
             pendingReplaySync.baselineByScriptId.get(script.scriptId) ?? null;
-          const nextLastSequence = getLatestBufferedTerminalSequence(script);
+          const currentContext = getDevServerTerminalBufferReplacementContext(
+            terminalBuffersRef.current,
+            script.scriptId,
+          );
+          // Replace if no live replay was observed, if we only re-observed the baseline,
+          // or if the authoritative replay window proves the local buffer is stale.
           const shouldReplaceReplay =
             !pendingReplaySync.observedScriptIds.has(script.scriptId) ||
             currentLastSequence === baselineLastSequence ||
-            (nextLastSequence !== null &&
-              (currentLastSequence === null || nextLastSequence > currentLastSequence));
+            shouldReplaceDevServerTerminalBufferFromScript(currentContext, script);
 
           if (shouldReplaceReplay) {
-            replaceDevServerTerminalBuffer(
+            const replacement =
+              !pendingReplaySync.observedScriptIds.has(script.scriptId) ||
+              currentLastSequence === baselineLastSequence
+                ? getDevServerTerminalBufferReplacement(null, script)
+                : getDevServerTerminalBufferReplacement(currentContext, script);
+            if (replacement === null) {
+              continue;
+            }
+
+            // Mutation success replaces the replay baseline when no new live output arrived yet.
+            applyDevServerTerminalBufferReplacement(
               terminalBuffersRef.current,
               script.scriptId,
-              script.bufferedTerminalChunks,
+              replacement,
             );
           }
         }

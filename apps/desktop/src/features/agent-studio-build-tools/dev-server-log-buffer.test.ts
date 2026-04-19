@@ -4,8 +4,11 @@ import {
   appendDevServerTerminalChunk,
   createDevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
+  getDevServerTerminalBufferReplacementContext,
   MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS,
+  reconcileDevServerTerminalBufferStore,
   replaceDevServerTerminalBuffer,
+  shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
   trimDevServerTerminalChunks,
 } from "./dev-server-log-buffer";
@@ -171,5 +174,209 @@ describe("dev-server-log-buffer", () => {
     const replacedBuffer = getDevServerTerminalBuffer(store, "frontend");
     expect(replacedBuffer?.entries[0]?.data).toBe("restarted\r\n");
     expect(replacedBuffer?.resetToken).toBe(2);
+  });
+
+  test("replaces a populated buffer when an authoritative snapshot is newer", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 0,
+        data: "stale\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+
+    const nextScript = buildScript({
+      bufferedTerminalChunks: [
+        {
+          scriptId: "frontend",
+          sequence: 1,
+          data: "fresh\r\n",
+          timestamp: "2026-03-25T10:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        nextScript,
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps a populated buffer when the local stream is newer than the snapshot", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 2,
+        data: "local-live\r\n",
+        timestamp: "2026-03-25T10:02:00.000Z",
+      },
+    ]);
+
+    const staleScript = buildScript({
+      bufferedTerminalChunks: [
+        {
+          scriptId: "frontend",
+          sequence: 1,
+          data: "stale\r\n",
+          timestamp: "2026-03-25T10:01:00.000Z",
+        },
+      ],
+    });
+
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        staleScript,
+      ),
+    ).toBe(false);
+  });
+
+  test("replaces a populated buffer when an authoritative snapshot clears replay", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 2,
+        data: "stale\r\n",
+        timestamp: "2026-03-25T10:02:00.000Z",
+      },
+    ]);
+
+    const clearedScript = buildScript({ bufferedTerminalChunks: [] });
+
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        clearedScript,
+      ),
+    ).toBe(true);
+  });
+
+  test("drops a stale snapshot prefix while preserving a newer live-only suffix", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 0,
+        data: "snapshot\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+    appendDevServerTerminalChunk(store, {
+      scriptId: "frontend",
+      sequence: 1,
+      data: "live-only\r\n",
+      timestamp: "2026-03-25T10:00:01.000Z",
+    });
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [buildScript({ bufferedTerminalChunks: [] })],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.entries).toEqual([
+      {
+        scriptId: "frontend",
+        sequence: 1,
+        data: "live-only\r\n",
+        timestamp: "2026-03-25T10:00:01.000Z",
+      },
+    ]);
+    expect(
+      shouldReplaceDevServerTerminalBufferFromScript(
+        getDevServerTerminalBufferReplacementContext(store, "frontend"),
+        buildScript({ bufferedTerminalChunks: [] }),
+      ),
+    ).toBe(false);
+    expect(getDevServerTerminalBufferReplacementContext(store, "frontend")?.snapshot).toEqual({
+      count: 0,
+      firstSequence: null,
+      lastSequence: null,
+    });
+  });
+
+  test("derives snapshot metadata from the stored buffer after replacement", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 2,
+        data: "latest\r\n",
+        timestamp: "2026-03-25T10:00:02.000Z",
+      },
+      {
+        scriptId: "frontend",
+        sequence: 1,
+        data: "older\r\n",
+        timestamp: "2026-03-25T10:00:01.000Z",
+      },
+    ]);
+
+    expect(getDevServerTerminalBufferReplacementContext(store, "frontend")?.snapshot).toEqual({
+      count: 1,
+      firstSequence: 2,
+      lastSequence: 2,
+    });
+  });
+
+  test("does not bump reset token when replacing an empty buffer with another empty replay", () => {
+    const store = createDevServerTerminalBufferStore();
+
+    replaceDevServerTerminalBuffer(store, "frontend", []);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(0);
+
+    replaceDevServerTerminalBuffer(store, "frontend", []);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(0);
+  });
+
+  test("reconciles the store with authoritative snapshots while pruning removed scripts", () => {
+    const store = createDevServerTerminalBufferStore();
+    replaceDevServerTerminalBuffer(store, "frontend", [
+      {
+        scriptId: "frontend",
+        sequence: 0,
+        data: "stale\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+    replaceDevServerTerminalBuffer(store, "removed", [
+      {
+        scriptId: "removed",
+        sequence: 0,
+        data: "removed\r\n",
+        timestamp: "2026-03-25T10:00:00.000Z",
+      },
+    ]);
+
+    const didChange = reconcileDevServerTerminalBufferStore(
+      store,
+      buildState({
+        scripts: [
+          buildScript({
+            bufferedTerminalChunks: [
+              {
+                scriptId: "frontend",
+                sequence: 2,
+                data: "fresh\r\n",
+                timestamp: "2026-03-25T10:02:00.000Z",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(didChange).toBe(true);
+    expect(getDevServerTerminalBuffer(store, "removed")).toBeNull();
+    expect(getDevServerTerminalBuffer(store, "frontend")?.entries[0]?.data).toBe("fresh\r\n");
   });
 });

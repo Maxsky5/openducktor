@@ -18,6 +18,8 @@ use std::time::Duration;
 
 pub(super) const DEV_SERVER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const DEV_SERVER_START_GRACE_PERIOD: Duration = Duration::from_millis(150);
+const DEV_SERVER_TERM: &str = "xterm-256color";
+const DEV_SERVER_COLORTERM: &str = "truecolor";
 
 impl AppService {
     pub(super) fn start_dev_server_script(
@@ -51,13 +53,7 @@ impl AppService {
             let mut command =
                 build_dev_server_command(script.command.as_str(), script.name.as_str())?;
             command.current_dir(worktree_path);
-            let path_value = subprocess_path_env().ok_or_else(|| {
-                anyhow!(
-                    "Failed to assemble subprocess PATH for dev server `{}`",
-                    script.name
-                )
-            })?;
-            command.env("PATH", path_value);
+            configure_dev_server_command_environment(&mut command, script.name.as_str())?;
             configure_process_group(&mut command);
 
             #[cfg(unix)]
@@ -182,6 +178,22 @@ impl AppService {
 
         start_result
     }
+}
+
+pub(super) fn configure_dev_server_command_environment(
+    command: &mut Command,
+    script_name: &str,
+) -> Result<()> {
+    let path_value = subprocess_path_env().ok_or_else(|| {
+        anyhow!(
+            "Failed to assemble subprocess PATH for dev server `{}`",
+            script_name
+        )
+    })?;
+    command.env("PATH", path_value);
+    command.env("TERM", DEV_SERVER_TERM);
+    command.env("COLORTERM", DEV_SERVER_COLORTERM);
+    Ok(())
 }
 
 fn wait_for_immediate_dev_server_exit(

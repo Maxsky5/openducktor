@@ -1,5 +1,6 @@
 use super::processes::{
-    spawn_dev_server_parent_death_watcher, stop_process_group, DEV_SERVER_STOP_TIMEOUT,
+    configure_dev_server_command_environment, spawn_dev_server_parent_death_watcher,
+    stop_process_group, DEV_SERVER_STOP_TIMEOUT,
 };
 use super::state::{build_group_state, dev_server_group_key, sync_group_state};
 use super::terminal::{
@@ -24,6 +25,7 @@ use host_infra_system::{AppConfigStore, RepoConfig, RepoDevServerScript};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{self, Read};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -366,6 +368,94 @@ fn spawn_terminal_forwarder_skips_invalid_utf8_and_continues_streaming() {
         "Dev server terminal output contained invalid UTF-8 bytes and could not be fully rendered."
     ));
     assert!(captured.contains("ready\r\n"));
+}
+
+#[test]
+fn spawn_terminal_forwarder_preserves_split_utf8_across_reads() {
+    let groups = build_runtime_groups_for_forwarder_test();
+    let emoji = "🎉".as_bytes();
+
+    spawn_terminal_forwarder(
+        groups.clone(),
+        "repo::task-forwarder".to_string(),
+        "repo".to_string(),
+        "task-forwarder".to_string(),
+        "server-1".to_string(),
+        ScriptedReader::new(vec![
+            ScriptedReadStep::Chunk(vec![emoji[0], emoji[1]]),
+            ScriptedReadStep::Chunk(vec![emoji[2], emoji[3], b' ', b'o', b'k', b'\r', b'\n']),
+            ScriptedReadStep::Eof,
+        ]),
+    );
+
+    let mut captured = String::new();
+    for _ in 0..20 {
+        thread::sleep(Duration::from_millis(25));
+        captured = read_forwarder_output(&groups);
+        if captured.contains("🎉 ok\r\n") {
+            break;
+        }
+    }
+
+    assert!(captured.contains("🎉 ok\r\n"));
+    assert!(!captured.contains("invalid UTF-8 bytes"));
+}
+
+#[test]
+fn spawn_terminal_forwarder_preserves_split_ansi_sequences_across_reads() {
+    let groups = build_runtime_groups_for_forwarder_test();
+
+    spawn_terminal_forwarder(
+        groups.clone(),
+        "repo::task-forwarder".to_string(),
+        "repo".to_string(),
+        "task-forwarder".to_string(),
+        "server-1".to_string(),
+        ScriptedReader::new(vec![
+            ScriptedReadStep::Chunk(b"\x1b[38;2;255;0".to_vec()),
+            ScriptedReadStep::Chunk(b";0mready\x1b[0m\r\n".to_vec()),
+            ScriptedReadStep::Eof,
+        ]),
+    );
+
+    let mut captured = String::new();
+    for _ in 0..20 {
+        thread::sleep(Duration::from_millis(25));
+        captured = read_forwarder_output(&groups);
+        if captured.contains("\u{1b}[38;2;255;0;0mready\u{1b}[0m\r\n") {
+            break;
+        }
+    }
+
+    assert!(captured.contains("\u{1b}[38;2;255;0;0mready\u{1b}[0m\r\n"));
+}
+
+#[test]
+fn configure_dev_server_command_environment_sets_terminal_capabilities() {
+    let mut command = Command::new("/bin/sh");
+
+    configure_dev_server_command_environment(&mut command, "Frontend")
+        .expect("environment should configure");
+
+    let envs = command
+        .get_envs()
+        .map(|(key, value)| {
+            (
+                key.to_string_lossy().into_owned(),
+                value.map(|entry| entry.to_string_lossy().into_owned()),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    assert!(matches!(envs.get("PATH"), Some(Some(path)) if !path.is_empty()));
+    assert_eq!(
+        envs.get("TERM").and_then(|value| value.as_deref()),
+        Some("xterm-256color")
+    );
+    assert_eq!(
+        envs.get("COLORTERM").and_then(|value| value.as_deref()),
+        Some("truecolor")
+    );
 }
 
 #[test]
@@ -737,6 +827,80 @@ sleep 5
         "expected fake dev-server command to resolve from augmented PATH"
     );
     stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop dev server");
+}
+
+#[cfg(unix)]
+#[test]
+fn start_dev_server_script_sets_terminal_capabilities_for_color_aware_commands() {
+    let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+    let repo_path = "/repo";
+    let task_id = "task-color-env";
+    let worktree_path = unique_temp_path("dev-server-color-env-worktree");
+    fs::create_dir_all(&worktree_path).expect("create worktree path");
+    let worktree_path = worktree_path.to_string_lossy().to_string();
+    let group_key = dev_server_group_key(repo_path, task_id);
+    let script = RepoDevServerScript {
+        id: "frontend".to_string(),
+        name: "Frontend".to_string(),
+        command: "if [ \"$TERM\" = \"xterm-256color\" ] && [ \"$COLORTERM\" = \"truecolor\" ]; then printf '\\033[32mready\\033[0m\\r\\n'; else printf 'plain\\r\\n'; fi && sleep 5".to_string(),
+    };
+
+    service
+        .dev_server_groups
+        .lock()
+        .expect("group lock poisoned")
+        .insert(
+            group_key.clone(),
+            DevServerGroupRuntime {
+                state: build_group_state(
+                    repo_path,
+                    task_id,
+                    Some(worktree_path.clone()),
+                    &repo_config(vec![script.clone()]),
+                ),
+                emitter: None,
+            },
+        );
+
+    service
+        .start_dev_server_script(
+            group_key.as_str(),
+            repo_path,
+            task_id,
+            worktree_path.as_str(),
+            script,
+        )
+        .expect("dev server should start");
+
+    let mut pid = None;
+    let mut captured = String::new();
+    for _ in 0..30 {
+        thread::sleep(Duration::from_millis(100));
+        let groups = service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned");
+        let runtime = groups.get(&group_key).expect("runtime present");
+        let script = &runtime.state.scripts[0];
+        pid = script.pid;
+        captured = script
+            .buffered_terminal_chunks
+            .iter()
+            .map(|chunk| chunk.data.as_str())
+            .collect::<String>();
+        if captured.contains("ready") {
+            break;
+        }
+    }
+
+    assert!(
+        captured.contains("\u{1b}[32mready\u{1b}[0m\r"),
+        "captured output was {captured:?}"
+    );
+    assert!(!captured.contains("plain\r\n"));
+
+    let pid = pid.expect("dev server pid missing");
+    stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT).expect("stop color-aware dev server");
 }
 
 #[cfg(unix)]

@@ -166,6 +166,138 @@ describe("AgentStudioDevServerTerminal", () => {
     expect(reset).toHaveBeenCalledTimes(2);
   });
 
+  test("preserves split ANSI sequences across replay and incremental writes", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    const reset = mock(() => {});
+    const writes: string[] = [];
+    let screen = "";
+    const write = mock((data: string, callback?: () => void) => {
+      writes.push(data);
+      screen += data;
+      callback?.();
+    });
+    const dispose = mock(() => {});
+    const onRendererError = () => {};
+    const createTerminalBinding = (container: HTMLElement) => {
+      open(container);
+      loadAddon({});
+      return {
+        terminal: {
+          dispose,
+          loadAddon,
+          open,
+          options: {},
+          reset: () => {
+            screen = "";
+            reset();
+          },
+          write,
+        },
+        fitAddon: { dispose, fit },
+      };
+    };
+
+    const view = render(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "\u001b[38;2;255;0",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 1,
+              data: ";0mready",
+              timestamp: "2026-03-19T15:30:01.000Z",
+            },
+          ],
+          lastSequence: 1,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("\u001b[38;2;255;0;0mready");
+    });
+    expect(writes).toEqual(["\u001b[38;2;255;0;0mready"]);
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "\u001b[38;2;255;0",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 1,
+              data: ";0mready",
+              timestamp: "2026-03-19T15:30:01.000Z",
+            },
+            {
+              scriptId: "frontend",
+              sequence: 2,
+              data: "\u001b[0m\r\n",
+              timestamp: "2026-03-19T15:30:02.000Z",
+            },
+          ],
+          lastSequence: 2,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("\u001b[38;2;255;0;0mready\u001b[0m\r\n");
+    });
+    expect(writes).toEqual(["\u001b[38;2;255;0;0mready", "\u001b[0m\r\n"]);
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "\u001b[38;2;255;0;0mready\u001b[0m\r\n",
+              timestamp: "2026-03-19T15:30:03.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 1,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("\u001b[38;2;255;0;0mready\u001b[0m\r\n");
+    });
+    expect(writes).toEqual([
+      "\u001b[38;2;255;0;0mready",
+      "\u001b[0m\r\n",
+      "\u001b[38;2;255;0;0mready\u001b[0m\r\n",
+    ]);
+    expect(reset).toHaveBeenCalledTimes(2);
+  });
+
   test("drops stale pending writes when switching scripts", async () => {
     const open = mock((_container: HTMLElement) => {});
     const loadAddon = mock((_addon: unknown) => {});
