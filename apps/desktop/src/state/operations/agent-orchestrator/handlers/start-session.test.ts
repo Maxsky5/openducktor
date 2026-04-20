@@ -302,7 +302,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: inFlightMap },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -464,7 +464,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "running",
           }),
         } as unknown as AgentEnginePort,
-        resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+        resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
         ensureRuntime: async () => ({
           kind: "opencode",
           runtimeId: "runtime-1",
@@ -620,7 +620,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -723,7 +723,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -817,7 +817,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/new-worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/new-worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -896,7 +896,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree/"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree/"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -987,7 +987,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -1093,7 +1093,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -1199,7 +1199,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
@@ -1497,7 +1497,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
@@ -2349,7 +2349,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-2",
@@ -2452,7 +2452,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -2574,7 +2574,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => continuationTarget("/tmp/repo/worktree"),
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
@@ -2785,7 +2785,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => {
+      resolveTaskWorktree: async () => {
         qaTargetCalls += 1;
         return continuationTarget("/tmp/repo/worktree");
       },
@@ -2857,7 +2857,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       attachSessionListener: () => {},
-      resolveBuildContinuationTarget: async () => {
+      resolveTaskWorktree: async () => {
         qaTargetCalls += 1;
         return continuationTarget("/tmp/repo/worktree");
       },

@@ -51,10 +51,7 @@ type SessionActionsDependencies = {
     options?: { persist?: boolean },
   ) => void;
   attachSessionListener: (repoPath: string, sessionId: string) => void;
-  resolveBuildContinuationTarget?: (
-    repoPath: string,
-    taskId: string,
-  ) => Promise<TaskWorktreeSummary | null>;
+  resolveTaskWorktree?: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -134,7 +131,7 @@ export const createAgentSessionActions = ({
   turnModelBySessionRef,
   updateSession,
   attachSessionListener,
-  resolveBuildContinuationTarget,
+  resolveTaskWorktree,
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
@@ -275,8 +272,8 @@ export const createAgentSessionActions = ({
     },
     runtime: {
       adapter,
-      resolveBuildContinuationTarget:
-        resolveBuildContinuationTarget ??
+      resolveTaskWorktree:
+        resolveTaskWorktree ??
         (async () => {
           throw new Error("Build continuation target resolution is unavailable.");
         }),

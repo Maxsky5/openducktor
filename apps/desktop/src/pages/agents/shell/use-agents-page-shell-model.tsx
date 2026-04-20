@@ -318,7 +318,44 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     ],
   );
 
-  const worktreeRecoverySignal = 0;
+  const [worktreeRecoverySignal, setWorktreeRecoverySignal] = useState(0);
+  const lastWorktreeRecoveryKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextRecoveryKey = [
+      workspaceRepoPath ?? "",
+      selection.viewTaskId ?? "",
+      selection.viewSelectedTask?.updatedAt ?? "",
+      selection.viewSelectedTask?.status ?? "",
+      selection.viewActiveSession?.sessionId ?? "",
+      selection.viewActiveSession?.status ?? "",
+      selection.viewActiveSession?.workingDirectory ?? "",
+      selection.isViewSessionHistoryHydrating ? "1" : "0",
+      isForegroundLoadingTasks ? "1" : "0",
+    ].join(":");
+
+    if (lastWorktreeRecoveryKeyRef.current === null) {
+      lastWorktreeRecoveryKeyRef.current = nextRecoveryKey;
+      return;
+    }
+
+    if (lastWorktreeRecoveryKeyRef.current === nextRecoveryKey) {
+      return;
+    }
+
+    lastWorktreeRecoveryKeyRef.current = nextRecoveryKey;
+    setWorktreeRecoverySignal((previous) => previous + 1);
+  }, [
+    isForegroundLoadingTasks,
+    selection.isViewSessionHistoryHydrating,
+    selection.viewActiveSession?.sessionId,
+    selection.viewActiveSession?.status,
+    selection.viewActiveSession?.workingDirectory,
+    selection.viewSelectedTask?.status,
+    selection.viewSelectedTask?.updatedAt,
+    selection.viewTaskId,
+    workspaceRepoPath,
+  ]);
 
   useEffect(() => {
     if (!workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {

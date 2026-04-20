@@ -226,7 +226,7 @@ export const loadRepoPromptOverrides = async (
   });
 };
 
-export const loadBuildContinuationTarget = async (
+export const loadTaskWorktree = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskWorktreeSummary | null> => {

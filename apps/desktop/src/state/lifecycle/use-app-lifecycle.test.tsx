@@ -13,10 +13,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 const actualHostClientModule = await import("@/lib/host-client");
 const actualSonnerModule = await import("sonner");
 
-let _subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
-let subscribeRunEventsImpl: ((listener: (payload: unknown) => void) => Promise<() => void>) | null =
-  null;
 let subscribeTaskEventsImpl:
   | ((listener: (payload: unknown) => void) => Promise<() => void>)
   | null = null;
@@ -77,12 +74,6 @@ const normalizeHookArgs = ({
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
 });
 beforeEach(() => {
-  subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
-    _subscribedRunListener = listener;
-    return () => {
-      _subscribedRunListener = null;
-    };
-  };
   subscribeTaskEventsImpl = async (listener: (payload: unknown) => void) => {
     subscribedTaskListener = listener;
     return () => {
@@ -94,12 +85,6 @@ beforeEach(() => {
       client: createTauriHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
-      subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-        if (!subscribeRunEventsImpl) {
-          throw new Error("Expected subscribeRunEventsImpl to be configured");
-        }
-        return subscribeRunEventsImpl(listener);
-      },
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
         if (!subscribeTaskEventsImpl) {
           throw new Error("Expected subscribeTaskEventsImpl to be configured");
@@ -115,12 +100,6 @@ beforeEach(() => {
       client: createTauriHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
-      subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-        if (!subscribeRunEventsImpl) {
-          throw new Error("Expected subscribeRunEventsImpl to be configured");
-        }
-        return subscribeRunEventsImpl(listener);
-      },
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
         if (!subscribeTaskEventsImpl) {
           throw new Error("Expected subscribeTaskEventsImpl to be configured");
@@ -131,12 +110,6 @@ beforeEach(() => {
     hostClient: createTauriHostClient(async () => {
       throw new Error("Tauri runtime not available. Run inside the desktop shell.");
     }),
-    subscribeRunEvents: async (listener: (payload: unknown) => void) => {
-      if (!subscribeRunEventsImpl) {
-        throw new Error("Expected subscribeRunEventsImpl to be configured");
-      }
-      return subscribeRunEventsImpl(listener);
-    },
     subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
       if (!subscribeTaskEventsImpl) {
         throw new Error("Expected subscribeTaskEventsImpl to be configured");
@@ -152,7 +125,6 @@ beforeEach(() => {
       dismiss: toastDismiss,
     },
   }));
-  _subscribedRunListener = null;
   subscribedTaskListener = null;
   toastError.mockClear();
   toastLoading.mockClear();
@@ -161,7 +133,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  subscribeRunEventsImpl = null;
   subscribeTaskEventsImpl = null;
 });
 

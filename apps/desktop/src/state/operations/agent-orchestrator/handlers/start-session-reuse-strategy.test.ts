@@ -81,7 +81,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           deps: {
             session: sessionDependencies,
             runtime: createRuntimeDependenciesFixture({
-              resolveBuildContinuationTarget: async () =>
+              resolveTaskWorktree: async () =>
                 createBuildContinuationTargetFixture("/tmp/repo/worktree"),
             }),
             task: createTaskDependenciesFixture(),
@@ -122,7 +122,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         deps: {
           session: sessionDependencies,
           runtime: createRuntimeDependenciesFixture({
-            resolveBuildContinuationTarget: async () =>
+            resolveTaskWorktree: async () =>
               createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
           }),
           task: createTaskDependenciesFixture(),
@@ -158,7 +158,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         deps: {
           session: sessionDependencies,
           runtime: createRuntimeDependenciesFixture({
-            resolveBuildContinuationTarget: async () => null,
+            resolveTaskWorktree: async () => null,
           }),
           task: createTaskDependenciesFixture({
             taskRef: {

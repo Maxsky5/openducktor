@@ -63,10 +63,7 @@ export type SessionDependencies = {
 };
 
 export type RuntimeDependencies = {
-  resolveBuildContinuationTarget: (
-    repoPath: string,
-    taskId: string,
-  ) => Promise<TaskWorktreeSummary | null>;
+  resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
   ensureRuntime: (
     repoPath: string,

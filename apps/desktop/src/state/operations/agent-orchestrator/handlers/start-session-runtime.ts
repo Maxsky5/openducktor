@@ -84,22 +84,21 @@ export const resolveRuntimeAndModel = async ({
 
 export const resolveFreshStartTargetWorkingDirectory = async ({
   ctx,
-  resolveBuildContinuationTarget,
+  resolveTaskWorktree,
 }: {
   ctx: StartSessionContext;
-  resolveBuildContinuationTarget: StartSessionExecutionDependencies["runtime"]["resolveBuildContinuationTarget"];
+  resolveTaskWorktree: StartSessionExecutionDependencies["runtime"]["resolveTaskWorktree"];
 }): Promise<string | null | undefined> => {
   if (ctx.role === "qa") {
-    return requireBuildContinuationTarget(
-      await resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
-    ).workingDirectory;
+    return requireBuildContinuationTarget(await resolveTaskWorktree(ctx.repoPath, ctx.taskId))
+      .workingDirectory;
   }
 
   if (ctx.role !== "build") {
     return undefined;
   }
 
-  return (await resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId))?.workingDirectory ?? null;
+  return (await resolveTaskWorktree(ctx.repoPath, ctx.taskId))?.workingDirectory ?? null;
 };
 
 export const resolveFreshStartTargetWorkingDirectoryForStart = async ({
@@ -123,7 +122,7 @@ export const resolveFreshStartTargetWorkingDirectoryForStart = async ({
 
   const targetWorkingDirectoryForStart = await resolveFreshStartTargetWorkingDirectory({
     ctx,
-    resolveBuildContinuationTarget: runtime.resolveBuildContinuationTarget,
+    resolveTaskWorktree: runtime.resolveTaskWorktree,
   });
   return {
     targetWorkingDirectory: targetWorkingDirectoryForStart,

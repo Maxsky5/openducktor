@@ -21,10 +21,10 @@ import {
   createAgentSessionActions,
   createEnsureRuntime,
   createLoadAgentSessions,
-  loadBuildContinuationTarget,
   loadRepoDefaultTargetBranch,
   loadRepoPromptOverrides,
   loadTaskDocuments,
+  loadTaskWorktree,
   runOrchestratorSideEffect,
   toPersistedSessionRecord,
 } from ".";
@@ -590,8 +590,7 @@ export function useAgentOrchestratorOperations({
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
         attachSessionListener,
-        resolveBuildContinuationTarget: async (repoPath, taskId) =>
-          loadBuildContinuationTarget(repoPath, taskId),
+        resolveTaskWorktree: async (repoPath, taskId) => loadTaskWorktree(repoPath, taskId),
         ensureRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides,
