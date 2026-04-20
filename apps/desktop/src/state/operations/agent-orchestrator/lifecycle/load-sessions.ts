@@ -54,19 +54,28 @@ export const createLoadAgentSessions = ({
 ) => Promise<void>) => {
   const inFlightRequestedHistoryLoads = new Map<string, Promise<void>>();
   const inFlightRuntimeAttachmentRecoveryLoads = new Map<string, Promise<void>>();
+  const normalizeHistoryPreludeMode = (
+    historyPreludeMode: AgentSessionLoadOptions["historyPreludeMode"],
+  ): string => historyPreludeMode ?? "task_context";
 
-  const buildRequestedHistoryKey = (repoPath: string, taskId: string, sessionId: string): string =>
-    `${repoPath}::${taskId}::${sessionId}`;
+  const buildRequestedHistoryKey = (
+    repoPath: string,
+    taskId: string,
+    sessionId: string,
+    historyPreludeMode: AgentSessionLoadOptions["historyPreludeMode"],
+  ): string =>
+    `${repoPath}::${taskId}::${sessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
 
   const buildRuntimeAttachmentRecoveryKey = (
     repoPath: string,
     taskId: string,
     sessionId: string,
     recoveryDedupKey?: string | null,
+    historyPreludeMode?: AgentSessionLoadOptions["historyPreludeMode"],
   ): string =>
     recoveryDedupKey?.trim().length
-      ? `${repoPath}::${taskId}::${sessionId}::${recoveryDedupKey.trim()}`
-      : `${repoPath}::${taskId}::${sessionId}`;
+      ? `${repoPath}::${taskId}::${sessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}::${recoveryDedupKey.trim()}`
+      : `${repoPath}::${taskId}::${sessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
 
   const buildLoadIntent = (
     repoPath: string,
@@ -87,7 +96,12 @@ export const createLoadAgentSessions = ({
       mode,
       requestedSessionId,
       requestedHistoryKey: shouldHydrateRequestedSession
-        ? buildRequestedHistoryKey(repoPath, taskId, requestedSessionId)
+        ? buildRequestedHistoryKey(
+            repoPath,
+            taskId,
+            requestedSessionId,
+            options?.historyPreludeMode,
+          )
         : null,
       shouldHydrateRequestedSession,
       shouldReconcileLiveSessions,
@@ -126,6 +140,7 @@ export const createLoadAgentSessions = ({
             taskId,
             intent.requestedSessionId,
             options?.recoveryDedupKey,
+            options?.historyPreludeMode,
           )
         : null;
     if (requestedHistoryKey) {
@@ -180,7 +195,11 @@ export const createLoadAgentSessions = ({
         recordsToHydrate,
         historyHydrationSessionIds,
       });
-      const promptAssembler = createHydrationPromptAssemblerStage({ taskId, taskRef });
+      const promptAssembler = createHydrationPromptAssemblerStage({
+        taskId,
+        taskRef,
+        ...(options?.historyPreludeMode ? { historyPreludeMode: options.historyPreludeMode } : {}),
+      });
 
       const { reattachedSessionIds } = await reconcileLiveSessionsStage({
         intent,

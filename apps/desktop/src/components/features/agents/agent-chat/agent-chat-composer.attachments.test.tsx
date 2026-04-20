@@ -16,7 +16,7 @@ const SHARED_CALLBACKS = {
 const buildModel = () => ({
   taskId: "task-1",
   displayedSessionId: "session-1",
-  agentStudioReady: true,
+  isInteractionEnabled: true,
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,

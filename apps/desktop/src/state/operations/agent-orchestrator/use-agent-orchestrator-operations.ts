@@ -7,7 +7,7 @@ import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionHistoryPreludeMode, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -75,6 +75,8 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   sessionStore: AgentSessionsStore;
@@ -362,11 +364,15 @@ export function useAgentOrchestratorOperations({
       taskId,
       sessionId,
       recoveryDedupKey,
+      historyPreludeMode,
+      allowLiveSessionResume,
       persistedRecords,
     }: {
       taskId: string;
       sessionId: string;
       recoveryDedupKey?: string | null;
+      historyPreludeMode?: AgentSessionHistoryPreludeMode;
+      allowLiveSessionResume?: boolean;
       persistedRecords?: AgentSessionRecord[];
     }): Promise<boolean> => {
       updateSession(
@@ -381,6 +387,8 @@ export function useAgentOrchestratorOperations({
           taskId,
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
+          ...(historyPreludeMode ? { historyPreludeMode } : {}),
+          ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
         });
       } catch (error) {
@@ -411,12 +419,16 @@ export function useAgentOrchestratorOperations({
       sessionId,
       repoReadinessState,
       recoveryDedupKey,
+      historyPreludeMode,
+      allowLiveSessionResume,
       persistedRecords,
     }: {
       taskId: string;
       sessionId: string;
       repoReadinessState: SessionRepoReadinessState;
       recoveryDedupKey?: string | null;
+      historyPreludeMode?: AgentSessionHistoryPreludeMode;
+      allowLiveSessionResume?: boolean;
       persistedRecords?: AgentSessionRecord[];
     }): Promise<boolean> => {
       const session = sessionsRef.current[sessionId] ?? null;
@@ -434,6 +446,8 @@ export function useAgentOrchestratorOperations({
           taskId,
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
+          ...(historyPreludeMode ? { historyPreludeMode } : {}),
+          ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
         });
       }
@@ -441,6 +455,8 @@ export function useAgentOrchestratorOperations({
       await sessionHydration.hydrateRequestedTaskSession({
         taskId,
         sessionId,
+        ...(historyPreludeMode ? { historyPreludeMode } : {}),
+        ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
         ...(persistedRecords ? { persistedRecords } : {}),
       });
       return true;

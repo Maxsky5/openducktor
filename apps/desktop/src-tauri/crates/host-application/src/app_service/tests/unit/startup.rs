@@ -174,11 +174,7 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
     });
     let service = AppService::new(task_store, config_store);
     let error = service
-        .resolve_build_startup_policy(
-            &AgentRuntimeKind::opencode(),
-            "/tmp/repo",
-            "task-42",
-        )
+        .resolve_build_startup_policy(&AgentRuntimeKind::opencode(), "/tmp/repo", "task-42")
         .expect_err("invalid config should fail build startup policy resolution");
     let message = format!("{error:#}");
     assert!(message.contains("opencode build runtime failed before worktree preparation"));

@@ -151,7 +151,7 @@ describe("deriveAgentStudioTaskHydrationState", () => {
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
-  test("treats existing transcript as ready even if a previous history hydration failed", () => {
+  test("keeps existing transcript renderable even if a previous history hydration failed", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
         sessionId: "session-1",
@@ -191,9 +191,10 @@ describe("deriveAgentStudioTaskHydrationState", () => {
       agentStudioReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("ready");
+    expect(lifecycle.phase).toBe("waiting_for_runtime_attachment");
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.isHistoryHydrationFailed).toBe(false);
+    expect(lifecycle.shouldWaitForRuntimeAttachment).toBe(true);
   });
 
   test("renders empty history when hydration already completed successfully", () => {

@@ -116,7 +116,8 @@ export function useAgentStudioTaskHydration({
     shouldEnsureSessionReady,
   ]);
 
-  const shouldShowPendingHydrationState = shouldEnsureSessionReady;
+  const shouldShowPendingHydrationState =
+    requestState.sessionId === activeSessionId && requestState.status === "pending";
 
   return {
     isActiveTaskHydrated: Boolean(activeWorkspace && activeTaskId),

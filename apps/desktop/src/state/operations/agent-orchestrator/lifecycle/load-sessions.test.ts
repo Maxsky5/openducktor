@@ -4369,6 +4369,121 @@ describe("agent-orchestrator-load-sessions", () => {
     ).toBe(true);
   });
 
+  test("keeps interactive and read-only requested-history hydration loads separate", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const historyDeferred =
+      createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
+    let historyCalls = 0;
+    const loadAgentSessions = createLoadAgentSessions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        loadSessionHistory: async () => {
+          historyCalls += 1;
+          return historyDeferred.promise;
+        },
+      }),
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const persistedRecords = [
+      persistedSessionRecord({
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo",
+      }),
+    ];
+    const preloadedRuntimeLists = new Map([
+      [
+        "opencode",
+        [
+          {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          } satisfies RuntimeInstanceSummary,
+        ],
+      ],
+    ]);
+
+    const interactiveLoad = loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-1",
+      historyPolicy: "requested_only",
+      persistedRecords,
+      preloadedRuntimeLists,
+    });
+    const readonlyLoad = loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-1",
+      historyPolicy: "requested_only",
+      historyPreludeMode: "none",
+      persistedRecords,
+      preloadedRuntimeLists,
+    });
+
+    while (historyCalls < 2) {
+      await Promise.resolve();
+    }
+    expect(historyCalls).toBe(2);
+
+    historyDeferred.resolve([
+      {
+        messageId: "history-user-1",
+        role: "user",
+        state: "read",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        text: "Previous request",
+        displayParts: [],
+        parts: [],
+      },
+    ]);
+
+    await Promise.all([interactiveLoad, readonlyLoad]);
+  });
+
   test("hydrates an already loaded requested session without reloading the full persisted session list", async () => {
     const existingSession: AgentSessionState = {
       sessionId: "session-1",

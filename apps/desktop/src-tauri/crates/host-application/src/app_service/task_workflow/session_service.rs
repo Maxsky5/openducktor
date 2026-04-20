@@ -91,8 +91,9 @@ impl AppService {
     ) -> Result<Option<TaskWorktreeSummary>> {
         match self.task_worktree_lookup(repo_path, task_id)? {
             TaskWorktreeLookup::Found(target) => Ok(Some(target)),
-            TaskWorktreeLookup::NoBuilderContext
-            | TaskWorktreeLookup::MissingBuilderWorktree => Ok(None),
+            TaskWorktreeLookup::NoBuilderContext | TaskWorktreeLookup::MissingBuilderWorktree => {
+                Ok(None)
+            }
         }
     }
 }
@@ -259,7 +260,9 @@ fn validate_build_continuation_working_directory(
 ) -> Result<String> {
     let trimmed = working_directory.trim();
     if trimmed.is_empty() {
-        return Err(anyhow!("Builder continuation cannot start until a builder worktree exists for task {task_id}."));
+        return Err(anyhow!(
+            "Builder continuation cannot start until a builder worktree exists for task {task_id}."
+        ));
     }
 
     if !Path::new(trimmed).exists() {

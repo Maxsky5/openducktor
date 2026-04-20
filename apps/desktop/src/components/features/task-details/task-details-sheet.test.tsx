@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryProvider } from "@/lib/query-provider";
@@ -7,6 +7,7 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
@@ -56,6 +57,12 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
 );
 
 describe("TaskDetailsSheet", () => {
+  beforeEach(async () => {
+    await restoreMockedModules([
+      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+    ]);
+  });
+
   test("passes activeWorkspace into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
 

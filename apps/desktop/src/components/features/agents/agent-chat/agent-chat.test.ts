@@ -1,15 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AgentChat } from "./agent-chat";
-import {
-  buildModelSelection,
-  buildSession,
-  buildTodoItem,
-  TEST_ROLE_OPTIONS,
-} from "./agent-chat-test-fixtures";
+import { AgentChat, AgentChatSurface } from "./agent-chat";
+import { buildModelSelection, buildSession, buildTodoItem } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
+  mode: "interactive" as const,
   thread: {
     session: buildSession({
       status: "running" as const,
@@ -20,20 +16,20 @@ const buildModel = () => ({
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,
-    roleOptions: TEST_ROLE_OPTIONS,
     readinessState: "ready" as const,
-    agentStudioReady: true,
+    isInteractionEnabled: true,
     blockedReason: "",
     isLoadingChecks: false,
     onRefreshChecks: () => {},
-    taskSelected: true,
-    canKickoffNewSession: false,
-    kickoffLabel: "Start Spec",
-    onKickoff: () => {},
+    emptyState: {
+      title: "Send a message to start a new session automatically.",
+    },
     isStarting: false,
     isSending: false,
     sessionAgentColors: {},
+    canSubmitQuestionAnswers: true,
     isSubmittingQuestionByRequestId: {},
+    canReplyToPermissions: true,
     isSubmittingPermissionByRequestId: {},
     permissionReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
@@ -48,7 +44,7 @@ const buildModel = () => ({
   composer: {
     taskId: "task-1",
     displayedSessionId: "session-1",
-    agentStudioReady: true,
+    isInteractionEnabled: true,
     isReadOnly: false,
     readOnlyReason: null,
     busySendBlockedReason: null,
@@ -113,6 +109,26 @@ describe("AgentChat", () => {
     );
 
     expect(html).toContain("Header slot");
+  });
+
+  test("hides the composer in non-interactive mode", () => {
+    const interactiveModel = buildModel();
+    const html = renderToStaticMarkup(
+      createElement(AgentChatSurface, {
+        model: {
+          mode: "non_interactive",
+          thread: {
+            ...interactiveModel.thread,
+            isInteractionEnabled: false,
+            canSubmitQuestionAnswers: false,
+            canReplyToPermissions: false,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Initial response");
+    expect(html).not.toContain("Send message");
   });
 
   test("keeps composer visible when no session is selected", () => {

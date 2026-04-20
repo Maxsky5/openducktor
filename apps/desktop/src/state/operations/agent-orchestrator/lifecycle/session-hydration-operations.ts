@@ -4,7 +4,11 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionHistoryPreludeMode,
+  AgentSessionLoadOptions,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import {
   getAgentSessionHistoryHydrationState,
   requiresHydratedAgentSessionHistory,
@@ -19,18 +23,24 @@ export type SessionHydrationOperations = {
   hydrateRequestedTaskSession: (input: {
     taskId: string;
     sessionId: string;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   recoverSessionRuntimeAndHydrateRequestedTaskSession: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   reconcileLiveTaskSessions: (input: {
@@ -59,7 +69,13 @@ export const createSessionHydrationOperations = ({
   return {
     bootstrapTaskSessions: (taskId, persistedRecords) =>
       loadAgentSessions(taskId, withPersistedRecords({}, persistedRecords)),
-    hydrateRequestedTaskSession: ({ taskId, sessionId, persistedRecords }) =>
+    hydrateRequestedTaskSession: ({
+      taskId,
+      sessionId,
+      historyPreludeMode,
+      allowLiveSessionResume,
+      persistedRecords,
+    }) =>
       loadAgentSessions(
         taskId,
         withPersistedRecords(
@@ -67,6 +83,8 @@ export const createSessionHydrationOperations = ({
             mode: "requested_history",
             targetSessionId: sessionId,
             historyPolicy: "requested_only",
+            ...(historyPreludeMode ? { historyPreludeMode } : {}),
+            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           },
           persistedRecords,
         ),
@@ -75,6 +93,8 @@ export const createSessionHydrationOperations = ({
       taskId,
       sessionId,
       recoveryDedupKey,
+      historyPreludeMode,
+      allowLiveSessionResume,
       persistedRecords,
     }) => {
       const sessionBeforeRecovery = getSessionSnapshot(sessionId);
@@ -89,6 +109,8 @@ export const createSessionHydrationOperations = ({
             targetSessionId: sessionId,
             ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
             historyPolicy: "none",
+            ...(historyPreludeMode ? { historyPreludeMode } : {}),
+            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           },
           persistedRecords,
         ),
@@ -116,6 +138,8 @@ export const createSessionHydrationOperations = ({
             mode: "requested_history",
             targetSessionId: sessionId,
             historyPolicy: "requested_only",
+            ...(historyPreludeMode ? { historyPreludeMode } : {}),
+            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           },
           persistedRecords,
         ),
@@ -123,7 +147,14 @@ export const createSessionHydrationOperations = ({
 
       return attached;
     },
-    retrySessionRuntimeAttachment: ({ taskId, sessionId, recoveryDedupKey, persistedRecords }) =>
+    retrySessionRuntimeAttachment: ({
+      taskId,
+      sessionId,
+      recoveryDedupKey,
+      historyPreludeMode,
+      allowLiveSessionResume,
+      persistedRecords,
+    }) =>
       loadAgentSessions(
         taskId,
         withPersistedRecords(
@@ -132,6 +163,8 @@ export const createSessionHydrationOperations = ({
             targetSessionId: sessionId,
             ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
             historyPolicy: "none",
+            ...(historyPreludeMode ? { historyPreludeMode } : {}),
+            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           },
           persistedRecords,
         ),

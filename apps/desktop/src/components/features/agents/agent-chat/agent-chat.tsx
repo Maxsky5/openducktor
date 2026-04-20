@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AgentChatModel } from "./agent-chat.types";
+import type { AgentChatModel, AgentChatSurfaceModel } from "./agent-chat.types";
 import { AgentChatComposer, type AgentChatComposerHandle } from "./agent-chat-composer";
 import { AgentChatThread } from "./agent-chat-thread";
 
@@ -30,11 +30,11 @@ const hasDraggedFiles = (dataTransfer: DataTransfer | null | undefined): boolean
   return Array.from(dataTransfer.types ?? []).includes("Files");
 };
 
-export function AgentChat({
+export function AgentChatSurface({
   model,
   header,
 }: {
-  model: AgentChatModel;
+  model: AgentChatSurfaceModel;
   header?: ReactNode;
 }): ReactElement {
   const composerRef = useRef<AgentChatComposerHandle | null>(null);
@@ -42,56 +42,89 @@ export function AgentChat({
   const dragDepthRef = useRef(0);
   const isDraggingFilesRef = useRef(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const supportsComposer =
+    (model.mode ?? "interactive") === "interactive" && model.composer !== undefined;
+  const composerModel = model.composer;
 
-  const handleDragEnter = useCallback((event: DragEvent): void => {
-    if (!hasDraggedFiles(event.dataTransfer)) {
-      return;
-    }
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    isDraggingFilesRef.current = true;
-    setIsDraggingFiles(true);
-  }, []);
+  const handleDragEnter = useCallback(
+    (event: DragEvent): void => {
+      if (!supportsComposer) {
+        return;
+      }
+      if (!hasDraggedFiles(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepthRef.current += 1;
+      isDraggingFilesRef.current = true;
+      setIsDraggingFiles(true);
+    },
+    [supportsComposer],
+  );
 
-  const handleDragOver = useCallback((event: DragEvent): void => {
-    if (!hasDraggedFiles(event.dataTransfer)) {
-      return;
-    }
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "copy";
-    }
-    isDraggingFilesRef.current = true;
-    setIsDraggingFiles(true);
-  }, []);
+  const handleDragOver = useCallback(
+    (event: DragEvent): void => {
+      if (!supportsComposer) {
+        return;
+      }
+      if (!hasDraggedFiles(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+      isDraggingFilesRef.current = true;
+      setIsDraggingFiles(true);
+    },
+    [supportsComposer],
+  );
 
-  const handleDragLeave = useCallback((event: DragEvent): void => {
-    if (!hasDraggedFiles(event.dataTransfer)) {
-      return;
-    }
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) {
+  const handleDragLeave = useCallback(
+    (event: DragEvent): void => {
+      if (!supportsComposer) {
+        return;
+      }
+      if (!hasDraggedFiles(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) {
+        isDraggingFilesRef.current = false;
+        setIsDraggingFiles(false);
+      }
+    },
+    [supportsComposer],
+  );
+
+  const handleDrop = useCallback(
+    (event: DragEvent): void => {
+      if (!supportsComposer) {
+        return;
+      }
+      if (!hasDraggedFiles(event.dataTransfer)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepthRef.current = 0;
       isDraggingFilesRef.current = false;
       setIsDraggingFiles(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback((event: DragEvent): void => {
-    if (!hasDraggedFiles(event.dataTransfer)) {
-      return;
-    }
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    isDraggingFilesRef.current = false;
-    setIsDraggingFiles(false);
-    const files = Array.from(event.dataTransfer?.files ?? []);
-    if (files.length > 0) {
-      composerRef.current?.addFiles(files);
-    }
-  }, []);
+      const files = Array.from(event.dataTransfer?.files ?? []);
+      if (files.length > 0) {
+        composerRef.current?.addFiles(files);
+      }
+    },
+    [supportsComposer],
+  );
 
   useEffect(() => {
+    if (!supportsComposer) {
+      dragDepthRef.current = 0;
+      isDraggingFilesRef.current = false;
+      setIsDraggingFiles(false);
+      return;
+    }
     const node = dropTargetRef.current;
     if (!node) {
       return;
@@ -153,7 +186,7 @@ export function AgentChat({
       window.removeEventListener("drop", onWindowDrop);
       window.removeEventListener("dragend", onWindowDragEnd);
     };
-  }, [handleDragEnter, handleDragLeave, handleDragOver, handleDrop]);
+  }, [handleDragEnter, handleDragLeave, handleDragOver, handleDrop, supportsComposer]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -175,9 +208,21 @@ export function AgentChat({
             </div>
           ) : null}
           <MemoizedAgentChatThread model={model.thread} />
-          <MemoizedAgentChatComposer ref={composerRef} model={model.composer} />
+          {supportsComposer && composerModel ? (
+            <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+export function AgentChat({
+  model,
+  header,
+}: {
+  model: AgentChatModel;
+  header?: ReactNode;
+}): ReactElement {
+  return <AgentChatSurface model={model} header={header} />;
 }

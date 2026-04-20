@@ -1,4 +1,6 @@
-use super::super::{AppService, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTargetResolution};
+use super::super::{
+    AppService, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTargetResolution,
+};
 use anyhow::{anyhow, Result};
 use host_domain::{AgentRuntimeKind, AgentSessionDocument, AgentSessionStopRequest, RuntimeRoute};
 use std::path::{Component, PathBuf};
@@ -163,7 +165,8 @@ impl LiveSessionStopRouteResolver<'_> {
             return Ok(runtime_route.clone());
         }
 
-        let probed_routes = self.probe_repo_runtime_routes_for_live_session(repo_routes.as_slice())?;
+        let probed_routes =
+            self.probe_repo_runtime_routes_for_live_session(repo_routes.as_slice())?;
         match probed_routes.as_slice() {
             [runtime_route] => Ok(runtime_route.clone()),
             [] => Err(anyhow!(
@@ -255,13 +258,16 @@ impl LiveSessionStopRouteResolver<'_> {
             .load_cached_runtime_session_statuses_for_targets(unique_probe_targets.as_slice())?;
         let mut matching_routes = Vec::new();
         for (runtime_route, probe_target) in probe_targets {
-            if statuses_by_target.get(&probe_target).is_some_and(|outcome| {
-                matches!(
-                    outcome,
-                    RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)
-                        if snapshot.has_live_session(external_session_id)
-                )
-            }) {
+            if statuses_by_target
+                .get(&probe_target)
+                .is_some_and(|outcome| {
+                    matches!(
+                        outcome,
+                        RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)
+                            if snapshot.has_live_session(external_session_id)
+                    )
+                })
+            {
                 push_unique_runtime_route(&mut matching_routes, runtime_route);
             }
         }

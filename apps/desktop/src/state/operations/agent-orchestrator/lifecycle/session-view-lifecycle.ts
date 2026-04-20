@@ -61,19 +61,6 @@ export const deriveAgentSessionViewLifecycle = ({
     sessionNeedsHydration &&
     isWaitingForAttachedWorktreeRuntime(session);
 
-  if (hasTranscript && historyHydrationState !== "hydrating") {
-    return {
-      phase: "ready",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-      canRenderHistory: true,
-      isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
-      shouldEnsureReadyForView: false,
-      shouldWaitForRuntimeAttachment: false,
-    };
-  }
-
   if (repoReadinessState !== "ready" && sessionNeedsHydration && !hasTranscript) {
     return {
       phase: "blocked_on_repo",
@@ -139,12 +126,11 @@ export const deriveAgentSessionViewLifecycle = ({
     };
   }
 
-  const shouldRequestHistory = !hasTranscript && historyHydrationState === "not_requested";
-  if (shouldRequestHistory) {
+  if (historyHydrationState === "not_requested") {
     return {
       phase: "needs_history",
       canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-      canRenderHistory: false,
+      canRenderHistory: hasTranscript,
       isWaitingForRuntimeReadiness: false,
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,

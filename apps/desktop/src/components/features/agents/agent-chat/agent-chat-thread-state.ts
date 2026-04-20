@@ -57,7 +57,7 @@ export const getAgentChatThreadState = ({
       kind: "session_loading" as const,
       title: "Loading session",
       description: hideTranscriptWhileHydrating
-        ? "Loading the selected session transcript."
+        ? "Loading the selected conversation."
         : "Preparing the selected session view.",
     };
   })();

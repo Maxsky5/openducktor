@@ -6,6 +6,10 @@ import { mergeModelSelection, normalizePersistedSelection } from "../support/mod
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
 const STALE_REPO_ABORT = Symbol("stale-repo-abort");
+const normalizeLiveSessionTitle = (title: string): string | undefined => {
+  const trimmed = title.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
 
 type CreateReattachLiveSessionArgs = {
   adapter: {
@@ -30,6 +34,7 @@ type CreateReattachLiveSessionArgs = {
     runtimeKind: RuntimeKind;
     runtimeConnection: AgentRuntimeConnection;
   }) => Promise<void>;
+  allowResumeMissingSession?: boolean;
   isStaleRepoOperation: () => boolean;
   toLiveSessionState: (status: LiveAgentSessionSnapshot["status"]) => AgentSessionState["status"];
 };
@@ -43,9 +48,18 @@ export const createReattachLiveSession = ({
   resolveHydrationRuntime,
   listLiveAgentSessions,
   resumeMissingLiveSession,
+  allowResumeMissingSession = true,
   isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
+  const isAttachableLiveSnapshot = (snapshot: LiveAgentSessionSnapshot): boolean => {
+    if (snapshot.pendingPermissions.length > 0 || snapshot.pendingQuestions.length > 0) {
+      return true;
+    }
+
+    return snapshot.status.type !== "idle";
+  };
+
   const awaitUnlessStale = async <T>(
     operation: Promise<T>,
   ): Promise<T | typeof STALE_REPO_ABORT> => {
@@ -88,13 +102,17 @@ export const createReattachLiveSession = ({
     const liveSession = liveAgentSessions.find(
       (session) => session.externalSessionId === externalSessionId,
     );
-    if (!liveSession) {
+    if (!liveSession || !isAttachableLiveSnapshot(liveSession)) {
       return false;
     }
 
     const nextStatus = toLiveSessionState(liveSession.status);
+    const liveSessionTitle = normalizeLiveSessionTitle(liveSession.title);
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!attachedExistingSession) {
+      if (!allowResumeMissingSession) {
+        return false;
+      }
       if (!resumeMissingLiveSession) {
         throw new Error(
           `Cannot reattach live session ${record.sessionId} without a resumeMissingLiveSession handler.`,
@@ -126,6 +144,7 @@ export const createReattachLiveSession = ({
         workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
         runtimeRecoveryState: "idle",
         status: nextStatus,
+        ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
         pendingPermissions: liveSession.pendingPermissions,
         pendingQuestions: liveSession.pendingQuestions,
         promptOverrides,

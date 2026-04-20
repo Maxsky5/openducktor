@@ -132,6 +132,8 @@ export type AgentSessionHistoryHydrationState =
   | "hydrated"
   | "failed";
 
+export type AgentSessionHistoryPreludeMode = "task_context" | "none";
+
 export type AgentSessionRuntimeRecoveryState =
   | "idle"
   | "waiting_for_runtime"
@@ -141,6 +143,7 @@ export type AgentSessionRuntimeRecoveryState =
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
+  title?: string;
   taskId: string;
   repoPath: string;
   runtimeKind?: RuntimeKind;
@@ -181,6 +184,8 @@ export type AgentSessionLoadOptions = {
   targetSessionId?: string | null;
   recoveryDedupKey?: string | null;
   historyPolicy?: AgentSessionHistoryHydrationPolicy;
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
+  allowLiveSessionResume?: boolean;
   persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   preloadedRuntimeLists?: Map<
     import("@openducktor/contracts").RuntimeKind,

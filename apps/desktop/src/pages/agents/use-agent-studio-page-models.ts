@@ -1,9 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { useAgentChatLayout } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
+import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -23,12 +23,7 @@ import {
   buildWorkflowModelContext,
   toChatContextUsage,
 } from "./use-agent-studio-page-model-builders";
-import {
-  useAgentStudioComposerModel,
-  useAgentStudioHeaderModel,
-  useAgentStudioThreadModel,
-} from "./use-agent-studio-page-submodels";
-import { useAgentStudioThreadContext } from "./use-agent-studio-thread-context";
+import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
 
 type AgentStudioCoreContext = {
   activeTabValue: string;
@@ -149,23 +144,6 @@ export function useAgentStudioPageModels({
   agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
   agentChatModel: AgentChatModel;
 } {
-  const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
-    Record<string, boolean>
-  >({});
-  const { threadSession, activeSessionId, isContextSwitching } = useAgentStudioThreadContext({
-    activeSession: core.activeSession,
-    isTaskHydrating: core.isTaskHydrating,
-    isSessionHistoryHydrating: core.isSessionHistoryHydrating,
-    contextSwitchVersion: core.contextSwitchVersion,
-  });
-  const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
-  const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
-    useAgentChatLayout({
-      activeSessionId: threadSession?.sessionId ?? null,
-      syncBottomAfterComposerLayoutRef,
-    });
-
-  const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
   const workflowSessionsForTask = core.sessionsForTask;
   const workflowActiveSessionId = core.activeSession?.sessionId ?? null;
   const workflowActiveSessionRole = core.activeSession?.role ?? null;
@@ -284,125 +262,207 @@ export function useAgentStudioPageModels({
     () => toChatContextUsage(modelSelection.activeSessionContextUsage),
     [modelSelection.activeSessionContextUsage],
   );
-
-  const activeTodoPanelCollapsed = activeSessionId
-    ? (todoPanelCollapsedBySession[activeSessionId] ?? true)
-    : true;
-  const composerSessionId = core.activeSession?.sessionId ?? null;
-  const composerSelectedModel = core.activeSession?.selectedModel ?? null;
-  const composerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
-  const composerPendingPermissions = core.activeSession?.pendingPermissions ?? [];
-  const composerPendingQuestions = core.activeSession?.pendingQuestions ?? [];
-  const composerSession = useMemo(
+  const canKickoff = sessionActions.canKickoffNewSession && selectedRoleAvailable;
+  const activeComposerSessionId = core.activeSession?.sessionId ?? null;
+  const activeComposerSelectedModel = core.activeSession?.selectedModel ?? null;
+  const activeComposerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
+  const activeComposerPendingPermissions = core.activeSession?.pendingPermissions ?? [];
+  const activeComposerPendingQuestions = core.activeSession?.pendingQuestions ?? [];
+  const activeComposerSession = useMemo(
     () =>
-      composerSessionId
+      activeComposerSessionId
         ? {
-            sessionId: composerSessionId,
-            selectedModel: composerSelectedModel,
-            isLoadingModelCatalog: composerIsLoadingModelCatalog,
-            pendingPermissions: composerPendingPermissions,
-            pendingQuestions: composerPendingQuestions,
+            sessionId: activeComposerSessionId,
+            selectedModel: activeComposerSelectedModel,
+            isLoadingModelCatalog: activeComposerIsLoadingModelCatalog,
+            pendingPermissions: activeComposerPendingPermissions,
+            pendingQuestions: activeComposerPendingQuestions,
           }
         : null,
     [
-      composerIsLoadingModelCatalog,
-      composerPendingPermissions,
-      composerPendingQuestions,
-      composerSelectedModel,
-      composerSessionId,
+      activeComposerIsLoadingModelCatalog,
+      activeComposerPendingPermissions,
+      activeComposerPendingQuestions,
+      activeComposerSelectedModel,
+      activeComposerSessionId,
     ],
   );
 
-  const handleToggleTodoPanel = useCallback((): void => {
-    if (!activeSessionId) {
-      return;
+  const chatEmptyState = useMemo(() => {
+    if (!core.taskId) {
+      return {
+        title: "Select a task to begin.",
+      };
     }
-    setTodoPanelCollapsedBySession((current) => ({
-      ...current,
-      [activeSessionId]: !(current[activeSessionId] ?? true),
-    }));
-  }, [activeSessionId]);
 
-  const agentChatThreadModel = useAgentStudioThreadModel({
-    threadSession,
-    isSessionWorking: sessionActions.isSessionWorking,
+    if (sessionActions.isStarting) {
+      return {
+        title: "Initializing session...",
+      };
+    }
+
+    if (canKickoff) {
+      return {
+        title: "Send a message to start a new session automatically.",
+        actionLabel: sessionActions.kickoffLabel,
+        onAction: (): void => {
+          void sessionActions.startScenarioKickoff();
+        },
+        isActionPending: sessionActions.isStarting,
+      };
+    }
+
+    return {
+      title: "Send a message to start a new session automatically.",
+    };
+  }, [
+    canKickoff,
+    core.taskId,
+    sessionActions.isStarting,
+    sessionActions.kickoffLabel,
+    sessionActions.startScenarioKickoff,
+  ]);
+
+  const runtimeReadiness = useMemo(
+    () => ({
+      readinessState: readiness.agentStudioReadinessState,
+      isReady: readiness.agentStudioReady,
+      blockedReason: readiness.agentStudioBlockedReason,
+      isLoadingChecks: readiness.isLoadingChecks,
+      refreshChecks: readiness.refreshChecks,
+    }),
+    [
+      readiness.agentStudioBlockedReason,
+      readiness.agentStudioReadinessState,
+      readiness.agentStudioReady,
+      readiness.isLoadingChecks,
+      readiness.refreshChecks,
+    ],
+  );
+
+  const pendingQuestions = useMemo(
+    () => ({
+      canSubmit: true,
+      isSubmittingByRequestId: sessionActions.isSubmittingQuestionByRequestId,
+      onSubmit: sessionActions.onSubmitQuestionAnswers,
+    }),
+    [sessionActions.isSubmittingQuestionByRequestId, sessionActions.onSubmitQuestionAnswers],
+  );
+
+  const permissionsModel = useMemo(
+    () => ({
+      canReply: true,
+      isSubmittingByRequestId: permissions.isSubmittingPermissionByRequestId,
+      errorByRequestId: permissions.permissionReplyErrorByRequestId,
+      onReply: permissions.onReplyPermission,
+    }),
+    [
+      permissions.isSubmittingPermissionByRequestId,
+      permissions.onReplyPermission,
+      permissions.permissionReplyErrorByRequestId,
+    ],
+  );
+
+  const composerConfig = useMemo(
+    () => ({
+      taskId: core.taskId,
+      activeSession: activeComposerSession,
+      isSessionWorking: sessionActions.isSessionWorking,
+      isWaitingInput: sessionActions.isWaitingInput,
+      busySendBlockedReason: sessionActions.busySendBlockedReason,
+      canStopSession: sessionActions.canStopSession,
+      stopAgentSession: sessionActions.stopAgentSession,
+      isReadOnly: !selectedRoleAvailable,
+      readOnlyReason: selectedRoleReadOnlyReason,
+      draftStateKey: composer.draftStateKey,
+      onSend: sessionActions.onSend,
+      isSending: sessionActions.isSending,
+      isStarting: sessionActions.isStarting,
+      contextUsage: chatContextUsage,
+      selectedModelSelection: modelSelection.selectedModelSelection,
+      selectedModelDescriptor: modelSelection.selectedModelDescriptor,
+      isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
+      supportsSlashCommands: modelSelection.supportsSlashCommands,
+      supportsFileSearch: modelSelection.supportsFileSearch,
+      slashCommandCatalog: modelSelection.slashCommandCatalog,
+      slashCommands: modelSelection.slashCommands,
+      slashCommandsError: modelSelection.slashCommandsError,
+      isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
+      searchFiles: modelSelection.searchFiles,
+      agentOptions: modelSelection.agentOptions,
+      modelOptions: modelSelection.modelOptions,
+      modelGroups: modelSelection.modelGroups,
+      variantOptions: modelSelection.variantOptions,
+      onSelectAgent: modelSelection.onSelectAgent,
+      onSelectModel: modelSelection.onSelectModel,
+      onSelectVariant: modelSelection.onSelectVariant,
+    }),
+    [
+      chatContextUsage,
+      composer.draftStateKey,
+      core.taskId,
+      activeComposerSession,
+      modelSelection.agentOptions,
+      modelSelection.isSelectionCatalogLoading,
+      modelSelection.isSlashCommandsLoading,
+      modelSelection.modelGroups,
+      modelSelection.modelOptions,
+      modelSelection.onSelectAgent,
+      modelSelection.onSelectModel,
+      modelSelection.onSelectVariant,
+      modelSelection.searchFiles,
+      modelSelection.selectedModelDescriptor,
+      modelSelection.selectedModelSelection,
+      modelSelection.slashCommandCatalog,
+      modelSelection.slashCommands,
+      modelSelection.slashCommandsError,
+      modelSelection.supportsFileSearch,
+      modelSelection.supportsSlashCommands,
+      modelSelection.variantOptions,
+      selectedRoleAvailable,
+      selectedRoleReadOnlyReason,
+      sessionActions.busySendBlockedReason,
+      sessionActions.canStopSession,
+      sessionActions.isSending,
+      sessionActions.isSessionWorking,
+      sessionActions.isStarting,
+      sessionActions.isWaitingInput,
+      sessionActions.onSend,
+      sessionActions.stopAgentSession,
+    ],
+  );
+
+  const surfaceModel = useAgentChatSurfaceModel({
+    mode: "interactive",
+    session: core.activeSession,
+    isTaskHydrating: core.isTaskHydrating,
+    contextSwitchVersion: core.contextSwitchVersion,
     showThinkingMessages: chatSettings.showThinkingMessages,
-    isContextSwitching,
+    isSessionWorking: sessionActions.isSessionWorking,
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
     isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
     sessionRuntimeDataError: core.sessionRuntimeDataError,
-    taskId: core.taskId,
-    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
-    agentStudioReadinessState: readiness.agentStudioReadinessState,
-    agentStudioReady: readiness.agentStudioReady,
-    agentStudioBlockedReason: readiness.agentStudioBlockedReason,
-    isLoadingChecks: readiness.isLoadingChecks,
-    refreshChecks: readiness.refreshChecks,
-    canKickoffNewSession: sessionActions.canKickoffNewSession,
-    selectedRoleAvailable,
-    kickoffLabel: sessionActions.kickoffLabel,
-    startScenarioKickoff: sessionActions.startScenarioKickoff,
-    isStarting: sessionActions.isStarting,
-    isSending: sessionActions.isSending,
-    isSubmittingQuestionByRequestId: sessionActions.isSubmittingQuestionByRequestId,
-    onSubmitQuestionAnswers: sessionActions.onSubmitQuestionAnswers,
-    isSubmittingPermissionByRequestId: permissions.isSubmittingPermissionByRequestId,
-    permissionReplyErrorByRequestId: permissions.permissionReplyErrorByRequestId,
-    onReplyPermission: permissions.onReplyPermission,
-    todoPanelCollapsed: activeTodoPanelCollapsed,
-    onToggleTodoPanel: handleToggleTodoPanel,
-    messagesContainerRef,
-    scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
+    runtimeReadiness,
+    emptyState: chatEmptyState,
+    pendingQuestions,
+    permissions: permissionsModel,
+    composer: composerConfig,
+    sessionAgentColors: modelSelection.activeSessionAgentColors,
   });
+  const composerModel = surfaceModel.composer;
 
-  const agentChatComposerModel = useAgentStudioComposerModel({
-    taskId: core.taskId,
-    activeSession: composerSession,
-    isSessionWorking: sessionActions.isSessionWorking,
-    isWaitingInput: sessionActions.isWaitingInput,
-    busySendBlockedReason: sessionActions.busySendBlockedReason,
-    canStopSession: sessionActions.canStopSession,
-    stopAgentSession: sessionActions.stopAgentSession,
-    agentStudioReady: readiness.agentStudioReady,
-    selectedRoleAvailable,
-    selectedRoleReadOnlyReason,
-    draftStateKey: composer.draftStateKey,
-    onSend: sessionActions.onSend,
-    isSending: sessionActions.isSending,
-    isStarting: sessionActions.isStarting,
-    chatContextUsage,
-    selectedModelSelection: modelSelection.selectedModelSelection,
-    selectedModelDescriptor: modelSelection.selectedModelDescriptor,
-    isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
-    supportsSlashCommands: modelSelection.supportsSlashCommands,
-    supportsFileSearch: modelSelection.supportsFileSearch,
-    slashCommandCatalog: modelSelection.slashCommandCatalog,
-    slashCommands: modelSelection.slashCommands,
-    slashCommandsError: modelSelection.slashCommandsError,
-    isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
-    searchFiles: modelSelection.searchFiles,
-    agentOptions: modelSelection.agentOptions,
-    modelOptions: modelSelection.modelOptions,
-    modelGroups: modelSelection.modelGroups,
-    variantOptions: modelSelection.variantOptions,
-    onSelectAgent: modelSelection.onSelectAgent,
-    onSelectModel: modelSelection.onSelectModel,
-    onSelectVariant: modelSelection.onSelectVariant,
-    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
-    composerFormRef,
-    composerEditorRef,
-    resizeComposerEditor,
-    scrollToBottomOnSendRef,
-    syncBottomAfterComposerLayoutRef,
-  });
+  if (!composerModel) {
+    throw new Error("Interactive Agent Studio chat is missing a composer model.");
+  }
 
   const agentChatModel = useMemo(
-    () => ({
-      thread: agentChatThreadModel,
-      composer: agentChatComposerModel,
-    }),
-    [agentChatComposerModel, agentChatThreadModel],
+    () =>
+      ({
+        ...surfaceModel,
+        mode: "interactive",
+        composer: composerModel,
+      }) as AgentChatModel,
+    [composerModel, surfaceModel],
   );
 
   return {

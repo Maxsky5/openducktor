@@ -1,10 +1,14 @@
 export { resolveAgentAccentColor } from "./agent-accent-color";
 export type {
   AgentChatComposerModel,
+  AgentChatEmptyStateModel,
+  AgentChatMode,
   AgentChatModel,
+  AgentChatSurfaceModel,
   AgentChatThreadModel,
   AgentRoleOption,
 } from "./agent-chat";
+export { AgentChatSurface } from "./agent-chat/agent-chat";
 export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
 export type { AgentStudioHeaderModel } from "./agent-studio-header";
 export type {

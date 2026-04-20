@@ -97,10 +97,7 @@ impl<'a> BuilderBranchService<'a> {
         task_id: &str,
         operation_label: &str,
     ) -> Result<BuilderBranchContextLoadResult> {
-        let target = match self
-            .service
-            .task_worktree_lookup(repo_path, task_id)?
-        {
+        let target = match self.service.task_worktree_lookup(repo_path, task_id)? {
             TaskWorktreeLookup::Found(target) => target,
             TaskWorktreeLookup::NoBuilderContext => {
                 return Ok(BuilderBranchContextLoadResult::MissingContext);
@@ -233,10 +230,7 @@ impl<'a> BuilderBranchService<'a> {
         task_id: &str,
         preferred_source_branch: Option<&str>,
     ) -> Result<Option<BuilderCleanupTarget>> {
-        if let Ok(Some(target)) = self
-            .service
-            .task_worktree_get(repo_path, task_id)
-        {
+        if let Ok(Some(target)) = self.service.task_worktree_get(repo_path, task_id) {
             if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
                 repo_path,
                 task_id,

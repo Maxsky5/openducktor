@@ -1914,7 +1914,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("reconciles idle live agent sessions on repo bootstrap", async () => {
+  test("does not resume idle live agent sessions on repo bootstrap", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
@@ -1925,6 +1925,8 @@ describe("use-agent-orchestrator-operations", () => {
       const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+      let liveSnapshotScans = 0;
+      let resumeCalls = 0;
 
       host.agentSessionsList = async () => [persistedBuildSessionFixture];
       host.agentSessionUpsert = async () => {};
@@ -1947,26 +1949,32 @@ describe("use-agent-orchestrator-operations", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         },
       ];
-      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [
-        {
-          externalSessionId: "external-1",
-          title: "BUILD task-1",
-          workingDirectory: "/tmp/repo/worktree",
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => {
+        liveSnapshotScans += 1;
+        return [
+          {
+            externalSessionId: "external-1",
+            title: "BUILD task-1",
+            workingDirectory: "/tmp/repo/worktree",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "idle" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+        ];
+      };
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+        resumeCalls += 1;
+        return {
+          runtimeKind: input.runtimeKind,
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
           startedAt: "2026-02-22T08:00:00.000Z",
-          status: { type: "idle" },
-          pendingPermissions: [],
-          pendingQuestions: [],
-        },
-      ];
-      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: input.runtimeKind,
-        sessionId: input.sessionId,
-        externalSessionId: input.externalSessionId,
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: input.role,
-        scenario: input.scenario,
-        status: "idle",
-      });
+          role: input.role,
+          scenario: input.scenario,
+          status: "idle",
+        };
+      };
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
@@ -1983,14 +1991,8 @@ describe("use-agent-orchestrator-operations", () => {
 
       try {
         await harness.mount();
-        const resolved = await harness.waitFor((state) =>
-          state.sessions.some(
-            (session) => session.sessionId === "session-1" && session.status === "idle",
-          ),
-        );
-        expect(resolved.sessions.find((session) => session.sessionId === "session-1")?.status).toBe(
-          "idle",
-        );
+        await harness.waitFor(() => liveSnapshotScans > 0);
+        expect(resumeCalls).toBe(0);
       } finally {
         await harness.unmount();
         host.agentSessionsList = originalAgentSessionsList;

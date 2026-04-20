@@ -1,4 +1,5 @@
 import type { GitBranch, GitTargetBranch, WorkspaceRecord } from "@openducktor/contracts";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -36,6 +37,12 @@ type AgentStudioOrchestrationComposerContext = {
 type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent: () => void;
+  scheduleSelectionIntent: (intent: {
+    taskId: string;
+    sessionId: string | null;
+    role: AgentRole;
+    scenario: AgentScenario | null;
+  }) => void;
   openTaskDetails: () => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
@@ -259,6 +266,7 @@ export function useAgentStudioOrchestrationController({
     setTaskTargetBranch,
     replyAgentPermission,
     answerAgentQuestion,
+    scheduleSelectionIntent,
   } = actions;
 
   const { repoSettings } = useAgentStudioRepoSettings({
@@ -347,6 +355,7 @@ export function useAgentStudioOrchestrationController({
     setTaskTargetBranch,
     answerAgentQuestion,
     updateQuery,
+    scheduleSelectionIntent,
     onContextSwitchIntent,
   });
 

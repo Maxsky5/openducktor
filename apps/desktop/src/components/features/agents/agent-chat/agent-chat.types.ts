@@ -17,6 +17,16 @@ export type AgentRoleOption = {
   disabled?: boolean;
 };
 
+export type AgentChatMode = "interactive" | "non_interactive";
+
+export type AgentChatEmptyStateModel = {
+  title: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
+  isActionPending?: boolean;
+};
+
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
   isSessionWorking: boolean;
@@ -24,21 +34,19 @@ export type AgentChatThreadModel = {
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
-  roleOptions: AgentRoleOption[];
   readinessState: "ready" | "checking" | "blocked";
-  agentStudioReady: boolean;
+  isInteractionEnabled: boolean;
   blockedReason: string | null;
   isLoadingChecks: boolean;
   onRefreshChecks: () => void;
-  taskSelected: boolean;
-  canKickoffNewSession: boolean;
-  kickoffLabel: string;
-  onKickoff: () => void;
+  emptyState?: AgentChatEmptyStateModel | null;
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
+  canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
+  canReplyToPermissions: boolean;
   isSubmittingPermissionByRequestId: Record<string, boolean>;
   permissionReplyErrorByRequestId: Record<string, string>;
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
@@ -53,7 +61,7 @@ export type AgentChatThreadModel = {
 export type AgentChatComposerModel = {
   taskId: string;
   displayedSessionId: string | null;
-  agentStudioReady: boolean;
+  isInteractionEnabled: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
   busySendBlockedReason: string | null;
@@ -98,7 +106,13 @@ export type AgentChatComposerModel = {
   syncBottomAfterComposerLayoutRef: MutableRefObject<(() => void) | null>;
 };
 
-export type AgentChatModel = {
+export type AgentChatSurfaceModel = {
+  mode: AgentChatMode;
   thread: AgentChatThreadModel;
+  composer?: AgentChatComposerModel;
+};
+
+export type AgentChatModel = AgentChatSurfaceModel & {
+  mode: "interactive";
   composer: AgentChatComposerModel;
 };

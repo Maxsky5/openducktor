@@ -178,6 +178,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
+  const [selectionIntent, setSelectionIntent] = useState<{
+    taskId: string;
+    sessionId: string | null;
+    role: AgentRole;
+    scenario: AgentScenario | null;
+  } | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const {
@@ -207,6 +213,17 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const signalContextSwitchIntent = useCallback((): void => {
     setContextSwitchVersion((current) => current + 1);
   }, []);
+  const scheduleSelectionIntent = useCallback(
+    (intent: {
+      taskId: string;
+      sessionId: string | null;
+      role: AgentRole;
+      scenario: AgentScenario | null;
+    }): void => {
+      setSelectionIntent(intent);
+    },
+    [],
+  );
 
   const clearComposerInput = signalContextSwitchIntent;
   const runtimeListQueries = useQueries({
@@ -261,6 +278,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasExplicitRoleParam,
     roleFromQuery,
     scenarioFromQuery,
+    selectionIntent,
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
@@ -272,6 +290,35 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     clearComposerInput,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
+
+  useEffect(() => {
+    if (isRepoNavigationBoundaryPending) {
+      setSelectionIntent(null);
+      return;
+    }
+
+    if (!selectionIntent) {
+      return;
+    }
+
+    const normalizedQueryScenario = sessionParam ? null : scenarioFromQuery;
+    const normalizedIntentScenario = selectionIntent.sessionId ? null : selectionIntent.scenario;
+    if (
+      selectionIntent.taskId === taskIdParam &&
+      selectionIntent.sessionId === sessionParam &&
+      selectionIntent.role === roleFromQuery &&
+      normalizedIntentScenario === normalizedQueryScenario
+    ) {
+      setSelectionIntent(null);
+    }
+  }, [
+    isRepoNavigationBoundaryPending,
+    roleFromQuery,
+    scenarioFromQuery,
+    selectionIntent,
+    sessionParam,
+    taskIdParam,
+  ]);
 
   const openTaskDetails = useCallback((): void => {
     if (!selection.viewSelectedTask) {
@@ -414,6 +461,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       setTaskTargetBranch,
       replyAgentPermission,
       answerAgentQuestion,
+      scheduleSelectionIntent,
     },
   });
 

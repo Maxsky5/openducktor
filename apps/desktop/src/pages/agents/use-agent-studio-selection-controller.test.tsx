@@ -79,6 +79,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
   scenarioFromQuery: null,
+  selectionIntent: null,
   updateQuery: () => {},
   hydrateRequestedTaskSessionHistory: async () => {},
   ensureSessionReadyForView: async () => false,
@@ -228,6 +229,49 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.activeSession?.sessionId).toBe("session-2");
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewActiveSession?.sessionId).toBe("session-2");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("prefers optimistic selection intent over stale query role and session", async () => {
+    const specSession = createSession("task-1", "session-spec", {
+      role: "spec",
+      scenario: "spec_initial",
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "idle",
+    });
+    const plannerSession = createSession("task-1", "session-planner", {
+      role: "planner",
+      scenario: "planner_initial",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [specSession, plannerSession],
+        taskIdParam: "task-1",
+        sessionParam: "session-spec",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "spec",
+        scenarioFromQuery: "spec_initial",
+        selectionIntent: {
+          taskId: "task-1",
+          sessionId: "session-planner",
+          role: "planner",
+          scenario: "planner_initial",
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.viewRole).toBe("planner");
+      expect(latest.viewScenario).toBe("planner_initial");
+      expect(latest.viewActiveSession?.sessionId).toBe("session-planner");
+      expect(latest.activeSession?.sessionId).toBe("session-planner");
     } finally {
       await harness.unmount();
     }

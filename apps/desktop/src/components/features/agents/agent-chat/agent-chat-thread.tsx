@@ -48,7 +48,9 @@ type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -57,15 +59,14 @@ type AgentChatThreadMotionRowProps = {
 type AgentChatTranscriptProps = {
   activeStreamingAssistantMessageId: string | null;
   hasSession: boolean;
-  taskSelected: boolean;
-  canKickoffNewSession: boolean;
-  kickoffLabel: string;
-  onKickoff: () => void;
+  emptyState: AgentChatThreadModel["emptyState"];
   isStarting: boolean;
   isSending: boolean;
-  agentStudioReady: boolean;
+  isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
@@ -125,9 +126,10 @@ type AgentChatBottomStackProps = {
   pendingPermissions: AgentSessionState["pendingPermissions"];
   todos: AgentSessionState["todos"];
   sessionRuntimeDataError: string | null;
-  agentStudioReady: boolean;
+  canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
+  canReplyToPermissions: boolean;
   isSubmittingPermissionByRequestId: AgentChatThreadModel["isSubmittingPermissionByRequestId"];
   permissionReplyErrorByRequestId: AgentChatThreadModel["permissionReplyErrorByRequestId"];
   onReplyPermission: AgentChatThreadModel["onReplyPermission"];
@@ -171,7 +173,9 @@ const AgentChatThreadMotionRow = memo(
     row,
     isStreamingAssistantMessage,
     sessionAgentColors,
+    sessionTaskId,
     sessionRole,
+    sessionSelectedModel,
     sessionWorkingDirectory,
     sessionRuntimeKind,
     resolveRowRef,
@@ -181,7 +185,9 @@ const AgentChatThreadMotionRow = memo(
         <AgentChatThreadRow
           row={row}
           isStreamingAssistantMessage={isStreamingAssistantMessage}
+          sessionTaskId={sessionTaskId}
           sessionRole={sessionRole}
+          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -191,7 +197,9 @@ const AgentChatThreadMotionRow = memo(
   },
   (previousProps, nextProps) => {
     return (
+      previousProps.sessionTaskId === nextProps.sessionTaskId &&
       previousProps.sessionRole === nextProps.sessionRole &&
+      previousProps.sessionSelectedModel === nextProps.sessionSelectedModel &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
@@ -206,7 +214,9 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   activeStreamingAssistantMessageId,
   sessionAgentColors,
+  sessionTaskId,
   sessionRole,
+  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   resolveRowRef,
@@ -215,7 +225,9 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn: AgentChatRenderedTurn;
   activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -230,7 +242,9 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           isStreamingAssistantMessage={
             row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
           }
+          sessionTaskId={sessionTaskId}
           sessionRole={sessionRole}
+          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -244,15 +258,14 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 const AgentChatTranscript = memo(function AgentChatTranscript({
   activeStreamingAssistantMessageId,
   hasSession,
-  taskSelected,
-  canKickoffNewSession,
-  kickoffLabel,
-  onKickoff,
+  emptyState,
   isStarting,
   isSending,
-  agentStudioReady,
+  isInteractionEnabled,
   sessionAgentColors,
+  sessionTaskId,
   sessionRole,
+  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   messagesContainerRef,
@@ -306,29 +319,29 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       ) : null}
 
       <div ref={messagesContentRef} className="space-y-1">
-        {!hasSession ? (
+        {!hasSession && !visibleStatusOverlay ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-            <p>
-              {taskSelected
-                ? isStarting
-                  ? "Initializing session..."
-                  : "Send a message to start a new session automatically."
-                : "Select a task to begin."}
-            </p>
-            {canKickoffNewSession ? (
+            <p>{emptyState?.title ?? "No conversation available."}</p>
+            {emptyState?.actionLabel && emptyState.onAction ? (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={isStarting || isSending || !taskSelected || !agentStudioReady}
-                onClick={onKickoff}
+                disabled={
+                  !isInteractionEnabled ||
+                  isStarting ||
+                  isSending ||
+                  emptyState.actionDisabled ||
+                  emptyState.isActionPending
+                }
+                onClick={emptyState.onAction}
               >
-                {isStarting ? (
+                {emptyState.isActionPending ? (
                   <LoaderCircle className="size-3.5 animate-spin" />
                 ) : (
                   <Sparkles className="size-3.5" />
                 )}
-                {kickoffLabel}
+                {emptyState.actionLabel}
               </Button>
             ) : null}
           </div>
@@ -340,7 +353,9 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 key={turn.key}
                 turn={turn}
                 activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
+                sessionTaskId={sessionTaskId}
                 sessionRole={sessionRole}
+                sessionSelectedModel={sessionSelectedModel}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
@@ -360,9 +375,10 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   pendingPermissions,
   todos,
   sessionRuntimeDataError,
-  agentStudioReady,
+  canSubmitQuestionAnswers,
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
+  canReplyToPermissions,
   isSubmittingPermissionByRequestId,
   permissionReplyErrorByRequestId,
   onReplyPermission,
@@ -385,7 +401,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         <AgentSessionQuestionCard
           key={`${sessionId}:${request.requestId}`}
           request={request}
-          disabled={!agentStudioReady}
+          disabled={!canSubmitQuestionAnswers}
           isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
           onSubmit={onSubmitQuestionAnswers}
         />
@@ -395,7 +411,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         <div key={`${sessionId}:${request.requestId}`} className="relative z-30">
           <AgentSessionPermissionCard
             request={request}
-            disabled={!agentStudioReady}
+            disabled={!canReplyToPermissions}
             isSubmitting={Boolean(isSubmittingPermissionByRequestId[request.requestId])}
             errorMessage={permissionReplyErrorByRequestId[request.requestId]}
             onReply={onReplyPermission}
@@ -436,19 +452,18 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSessionHistoryLoading,
     isWaitingForRuntimeReadiness,
     readinessState,
-    agentStudioReady,
+    isInteractionEnabled,
     blockedReason,
     isLoadingChecks,
     onRefreshChecks,
-    taskSelected,
-    canKickoffNewSession,
-    kickoffLabel,
-    onKickoff,
+    emptyState,
     isStarting,
     isSending,
     sessionAgentColors,
+    canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
+    canReplyToPermissions,
     isSubmittingPermissionByRequestId,
     permissionReplyErrorByRequestId,
     onReplyPermission,
@@ -637,6 +652,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
   const sessionRole = session?.role ?? null;
   const sessionRuntimeKind = session?.runtimeKind ?? null;
+  const sessionTaskId = session?.taskId ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
   const sessionAccentColor = useMemo(() => {
     const profileId = sessionSelectedModel?.profileId;
@@ -758,15 +774,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <AgentChatTranscript
         activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
         hasSession={session !== null}
-        taskSelected={taskSelected}
-        canKickoffNewSession={canKickoffNewSession}
-        kickoffLabel={kickoffLabel}
-        onKickoff={onKickoff}
+        emptyState={emptyState}
         isStarting={isStarting}
         isSending={isSending}
-        agentStudioReady={agentStudioReady}
+        isInteractionEnabled={isInteractionEnabled}
         sessionAgentColors={sessionAgentColors}
+        sessionTaskId={sessionTaskId}
         sessionRole={sessionRole}
+        sessionSelectedModel={sessionSelectedModel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
         messagesContainerRef={messagesContainerRef}
@@ -789,9 +804,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             pendingQuestions={session.pendingQuestions}
             pendingPermissions={session.pendingPermissions}
             todos={session.todos}
-            agentStudioReady={agentStudioReady}
+            canSubmitQuestionAnswers={canSubmitQuestionAnswers}
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}
+            canReplyToPermissions={canReplyToPermissions}
             isSubmittingPermissionByRequestId={isSubmittingPermissionByRequestId}
             permissionReplyErrorByRequestId={permissionReplyErrorByRequestId}
             onReplyPermission={onReplyPermission}

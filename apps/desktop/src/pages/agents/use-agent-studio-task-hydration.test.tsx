@@ -76,7 +76,13 @@ describe("useAgentStudioTaskHydration", () => {
   });
 
   test("ensures view readiness for a ready session that still needs history", async () => {
-    const ensureSessionReadyForView = mock(async (): Promise<boolean> => true);
+    let resolveReady: (() => void) | undefined;
+    const ensureSessionReadyForView = mock(
+      async (): Promise<boolean> =>
+        await new Promise<boolean>((resolve) => {
+          resolveReady = () => resolve(true);
+        }),
+    );
     const harness = createHookHarness(
       createBaseArgs({
         activeSession: createSession(),
@@ -93,7 +99,48 @@ describe("useAgentStudioTaskHydration", () => {
         sessionId: "session-1",
         repoReadinessState: "ready",
       });
+      await harness.waitFor((state) => state.isActiveSessionHistoryHydrating);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(true);
+      if (resolveReady) {
+        resolveReady();
+      }
+      await harness.waitFor((state) => !state.isActiveSessionHistoryHydrating);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rehydrates in the background when a partial transcript exists but history was never loaded", async () => {
+    const ensureSessionReadyForView = mock(async (): Promise<boolean> => true);
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSession: createSession({
+          historyHydrationState: "not_requested",
+          messages: [
+            {
+              id: "message-tail-1",
+              role: "assistant",
+              content: "Only the new tail is in memory",
+              timestamp: "2026-02-22T08:00:02.000Z",
+            },
+          ],
+        }),
+        ensureSessionReadyForView,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => ensureSessionReadyForView.mock.calls.length === 1);
+
+      expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
+      expect(ensureSessionReadyForView).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+        repoReadinessState: "ready",
+      });
     } finally {
       await harness.unmount();
     }

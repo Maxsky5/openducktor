@@ -11,6 +11,7 @@ import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type {
   AgentSessionHistoryHydrationPolicy,
+  AgentSessionHistoryPreludeMode,
   AgentSessionLoadMode,
   AgentSessionLoadOptions,
   AgentSessionState,
@@ -122,6 +123,7 @@ export type HydrationPromptAssembler = {
 export type PromptAssemblerStageInput = {
   taskId: string;
   taskRef: MutableRefObject<TaskCard[]>;
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
 };
 
 export type LiveReconciliationStageInput = {
@@ -156,6 +158,10 @@ export type HistoryHydrationStageInput = {
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 const EMPTY_PROMPT_OVERRIDES: RepoPromptOverrides = {};
+const normalizeLiveSessionTitle = (title: string | undefined): string | undefined => {
+  const trimmed = title?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+};
 
 const mergePersistedSessionRecord = (
   current: AgentSessionState,
@@ -521,6 +527,7 @@ export const createRuntimeResolutionPlannerStage = async ({
 export const createHydrationPromptAssemblerStage = ({
   taskId,
   taskRef,
+  historyPreludeMode = "task_context",
 }: PromptAssemblerStageInput): HydrationPromptAssembler => {
   const buildHydrationPreludeMessages = async ({
     record,
@@ -531,6 +538,9 @@ export const createHydrationPromptAssemblerStage = ({
     resolvedScenario: AgentSessionState["scenario"];
     promptOverrides: RepoPromptOverrides;
   }): Promise<AgentSessionState["messages"]> => {
+    if (historyPreludeMode === "none") {
+      return [];
+    }
     const task = taskRef.current.find((entry) => entry.id === taskId);
     if (!task) {
       return buildSessionHeaderMessages({
@@ -568,6 +578,9 @@ export const createHydrationPromptAssemblerStage = ({
     resolvedScenario: AgentSessionState["scenario"];
     promptOverrides: RepoPromptOverrides;
   }): Promise<string> => {
+    if (historyPreludeMode === "none") {
+      return "";
+    }
     const task = taskRef.current.find((entry) => entry.id === taskId);
     if (!task) {
       return "";
@@ -667,6 +680,7 @@ export const reconcileLiveSessionsStage = async ({
         ...(selectedModel ? { model: selectedModel } : {}),
       });
     },
+    allowResumeMissingSession: options?.allowLiveSessionResume !== false,
     isStaleRepoOperation,
     toLiveSessionState,
   });
@@ -834,6 +848,7 @@ export const hydrateSessionRecordsStage = async ({
       record.sessionId,
       (current) => {
         const selectedModel = normalizePersistedSelection(record.selectedModel);
+        const liveSessionTitle = normalizeLiveSessionTitle(liveRuntimeSnapshot?.title);
         const hydratedMessages = createSessionMessagesState(record.sessionId, [
           ...getSessionMessagesSlice({ sessionId: record.sessionId, messages: preludeMessages }, 0),
           ...historyToChatMessages(history, {
@@ -841,7 +856,7 @@ export const hydrateSessionRecordsStage = async ({
             selectedModel,
           }),
         ]);
-        return {
+        const nextSession: AgentSessionState = {
           ...current,
           runtimeKind,
           runtimeId,
@@ -856,6 +871,14 @@ export const hydrateSessionRecordsStage = async ({
           contextUsage: historyToSessionContextUsage(history, selectedModel),
           messages: mergeHydratedMessages(current.sessionId, hydratedMessages, current.messages),
         };
+        if (liveRuntimeSnapshot) {
+          if (liveSessionTitle) {
+            nextSession.title = liveSessionTitle;
+          } else {
+            delete nextSession.title;
+          }
+        }
+        return nextSession;
       },
       { persist: false },
     );

@@ -41,7 +41,8 @@ impl TaskRuntimeRouteIndex {
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
 
         for runtime in runtimes.values() {
-            if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo {
+            if normalize_path_for_comparison(runtime.summary.repo_path.as_str()) != normalized_repo
+            {
                 continue;
             }
 
@@ -231,14 +232,17 @@ fn parse_runtime_kind_from_session(
     }
 
     let runtime_kind = AgentRuntimeKind::from(runtime_kind);
-    service.runtime_registry.runtime(&runtime_kind).with_context(|| {
-        format!(
-            "Persisted {} session '{}' references unsupported runtime kind '{}'",
-            session.role.trim(),
-            session.session_id,
-            session.runtime_kind.trim()
-        )
-    })?;
+    service
+        .runtime_registry
+        .runtime(&runtime_kind)
+        .with_context(|| {
+            format!(
+                "Persisted {} session '{}' references unsupported runtime kind '{}'",
+                session.role.trim(),
+                session.session_id,
+                session.runtime_kind.trim()
+            )
+        })?;
 
     Ok(runtime_kind)
 }

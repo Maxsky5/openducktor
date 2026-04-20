@@ -422,6 +422,69 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
   });
 
+  test("clears a stale session title when the live snapshot has no custom title", async () => {
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        title: "Fallback title",
+        historyHydrationState: "hydrating",
+      }),
+    });
+
+    await hydrateSessionRecordsStage({
+      adapter: {
+        hasSession: () => false,
+        listLiveAgentSessionSnapshots: async () => [],
+        loadSessionHistory: async () => [],
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+      },
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["session-1"]),
+      runtimePlanner: {
+        readCurrentHydratedRuntimeResolution: () => null,
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+          runtimeConnection: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        }),
+        loadLiveAgentSessionSnapshot: async () => ({
+          externalSessionId: "external-1",
+          title: "   ",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: { type: "busy" },
+          pendingPermissions: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["session-1"]?.title).toBeUndefined();
+  });
+
   test("runtime planner reuses current hydrated runtime and preloaded live snapshots", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const stateHarness = createStateHarness({
@@ -555,6 +618,28 @@ describe("load-sessions-stages", () => {
       id: "history:session-start:session-1",
       content: "Session started (planner - planner_initial)",
     });
+  });
+
+  test("prompt assembler can skip synthetic prelude messages entirely", async () => {
+    const assembler = createHydrationPromptAssemblerStage({
+      taskId: "task-1",
+      taskRef: { current: [createTaskFixture()] },
+      historyPreludeMode: "none",
+    });
+
+    const prelude = await assembler.buildHydrationPreludeMessages({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+    const systemPrompt = await assembler.buildHydrationSystemPrompt({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+
+    expect(systemPrompt).toBe("");
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(0);
   });
 
   test("prompt assembler builds system prompt and header messages when the task exists", async () => {

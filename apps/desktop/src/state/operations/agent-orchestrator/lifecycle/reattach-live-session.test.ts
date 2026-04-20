@@ -26,7 +26,7 @@ const sessionRecordFixture: AgentSessionRecord = {
   selectedModel: null,
 };
 
-const sessionStateFixture: AgentSessionState = {
+const createSessionStateFixture = (): AgentSessionState => ({
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -52,11 +52,11 @@ const sessionStateFixture: AgentSessionState = {
   selectedModel: null,
   isLoadingModelCatalog: false,
   promptOverrides: {},
-};
+});
 
 describe("reattach-live-session", () => {
-  test("clears pending input when the live snapshot is empty", async () => {
-    let state = sessionStateFixture;
+  test("does not resume an idle snapshot with no pending input", async () => {
+    let state = createSessionStateFixture();
     let resumed = false;
     let attachedSessionId: string | null = null;
 
@@ -98,14 +98,115 @@ describe("reattach-live-session", () => {
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
+    expect(reattached).toBe(false);
+    expect(resumed).toBe(false);
+    expect(attachedSessionId).toBeNull();
+    expect(state.pendingPermissions).toEqual(createSessionStateFixture().pendingPermissions);
+  });
+
+  test("reattaches an idle snapshot when pending input is still live", async () => {
+    let state = createSessionStateFixture();
+    let resumed = false;
+    let attachedSessionId: string | null = null;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: (sessionId, updater) => {
+        if (sessionId !== "session-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: (_repoPath, sessionId) => {
+        attachedSessionId = sessionId;
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
+      resumeMissingLiveSession: async () => {
+        resumed = true;
+      },
+      listLiveAgentSessions: async () => [
+        {
+          externalSessionId: "external-1",
+          title: "Session",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "idle" },
+          pendingPermissions: [{ requestId: "permission-2", permission: "read", patterns: [] }],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ],
+      isStaleRepoOperation: () => false,
+      toLiveSessionState: () => "idle",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
     expect(reattached).toBe(true);
     expect(resumed).toBe(true);
     expect(attachedSessionId === "session-1").toBe(true);
-    expect(state.pendingPermissions).toEqual([]);
+    expect(state.pendingPermissions).toEqual([
+      { requestId: "permission-2", permission: "read", patterns: [] },
+    ]);
+  });
+
+  test("does not resume a missing live session when resume is explicitly disabled", async () => {
+    let state = createSessionStateFixture();
+    let resumed = false;
+    let attachedSessionId: string | null = null;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: (sessionId, updater) => {
+        if (sessionId !== "session-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: (_repoPath, sessionId) => {
+        attachedSessionId = sessionId;
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
+      resumeMissingLiveSession: async () => {
+        resumed = true;
+      },
+      allowResumeMissingSession: false,
+      listLiveAgentSessions: async () => [
+        {
+          externalSessionId: "external-1",
+          title: "Session",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "busy" },
+          pendingPermissions: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ],
+      isStaleRepoOperation: () => false,
+      toLiveSessionState: () => "running",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(resumed).toBe(false);
+    expect(attachedSessionId).toBeNull();
+    expect(state).toEqual(createSessionStateFixture());
   });
 
   test("returns false when no live snapshot matches the persisted session", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
 
     const reattachLiveSession = createReattachLiveSession({
       adapter: {
@@ -130,11 +231,11 @@ describe("reattach-live-session", () => {
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
     expect(reattached).toBe(false);
-    expect(state.pendingPermissions).toEqual(sessionStateFixture.pendingPermissions);
+    expect(state.pendingPermissions).toEqual(createSessionStateFixture().pendingPermissions);
   });
 
   test("does not attach or update when the repo becomes stale after resume", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
     let attachedSessionId: string | null = null;
     let stale = false;
     let resumeCalls = 0;
@@ -181,7 +282,7 @@ describe("reattach-live-session", () => {
     expect(resumeCalls).toBe(1);
     expect(reattached).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state).toEqual(sessionStateFixture);
+    expect(state).toEqual(createSessionStateFixture());
   });
 
   test("does not resume when the repo becomes stale after live lookup", async () => {
