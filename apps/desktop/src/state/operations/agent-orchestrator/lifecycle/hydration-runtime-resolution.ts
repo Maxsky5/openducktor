@@ -8,6 +8,7 @@ import type { AgentRuntimeConnection } from "@openducktor/core";
 import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
+import { canUseRepoRootWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
@@ -35,17 +36,6 @@ export const createHydrationRuntimeResolver = ({
   preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
   ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
-  const isRepoRootSession = (workingDirectory: string): boolean => {
-    return normalizeWorkingDirectory(workingDirectory) === normalizeWorkingDirectory(repoPath);
-  };
-
-  const canEnsureWorkspaceRuntime = (record: AgentSessionRecord): boolean => {
-    if (record.role === "spec" || record.role === "planner") {
-      return isRepoRootSession(record.workingDirectory);
-    }
-    return false;
-  };
-
   const findRuntimeByWorkingDirectory = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
@@ -91,7 +81,7 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
-    if (!canEnsureWorkspaceRuntime(record)) {
+    if (!canUseRepoRootWorkspaceRuntimeForHydration(record, repoPath)) {
       return {
         ok: false,
         runtimeKind,

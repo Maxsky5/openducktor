@@ -19,6 +19,7 @@ import {
   isSessionRuntimeMetadataError,
   readPersistedRuntimeKind,
 } from "../support/session-runtime-metadata";
+import { canUseRepoRootWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
@@ -45,6 +46,15 @@ type ReconcilePreloadPlan = {
   skippedTaskErrors: Map<string, unknown>;
 };
 
+type ReconcilePreloadMetadata = {
+  persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
+  persistedTaskIdsByLiveSessionKey: Map<string, Set<string>>;
+  runtimeKinds: Set<RuntimeKind>;
+  desiredDirectoriesByRuntimeKind: Map<RuntimeKind, Set<string>>;
+  runtimeKindsAllowedToEnsureRepoRoot: Set<RuntimeKind>;
+  skippedTaskErrors: Map<string, unknown>;
+};
+
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
 const invalidateRuntimeList = async (runtimeKind: RuntimeKind, repoPath: string): Promise<void> => {
@@ -68,15 +78,77 @@ const getOrCreateRepoTaskSet = (
   return created;
 };
 
-const canEnsureWorkspaceRuntimeForReconcile = (
-  record: AgentSessionRecord,
-  repoPath: string,
-): boolean => {
-  if (record.role !== "spec" && record.role !== "planner") {
-    return false;
+const getOrCreateMapSet = <K>(map: Map<K, Set<string>>, key: K): Set<string> => {
+  const existing = map.get(key);
+  if (existing) {
+    return existing;
   }
 
-  return normalizeWorkingDirectory(record.workingDirectory) === normalizeWorkingDirectory(repoPath);
+  const created = new Set<string>();
+  map.set(key, created);
+  return created;
+};
+
+const collectReconcilePreloadMetadata = ({
+  tasks,
+  repoPath,
+}: {
+  tasks: TaskCard[];
+  repoPath: string;
+}): ReconcilePreloadMetadata => {
+  const persistedByTask = tasks.map((task) => ({
+    taskId: task.id,
+    records: task.agentSessions ?? [],
+  }));
+
+  const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
+  const runtimeKinds = new Set<RuntimeKind>();
+  const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+  const runtimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
+  const skippedTaskErrors = new Map<string, unknown>();
+
+  for (const { taskId, records } of persistedByTask) {
+    try {
+      for (const record of records) {
+        const runtimeKind = readPersistedRuntimeKind(record);
+        const externalSessionId = record.externalSessionId ?? record.sessionId;
+        if (!externalSessionId) {
+          continue;
+        }
+
+        runtimeKinds.add(runtimeKind);
+        getOrCreateMapSet(
+          persistedTaskIdsByLiveSessionKey,
+          `${runtimeKind}::${externalSessionId}`,
+        ).add(taskId);
+        getOrCreateMapSet(desiredDirectoriesByRuntimeKind, runtimeKind).add(
+          normalizeWorkingDirectory(record.workingDirectory),
+        );
+        if (canUseRepoRootWorkspaceRuntimeForHydration(record, repoPath)) {
+          runtimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
+        }
+      }
+    } catch (error) {
+      if (!isSessionRuntimeMetadataError(error)) {
+        throw error;
+      }
+
+      console.error(
+        `Skipping reconcile preload for task '${taskId}' in repo '${repoPath}' because persisted session runtime metadata is invalid.`,
+        error,
+      );
+      skippedTaskErrors.set(taskId, error);
+    }
+  }
+
+  return {
+    persistedByTask,
+    persistedTaskIdsByLiveSessionKey,
+    runtimeKinds,
+    desiredDirectoriesByRuntimeKind,
+    runtimeKindsAllowedToEnsureRepoRoot,
+    skippedTaskErrors,
+  };
 };
 
 export const createRepoSessionHydrationService = ({
@@ -140,51 +212,14 @@ export const createRepoSessionHydrationService = ({
     tasks: TaskCard[];
     isCancelled: () => boolean;
   }): Promise<ReconcilePreloadPlan> => {
-    const persistedByTask = tasks.map((task) => ({
-      taskId: task.id,
-      records: task.agentSessions ?? [],
-    }));
-
-    const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
-    const runtimeKinds = new Set<RuntimeKind>();
-    const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
-    const runtimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
-    const skippedTaskErrors = new Map<string, unknown>();
-
-    for (const { taskId, records } of persistedByTask) {
-      try {
-        for (const record of records) {
-          const runtimeKind = readPersistedRuntimeKind(record);
-          const externalSessionId = record.externalSessionId ?? record.sessionId;
-          if (!externalSessionId) {
-            continue;
-          }
-          runtimeKinds.add(runtimeKind);
-          const liveSessionKey = `${runtimeKind}::${externalSessionId}`;
-          const taskIds = persistedTaskIdsByLiveSessionKey.get(liveSessionKey) ?? new Set<string>();
-          taskIds.add(taskId);
-          persistedTaskIdsByLiveSessionKey.set(liveSessionKey, taskIds);
-
-          const desiredDirectories =
-            desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
-          desiredDirectories.add(normalizeWorkingDirectory(record.workingDirectory));
-          desiredDirectoriesByRuntimeKind.set(runtimeKind, desiredDirectories);
-          if (canEnsureWorkspaceRuntimeForReconcile(record, repoPath)) {
-            runtimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
-          }
-        }
-      } catch (error) {
-        if (!isSessionRuntimeMetadataError(error)) {
-          throw error;
-        }
-
-        console.error(
-          `Skipping reconcile preload for task '${taskId}' in repo '${repoPath}' because persisted session runtime metadata is invalid.`,
-          error,
-        );
-        skippedTaskErrors.set(taskId, error);
-      }
-    }
+    const {
+      persistedByTask,
+      persistedTaskIdsByLiveSessionKey,
+      runtimeKinds,
+      desiredDirectoriesByRuntimeKind,
+      runtimeKindsAllowedToEnsureRepoRoot,
+      skippedTaskErrors,
+    } = collectReconcilePreloadMetadata({ tasks, repoPath });
 
     const runtimeConnections = new Map<string, RuntimeConnectionScan>();
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
