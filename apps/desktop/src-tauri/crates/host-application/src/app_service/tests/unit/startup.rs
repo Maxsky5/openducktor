@@ -372,3 +372,90 @@ fn wait_for_local_server_with_process_honors_cancellation_epoch() {
     terminate_child_process(&mut child);
     assert_eq!(error.reason(), RuntimeStartupFailureReason::Cancelled);
 }
+
+#[test]
+fn build_start_preserves_task_state_when_runtime_adapter_rejects_external_startup() -> Result<()> {
+    let root = unique_temp_path("build-start-runtime-startup-failure");
+    let repo_path = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    crate::app_service::test_support::init_git_repo(&repo_path)?;
+
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition_with_provisioning(
+                    "test-runtime",
+                    "Test Runtime",
+                    RuntimeProvisioningMode::External,
+                ),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::ReturnError(
+                    "runtime-owned external startup rejected route",
+                ),
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, task_state, _git_state) = build_service_with_runtime_registry(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        runtime_registry,
+    );
+    let repo_path_string = repo_path.to_string_lossy().to_string();
+    service.workspace_add(repo_path_string.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path_string.as_str(),
+        host_infra_system::RepoConfig {
+            default_runtime_kind: "test-runtime".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: None,
+                branch: "main".to_string(),
+            },
+            trusted_hooks: true,
+            ..Default::default()
+        },
+    )?;
+
+    let error = service
+        .build_start(repo_path_string.as_str(), "task-1", "test-runtime")
+        .expect_err("runtime-owned startup failures should surface from build_start");
+    let message = format!("{error:#}");
+
+    assert!(
+        message.contains("test-runtime build runtime failed to start for task task-1"),
+        "unexpected build_start error chain: {message}"
+    );
+    assert!(
+        message.contains("runtime-owned external startup rejected route"),
+        "unexpected runtime startup error chain: {message}"
+    );
+    assert!(task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .updated_patches
+        .is_empty());
+    assert!(service
+        .runtime_list("test-runtime", Some(repo_path_string.as_str()))?
+        .is_empty());
+
+    Ok(())
+}

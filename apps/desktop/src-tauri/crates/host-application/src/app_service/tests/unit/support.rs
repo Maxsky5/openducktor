@@ -151,6 +151,21 @@ pub(super) struct TestRuntimeAdapter {
     pub(super) definition: RuntimeDefinition,
     pub(super) health: RuntimeHealth,
     pub(super) session_probe_behavior: SessionProbeBehavior,
+    pub(super) external_start_behavior: ExternalStartBehavior,
+}
+
+#[derive(Clone)]
+pub(super) enum ExternalStartBehavior {
+    ReturnRoute(host_domain::RuntimeRoute),
+    ReturnError(&'static str),
+}
+
+impl Default for ExternalStartBehavior {
+    fn default() -> Self {
+        Self::ReturnRoute(host_domain::RuntimeRoute::LocalHttp {
+            endpoint: "http://127.0.0.1:43123".to_string(),
+        })
+    }
 }
 
 impl AppRuntime for TestRuntimeAdapter {
@@ -168,10 +183,13 @@ impl AppRuntime for TestRuntimeAdapter {
         _input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
         _runtime_id: &str,
     ) -> Result<ExternalRuntimeStart> {
-        Ok(ExternalRuntimeStart {
-            runtime_route: self.definition.route_for_port(43_123),
-            startup_report: crate::app_service::RuntimeStartupWaitReport::zero(),
-        })
+        match &self.external_start_behavior {
+            ExternalStartBehavior::ReturnRoute(runtime_route) => Ok(ExternalRuntimeStart {
+                runtime_route: runtime_route.clone(),
+                startup_report: crate::app_service::RuntimeStartupWaitReport::zero(),
+            }),
+            ExternalStartBehavior::ReturnError(message) => Err(anyhow::anyhow!(*message)),
+        }
     }
 
     fn track_process(&self, _service: &AppService, _child_id: u32) -> Result<RuntimeProcessGuard> {
