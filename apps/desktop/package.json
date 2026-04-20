@@ -28,7 +28,7 @@
     "@openducktor/adapters-tauri-host": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
-    "@pierre/diffs": "^1.1.15",
+    "@pierre/diffs": "^1.1.16",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dismissable-layer": "^1.1.11",
@@ -38,7 +38,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tanstack/react-query": "^5.99.0",
+    "@tanstack/react-query": "^5.99.2",
     "@tauri-apps/api": "^2.0.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
@@ -50,7 +50,7 @@
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4",
-    "react-router-dom": "^7.14.0",
+    "react-router-dom": "^7.14.1",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
@@ -58,7 +58,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@happy-dom/global-registrator": "^20.8.9",
+    "@happy-dom/global-registrator": "^20.9.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.2",
     "@tauri-apps/cli": "^2.10.1",
@@ -70,6 +70,6 @@
     "@vitejs/plugin-react": "^6.0.1",
     "bun-types": "^1.3.12",
     "tailwindcss": "^4.1.12",
-    "vite": "^8.0.8"
+    "vite": "^8.0.9"
   }
 }
