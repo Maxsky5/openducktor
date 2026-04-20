@@ -73,26 +73,26 @@ describe("createHydrationRuntimeResolver", () => {
     });
   });
 
-  test("attaches build sessions from the shared workspace runtime when no run is present", async () => {
+  test("fails build session hydration when only a shared workspace runtime exists", async () => {
+    let ensureCalls = 0;
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
         ["opencode", [createRuntime("/tmp/repo")]],
       ]),
-      ensureWorkspaceRuntime: async () => null,
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return null;
+      },
     });
 
     const result = await resolveHydrationRuntime(createRecord("build", "/tmp/repo/worktree"));
-    if (!result.ok) {
-      throw new Error("Expected runtime resolution to succeed");
-    }
-
-    expect(result.runtimeId).toBe("runtime-1");
-    expect(result.runtimeConnection).toEqual({
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4555",
-      workingDirectory: "/tmp/repo/worktree",
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo/worktree.",
     });
+    expect(ensureCalls).toBe(0);
   });
 
   test("falls back to preloaded runtime connection when no run or runtime exists", async () => {
@@ -164,5 +164,25 @@ describe("createHydrationRuntimeResolver", () => {
     expect(result.runtimeRoute).toEqual({
       type: "stdio",
     });
+  });
+
+  test("includes the missing working directory when repo-root planner ensure cannot provide a runtime", async () => {
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return null;
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("planner", "/tmp/repo"));
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo.",
+    });
+    expect(ensureCalls).toBe(1);
   });
 });

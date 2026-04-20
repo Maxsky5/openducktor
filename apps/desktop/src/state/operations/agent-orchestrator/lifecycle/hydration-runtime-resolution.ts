@@ -59,33 +59,11 @@ export const createHydrationRuntimeResolver = ({
     );
   };
 
-  const findWorkspaceRuntime = (runtimeKind: RuntimeKind): RuntimeInstanceSummary | null => {
-    const runtimes = runtimesByKind.get(runtimeKind) ?? [];
-    const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-    return (
-      runtimes.find(
-        (runtime) =>
-          runtime.role === "workspace" &&
-          normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath,
-      ) ?? null
-    );
-  };
-
-  const findRuntimeForWorkingDirectory = (
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-  ): RuntimeInstanceSummary | null => {
-    return (
-      findRuntimeByWorkingDirectory(runtimeKind, workingDirectory) ??
-      findWorkspaceRuntime(runtimeKind)
-    );
-  };
-
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
 
-    const runtime = findRuntimeForWorkingDirectory(runtimeKind, workingDirectory);
+    const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
     if (runtime) {
       const { runtimeConnection } = resolveRuntimeRouteConnection(
         runtime.runtimeRoute,
@@ -126,7 +104,7 @@ export const createHydrationRuntimeResolver = ({
       return {
         ok: false,
         runtimeKind,
-        reason: `Runtime ${runtimeKind} is unavailable for session hydration.`,
+        reason: `No live runtime found for working directory ${workingDirectory}.`,
       };
     }
     const { runtimeConnection } = resolveRuntimeRouteConnection(

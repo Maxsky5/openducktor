@@ -86,6 +86,21 @@ const taskWithSessionAt = (
   return task;
 };
 
+const plannerTaskWithSessionAt = (
+  taskId: string,
+  externalSessionId: string,
+  workingDirectory: string,
+): TaskCard => {
+  const task = taskWithSessionAt(taskId, externalSessionId, workingDirectory);
+  const session = task.agentSessions?.[0];
+  if (!session) {
+    throw new Error("Expected seeded task session");
+  }
+
+  task.agentSessions = [{ ...session, role: "planner", scenario: "planner_initial" }];
+  return task;
+};
+
 const createRuntimeInstance = ({
   runtimeId = "runtime-1",
   workingDirectory = worktreePath,
@@ -561,7 +576,7 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
-  test("reconcile ensures a missing runtime kind only once even when multiple directories are missing", async () => {
+  test("reconcile ensures a missing repo-root planner runtime only once", async () => {
     let runtimeEnsureCalls = 0;
     const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
@@ -585,8 +600,8 @@ describe("repo-session-hydration-service", () => {
       };
     };
 
-    const taskOne = taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a");
-    const taskTwo = taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b");
+    const taskOne = plannerTaskWithSessionAt("task-1", "external-1", repoPath);
+    const taskTwo = plannerTaskWithSessionAt("task-2", "external-2", repoPath);
 
     const service = createRepoSessionHydrationService({
       agentEngine: {
@@ -615,13 +630,66 @@ describe("repo-session-hydration-service", () => {
     expect(runtimeEnsureCalls).toBe(1);
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([
       {
-        directories: ["/tmp/repo/worktree-a", "/tmp/repo/worktree-b"],
+        directories: [repoPath],
       },
     ]);
     service.dispose();
   });
 
-  test("reconcile fans missing stdio worktrees out by per-directory scan identity", async () => {
+  test("reconcile scans normalized-equivalent repo-root planner directories", async () => {
+    let runtimeEnsureCalls = 0;
+    const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
+    const reconcileCalls: string[] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [createRuntimeInstance({ workingDirectory: repoPath })];
+    host.runtimeEnsure = async () => {
+      runtimeEnsureCalls += 1;
+      return createRuntimeInstance({ workingDirectory: repoPath });
+    };
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push(
+            input.directories ? { directories: [...input.directories].sort() } : {},
+          );
+          return [
+            createLiveAgentSessionSnapshotFixture({
+              externalSessionId: "external-1",
+              workingDirectory: repoPath,
+            }),
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [plannerTaskWithSessionAt("task-1", "external-1", `${repoPath}/`)],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(runtimeEnsureCalls).toBe(0);
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        directories: [repoPath],
+      },
+    ]);
+    expect(reconcileCalls).toEqual(["task-1"]);
+    service.dispose();
+  });
+
+  test("reconcile does not ensure missing stdio worktree runtimes", async () => {
     let runtimeEnsureCalls = 0;
     const listLiveAgentSessionSnapshotsCalls: Array<{
       runtimeConnection: unknown;
@@ -667,17 +735,8 @@ describe("repo-session-hydration-service", () => {
       isCurrentRepo: () => true,
     });
 
-    expect(runtimeEnsureCalls).toBe(1);
-    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
-      {
-        runtimeConnection: stdioRuntimeConnection("/tmp/repo/worktree-a"),
-        directories: ["/tmp/repo/worktree-a"],
-      },
-      {
-        runtimeConnection: stdioRuntimeConnection("/tmp/repo/worktree-b"),
-        directories: ["/tmp/repo/worktree-b"],
-      },
-    ]);
+    expect(runtimeEnsureCalls).toBe(0);
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([]);
     service.dispose();
   });
 
@@ -714,7 +773,7 @@ describe("repo-session-hydration-service", () => {
 
     await service.reconcilePendingTasks({
       repoPath,
-      tasks: [taskWithSession("task-1", "external-1")],
+      tasks: [plannerTaskWithSessionAt("task-1", "external-1", repoPath)],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });

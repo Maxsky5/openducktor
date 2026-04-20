@@ -68,6 +68,17 @@ const getOrCreateRepoTaskSet = (
   return created;
 };
 
+const canEnsureWorkspaceRuntimeForReconcile = (
+  record: AgentSessionRecord,
+  repoPath: string,
+): boolean => {
+  if (record.role !== "spec" && record.role !== "planner") {
+    return false;
+  }
+
+  return normalizeWorkingDirectory(record.workingDirectory) === normalizeWorkingDirectory(repoPath);
+};
+
 export const createRepoSessionHydrationService = ({
   agentEngine,
   sessionHydration,
@@ -137,6 +148,7 @@ export const createRepoSessionHydrationService = ({
     const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
     const runtimeKinds = new Set<RuntimeKind>();
     const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+    const runtimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
     const skippedTaskErrors = new Map<string, unknown>();
 
     for (const { taskId, records } of persistedByTask) {
@@ -155,8 +167,11 @@ export const createRepoSessionHydrationService = ({
 
           const desiredDirectories =
             desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
-          desiredDirectories.add(record.workingDirectory);
+          desiredDirectories.add(normalizeWorkingDirectory(record.workingDirectory));
           desiredDirectoriesByRuntimeKind.set(runtimeKind, desiredDirectories);
+          if (canEnsureWorkspaceRuntimeForReconcile(record, repoPath)) {
+            runtimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
+          }
         }
       } catch (error) {
         if (!isSessionRuntimeMetadataError(error)) {
@@ -188,11 +203,10 @@ export const createRepoSessionHydrationService = ({
       }
 
       const runtimeEntries = [...runtimes];
-      let ensuredRuntimeForKind: RuntimeInstanceSummary | null = null;
       const desiredDirectories = desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set();
       const repoPathKey = normalizeWorkingDirectory(repoPath);
       const needsRepoRootRuntime =
-        desiredDirectories.has(repoPath) &&
+        runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind) &&
         !runtimeEntries.some(
           (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
         );
@@ -214,14 +228,10 @@ export const createRepoSessionHydrationService = ({
             skippedTaskErrors,
           };
         }
-        ensuredRuntimeForKind = ensuredRuntime;
         runtimeEntries.push(ensuredRuntime);
       }
 
       preloadedRuntimeLists.set(runtimeKind, runtimeEntries);
-      const coveredDirectories = new Set(
-        runtimeEntries.map((runtime) => normalizeWorkingDirectory(runtime.workingDirectory)),
-      );
 
       for (const runtime of runtimeEntries) {
         const { runtimeConnection } = resolveRuntimeRouteConnection(
@@ -232,7 +242,7 @@ export const createRepoSessionHydrationService = ({
           runtimeWorkingDirectoryKey(runtimeKind, runtime.workingDirectory),
           runtimeConnection,
         );
-        if (!desiredDirectories.has(runtime.workingDirectory)) {
+        if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
           continue;
         }
 
@@ -245,62 +255,6 @@ export const createRepoSessionHydrationService = ({
           });
         }
         runtimeConnections.get(scanKey)?.directories.add(runtime.workingDirectory);
-      }
-
-      const missingDesiredDirectories = Array.from(desiredDirectories).filter(
-        (workingDirectory) => !coveredDirectories.has(normalizeWorkingDirectory(workingDirectory)),
-      );
-      if (missingDesiredDirectories.length === 0) {
-        continue;
-      }
-
-      const routeSourceRuntime =
-        ensuredRuntimeForKind ??
-        runtimeEntries.find(
-          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
-        ) ??
-        runtimeEntries[0] ??
-        (await ensureRuntimeAndInvalidateReadinessQueries({
-          repoPath,
-          runtimeKind,
-          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-        }));
-      if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
-        await invalidateRuntimeList(runtimeKind, repoPath);
-      }
-      if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
-        if (isCancelled()) {
-          return {
-            persistedByTask,
-            taskIdsToReconcile: new Set<string>(),
-            preloadedRuntimeLists,
-            preloadedRuntimeConnectionsByKey,
-            preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
-            skippedTaskErrors,
-          };
-        }
-        ensuredRuntimeForKind = routeSourceRuntime;
-        runtimeEntries.push(routeSourceRuntime);
-      }
-      for (const workingDirectory of missingDesiredDirectories) {
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          routeSourceRuntime.runtimeRoute,
-          workingDirectory,
-        );
-        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
-        if (!runtimeConnections.has(scanKey)) {
-          runtimeConnections.set(scanKey, {
-            runtimeKind,
-            runtimeConnection,
-            directories: new Set<string>(),
-          });
-        }
-        preloadedRuntimeConnectionsByKey.set(
-          runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
-          runtimeConnection,
-        );
-        runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
       }
     }
 
