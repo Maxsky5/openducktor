@@ -462,6 +462,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
+  sessionTaskId?: string | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
@@ -472,6 +473,7 @@ type MessageBodyProps = {
 
 export const MessageBody = ({
   message,
+  sessionTaskId,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
@@ -490,6 +492,7 @@ export const MessageBody = ({
       return (
         <WorkflowToolMessage
           meta={meta}
+          taskId={sessionTaskId ?? null}
           messageTimestamp={message.timestamp}
           sessionWorkingDirectory={sessionWorkingDirectory}
           workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
@@ -499,6 +502,7 @@ export const MessageBody = ({
     return (
       <RegularToolMessage
         meta={meta}
+        taskId={sessionTaskId ?? null}
         messageContent={message.content}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}

@@ -48,6 +48,7 @@ type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
@@ -62,6 +63,7 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
@@ -169,6 +171,7 @@ const AgentChatThreadMotionRow = memo(
     row,
     isStreamingAssistantMessage,
     sessionAgentColors,
+    sessionTaskId,
     sessionRole,
     sessionWorkingDirectory,
     sessionRuntimeKind,
@@ -179,6 +182,7 @@ const AgentChatThreadMotionRow = memo(
         <AgentChatThreadRow
           row={row}
           isStreamingAssistantMessage={isStreamingAssistantMessage}
+          sessionTaskId={sessionTaskId}
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
@@ -189,6 +193,7 @@ const AgentChatThreadMotionRow = memo(
   },
   (previousProps, nextProps) => {
     return (
+      previousProps.sessionTaskId === nextProps.sessionTaskId &&
       previousProps.sessionRole === nextProps.sessionRole &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
@@ -204,6 +209,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   activeStreamingAssistantMessageId,
   sessionAgentColors,
+  sessionTaskId,
   sessionRole,
   sessionWorkingDirectory,
   sessionRuntimeKind,
@@ -213,6 +219,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn: AgentChatRenderedTurn;
   activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
@@ -228,6 +235,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           isStreamingAssistantMessage={
             row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
           }
+          sessionTaskId={sessionTaskId}
           sessionRole={sessionRole}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
@@ -247,6 +255,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
+  sessionTaskId,
   sessionRole,
   sessionWorkingDirectory,
   sessionRuntimeKind,
@@ -335,6 +344,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 key={turn.key}
                 turn={turn}
                 activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
+                sessionTaskId={sessionTaskId}
                 sessionRole={sessionRole}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
@@ -632,6 +642,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
   const sessionRole = session?.role ?? null;
   const sessionRuntimeKind = session?.runtimeKind ?? null;
+  const sessionTaskId = session?.taskId ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
   const sessionAccentColor = useMemo(() => {
     const profileId = sessionSelectedModel?.profileId;
@@ -758,6 +769,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         isSending={isSending}
         isInteractionEnabled={isInteractionEnabled}
         sessionAgentColors={sessionAgentColors}
+        sessionTaskId={sessionTaskId}
         sessionRole={sessionRole}
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}

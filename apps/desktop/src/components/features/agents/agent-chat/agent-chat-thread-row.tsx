@@ -10,6 +10,7 @@ type AgentChatWindowRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
+  sessionTaskId?: string | null;
   sessionRole: AgentSessionState["role"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
@@ -19,6 +20,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   isStreamingAssistantMessage,
   sessionAgentColors,
+  sessionTaskId,
   sessionRole,
   sessionWorkingDirectory,
   sessionRuntimeKind,
@@ -34,6 +36,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
           <AgentChatMessageCard
             message={row.message}
             isStreamingAssistantMessage={isStreamingAssistantMessage}
+            sessionTaskId={sessionTaskId ?? null}
             sessionRole={sessionRole}
             sessionAgentColors={sessionAgentColors}
             sessionWorkingDirectory={sessionWorkingDirectory}

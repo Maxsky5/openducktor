@@ -53,6 +53,23 @@ const PATH_DISPLAY_TOOL_NAMES = new Set([
 
 const REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES = new Set(["task", "subtask", "delegate"]);
 
+export const extractSubagentSessionId = (meta: ToolMeta): string | null => {
+  const sessionId = meta.metadata?.sessionId;
+  if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+    return null;
+  }
+
+  const lowerTool = meta.tool.toLowerCase();
+  if (
+    REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES.has(lowerTool) ||
+    Array.isArray(meta.metadata?.summary)
+  ) {
+    return sessionId.trim();
+  }
+
+  return null;
+};
+
 const summarizeSearchToolInput = (
   tool: string,
   input: Record<string, unknown> | undefined,
@@ -91,8 +108,8 @@ const getTaskSummary = (meta: ToolMeta): string | null => {
   if (Array.isArray(summary)) {
     return `${summary.length} subagent tool step${summary.length === 1 ? "" : "s"}`;
   }
-  const sessionId = meta.metadata?.sessionId;
-  if (typeof sessionId === "string" && sessionId.trim().length > 0) {
+  const sessionId = extractSubagentSessionId(meta);
+  if (sessionId) {
     return `Subagent session ${sessionId.slice(0, 8)}`;
   }
   return null;

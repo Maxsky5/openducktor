@@ -10,6 +10,7 @@ import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-vi
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
+  sessionTaskId?: string | null;
   sessionRole: AgentRole | null;
   sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
@@ -20,6 +21,7 @@ type AgentChatMessageCardProps = {
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   isStreamingAssistantMessage = false,
+  sessionTaskId,
   sessionRole,
   sessionSelectedModel,
   sessionAgentColors,
@@ -51,6 +53,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
+        sessionTaskId={sessionTaskId ?? null}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         timeLabel={vm.timeLabel}
