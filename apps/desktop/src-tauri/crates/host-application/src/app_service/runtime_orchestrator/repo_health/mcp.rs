@@ -143,20 +143,32 @@ impl AppService {
         error
     }
 
-    pub(in crate::app_service::runtime_orchestrator) fn repo_runtime_has_active_run(
+    pub(in crate::app_service::runtime_orchestrator) fn repo_runtime_has_active_session(
         &self,
-        repo_key: &str,
-        runtime_route: &RuntimeRoute,
+        runtime_kind: &AgentRuntimeKind,
+        runtime: &RuntimeInstanceSummary,
     ) -> Result<bool> {
-        Ok(self.runs_list(Some(repo_key))?.iter().any(|run| {
-            matches!(
-                run.state,
-                RunState::Starting
-                    | RunState::Running
-                    | RunState::Blocked
-                    | RunState::AwaitingDoneConfirmation
-            ) && &run.runtime_route == runtime_route
-        }))
+        let probe_target_resolution = self
+            .runtime_registry
+            .runtime(runtime_kind)?
+            .session_status_probe_target(&runtime.runtime_route, runtime.working_directory.as_str())?;
+        let RuntimeSessionStatusProbeTargetResolution::Target(probe_target) =
+            probe_target_resolution
+        else {
+            return Ok(true);
+        };
+        let statuses = self.load_cached_runtime_session_statuses_for_targets(std::slice::from_ref(&probe_target))?;
+        match statuses.get(&probe_target) {
+            Some(RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)) => Ok(snapshot.has_any_live_sessions()),
+            Some(RuntimeSessionStatusProbeOutcome::Unsupported) => Ok(true),
+            Some(RuntimeSessionStatusProbeOutcome::ActionableError(error)) => {
+                Err(anyhow!(error.to_string()))
+            }
+            None => Err(anyhow!(
+                "Missing cached runtime session status outcome for {}",
+                runtime.working_directory
+            )),
+        }
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn recover_repo_runtime_mcp_status_failure(
@@ -168,9 +180,9 @@ impl AppService {
         host_status: Option<RepoRuntimeStartupStatus>,
         error: RuntimeHealthCheckFailure,
     ) -> Result<RepoRuntimeHealthCheck> {
-        if self.repo_runtime_has_active_run(repo_key, &runtime.runtime_route)? {
+        if self.repo_runtime_has_active_session(&runtime_kind, runtime)? {
             let skipped_message = format!(
-                "Failed to query runtime MCP status: {}. Automatic runtime restart was skipped because an active run is using this runtime.",
+                "Failed to query runtime MCP status: {}. Automatic runtime restart was skipped because an active session is using this runtime.",
                 error.message
             );
             return self.store_repo_runtime_health(
@@ -189,8 +201,8 @@ impl AppService {
                     mcp_server_status: None,
                     available_tool_ids: Vec::new(),
                     progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
-                        stage: RuntimeHealthWorkflowStage::RestartSkippedActiveRun,
-                        observation: Some(RepoRuntimeHealthObservation::RestartSkippedActiveRun),
+                        stage: RuntimeHealthWorkflowStage::RestartSkippedActiveSession,
+                        observation: Some(RepoRuntimeHealthObservation::RestartSkippedActiveSession),
                         host: host_status,
                         checked_at: checked_at.to_string(),
                         failure_reason: None,

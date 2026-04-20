@@ -32,7 +32,6 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.runtimeId).toBeNull();
-    expect(hydrated.runId).toBeNull();
     expect(hydrated.pendingPermissions).toEqual([]);
     expect(hydrated.pendingQuestions).toEqual([]);
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");

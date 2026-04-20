@@ -20,8 +20,7 @@ import type {
   AutopilotRule,
   AutopilotSettings,
   BeadsCheck,
-  BuildContinuationTarget,
-  BuildContinuationTargetSource,
+  BuildSessionBootstrap,
   ChatSettings,
   CommitsAheadBehind,
   DirectoryEntry,
@@ -83,9 +82,6 @@ import type {
   RepoStoreHealthStatus,
   RepoStoreSharedServerHealth,
   RepoStoreSharedServerOwnershipState,
-  RunEvent,
-  RunState,
-  RunSummary,
   RuntimeCapabilities,
   RuntimeCapabilityClass,
   RuntimeCapabilityKey,
@@ -119,6 +115,7 @@ import type {
   TaskQaDocumentPresence,
   TaskStatus,
   TaskUpdatePatch,
+  TaskWorktreeSummary,
   WorkspaceRecord,
 } from "./index";
 import * as contracts from "./index";
@@ -134,8 +131,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentKickoffScenarioValues",
   "agentToolNameSchema",
   "agentToolNameValues",
-  "buildContinuationTargetSchema",
-  "buildContinuationTargetSourceSchema",
+  "buildSessionBootstrapSchema",
   "runtimeInstanceSummarySchema",
   "runtimeInstanceSummaryRoleSchema",
   "agentPromptOverrideSchema",
@@ -269,9 +265,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitRebaseBranchResultSchema",
   "gitRebaseAbortRequestSchema",
   "gitRebaseAbortResultSchema",
-  "runEventSchema",
-  "runStateSchema",
-  "runSummarySchema",
   "isAgentKickoffScenario",
   "isScenarioStartModeAllowed",
   "runtimeCheckSchema",
@@ -353,6 +346,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskStatusSchema",
   "taskSummarySchema",
   "taskUpdatePatchSchema",
+  "taskWorktreeSummarySchema",
   "tasksUpdatedEventSchema",
   "themeSchema",
   "pullRequestSchema",
@@ -376,8 +370,7 @@ type ExportedTypeContract = {
   AutopilotSettings: AutopilotSettings;
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
-  BuildContinuationTarget: BuildContinuationTarget;
-  BuildContinuationTargetSource: BuildContinuationTargetSource;
+  BuildSessionBootstrap: BuildSessionBootstrap;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;
@@ -436,9 +429,6 @@ type ExportedTypeContract = {
   RepoDevServerScript: RepoDevServerScript;
   RepoHooks: RepoHooks;
   RepoPromptOverrides: RepoPromptOverrides;
-  RunEvent: RunEvent;
-  RunState: RunState;
-  RunSummary: RunSummary;
   SlashCommandCatalog: SlashCommandCatalog;
   SlashCommandDescriptor: SlashCommandDescriptor;
   SlashCommandSource: SlashCommandSource;
@@ -483,6 +473,7 @@ type ExportedTypeContract = {
   TaskPriority: TaskPriority;
   TaskQaDocumentPresence: TaskQaDocumentPresence;
   TaskStatus: TaskStatus;
+  TaskWorktreeSummary: TaskWorktreeSummary;
   TaskUpdatePatch: TaskUpdatePatch;
   WorkspaceRecord: WorkspaceRecord;
 };

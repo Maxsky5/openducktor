@@ -25,7 +25,7 @@ type UseAgentStudioBuildToolsReadModelArgs = {
   isPanelOpen: boolean;
   isViewSessionHistoryHydrating: boolean;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  runCompletionRecoverySignal: number;
+  worktreeRecoverySignal: number;
 };
 
 export function useAgentStudioBuildToolsReadModel({
@@ -38,7 +38,7 @@ export function useAgentStudioBuildToolsReadModel({
   isPanelOpen,
   isViewSessionHistoryHydrating,
   repoSettings,
-  runCompletionRecoverySignal,
+  worktreeRecoverySignal,
 }: UseAgentStudioBuildToolsReadModelArgs) {
   const sessionRole = session.role;
   const gitPanelContextMode: "repository" | "worktree" =
@@ -70,9 +70,9 @@ export function useAgentStudioBuildToolsReadModel({
 
   const diffData = useAgentStudioDiffData({
     repoPath: buildToolsBootstrap.repoPath,
+    taskId: buildToolsBootstrap.taskId,
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
-    sessionRunId: buildToolsBootstrap.sessionRunId,
-    runCompletionRecoverySignal,
+    worktreeRecoverySignal,
     defaultTargetBranch: diffComparisonTarget,
     ...(taskTargetBranchState.validationError
       ? { preconditionError: taskTargetBranchState.validationError }

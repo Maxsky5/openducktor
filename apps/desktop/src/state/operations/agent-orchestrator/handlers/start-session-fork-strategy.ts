@@ -49,7 +49,6 @@ const requireForkSourceRuntime = (
   const sourceRuntime: RuntimeInfo = {
     runtimeKind: sourceRuntimeKind,
     runtimeId: sourceSession.runtimeId,
-    runId: sourceSession.runId,
     runtimeRoute: sourceSession.runtimeRoute,
     workingDirectory: sourceSession.workingDirectory,
   };
@@ -188,7 +187,6 @@ export const executeForkStart = async ({
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,
     runtimeId: sourceSession.runtimeId,
-    runId: sourceSession.runId,
     runtimeRoute: sourceSession.runtimeRoute,
     runtimeConnection: supportedRuntimeConnection,
     workingDirectory: sourceSession.workingDirectory,

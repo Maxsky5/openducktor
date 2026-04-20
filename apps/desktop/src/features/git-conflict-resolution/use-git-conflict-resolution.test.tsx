@@ -21,7 +21,6 @@ const buildSession = (
     status: "idle",
     startedAt: "2026-03-18T10:00:00.000Z",
     runtimeId: null,
-    runId: null,
     runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
     workingDirectory,
     messages: [],

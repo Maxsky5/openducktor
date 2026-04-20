@@ -9,7 +9,6 @@ export type AgentSessionSummary = Pick<
   | "scenario"
   | "status"
   | "startedAt"
-  | "runId"
   | "workingDirectory"
   | "pendingPermissions"
   | "pendingQuestions"
@@ -49,7 +48,6 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
   scenario: session.scenario,
   status: session.status,
   startedAt: session.startedAt,
-  runId: session.runId,
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel,
   runtimeKind: session.runtimeKind,
@@ -84,7 +82,6 @@ const areSummariesEquivalent = (
     left.scenario === right.scenario &&
     left.status === right.status &&
     left.startedAt === right.startedAt &&
-    left.runId === right.runId &&
     left.workingDirectory === right.workingDirectory &&
     left.selectedModel === right.selectedModel &&
     left.runtimeKind === right.runtimeKind &&

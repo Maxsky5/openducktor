@@ -69,7 +69,6 @@ describe("KanbanColumn", () => {
             title: "In Progress",
             tasks: [waitingTask, activeTask, idleTask],
           },
-          runStateByTaskId: new Map(),
           taskSessionsByTaskId,
           taskActivityStateByTaskId,
           activeTaskSessionContextByTaskId: new Map(),

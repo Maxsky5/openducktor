@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use host_domain::GitCurrentBranch;
 use host_infra_system::RepoConfig;
 use std::path::Path;

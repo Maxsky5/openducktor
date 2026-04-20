@@ -46,7 +46,6 @@ export function TaskDetailsSheet({
   activeWorkspace = null,
   task,
   allTasks,
-  runs,
   taskSessions = [],
   hasActiveSession = false,
   activeSessionRole,
@@ -119,7 +118,7 @@ export function TaskDetailsSheet({
     );
   }
 
-  const canDetectPullRequestForTask = canDetectTaskPullRequest(task, runs);
+  const canDetectPullRequestForTask = canDetectTaskPullRequest(task);
   const detailActions = onResetTask ? DETAIL_ACTIONS : DETAIL_ACTIONS_WITHOUT_TASK_RESET;
 
   return (

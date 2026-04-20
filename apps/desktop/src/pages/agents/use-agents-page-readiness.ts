@@ -1,13 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { describeRepoRuntimeStatus, isRepoRuntimeReady } from "@/lib/repo-runtime-health";
 import type { useChecksState } from "@/state";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type {
-  AgentStudioOrchestrationReadinessContext,
-  AgentStudioOrchestrationSelectionContext,
-} from "./use-agent-studio-orchestration-controller";
+import type { AgentStudioOrchestrationReadinessContext } from "./use-agent-studio-orchestration-controller";
 
 const getBlockedRuntimeReason = (
   runtimeLabel: string,
@@ -18,43 +15,6 @@ const getBlockedRuntimeReason = (
   }
   return describeRepoRuntimeStatus(runtimeLabel, runtimeHealth);
 };
-
-type UseRunCompletionRecoverySignalArgs = {
-  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
-  runCompletionSignal: {
-    runId: string;
-    version: number;
-  } | null;
-};
-
-export function useRunCompletionRecoverySignal({
-  activeSession,
-  runCompletionSignal,
-}: UseRunCompletionRecoverySignalArgs): number {
-  const [runCompletionRecoverySignal, setRunCompletionRecoverySignal] = useState(0);
-  const latestRunCompletionSignalVersionRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const activeBuildRunId = activeSession?.role === "build" ? activeSession.runId : null;
-
-    if (!runCompletionSignal || !activeBuildRunId) {
-      return;
-    }
-
-    if (runCompletionSignal.runId !== activeBuildRunId) {
-      return;
-    }
-
-    if (runCompletionSignal.version === latestRunCompletionSignalVersionRef.current) {
-      return;
-    }
-
-    latestRunCompletionSignalVersionRef.current = runCompletionSignal.version;
-    setRunCompletionRecoverySignal((current) => current + 1);
-  }, [activeSession, runCompletionSignal]);
-
-  return runCompletionRecoverySignal;
-}
 
 type UseAgentStudioReadinessArgs = {
   activeWorkspace: ActiveWorkspace | null;

@@ -15,7 +15,6 @@ const model: KanbanPageContentModel = {
       tasks: [],
     },
   ],
-  runStateByTaskId: new Map(),
   taskSessionsByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import { appQueryClient } from "@/lib/query-client";
-import { loadRepoRunsFromQuery, taskQueryKeys } from "@/state/queries/tasks";
+import { host } from "@/state/operations/shared/host";
 
 const WORKTREE_RESOLUTION_TIMEOUT_MS = 5_000;
 
@@ -10,31 +9,31 @@ type WorktreeResolutionState =
   | {
       status: "resolving";
       repoPath: string;
-      runId: string;
+      taskId: string;
     }
   | {
       status: "resolved";
       repoPath: string;
-      runId: string;
+      taskId: string;
       path: string | null;
     }
   | {
       status: "failed";
       repoPath: string;
-      runId: string;
+      taskId: string;
       error: string;
     };
 
 type UseAgentStudioWorktreeResolutionInput = {
   repoPath: string | null;
+  taskId: string | null;
   sessionWorkingDirectory: string | null;
-  sessionRunId: string | null;
-  runCompletionRecoverySignal?: number;
+  worktreeRecoverySignal?: number;
 };
 
 type WorktreeResolutionResult = {
   worktreePath: string | null;
-  worktreeResolutionRunId: string | null;
+  worktreeResolutionTaskId: string | null;
   shouldBlockDiffLoading: boolean;
   isWorktreeResolutionResolving: boolean;
   worktreeResolutionError: string | null;
@@ -43,8 +42,8 @@ type WorktreeResolutionResult = {
 
 const IDLE_WORKTREE_RESOLUTION_STATE: WorktreeResolutionState = { status: "idle" };
 
-const buildWorktreeResolutionError = (runId: string, reason?: string): string => {
-  const baseMessage = `Failed to resolve run worktree path for session ${runId}`;
+const buildWorktreeResolutionError = (taskId: string, reason?: string): string => {
+  const baseMessage = `Failed to resolve task worktree path for task ${taskId}`;
   const retryMessage = "Use Refresh to retry.";
   const normalizedReason = reason?.trim() ?? "";
   if (normalizedReason.length === 0) {
@@ -78,87 +77,87 @@ const withTimeout = async <T>(
 
 export function useAgentStudioWorktreeResolution({
   repoPath,
+  taskId,
   sessionWorkingDirectory,
-  sessionRunId,
-  runCompletionRecoverySignal,
+  worktreeRecoverySignal,
 }: UseAgentStudioWorktreeResolutionInput): WorktreeResolutionResult {
   const [worktreeResolutionState, setWorktreeResolutionState] = useState<WorktreeResolutionState>(
     IDLE_WORKTREE_RESOLUTION_STATE,
   );
   const [worktreeResolutionRetryToken, setWorktreeResolutionRetryToken] = useState(0);
-  const lastHandledRunCompletionRecoverySignalRef = useRef<number | null>(null);
-  const pendingRunCompletionRecoverySignalRef = useRef<number | null>(null);
-  const lastRunCompletionRecoveryContextKeyRef = useRef<string | null>(null);
+  const lastHandledWorktreeRecoverySignalRef = useRef<number | null>(null);
+  const pendingWorktreeRecoverySignalRef = useRef<number | null>(null);
+  const lastWorktreeRecoveryContextKeyRef = useRef<string | null>(null);
 
   const directWorktreePath =
     sessionWorkingDirectory && sessionWorkingDirectory !== repoPath
       ? sessionWorkingDirectory
       : null;
-  const shouldResolveWorktreeFromRunSummary =
-    directWorktreePath === null && repoPath != null && sessionRunId != null;
-  const worktreeResolutionRepoPath = shouldResolveWorktreeFromRunSummary ? repoPath : null;
-  const worktreeResolutionRunId = shouldResolveWorktreeFromRunSummary ? sessionRunId : null;
+  const shouldResolveWorktreeFromTask =
+    directWorktreePath === null && repoPath != null && taskId != null;
+  const worktreeResolutionRepoPath = shouldResolveWorktreeFromTask ? repoPath : null;
+  const worktreeResolutionTaskId = shouldResolveWorktreeFromTask ? taskId : null;
   const hasResolvedWorktreeForCurrentContext =
     worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
+    worktreeResolutionTaskId != null &&
     worktreeResolutionState.status === "resolved" &&
     worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
-    worktreeResolutionState.runId === worktreeResolutionRunId;
+    worktreeResolutionState.taskId === worktreeResolutionTaskId;
   const resolvedWorktreePath = hasResolvedWorktreeForCurrentContext
     ? worktreeResolutionState.path
     : null;
   const worktreePath = directWorktreePath ?? resolvedWorktreePath;
   const shouldBlockDiffLoading =
     worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
+    worktreeResolutionTaskId != null &&
     !hasResolvedWorktreeForCurrentContext;
   const isWorktreeResolutionResolving =
     worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
+    worktreeResolutionTaskId != null &&
     worktreeResolutionState.status === "resolving" &&
     worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
-    worktreeResolutionState.runId === worktreeResolutionRunId;
+    worktreeResolutionState.taskId === worktreeResolutionTaskId;
   const worktreeResolutionError =
     worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
+    worktreeResolutionTaskId != null &&
     worktreeResolutionState.status === "failed" &&
     worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
-    worktreeResolutionState.runId === worktreeResolutionRunId
+    worktreeResolutionState.taskId === worktreeResolutionTaskId
       ? worktreeResolutionState.error
       : null;
   const worktreeResolutionRequestKey =
-    worktreeResolutionRepoPath != null && worktreeResolutionRunId != null
-      ? `${worktreeResolutionRepoPath}::${worktreeResolutionRunId}::${worktreeResolutionRetryToken}`
+    worktreeResolutionRepoPath != null && worktreeResolutionTaskId != null
+      ? `${worktreeResolutionRepoPath}::${worktreeResolutionTaskId}::${worktreeResolutionRetryToken}`
       : null;
   const worktreeResolutionContextKey =
-    worktreeResolutionRepoPath != null && worktreeResolutionRunId != null
-      ? `${worktreeResolutionRepoPath}::${worktreeResolutionRunId}`
+    worktreeResolutionRepoPath != null && worktreeResolutionTaskId != null
+      ? `${worktreeResolutionRepoPath}::${worktreeResolutionTaskId}`
       : null;
   const retryWorktreeResolution = useCallback((): void => {
     setWorktreeResolutionRetryToken((previous) => previous + 1);
   }, []);
 
   useEffect(() => {
-    if (lastRunCompletionRecoveryContextKeyRef.current !== worktreeResolutionContextKey) {
-      lastRunCompletionRecoveryContextKeyRef.current = worktreeResolutionContextKey;
-      lastHandledRunCompletionRecoverySignalRef.current = null;
-      pendingRunCompletionRecoverySignalRef.current = null;
+    if (lastWorktreeRecoveryContextKeyRef.current !== worktreeResolutionContextKey) {
+      lastWorktreeRecoveryContextKeyRef.current = worktreeResolutionContextKey;
+      lastHandledWorktreeRecoverySignalRef.current = null;
+      pendingWorktreeRecoverySignalRef.current = null;
     }
 
-    if (runCompletionRecoverySignal == null) {
-      lastHandledRunCompletionRecoverySignalRef.current = null;
-      pendingRunCompletionRecoverySignalRef.current = null;
+    if (worktreeRecoverySignal == null) {
+      lastHandledWorktreeRecoverySignalRef.current = null;
+      pendingWorktreeRecoverySignalRef.current = null;
       return;
     }
 
-    const pendingSignal = pendingRunCompletionRecoverySignalRef.current;
+    const pendingSignal = pendingWorktreeRecoverySignalRef.current;
     if (pendingSignal != null && !isWorktreeResolutionResolving) {
-      pendingRunCompletionRecoverySignalRef.current = null;
-      lastHandledRunCompletionRecoverySignalRef.current = pendingSignal;
+      pendingWorktreeRecoverySignalRef.current = null;
+      lastHandledWorktreeRecoverySignalRef.current = pendingSignal;
 
       if (
         worktreeResolutionRepoPath == null ||
-        worktreeResolutionRunId == null ||
+        worktreeResolutionTaskId == null ||
         hasResolvedWorktreeForCurrentContext
       ) {
         return;
@@ -168,45 +167,45 @@ export function useAgentStudioWorktreeResolution({
       return;
     }
 
-    if (lastHandledRunCompletionRecoverySignalRef.current === null) {
-      lastHandledRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+    if (lastHandledWorktreeRecoverySignalRef.current === null) {
+      lastHandledWorktreeRecoverySignalRef.current = worktreeRecoverySignal;
       return;
     }
 
     if (
-      runCompletionRecoverySignal === lastHandledRunCompletionRecoverySignalRef.current ||
-      runCompletionRecoverySignal === pendingRunCompletionRecoverySignalRef.current
+      worktreeRecoverySignal === lastHandledWorktreeRecoverySignalRef.current ||
+      worktreeRecoverySignal === pendingWorktreeRecoverySignalRef.current
     ) {
       return;
     }
 
     if (
       worktreeResolutionRepoPath == null ||
-      worktreeResolutionRunId == null ||
+      worktreeResolutionTaskId == null ||
       hasResolvedWorktreeForCurrentContext
     ) {
-      lastHandledRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+      lastHandledWorktreeRecoverySignalRef.current = worktreeRecoverySignal;
       return;
     }
 
     if (isWorktreeResolutionResolving) {
-      pendingRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+      pendingWorktreeRecoverySignalRef.current = worktreeRecoverySignal;
       return;
     }
 
-    lastHandledRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+    lastHandledWorktreeRecoverySignalRef.current = worktreeRecoverySignal;
     setWorktreeResolutionRetryToken((previous) => previous + 1);
   }, [
     hasResolvedWorktreeForCurrentContext,
     isWorktreeResolutionResolving,
-    runCompletionRecoverySignal,
+    worktreeRecoverySignal,
     worktreeResolutionContextKey,
     worktreeResolutionRepoPath,
-    worktreeResolutionRunId,
+    worktreeResolutionTaskId,
   ]);
 
   useEffect(() => {
-    if (!worktreeResolutionRequestKey || !worktreeResolutionRepoPath || !worktreeResolutionRunId) {
+    if (!worktreeResolutionRequestKey || !worktreeResolutionRepoPath || !worktreeResolutionTaskId) {
       setWorktreeResolutionState((previous) =>
         previous.status === "idle" ? previous : IDLE_WORKTREE_RESOLUTION_STATE,
       );
@@ -218,7 +217,7 @@ export function useAgentStudioWorktreeResolution({
       if (
         previous.status === "resolving" &&
         previous.repoPath === worktreeResolutionRepoPath &&
-        previous.runId === worktreeResolutionRunId
+        previous.taskId === worktreeResolutionTaskId
       ) {
         return previous;
       }
@@ -226,39 +225,32 @@ export function useAgentStudioWorktreeResolution({
       return {
         status: "resolving",
         repoPath: worktreeResolutionRepoPath,
-        runId: worktreeResolutionRunId,
+        taskId: worktreeResolutionTaskId,
       };
     });
 
     void (async () => {
       try {
-        await appQueryClient.cancelQueries({
-          queryKey: taskQueryKeys.runs(worktreeResolutionRepoPath),
-        });
-        await appQueryClient.invalidateQueries({
-          queryKey: taskQueryKeys.runs(worktreeResolutionRepoPath),
-        });
-        const runs = await withTimeout(
-          loadRepoRunsFromQuery(appQueryClient, worktreeResolutionRepoPath),
+        const taskWorktree = await withTimeout(
+          host.taskWorktreeGet(worktreeResolutionRepoPath, worktreeResolutionTaskId),
           WORKTREE_RESOLUTION_TIMEOUT_MS,
-          `Timed out after ${WORKTREE_RESOLUTION_TIMEOUT_MS}ms while loading runs list.`,
+          `Timed out after ${WORKTREE_RESOLUTION_TIMEOUT_MS}ms while loading task worktree.`,
         );
         if (!isCurrent) {
           return;
         }
 
-        const matchingRun = runs.find((run) => run.runId === worktreeResolutionRunId);
-        if (!matchingRun) {
-          const missingRunError = buildWorktreeResolutionError(
-            worktreeResolutionRunId,
-            "Run not found in runs list response.",
+        if (!taskWorktree) {
+          const missingWorktreeError = buildWorktreeResolutionError(
+            worktreeResolutionTaskId,
+            "Task worktree is not available.",
           );
           setWorktreeResolutionState((previous) => {
             if (
               previous.status === "failed" &&
               previous.repoPath === worktreeResolutionRepoPath &&
-              previous.runId === worktreeResolutionRunId &&
-              previous.error === missingRunError
+              previous.taskId === worktreeResolutionTaskId &&
+              previous.error === missingWorktreeError
             ) {
               return previous;
             }
@@ -266,21 +258,23 @@ export function useAgentStudioWorktreeResolution({
             return {
               status: "failed",
               repoPath: worktreeResolutionRepoPath,
-              runId: worktreeResolutionRunId,
-              error: missingRunError,
+              taskId: worktreeResolutionTaskId,
+              error: missingWorktreeError,
             };
           });
           return;
         }
 
         const nextPath =
-          matchingRun.worktreePath !== worktreeResolutionRepoPath ? matchingRun.worktreePath : null;
+          taskWorktree.workingDirectory !== worktreeResolutionRepoPath
+            ? taskWorktree.workingDirectory
+            : null;
 
         setWorktreeResolutionState((previous) => {
           if (
             previous.status === "resolved" &&
             previous.repoPath === worktreeResolutionRepoPath &&
-            previous.runId === worktreeResolutionRunId &&
+            previous.taskId === worktreeResolutionTaskId &&
             previous.path === nextPath
           ) {
             return previous;
@@ -289,7 +283,7 @@ export function useAgentStudioWorktreeResolution({
           return {
             status: "resolved",
             repoPath: worktreeResolutionRepoPath,
-            runId: worktreeResolutionRunId,
+            taskId: worktreeResolutionTaskId,
             path: nextPath,
           };
         });
@@ -299,13 +293,13 @@ export function useAgentStudioWorktreeResolution({
         }
 
         const resolutionError = buildWorktreeResolutionError(
-          worktreeResolutionRunId,
+          worktreeResolutionTaskId,
           errorMessage(cause),
         );
         setWorktreeResolutionState({
           status: "failed",
           repoPath: worktreeResolutionRepoPath,
-          runId: worktreeResolutionRunId,
+          taskId: worktreeResolutionTaskId,
           error: resolutionError,
         });
       }
@@ -314,11 +308,11 @@ export function useAgentStudioWorktreeResolution({
     return () => {
       isCurrent = false;
     };
-  }, [worktreeResolutionRepoPath, worktreeResolutionRequestKey, worktreeResolutionRunId]);
+  }, [worktreeResolutionRepoPath, worktreeResolutionRequestKey, worktreeResolutionTaskId]);
 
   return {
     worktreePath,
-    worktreeResolutionRunId,
+    worktreeResolutionTaskId,
     shouldBlockDiffLoading,
     isWorktreeResolutionResolving,
     worktreeResolutionError,

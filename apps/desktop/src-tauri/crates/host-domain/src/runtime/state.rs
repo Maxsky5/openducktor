@@ -2,18 +2,6 @@ use super::{AgentRuntimeKind, RuntimeDescriptor, RuntimeRoute};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunState {
-    Starting,
-    Running,
-    Blocked,
-    AwaitingDoneConfirmation,
-    Completed,
-    Failed,
-    Stopped,
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeRole {
@@ -42,18 +30,16 @@ impl fmt::Display for RuntimeRole {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-pub enum BuildContinuationTargetSource {
-    ActiveBuildRun,
-    BuilderSession,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct BuildContinuationTarget {
-    pub working_directory: String,
-    pub source: BuildContinuationTargetSource,
+pub enum RunState {
+    Starting,
+    Running,
+    Blocked,
+    AwaitingDoneConfirmation,
+    Completed,
+    Failed,
+    Stopped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +56,20 @@ pub struct RunSummary {
     pub state: RunState,
     pub last_message: Option<String>,
     pub started_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskWorktreeSummary {
+    pub working_directory: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildSessionBootstrap {
+    pub runtime_kind: AgentRuntimeKind,
+    pub runtime_route: RuntimeRoute,
+    pub working_directory: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,7 +147,7 @@ pub enum RepoRuntimeHealthObservation {
     ObservingExistingStartup,
     StartedByDiagnostics,
     RestartedForMcp,
-    RestartSkippedActiveRun,
+    RestartSkippedActiveSession,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

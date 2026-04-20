@@ -12,7 +12,7 @@ import {
 } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
-import { buildContinuationTargetQueryOptions } from "@/state/queries/build-runtime";
+import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
@@ -34,15 +34,14 @@ export type UseAgentsPageRightPanelModelArgs = {
   isViewSessionHistoryHydrating: boolean;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  runCompletionRecoverySignal: number;
-  runs: ReturnType<typeof useTasksState>["runs"];
+  worktreeRecoverySignal: number;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
 };
 
-export const resolveBuildContinuationTargetTaskId = ({
+export const resolveTaskWorktreeTaskId = ({
   viewTaskId,
   viewSelectedTask,
 }: {
@@ -70,25 +69,25 @@ export const resolveAgentStudioGitPanelOpenInTarget = ({
   contextMode,
   activeWorkspace,
   worktreePath,
-  runWorktreePath,
+  fallbackWorktreePath,
   sessionWorkingDirectory,
-  continuationTargetWorkingDirectory,
-  isContinuationTargetResolving,
+  taskWorktreeWorkingDirectory,
+  isTaskWorktreeResolving,
 }: {
   contextMode: "repository" | "worktree";
   activeWorkspace: ActiveWorkspace | null;
   worktreePath: string | null;
-  runWorktreePath: string | null;
+  fallbackWorktreePath: string | null;
   sessionWorkingDirectory: string | null;
-  continuationTargetWorkingDirectory: string | null;
-  isContinuationTargetResolving: boolean;
+  taskWorktreeWorkingDirectory: string | null;
+  isTaskWorktreeResolving: boolean;
 }): { path: string | null; disabledReason: string | null } => {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const repoPath = workspaceRepoPath ?? "";
   const resolvedContextWorkingDirectory = firstNonRepoWorktreePath(repoPath, [
     worktreePath,
-    runWorktreePath,
-    continuationTargetWorkingDirectory,
+    fallbackWorktreePath,
+    taskWorktreeWorkingDirectory,
     sessionWorkingDirectory,
   ]);
 
@@ -113,7 +112,7 @@ export const resolveAgentStudioGitPanelOpenInTarget = ({
     };
   }
 
-  if (isContinuationTargetResolving) {
+  if (isTaskWorktreeResolving) {
     return {
       path: null,
       disabledReason: "Resolving builder worktree path...",
@@ -139,8 +138,7 @@ export function useAgentsPageRightPanelModel({
   isViewSessionHistoryHydrating,
   documentsModel,
   repoSettings,
-  runCompletionRecoverySignal,
-  runs,
+  worktreeRecoverySignal,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -161,34 +159,26 @@ export function useAgentsPageRightPanelModel({
       isPanelOpen,
       isViewSessionHistoryHydrating,
       repoSettings,
-      runCompletionRecoverySignal,
+      worktreeRecoverySignal,
     });
 
-  const buildContinuationTargetRepoPath = workspaceRepoPath ?? "";
-  const buildContinuationTargetTaskId = resolveBuildContinuationTargetTaskId({
+  const taskWorktreeRepoPath = workspaceRepoPath ?? "";
+  const taskWorktreeTaskId = resolveTaskWorktreeTaskId({
     viewTaskId,
     viewSelectedTask,
   });
-  const matchingRunWorktreePath =
-    session.runId == null
-      ? null
-      : (runs.find((run) => run.runId === session.runId)?.worktreePath ?? null);
-  const shouldResolveBuildContinuationTarget =
+  const shouldResolveTaskWorktree =
     panelKind === "build_tools" &&
     isPanelOpen &&
     gitPanelContextMode === "worktree" &&
-    buildContinuationTargetRepoPath.length > 0 &&
-    buildContinuationTargetTaskId.length > 0;
+    taskWorktreeRepoPath.length > 0 &&
+    taskWorktreeTaskId.length > 0;
 
   const isActiveBuilderWorking =
     sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
-  const continuationTargetQuery = useQuery({
-    ...buildContinuationTargetQueryOptions(
-      buildContinuationTargetRepoPath,
-      buildContinuationTargetTaskId,
-      hostClient,
-    ),
-    enabled: shouldResolveBuildContinuationTarget,
+  const taskWorktreeQuery = useQuery({
+    ...taskWorktreeQueryOptions(taskWorktreeRepoPath, taskWorktreeTaskId, hostClient),
+    enabled: shouldResolveTaskWorktree,
   });
   const gitActions = useAgentStudioGitActions({
     repoPath: workspaceRepoPath,
@@ -236,10 +226,10 @@ export function useAgentsPageRightPanelModel({
       contextMode: gitPanelContextMode,
       activeWorkspace,
       worktreePath: diffData.worktreePath,
-      runWorktreePath: matchingRunWorktreePath,
+      fallbackWorktreePath: null,
       sessionWorkingDirectory: session.workingDirectory,
-      continuationTargetWorkingDirectory: continuationTargetQuery.data?.workingDirectory ?? null,
-      isContinuationTargetResolving: continuationTargetQuery.isPending,
+      taskWorktreeWorkingDirectory: taskWorktreeQuery.data?.workingDirectory ?? null,
+      isTaskWorktreeResolving: taskWorktreeQuery.isPending,
     });
 
     return {
@@ -274,7 +264,7 @@ export function useAgentsPageRightPanelModel({
         : {}),
       ...(viewSelectedTask &&
       !viewSelectedTask.pullRequest &&
-      canDetectTaskPullRequest(viewSelectedTask, runs)
+      canDetectTaskPullRequest(viewSelectedTask)
         ? {
             onDetectPullRequest: () => onDetectPullRequest(viewSelectedTask.id),
           }
@@ -298,11 +288,9 @@ export function useAgentsPageRightPanelModel({
     detectingPullRequestTaskId,
     repoSettings?.defaultTargetBranch,
     resolvedGitPanelBranch,
-    runs,
     setTaskTargetBranch,
-    continuationTargetQuery.data?.workingDirectory,
-    continuationTargetQuery.isPending,
-    matchingRunWorktreePath,
+    taskWorktreeQuery.data?.workingDirectory,
+    taskWorktreeQuery.isPending,
     session.workingDirectory,
     viewSelectedTask,
   ]);

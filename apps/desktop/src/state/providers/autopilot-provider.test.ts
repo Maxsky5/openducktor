@@ -130,9 +130,7 @@ const createExecuteArgs = (task: TaskCard) => ({
   ),
   loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
   loadRepoRuntimeFileSearch: mock(async () => []),
-  resolveBuildContinuationTarget: mock(
-    async (): Promise<{ workingDirectory: string } | null> => null,
-  ),
+  resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
   startSessionWorkflow: startSessionWorkflowMock,
   startAgentSession: mock(async () => {
     throw new Error("startAgentSession should not be called in this test");
@@ -306,7 +304,7 @@ describe("autopilot provider helpers", () => {
         agentSessions: [createBuilderSessionRecord({ workingDirectory: "/tmp/repo/old-worktree" })],
       }),
     );
-    args.resolveBuildContinuationTarget.mockResolvedValue({
+    args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/new-worktree",
     });
 
@@ -347,7 +345,7 @@ describe("autopilot provider helpers", () => {
         ],
       }),
     );
-    args.resolveBuildContinuationTarget.mockResolvedValue({
+    args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/current-worktree",
     });
 

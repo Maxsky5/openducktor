@@ -41,7 +41,6 @@ export const TaskDetailsSheetController = forwardRef<
   {
     activeWorkspace = null,
     allTasks,
-    runs,
     taskSessionsByTaskId,
     activeTaskSessionContextByTaskId,
     workflowActionsEnabled,
@@ -103,7 +102,6 @@ export const TaskDetailsSheetController = forwardRef<
       activeWorkspace={activeWorkspace}
       task={task}
       allTasks={allTasks}
-      runs={runs}
       taskSessions={selectedTaskSessions}
       hasActiveSession={Boolean(selectedActiveSessionContext)}
       {...(selectedActiveSessionContext?.role

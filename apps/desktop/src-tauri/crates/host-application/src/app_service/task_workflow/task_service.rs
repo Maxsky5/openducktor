@@ -79,19 +79,6 @@ impl AppService {
         TaskResetService::new(self).reset(repo_path, task_id)
     }
 
-    pub(super) fn clear_task_runs(&self, repo_path: &str, task_id: &str) -> Result<()> {
-        let normalized_repo = super::normalize_path_for_comparison(repo_path);
-        let mut runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        runs.retain(|_, run| {
-            super::normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo
-                || run.task_id != task_id
-        });
-        Ok(())
-    }
-
     pub fn task_transition(
         &self,
         repo_path: &str,

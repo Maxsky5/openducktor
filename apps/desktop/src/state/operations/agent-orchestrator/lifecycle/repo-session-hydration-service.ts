@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
   TaskCard,
@@ -124,12 +123,10 @@ export const createRepoSessionHydrationService = ({
   const buildReconcilePreloadPlan = async ({
     repoPath,
     tasks,
-    runs,
     isCancelled,
   }: {
     repoPath: string;
     tasks: TaskCard[];
-    runs: RunSummary[];
     isCancelled: () => boolean;
   }): Promise<ReconcilePreloadPlan> => {
     const persistedByTask = tasks.map((task) => ({
@@ -177,13 +174,6 @@ export const createRepoSessionHydrationService = ({
     const runtimeConnections = new Map<string, RuntimeConnectionScan>();
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>();
-    const activeRunStates = new Set<RunSummary["state"]>([
-      "starting",
-      "running",
-      "blocked",
-      "awaiting_done_confirmation",
-    ]);
-
     for (const runtimeKind of runtimeKinds) {
       const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
       if (isCancelled()) {
@@ -312,29 +302,6 @@ export const createRepoSessionHydrationService = ({
         );
         runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
       }
-    }
-
-    for (const run of runs) {
-      if (!activeRunStates.has(run.state)) {
-        continue;
-      }
-      const { runtimeConnection } = resolveRuntimeRouteConnection(
-        run.runtimeRoute,
-        run.worktreePath,
-      );
-      preloadedRuntimeConnectionsByKey.set(
-        runtimeWorkingDirectoryKey(run.runtimeKind, run.worktreePath),
-        runtimeConnection,
-      );
-      const scanKey = getLiveAgentSessionCacheKey(run.runtimeKind, runtimeConnection);
-      if (!runtimeConnections.has(scanKey)) {
-        runtimeConnections.set(scanKey, {
-          runtimeKind: run.runtimeKind,
-          runtimeConnection,
-          directories: new Set<string>(),
-        });
-      }
-      runtimeConnections.get(scanKey)?.directories.add(run.worktreePath);
     }
 
     const taskIdsToReconcile = new Set<string>();
@@ -475,13 +442,11 @@ export const createRepoSessionHydrationService = ({
     async reconcilePendingTasks({
       repoPath,
       tasks,
-      runs,
       isCancelled,
       isCurrentRepo,
     }: {
       repoPath: string;
       tasks: TaskCard[];
-      runs: RunSummary[];
       isCancelled: () => boolean;
       isCurrentRepo: (repoPath: string) => boolean;
     }): Promise<void> {
@@ -499,7 +464,6 @@ export const createRepoSessionHydrationService = ({
         const plan = await buildReconcilePreloadPlan({
           repoPath,
           tasks: pendingTasks,
-          runs,
           isCancelled,
         });
         if (isCancelled() || !isCurrentRepo(repoPath)) {
@@ -528,7 +492,6 @@ export const createRepoSessionHydrationService = ({
             await sessionHydration.reconcileLiveTaskSessions({
               taskId,
               persistedRecords: records,
-              preloadedRuns: runs,
               preloadedRuntimeLists: plan.preloadedRuntimeLists,
               preloadedRuntimeConnectionsByKey: plan.preloadedRuntimeConnectionsByKey,
               preloadedLiveAgentSessionsByKey: plan.preloadedLiveAgentSessionsByKey,

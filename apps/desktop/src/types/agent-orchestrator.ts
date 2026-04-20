@@ -149,7 +149,6 @@ export type AgentSessionState = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   runtimeId: string | null;
-  runId: string | null;
   runtimeRoute: RuntimeRoute | null;
   workingDirectory: string;
   historyHydrationState?: AgentSessionHistoryHydrationState;
@@ -183,7 +182,6 @@ export type AgentSessionLoadOptions = {
   recoveryDedupKey?: string | null;
   historyPolicy?: AgentSessionHistoryHydrationPolicy;
   persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
-  preloadedRuns?: import("@openducktor/contracts").RunSummary[];
   preloadedRuntimeLists?: Map<
     import("@openducktor/contracts").RuntimeKind,
     import("@openducktor/contracts").RuntimeInstanceSummary[]

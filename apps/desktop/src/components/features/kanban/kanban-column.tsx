@@ -1,4 +1,3 @@
-import type { RunSummary } from "@openducktor/contracts";
 import type {
   AgentRole,
   AgentScenario,
@@ -25,7 +24,6 @@ const EMPTY_TASK_SESSIONS: TaskSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
-  runStateByTaskId: Map<string, RunSummary["state"]>;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
@@ -75,7 +73,6 @@ type TaskCardHandlers = Pick<
 
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
-  runState,
   taskSessions,
   hasActiveSession,
   activeSessionRole,
@@ -95,7 +92,6 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   onResetImplementation,
 }: {
   task: KanbanColumnData["tasks"][number];
-  runState: RunSummary["state"] | undefined;
   taskSessions: TaskSessions | undefined;
   hasActiveSession: boolean;
   activeSessionRole: AgentRole | undefined;
@@ -126,7 +122,6 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       .join("|") ?? "";
   const measurementTrigger = [
     measurementVersion,
-    runState ?? "",
     taskActivityState,
     taskMeasurementKey,
     taskSessionsMeasurementKey,
@@ -170,7 +165,6 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     <div ref={taskWrapperRef}>
       <KanbanTaskCard
         task={task}
-        runState={runState}
         taskSessions={taskSessions}
         hasActiveSession={hasActiveSession}
         {...(activeSessionRole ? { activeSessionRole } : {})}
@@ -235,7 +229,6 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
 
 export function KanbanColumn({
   column,
-  runStateByTaskId,
   taskSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
@@ -286,7 +279,6 @@ export function KanbanColumn({
                     <MeasuredTaskCard
                       key={task.id}
                       task={task}
-                      runState={runStateByTaskId.get(task.id)}
                       taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
                       hasActiveSession={Boolean(activeSessionContext)}
                       activeSessionRole={activeSessionContext?.role}
@@ -325,7 +317,6 @@ export function KanbanColumn({
                   <KanbanTaskCard
                     key={task.id}
                     task={task}
-                    runState={runStateByTaskId.get(task.id)}
                     taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
                     hasActiveSession={Boolean(activeSessionContext)}
                     {...(activeSessionContext?.role

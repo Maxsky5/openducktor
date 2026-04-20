@@ -4,8 +4,7 @@ import {
   agentSessionPermissionRequestSchema,
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
-  buildContinuationTargetSchema,
-  buildContinuationTargetSourceSchema,
+  buildSessionBootstrapSchema,
   gitBranchSchema,
   gitCommitAllRequestSchema,
   gitCommitAllResultSchema,
@@ -26,14 +25,13 @@ import {
   gitWorktreeSummarySchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
-  runEventSchema,
-  runSummarySchema,
   runtimeDescriptorSchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
   runtimeTransportSchema,
   slashCommandCatalogSchema,
   taskCardSchema,
+  taskWorktreeSummarySchema,
 } from "./index";
 
 const baseRepoConfigInput = {
@@ -166,19 +164,16 @@ describe("runtime schemas", () => {
     expect(parsed.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
   });
 
-  test("permission_required event accepts null command", () => {
-    const parsed = runEventSchema.parse({
-      type: "permission_required",
-      runId: "run-1",
-      message: "permission prompt",
-      command: null,
-      timestamp: "2026-01-01T00:00:00.000Z",
+  test("build session bootstrap preserves runtime route and working directory", () => {
+    const parsed = buildSessionBootstrapSchema.parse({
+      runtimeKind: "opencode",
+      runtimeRoute: { type: "stdio" },
+      workingDirectory: "/repo/.worktrees/task-1",
     });
 
-    expect(parsed.type).toBe("permission_required");
-    expect(
-      "command" in parsed ? (parsed as { command?: unknown }).command : undefined,
-    ).toBeUndefined();
+    expect(parsed.runtimeKind).toBe("opencode");
+    expect(parsed.runtimeRoute).toEqual({ type: "stdio" });
+    expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
   });
 
   test("repo config accepts null worktree base path", () => {
@@ -825,24 +820,19 @@ describe("runtime schemas", () => {
     ).toThrow();
   });
 
-  test("run summary accepts missing generic port semantics", () => {
-    const parsed = runSummarySchema.parse({
-      runId: "run-1",
-      runtimeKind: "opencode",
-      runtimeRoute: {
-        type: "stdio",
-      },
-      repoPath: "/repo",
-      taskId: "task-1",
-      branch: "feature/runtime-route",
-      worktreePath: "/repo/.worktrees/task-1",
-      state: "running",
-      lastMessage: null,
-      startedAt: "2026-01-01T00:00:00.000Z",
+  test("task worktree summary enforces a non-empty working directory", () => {
+    expect(
+      taskWorktreeSummarySchema.parse({
+        workingDirectory: "/repo/worktrees/task-1",
+      }),
+    ).toEqual({
+      workingDirectory: "/repo/worktrees/task-1",
     });
-
-    expect(parsed.port).toBeUndefined();
-    expect(parsed.runtimeRoute).toEqual({ type: "stdio" });
+    expect(() =>
+      taskWorktreeSummarySchema.parse({
+        workingDirectory: "   ",
+      }),
+    ).toThrow();
   });
 
   test("slash command catalog parses runtime command metadata", () => {
@@ -907,23 +897,19 @@ describe("runtime schemas", () => {
     ).toThrow("Duplicate slash command id: review");
   });
 
-  test("agent runtime role and buildContinuationTarget schemas enforce boundaries", () => {
+  test("agent runtime role and task worktree schemas enforce boundaries", () => {
     expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
     expect(() => runtimeInstanceSummaryRoleSchema.parse("planner")).toThrow();
-    expect(buildContinuationTargetSourceSchema.parse("active_build_run")).toBe("active_build_run");
     expect(
-      buildContinuationTargetSchema.parse({
+      taskWorktreeSummarySchema.parse({
         workingDirectory: "/repo/worktrees/task-1",
-        source: "builder_session",
       }),
     ).toEqual({
       workingDirectory: "/repo/worktrees/task-1",
-      source: "builder_session",
     });
     expect(() =>
-      buildContinuationTargetSchema.parse({
+      taskWorktreeSummarySchema.parse({
         workingDirectory: "   ",
-        source: "active_build_run",
       }),
     ).toThrow();
   });

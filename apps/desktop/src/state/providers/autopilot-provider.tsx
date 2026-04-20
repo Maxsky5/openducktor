@@ -31,7 +31,7 @@ import {
   useTaskDataContext,
 } from "../app-state-contexts";
 import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
-import { loadBuildContinuationTarget } from "../operations/agent-orchestrator/runtime/runtime";
+import { loadTaskWorktree } from "../operations/agent-orchestrator/runtime/runtime";
 import { normalizeWorkingDirectory } from "../operations/agent-orchestrator/support/core";
 import {
   loadRepoConfigFromQuery,
@@ -55,7 +55,7 @@ type ExecuteAutopilotActionArgs = {
   actionId: AutopilotActionId;
   queryClient: QueryClient;
   loadRepoRuntimeCatalog: (repoPath: string, runtimeKind: string) => Promise<AgentModelCatalog>;
-  resolveBuildContinuationTarget: (
+  resolveTaskWorktree: (
     repoPath: string,
     taskId: string,
   ) => Promise<{
@@ -213,11 +213,8 @@ const resolveAutopilotStart = async ({
   activeWorkspace,
   task,
   actionId,
-  resolveBuildContinuationTarget,
-}: Pick<
-  ExecuteAutopilotActionArgs,
-  "activeWorkspace" | "task" | "resolveBuildContinuationTarget"
-> & {
+  resolveTaskWorktree,
+}: Pick<ExecuteAutopilotActionArgs, "activeWorkspace" | "task" | "resolveTaskWorktree"> & {
   actionId: AutopilotActionId;
 }): Promise<ResolvedAutopilotStart> => {
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
@@ -238,10 +235,7 @@ const resolveAutopilotStart = async ({
     };
   }
 
-  const continuationTarget = await resolveBuildContinuationTarget(
-    activeWorkspace.repoPath,
-    task.id,
-  );
+  const continuationTarget = await resolveTaskWorktree(activeWorkspace.repoPath, task.id);
   if (!continuationTarget) {
     throw new Error(MISSING_BUILD_TARGET_ERROR);
   }
@@ -270,7 +264,7 @@ export const executeAutopilotAction = async ({
   actionId,
   queryClient,
   loadRepoRuntimeCatalog,
-  resolveBuildContinuationTarget,
+  resolveTaskWorktree,
   startSessionWorkflow,
   startAgentSession,
   sendAgentMessage,
@@ -290,7 +284,7 @@ export const executeAutopilotAction = async ({
       activeWorkspace,
       task,
       actionId,
-      resolveBuildContinuationTarget,
+      resolveTaskWorktree,
     });
 
     await startSessionWorkflow({
@@ -397,7 +391,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
               actionId,
               queryClient,
               loadRepoRuntimeCatalog,
-              resolveBuildContinuationTarget: loadBuildContinuationTarget,
+              resolveTaskWorktree: loadTaskWorktree,
               startSessionWorkflow,
               startAgentSession,
               sendAgentMessage,

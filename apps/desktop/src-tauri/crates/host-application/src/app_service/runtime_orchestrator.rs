@@ -2,7 +2,6 @@ mod ensure_flight;
 mod registry;
 mod repo_health;
 mod repo_health_snapshot;
-mod run_exposure;
 mod start_pipeline;
 mod startup;
 mod startup_status;
@@ -86,15 +85,14 @@ mod tests {
     use crate::app_service::test_support::{
         build_service_with_state, builtin_opencode_runtime_descriptor,
     };
-    use crate::app_service::{AgentRuntimeProcess, RunProcess};
+    use crate::app_service::AgentRuntimeProcess;
     use anyhow::Result;
     use chrono::{TimeDelta, Utc};
     use host_domain::{
         now_rfc3339, AgentRuntimeKind, RepoRuntimeHealthMcp, RepoRuntimeHealthObservation,
         RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus,
-        RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RunSummary, RuntimeRoute,
+        RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RuntimeRoute,
     };
-    use host_infra_system::RepoConfig;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::process::Command;
@@ -590,69 +588,6 @@ mod tests {
         let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-preserve")?;
         assert_eq!(health.status, RepoRuntimeHealthState::Checking);
         assert!(health.runtime.instance.is_some());
-        Ok(())
-    }
-
-    #[test]
-    fn repo_runtime_health_skips_restart_when_active_run_uses_runtime() -> Result<()> {
-        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let (port, server_handle) = spawn_runtime_http_server(vec![runtime_http_response(
-            "500 Internal Server Error",
-            r#"{"error":{"message":"ConfigInvalidError: invalid option loglevel"}}"#,
-        )])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-active-run".to_string(),
-            repo_path: "/tmp/repo-health-active-run".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-active-run".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
-        insert_workspace_runtime(&service, runtime.clone())?;
-        service.runs.lock().expect("runs lock poisoned").insert(
-            "run-1".to_string(),
-            RunProcess {
-                summary: RunSummary {
-                    run_id: "run-1".to_string(),
-                    runtime_kind: AgentRuntimeKind::opencode(),
-                    runtime_route: runtime.runtime_route.clone(),
-                    repo_path: runtime.repo_path.clone(),
-                    task_id: "task-1".to_string(),
-                    branch: "odt/task-1".to_string(),
-                    worktree_path: runtime.working_directory.clone(),
-                    port: Some(port),
-                    state: host_domain::RunState::Running,
-                    last_message: None,
-                    started_at: "2026-04-04T16:00:10Z".to_string(),
-                },
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: runtime.repo_path.clone(),
-                task_id: "task-1".to_string(),
-                worktree_path: runtime.working_directory.clone(),
-                repo_config: RepoConfig::default(),
-            },
-        );
-
-        let health = service.repo_runtime_health("opencode", "/tmp/repo-health-active-run")?;
-        let _requests = server_handle.join().expect("server thread should finish");
-
-        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
-        assert_eq!(
-            health.mcp.as_ref().map(|value| value.status),
-            Some(RepoRuntimeMcpStatus::Error)
-        );
-        assert!(health
-            .mcp
-            .as_ref()
-            .and_then(|value| value.detail.as_deref())
-            .is_some_and(|value| value.contains("restart was skipped")));
-        service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
     }
 

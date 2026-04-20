@@ -1,6 +1,5 @@
-#![allow(unused_imports)]
+#![allow(dead_code, unused_imports)]
 
-use super::build_orchestrator::{BuildResponseAction, CleanupMode};
 use super::runtime_registry::AppRuntimeRegistry;
 use super::{
     allows_transition, build_opencode_config_content, build_opencode_startup_event_payload,
@@ -12,7 +11,6 @@ use super::{
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
     wait_for_local_server, wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
     OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    RunProcess,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{

@@ -220,7 +220,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskWithSession("task-1", "external-1"), taskWithSession("task-2", "external-2")],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -280,7 +279,6 @@ describe("repo-session-hydration-service", () => {
         reconcileLiveTaskSessions: async ({
           taskId,
           persistedRecords,
-          preloadedRuns,
           preloadedRuntimeLists,
           preloadedRuntimeConnectionsByKey,
           preloadedLiveAgentSessionsByKey,
@@ -293,7 +291,6 @@ describe("repo-session-hydration-service", () => {
 
           const plannerOptions = {
             ...(persistedRecords ? { persistedRecords } : {}),
-            ...(preloadedRuns ? { preloadedRuns } : {}),
             ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
             ...(preloadedRuntimeConnectionsByKey ? { preloadedRuntimeConnectionsByKey } : {}),
             ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),
@@ -383,7 +380,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskWithSession("task-1", expectedExternalSessionId)],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -466,7 +462,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskOne, taskTwo],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -544,7 +539,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskWithSession("task-1", "external-1")],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -614,7 +608,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskOne, taskTwo],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -670,7 +663,6 @@ describe("repo-session-hydration-service", () => {
         taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a"),
         taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b"),
       ],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -723,7 +715,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskWithSession("task-1", "external-1")],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
@@ -784,7 +775,6 @@ describe("repo-session-hydration-service", () => {
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [taskWithSession("task-valid", "external-valid"), invalidTask],
-      runs: [],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });

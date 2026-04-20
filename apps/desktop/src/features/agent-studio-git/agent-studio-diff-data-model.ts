@@ -10,13 +10,13 @@ import type { DiffScope, DiffScopeState, GitConflict } from "./contracts";
 
 export type UseAgentStudioDiffDataInput = {
   repoPath: string | null;
+  taskId: string | null;
   sessionWorkingDirectory: string | null;
-  sessionRunId: string | null;
   defaultTargetBranch: GitTargetBranch;
   preconditionError?: string | null;
   branchIdentityKey?: string | null;
   enablePolling: boolean;
-  runCompletionRecoverySignal?: number;
+  worktreeRecoverySignal?: number;
 };
 
 export type DiffBatchState = {

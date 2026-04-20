@@ -7,7 +7,6 @@ const localHttpRuntimeResolution = {
   ok: true as const,
   runtimeKind: "opencode" as const,
   runtimeId: "runtime-1",
-  runId: null,
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" } as const,
   runtimeConnection: {
     type: "local_http" as const,
@@ -38,7 +37,6 @@ const sessionStateFixture: AgentSessionState = {
   startedAt: "2026-03-22T12:00:00.000Z",
   runtimeKind: "opencode",
   runtimeId: null,
-  runId: null,
   runtimeRoute: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
@@ -252,7 +250,6 @@ describe("reattach-live-session", () => {
         ok: true,
         runtimeKind: "opencode",
         runtimeId: "runtime-stdio",
-        runId: null,
         runtimeRoute: { type: "stdio" },
         runtimeConnection: {
           type: "stdio",

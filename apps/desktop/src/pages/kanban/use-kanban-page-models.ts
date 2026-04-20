@@ -57,7 +57,6 @@ export function useKanbanPageModels({
   } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
-    runs,
     refreshTasks,
     syncPullRequests,
     linkMergedPullRequest,
@@ -264,7 +263,6 @@ export function useKanbanPageModels({
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
     tasks: kanbanTasks,
-    runs,
     sessions,
     onOpenDetails,
     onDelegate,
@@ -290,7 +288,6 @@ export function useKanbanPageModels({
     taskDetailsController: {
       activeWorkspace,
       allTasks: kanbanTasks,
-      runs,
       taskSessionsByTaskId: content.taskSessionsByTaskId,
       activeTaskSessionContextByTaskId: content.activeTaskSessionContextByTaskId,
       onOpenSession,

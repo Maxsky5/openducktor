@@ -16,7 +16,7 @@ pub(super) enum RuntimeHealthWorkflowStage {
     CheckingMcpStatus,
     ReconnectingMcp,
     RestartingRuntime,
-    RestartSkippedActiveRun,
+    RestartSkippedActiveSession,
     Ready,
     StartupFailed,
 }
@@ -207,7 +207,7 @@ fn summarize_runtime_status(stage: RuntimeHealthWorkflowStage) -> RepoRuntimeHea
         RuntimeHealthWorkflowStage::RuntimeReady
         | RuntimeHealthWorkflowStage::CheckingMcpStatus
         | RuntimeHealthWorkflowStage::ReconnectingMcp
-        | RuntimeHealthWorkflowStage::RestartSkippedActiveRun
+        | RuntimeHealthWorkflowStage::RestartSkippedActiveSession
         | RuntimeHealthWorkflowStage::Ready => RepoRuntimeHealthState::Ready,
         RuntimeHealthWorkflowStage::StartupFailed => RepoRuntimeHealthState::Error,
     }
@@ -253,7 +253,7 @@ fn summarize_timeout_mcp_status(
 ) -> RepoRuntimeMcpStatus {
     match workflow_stage {
         RuntimeHealthWorkflowStage::CheckingMcpStatus
-        | RuntimeHealthWorkflowStage::RestartSkippedActiveRun => RepoRuntimeMcpStatus::Checking,
+        | RuntimeHealthWorkflowStage::RestartSkippedActiveSession => RepoRuntimeMcpStatus::Checking,
         RuntimeHealthWorkflowStage::ReconnectingMcp => RepoRuntimeMcpStatus::Reconnecting,
         _ => RepoRuntimeMcpStatus::Error,
     }
@@ -278,7 +278,7 @@ fn runtime_stage_from_progress(
         RuntimeHealthWorkflowStage::RuntimeReady
         | RuntimeHealthWorkflowStage::CheckingMcpStatus
         | RuntimeHealthWorkflowStage::ReconnectingMcp
-        | RuntimeHealthWorkflowStage::RestartSkippedActiveRun
+        | RuntimeHealthWorkflowStage::RestartSkippedActiveSession
         | RuntimeHealthWorkflowStage::Ready => RepoRuntimeStartupStage::RuntimeReady,
         RuntimeHealthWorkflowStage::StartupFailed => RepoRuntimeStartupStage::StartupFailed,
     }
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn timeout_mcp_restart_skip_stays_checking() {
         let health = build_runtime_ready_timeout_health_check(
-            RuntimeHealthWorkflowStage::RestartSkippedActiveRun,
+            RuntimeHealthWorkflowStage::RestartSkippedActiveSession,
         );
 
         assert_eq!(health.status, RepoRuntimeHealthState::Checking);

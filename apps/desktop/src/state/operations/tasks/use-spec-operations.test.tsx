@@ -191,7 +191,6 @@ describe("use-spec-operations", () => {
       spec: specGet,
     });
     const tasksList = mock(async () => []);
-    const runsList = mock(async () => []);
 
     const original = {
       specGet: host.specGet,
@@ -199,14 +198,12 @@ describe("use-spec-operations", () => {
       taskDocumentGetFresh: host.taskDocumentGetFresh,
       setSpec: host.setSpec,
       tasksList: host.tasksList,
-      runsList: host.runsList,
     };
     host.specGet = specGet;
     host.taskDocumentGet = taskDocumentGet;
     host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.setSpec = setSpec;
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
     const harness = createHookHarness({ activeRepo: "/repo-a" });
 
@@ -231,7 +228,6 @@ describe("use-spec-operations", () => {
       host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.setSpec = original.setSpec;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
     }
   });
 
@@ -268,7 +264,6 @@ describe("use-spec-operations", () => {
       qa: qaGetReport,
     });
     const tasksList = mock(async () => []);
-    const runsList = mock(async () => []);
 
     const original = {
       specGet: host.specGet,
@@ -279,7 +274,6 @@ describe("use-spec-operations", () => {
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
       tasksList: host.tasksList,
-      runsList: host.runsList,
     };
     host.specGet = specGet;
     host.planGet = planGet;
@@ -289,7 +283,6 @@ describe("use-spec-operations", () => {
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
     const harness = createHookHarness({ activeRepo: "/repo-a" });
 
@@ -340,7 +333,6 @@ describe("use-spec-operations", () => {
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
     }
   });
 
@@ -395,7 +387,6 @@ describe("use-spec-operations", () => {
       plan: planGet,
     });
     const tasksList = mock(async () => []);
-    const runsList = mock(async () => []);
     const original = {
       specGet: host.specGet,
       planGet: host.planGet,
@@ -404,7 +395,6 @@ describe("use-spec-operations", () => {
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
       tasksList: host.tasksList,
-      runsList: host.runsList,
     };
     host.specGet = specGet;
     host.planGet = planGet;
@@ -413,7 +403,6 @@ describe("use-spec-operations", () => {
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
       markdown: "# Old spec",
@@ -433,7 +422,6 @@ describe("use-spec-operations", () => {
     });
     queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
       tasks: [],
-      runs: [],
     });
     queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), []);
     queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), []);
@@ -487,7 +475,6 @@ describe("use-spec-operations", () => {
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
       queryClient.clear();
     }
   });
@@ -531,21 +518,18 @@ describe("use-spec-operations", () => {
       spec: specGet,
     });
     const tasksList = mock(async () => []);
-    const runsList = mock(async () => []);
     const original = {
       specGet: host.specGet,
       taskDocumentGet: host.taskDocumentGet,
       taskDocumentGetFresh: host.taskDocumentGetFresh,
       setSpec: host.setSpec,
       tasksList: host.tasksList,
-      runsList: host.runsList,
     };
     host.specGet = specGet;
     host.taskDocumentGet = taskDocumentGet;
     host.taskDocumentGetFresh = taskDocumentGetFresh;
     host.setSpec = setSpec;
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
       markdown: "# Old spec",
@@ -557,7 +541,6 @@ describe("use-spec-operations", () => {
     });
     queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
       tasks: [],
-      runs: [],
     });
     queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), []);
     queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), []);
@@ -598,7 +581,6 @@ describe("use-spec-operations", () => {
       host.taskDocumentGetFresh = original.taskDocumentGetFresh;
       host.setSpec = original.setSpec;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
       queryClient.clear();
     }
   });
@@ -646,7 +628,6 @@ describe("use-spec-operations", () => {
       plan: planGet,
     });
     const tasksList = mock(async () => []);
-    const runsList = mock(async () => []);
     const original = {
       specGet: host.specGet,
       planGet: host.planGet,
@@ -655,7 +636,6 @@ describe("use-spec-operations", () => {
       saveSpecDocument: host.saveSpecDocument,
       savePlanDocument: host.savePlanDocument,
       tasksList: host.tasksList,
-      runsList: host.runsList,
     };
     host.specGet = specGet;
     host.planGet = planGet;
@@ -664,7 +644,6 @@ describe("use-spec-operations", () => {
     host.saveSpecDocument = saveSpecDocument;
     host.savePlanDocument = savePlanDocument;
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
       markdown: "# Newer spec",
@@ -712,7 +691,6 @@ describe("use-spec-operations", () => {
       host.saveSpecDocument = original.saveSpecDocument;
       host.savePlanDocument = original.savePlanDocument;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
       queryClient.clear();
     }
   });

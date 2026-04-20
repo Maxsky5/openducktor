@@ -27,7 +27,7 @@ const originalConsoleError = console.error;
 const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 const originalTasksList = host.tasksList;
-const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
@@ -70,7 +70,7 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
 const tasksListMock = mock(async () => [currentTaskFixture]);
-const buildContinuationTargetGetMock = mock(async () => ({
+const taskWorktreeGetMock = mock(async () => ({
   workingDirectory: "/repo/worktrees/task-1",
   source: "builder_session" as const,
 }));
@@ -436,7 +436,6 @@ describe("KanbanPage session start modal flow", () => {
         isForegroundLoadingTasks: false,
         isRefreshingTasksInBackground: false,
         tasks: [currentTaskFixture],
-        runs: [],
         isLoadingTasks: false,
         createTask: async () => {},
         updateTask: async () => {},
@@ -483,8 +482,7 @@ describe("KanbanPage session start modal flow", () => {
     host.workspaceGetSettingsSnapshot =
       workspaceGetSettingsSnapshotMock as typeof host.workspaceGetSettingsSnapshot;
     host.tasksList = tasksListMock as typeof host.tasksList;
-    host.buildContinuationTargetGet =
-      buildContinuationTargetGetMock as typeof host.buildContinuationTargetGet;
+    host.taskWorktreeGet = taskWorktreeGetMock as typeof host.taskWorktreeGet;
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
     currentSessionsFixture = [
       {
@@ -552,7 +550,7 @@ describe("KanbanPage session start modal flow", () => {
     workspaceGetRepoConfigMock.mockClear();
     workspaceGetSettingsSnapshotMock.mockClear();
     tasksListMock.mockClear();
-    buildContinuationTargetGetMock.mockClear();
+    taskWorktreeGetMock.mockClear();
     loadRepoRuntimeCatalogMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
@@ -579,7 +577,7 @@ describe("KanbanPage session start modal flow", () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.tasksList = originalTasksList;
-    host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+    host.taskWorktreeGet = originalBuildContinuationTargetGet;
     await restoreMockedModules([
       ["sonner", () => import("sonner")],
       [

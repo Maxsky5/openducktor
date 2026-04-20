@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { BuildContinuationTarget } from "@openducktor/contracts";
+import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { buildContinuationTargetQueryOptions, buildRuntimeQueryKeys } from "./build-runtime";
+import { taskWorktreeQueryKeys, taskWorktreeQueryOptions } from "./build-runtime";
 
 describe("build runtime queries", () => {
   let queryClient: QueryClient;
@@ -10,33 +10,30 @@ describe("build runtime queries", () => {
     queryClient = new QueryClient();
   });
 
-  test("uses a repo and task scoped query key for continuation targets", () => {
-    expect(buildRuntimeQueryKeys.continuationTarget("/repo", "task-24")).toEqual([
-      "build-runtime",
-      "continuation-target",
+  test("uses a repo and task scoped query key for task worktrees", () => {
+    expect(taskWorktreeQueryKeys.taskWorktree("/repo", "task-24")).toEqual([
+      "task-worktree",
       "/repo",
       "task-24",
     ]);
   });
 
-  test("buildContinuationTargetQueryOptions loads the canonical working directory", async () => {
-    const buildContinuationTargetGet = mock(
-      async (): Promise<BuildContinuationTarget> => ({
+  test("taskWorktreeQueryOptions loads the canonical working directory", async () => {
+    const taskWorktreeGet = mock(
+      async (): Promise<TaskWorktreeSummary> => ({
         workingDirectory: "/repo/.worktrees/task-24",
-        source: "active_build_run",
       }),
     );
 
     const result = await queryClient.fetchQuery(
-      buildContinuationTargetQueryOptions("/repo", "task-24", {
-        buildContinuationTargetGet,
+      taskWorktreeQueryOptions("/repo", "task-24", {
+        taskWorktreeGet,
       }),
     );
 
     expect(result).toEqual({
       workingDirectory: "/repo/.worktrees/task-24",
-      source: "active_build_run",
     });
-    expect(buildContinuationTargetGet).toHaveBeenCalledWith("/repo", "task-24");
+    expect(taskWorktreeGet).toHaveBeenCalledWith("/repo", "task-24");
   });
 });

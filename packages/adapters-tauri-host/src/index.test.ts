@@ -266,10 +266,9 @@ describe("TauriHostClient", () => {
       "systemCheck",
       "runtimeCheck",
       "beadsCheck",
-      "runsList",
       "runtimeDefinitionsList",
       "runtimeList",
-      "buildContinuationTargetGet",
+      "taskWorktreeGet",
       "runtimeStop",
       "runtimeEnsure",
       "buildStart",
@@ -286,10 +285,7 @@ describe("TauriHostClient", () => {
       "repoPullRequestSync",
       "humanRequestChanges",
       "humanApprove",
-      "buildRespond",
-      "buildStop",
       "agentSessionStop",
-      "buildCleanup",
       "gitGetBranches",
       "gitGetCurrentBranch",
       "gitSwitchBranch",
@@ -1379,10 +1375,9 @@ describe("TauriHostClient", () => {
           },
         ];
       }
-      if (command === "build_continuation_target_get") {
+      if (command === "task_worktree_get") {
         return {
           workingDirectory: "/repo/worktrees/task-1",
-          source: "active_build_run",
         };
       }
       if (command === "runtime_list") {
@@ -1523,7 +1518,7 @@ describe("TauriHostClient", () => {
     });
 
     const definitions = await client.runtimeDefinitionsList();
-    const qaTarget = await client.buildContinuationTargetGet("/repo", "task-1");
+    const qaTarget = await client.taskWorktreeGet("/repo", "task-1");
     const runtimes = await client.runtimeList("/repo", "opencode");
     const ensured = await client.runtimeEnsure("/repo", "opencode");
     const startupStatus = await client.runtimeStartupStatus("/repo", "opencode");
@@ -1537,7 +1532,6 @@ describe("TauriHostClient", () => {
     );
     expect(qaTarget).toEqual({
       workingDirectory: "/repo/worktrees/task-1",
-      source: "active_build_run",
     });
     expect(runtimes).toHaveLength(1);
     expect(runtimes[0]?.descriptor.workflowToolAliasesByCanonical).toEqual(
@@ -1553,7 +1547,7 @@ describe("TauriHostClient", () => {
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
-      "build_continuation_target_get",
+      "task_worktree_get",
       "runtime_list",
       "runtime_ensure",
       "runtime_startup_status",
@@ -1573,28 +1567,22 @@ describe("TauriHostClient", () => {
 
   test("build continuation target returns null when host reports no target", async () => {
     const { client } = createClient((command) => {
-      if (command === "build_continuation_target_get") {
+      if (command === "task_worktree_get") {
         return null;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.buildContinuationTargetGet("/repo", "task-1")).toBe(null);
+    expect(await client.taskWorktreeGet("/repo", "task-1")).toBe(null);
   });
 
-  test("runtime and build ack commands reject malformed host payloads", async () => {
+  test("runtime and session ack commands reject malformed host payloads", async () => {
     const { client } = createClient((command) => {
       switch (command) {
         case "runtime_stop":
           return { ok: "yes" };
-        case "build_respond":
-          return { ok: 1 };
-        case "build_stop":
-          return {};
         case "agent_session_stop":
           return { ok: "nope" };
-        case "build_cleanup":
-          return null;
         default:
           throw new Error(`Unexpected command: ${command}`);
       }
@@ -1602,12 +1590,6 @@ describe("TauriHostClient", () => {
 
     await expect(client.runtimeStop("runtime-1")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command runtime_stop",
-    );
-    await expect(client.buildRespond("run-1", { action: "approve" })).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command build_respond",
-    );
-    await expect(client.buildStop("run-1")).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command build_stop",
     );
     await expect(
       client.agentSessionStop({
@@ -1619,9 +1601,6 @@ describe("TauriHostClient", () => {
         externalSessionId: "external-session-1",
       }),
     ).rejects.toThrow("Expected { ok: boolean } payload from host command agent_session_stop");
-    await expect(client.buildCleanup("run-1", "success")).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command build_cleanup",
-    );
   });
 
   test("agentSessionStop uses the session-oriented IPC route", async () => {

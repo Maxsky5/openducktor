@@ -14,9 +14,9 @@ pub use registry::{
 };
 pub use route::RuntimeRoute;
 pub use state::{
-    AgentSessionStopRequest, BuildContinuationTarget, BuildContinuationTargetSource,
+    AgentSessionStopRequest, BuildSessionBootstrap,
     RepoRuntimeHealthCheck, RepoRuntimeHealthMcp, RepoRuntimeHealthObservation,
     RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus,
-    RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunState,
-    RunSummary, RuntimeInstanceSummary, RuntimeRole,
+    RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus,
+    RunState, RunSummary, RuntimeInstanceSummary, RuntimeRole, TaskWorktreeSummary,
 };

@@ -1,9 +1,8 @@
-import type { IssueType, RunSummary, TaskCard } from "@openducktor/contracts";
+import type { IssueType, TaskCard } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, Bug, CheckSquare, Layers3, Sparkles } from "lucide-react";
+import { Bug, CheckSquare, Layers3, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
-import { assertNever } from "@/lib/assert-never";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
 const ISSUE_TYPE_STYLES: Record<
@@ -102,37 +101,6 @@ const toPriorityLevel = (priority: number): PriorityLevel => {
 const getPriorityStyle = (priority: number): (typeof PRIORITY_STYLES)[PriorityLevel] =>
   PRIORITY_STYLES[toPriorityLevel(priority)];
 
-export type VisibleKanbanRunState = Extract<RunSummary["state"], "blocked" | "failed">;
-
-const runStateLabel = (value: VisibleKanbanRunState): string => {
-  switch (value) {
-    case "blocked":
-      return "Blocked";
-    case "failed":
-      return "Failed";
-    default:
-      return assertNever(value, "Unhandled run state");
-  }
-};
-
-const runStateIcon = (value: VisibleKanbanRunState): LucideIcon => {
-  switch (value) {
-    case "blocked":
-      return AlertTriangle;
-    case "failed":
-      return AlertTriangle;
-    default:
-      return assertNever(value, "Unhandled run state");
-  }
-};
-
-const runStateClassName = (value: VisibleKanbanRunState): string => {
-  if (value === "blocked" || value === "failed") {
-    return "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300";
-  }
-  return assertNever(value, "Unhandled run state");
-};
-
 export const IssueTypeBadge = memo(function IssueTypeBadge({
   issueType,
 }: {
@@ -165,23 +133,6 @@ export const PriorityBadge = memo(function PriorityBadge({
     >
       <span className={`size-1.5 rounded-full ${style.dotClassName}`} />
       {style.label}
-    </Badge>
-  );
-});
-
-export const RunStateBadge = memo(function RunStateBadge({
-  runState,
-}: {
-  runState: VisibleKanbanRunState;
-}): ReactElement {
-  const Icon = runStateIcon(runState);
-  return (
-    <Badge
-      variant="outline"
-      className={`h-6 rounded-full px-2.5 text-[11px] font-medium gap-1 ${runStateClassName(runState)}`}
-    >
-      <Icon className="size-3" />
-      {runStateLabel(runState)}
     </Badge>
   );
 });

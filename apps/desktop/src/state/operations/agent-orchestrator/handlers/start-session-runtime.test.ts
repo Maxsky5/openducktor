@@ -14,7 +14,7 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
     const result = await resolveFreshStartTargetWorkingDirectoryForStart({
       ctx: createStartSessionContextFixture(),
       runtime: createRuntimeDependenciesFixture({
-        resolveBuildContinuationTarget: async () => {
+        resolveTaskWorktree: async () => {
           throw new Error("should not resolve build target");
         },
       }),
@@ -31,7 +31,7 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
     const result = await resolveFreshStartTargetWorkingDirectoryForStart({
       ctx: createStartSessionContextFixture(),
       runtime: createRuntimeDependenciesFixture({
-        resolveBuildContinuationTarget: async () => null,
+        resolveTaskWorktree: async () => null,
       }),
     });
 
@@ -58,8 +58,8 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
       resolveFreshStartTargetWorkingDirectoryForStart({
         ctx: createStartSessionContextFixture({ role: "qa" }),
         runtime: createRuntimeDependenciesFixture({
-          resolveBuildContinuationTarget: async () =>
-            createBuildContinuationTargetFixture("/tmp/repo/worktree", "builder_session"),
+          resolveTaskWorktree: async () =>
+            createBuildContinuationTargetFixture("/tmp/repo/worktree"),
         }),
       }),
     ).resolves.toEqual({

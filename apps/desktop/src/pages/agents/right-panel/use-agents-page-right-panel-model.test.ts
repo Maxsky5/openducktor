@@ -3,7 +3,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import { createTaskCardFixture } from "../agent-studio-test-utils";
 import {
   resolveAgentStudioGitPanelOpenInTarget,
-  resolveBuildContinuationTargetTaskId,
+  resolveTaskWorktreeTaskId,
 } from "./use-agents-page-right-panel-model";
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
@@ -12,10 +12,10 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   repoPath,
 });
 
-describe("resolveBuildContinuationTargetTaskId", () => {
+describe("resolveTaskWorktreeTaskId", () => {
   test("uses the stable tab task id while selected task hydration is still pending", () => {
     expect(
-      resolveBuildContinuationTargetTaskId({
+      resolveTaskWorktreeTaskId({
         viewTaskId: "task-24",
         viewSelectedTask: null,
       }),
@@ -24,7 +24,7 @@ describe("resolveBuildContinuationTargetTaskId", () => {
 
   test("prefers the hydrated selected task id when available", () => {
     expect(
-      resolveBuildContinuationTargetTaskId({
+      resolveTaskWorktreeTaskId({
         viewTaskId: "task-24",
         viewSelectedTask: createTaskCardFixture({ id: "task-24-hydrated" }),
       }),
@@ -39,10 +39,10 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
         contextMode: "repository",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: null,
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo",
@@ -56,10 +56,10 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: "/worktrees/task-24",
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: null,
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/worktrees/task-24",
@@ -73,10 +73,10 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
         contextMode: "repository",
         activeWorkspace: createActiveWorkspace("  /repo with padded name  "),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: null,
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: "  /repo with padded name  ",
@@ -90,10 +90,10 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: null,
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: null,
@@ -107,10 +107,10 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: "/repo/.worktrees/task-24",
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo/.worktrees/task-24",
@@ -124,10 +124,10 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: "/repo",
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: null,
@@ -135,16 +135,16 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     });
   });
 
-  test("uses the canonical continuation target before direct session fallback", () => {
+  test("uses the canonical task worktree before direct session fallback", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: "/repo/.worktrees/older-task-23",
-        continuationTargetWorkingDirectory: "/repo/.worktrees/task-24",
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: "/repo/.worktrees/task-24",
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo/.worktrees/task-24",
@@ -152,16 +152,16 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     });
   });
 
-  test("shows a resolving message while continuation target resolution is still loading", () => {
+  test("shows a resolving message while task worktree resolution is still loading", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: null,
+        fallbackWorktreePath: null,
         sessionWorkingDirectory: null,
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: true,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: true,
       }),
     ).toEqual({
       path: null,
@@ -169,16 +169,16 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
     });
   });
 
-  test("uses the matching run worktree path before task hydration catches up", () => {
+  test("uses the fallback worktree path before task hydration catches up", () => {
     expect(
       resolveAgentStudioGitPanelOpenInTarget({
         contextMode: "worktree",
         activeWorkspace: createActiveWorkspace("/repo"),
         worktreePath: null,
-        runWorktreePath: "/repo/.worktrees/task-24",
+        fallbackWorktreePath: "/repo/.worktrees/task-24",
         sessionWorkingDirectory: "/repo",
-        continuationTargetWorkingDirectory: null,
-        isContinuationTargetResolving: false,
+        taskWorktreeWorkingDirectory: null,
+        isTaskWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo/.worktrees/task-24",

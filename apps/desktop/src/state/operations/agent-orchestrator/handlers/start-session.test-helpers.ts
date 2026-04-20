@@ -11,8 +11,8 @@ export type FlatStartSessionDependencies = Omit<
   activeWorkspaceId?: string | null;
   loadRepoDefaultModel?: unknown;
 } & StartSessionDependencies["session"] &
-  Omit<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "resolveBuildContinuationTarget">> &
+  Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree"> &
+  Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree">> &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -43,8 +43,8 @@ export const toStartSessionDependencies = (
     },
     runtime: {
       adapter: deps.adapter,
-      resolveBuildContinuationTarget:
-        deps.resolveBuildContinuationTarget ??
+      resolveTaskWorktree:
+        deps.resolveTaskWorktree ??
         (async () => ({
           workingDirectory: "/tmp/repo/worktree",
           source: "active_build_run",

@@ -62,7 +62,7 @@ impl AppService {
             ));
         }
         let worktree_path = self
-            .build_continuation_target_get(repo_path.as_str(), task_id)?
+            .task_worktree_get(repo_path.as_str(), task_id)?
             .ok_or_else(|| {
                 anyhow!(
                     "Builder continuation cannot start until a builder worktree exists for task {task_id}. Start Builder first."

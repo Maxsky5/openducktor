@@ -3,18 +3,11 @@ use super::command_support::{
     deserialize_args, handle_repo_task_operation_blocking, run_headless_blocking, serialize_value,
     service_error, CommandResult, HeadlessState, RepoTaskArgs,
 };
-use super::events::{make_dev_server_emitter, make_emitter};
+use super::events::make_dev_server_emitter;
 use crate::runtime_ensure_failure_kind;
-use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{AgentRuntimeKind, AgentSessionStopRequest};
 use serde::Deserialize;
 use serde_json::{json, Value};
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct OptionalRepoPathArgs {
-    repo_path: Option<String>,
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,29 +39,8 @@ struct BuildStartArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BuildRespondArgs {
-    run_id: String,
-    action: BuildResponseAction,
-    payload: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BuildStopArgs {
-    run_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct AgentSessionStopArgs {
     request: AgentSessionStopRequest,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BuildCleanupArgs {
-    run_id: String,
-    mode: CleanupMode,
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,20 +74,8 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("dev_server_restart", |state, args| {
         Box::pin(handle_dev_server_restart(state, args))
     })?;
-    registry.register("build_respond", |state, args| {
-        Box::pin(async move { handle_build_respond(state, args) })
-    })?;
-    registry.register("build_stop", |state, args| {
-        Box::pin(handle_build_stop(state, args))
-    })?;
     registry.register("agent_session_stop", |state, args| {
         Box::pin(handle_agent_session_stop(state, args))
-    })?;
-    registry.register("build_cleanup", |state, args| {
-        Box::pin(handle_build_cleanup(state, args))
-    })?;
-    registry.register("runs_list", |state, args| {
-        Box::pin(handle_runs_list(state, args))
     })?;
     registry.register("runtime_definitions_list", |state, _| {
         Box::pin(handle_runtime_definitions_list(state))
@@ -123,8 +83,8 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("runtime_list", |state, args| {
         Box::pin(handle_runtime_list(state, args))
     })?;
-    registry.register("build_continuation_target_get", |state, args| {
-        Box::pin(handle_build_continuation_target_get(state, args))
+    registry.register("task_worktree_get", |state, args| {
+        Box::pin(handle_task_worktree_get(state, args))
     })?;
     registry.register("runtime_stop", |state, args| {
         Box::pin(handle_runtime_stop(state, args))
@@ -160,10 +120,9 @@ async fn handle_build_start(state: &HeadlessState, args: Value) -> CommandResult
         runtime_kind,
     } = deserialize_args(args)?;
     let service = state.service.clone();
-    let emitter = make_emitter(state.events.clone());
     serialize_value(
         crate::run_service_blocking_tokio("build_start", move || {
-            service.build_start(&repo_path, &task_id, runtime_kind.as_str(), emitter)
+            service.build_start(&repo_path, &task_id, runtime_kind.as_str())
         })
         .await
         .map_err(service_error)?,
@@ -220,74 +179,16 @@ async fn handle_dev_server_restart(state: &HeadlessState, args: Value) -> Comman
     )
 }
 
-fn handle_build_respond(state: &HeadlessState, args: Value) -> CommandResult {
-    let BuildRespondArgs {
-        run_id,
-        action,
-        payload,
-    } = deserialize_args(args)?;
-    Ok(json!({
-        "ok": state
-            .service
-            .build_respond(
-                &run_id,
-                action,
-                payload.as_deref(),
-                make_emitter(state.events.clone()),
-            )
-            .map_err(service_error)?
-    }))
-}
-
-async fn handle_build_stop(state: &HeadlessState, args: Value) -> CommandResult {
-    let BuildStopArgs { run_id } = deserialize_args(args)?;
-    let service = state.service.clone();
-    let emitter = make_emitter(state.events.clone());
-    Ok(json!({
-        "ok": crate::run_service_blocking_tokio("build_stop", move || {
-            service.build_stop(&run_id, emitter)
-        })
-        .await
-        .map_err(service_error)?
-    }))
-}
-
 async fn handle_agent_session_stop(state: &HeadlessState, args: Value) -> CommandResult {
     let AgentSessionStopArgs { request } = deserialize_args(args)?;
     let service = state.service.clone();
-    let emitter = make_emitter(state.events.clone());
     Ok(json!({
         "ok": crate::run_service_blocking_tokio("agent_session_stop", move || {
-            service.agent_session_stop(request, emitter)
+            service.agent_session_stop(request)
         })
         .await
         .map_err(service_error)?
     }))
-}
-
-async fn handle_build_cleanup(state: &HeadlessState, args: Value) -> CommandResult {
-    let BuildCleanupArgs { run_id, mode } = deserialize_args(args)?;
-    let service = state.service.clone();
-    let emitter = make_emitter(state.events.clone());
-    Ok(json!({
-        "ok": crate::run_service_blocking_tokio("build_cleanup", move || {
-            service.build_cleanup(&run_id, mode, emitter)
-        })
-        .await
-        .map_err(service_error)?
-    }))
-}
-
-async fn handle_runs_list(state: &HeadlessState, args: Value) -> CommandResult {
-    let OptionalRepoPathArgs { repo_path } = deserialize_args(args)?;
-    let service = state.service.clone();
-    serialize_value(
-        crate::run_service_blocking_tokio("runs_list", move || {
-            service.runs_list(repo_path.as_deref())
-        })
-        .await
-        .map_err(service_error)?,
-    )
 }
 
 async fn handle_runtime_definitions_list(state: &HeadlessState) -> CommandResult {
@@ -313,12 +214,12 @@ async fn handle_runtime_list(state: &HeadlessState, args: Value) -> CommandResul
     )
 }
 
-async fn handle_build_continuation_target_get(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_task_worktree_get(state: &HeadlessState, args: Value) -> CommandResult {
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("build_continuation_target_get", move || {
-            service.build_continuation_target_get(&repo_path, &task_id)
+        crate::run_service_blocking_tokio("task_worktree_get", move || {
+            service.task_worktree_get(&repo_path, &task_id)
         })
         .await
         .map_err(service_error)?,

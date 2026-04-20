@@ -76,7 +76,7 @@ const createWorkingDirectoryMatchers = ({
 
     resolvedExpectedWorkingDirectory = normalizeWorkingDirectory(
       requireBuildContinuationTarget(
-        await deps.runtime.resolveBuildContinuationTarget(ctx.repoPath, ctx.taskId),
+        await deps.runtime.resolveTaskWorktree(ctx.repoPath, ctx.taskId),
       ).workingDirectory,
     );
     return resolvedExpectedWorkingDirectory;

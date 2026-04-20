@@ -19,12 +19,11 @@ export function AgentStudioStateProvider({
   children,
 }: AgentStudioStateProviderProps): ReactElement {
   const { activeWorkspace } = useRequiredContext(WorkspaceStateContext, "AgentStudioStateProvider");
-  const { tasks, runs } = useTaskDataContext();
+  const { tasks } = useTaskDataContext();
   const { refreshTaskData } = useTaskControlContext();
   const { sessionStore, operations } = useAgentOrchestratorOperations({
     activeWorkspace,
     tasks,
-    runs,
     refreshTaskData,
     agentEngine,
   });

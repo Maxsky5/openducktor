@@ -29,8 +29,8 @@ export const formatRepoRuntimeObservation = (
       return "Startup initiated by diagnostics";
     case "restarted_for_mcp":
       return "Runtime restarted after MCP status failure";
-    case "restart_skipped_active_run":
-      return "Restart skipped because an active run is using the runtime";
+    case "restart_skipped_active_session":
+      return "Restart skipped because an active session is using the runtime";
     case null:
       return null;
   }

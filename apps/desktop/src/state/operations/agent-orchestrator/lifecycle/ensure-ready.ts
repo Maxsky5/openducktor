@@ -161,7 +161,6 @@ export const createEnsureSessionReady = ({
       if (session.status !== "error") {
         let attachedRuntimeKind = session.runtimeKind;
         let attachedRuntimeId = session.runtimeId;
-        let attachedRunId = session.runId;
         let attachedRuntimeRoute = session.runtimeRoute;
         let attachedWorkingDirectory = session.workingDirectory;
 
@@ -181,7 +180,6 @@ export const createEnsureSessionReady = ({
 
           attachedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
           attachedRuntimeId = runtime.runtimeId;
-          attachedRunId = runtime.runId;
           attachedRuntimeRoute = runtime.runtimeRoute;
           attachedWorkingDirectory = runtime.workingDirectory;
 
@@ -190,7 +188,6 @@ export const createEnsureSessionReady = ({
             (current) => ({
               ...current,
               runtimeId: attachedRuntimeId,
-              runId: attachedRunId,
               runtimeRoute: attachedRuntimeRoute,
               workingDirectory: attachedWorkingDirectory,
               ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
@@ -217,7 +214,6 @@ export const createEnsureSessionReady = ({
             ...current,
             status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
             runtimeId: attachedRuntimeId,
-            runId: attachedRunId,
             runtimeRoute: attachedRuntimeRoute,
             workingDirectory: attachedWorkingDirectory,
             pendingPermissions,
@@ -326,7 +322,6 @@ export const createEnsureSessionReady = ({
       status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : "idle",
       runtimeKind: resolvedRuntimeKind,
       runtimeId: runtime.runtimeId,
-      runId: runtime.runId,
       runtimeRoute: runtime.runtimeRoute,
       workingDirectory: runtime.workingDirectory,
       promptOverrides: promptContext.promptOverrides,

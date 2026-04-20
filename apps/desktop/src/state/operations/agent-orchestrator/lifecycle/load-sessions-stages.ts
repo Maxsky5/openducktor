@@ -411,7 +411,6 @@ export const createRuntimeResolutionPlannerStage = async ({
       ok: true,
       runtimeKind,
       runtimeId: currentSession?.runtimeId ?? null,
-      runId: currentSession?.runId ?? null,
       runtimeRoute,
       runtimeConnection: runtimeRouteToConnection(runtimeRoute, workingDirectory),
     };
@@ -773,7 +772,6 @@ export const hydrateSessionRecordsStage = async ({
           ...current,
           runtimeKind: readPersistedRuntimeKind(record),
           runtimeId: null,
-          runId: null,
           runtimeRoute: null,
           workingDirectory: record.workingDirectory,
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
@@ -783,7 +781,7 @@ export const hydrateSessionRecordsStage = async ({
       return;
     }
 
-    const { runtimeKind, runtimeId, runId, runtimeRoute, runtimeConnection } = runtimeResolution;
+    const { runtimeKind, runtimeId, runtimeRoute, runtimeConnection } = runtimeResolution;
     const workingDirectory = runtimeConnection.workingDirectory;
     if (!shouldHydrateHistory) {
       updateSession(
@@ -792,7 +790,6 @@ export const hydrateSessionRecordsStage = async ({
           ...current,
           runtimeKind,
           runtimeId,
-          runId,
           runtimeRoute,
           workingDirectory,
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
@@ -848,7 +845,6 @@ export const hydrateSessionRecordsStage = async ({
           ...current,
           runtimeKind,
           runtimeId,
-          runId,
           runtimeRoute,
           status: liveSessionStatus ?? current.status,
           workingDirectory,

@@ -45,14 +45,6 @@ impl<'a> TaskResetService<'a> {
             context.repo.tasks[index] = updated.clone();
         }
 
-        self.service
-            .clear_task_runs(context.repo.repo_path.as_str(), task_id.as_str())
-            .with_context(|| format!("Failed to clear in-memory run state for {task_id}"))
-            .map_err(|error| cleanup_progress.wrap(error))?;
-        cleanup_progress
-            .completed_steps
-            .push("cleared in-memory run state");
-
         Ok(self.service.enrich_task(updated, &context.repo.tasks))
     }
 

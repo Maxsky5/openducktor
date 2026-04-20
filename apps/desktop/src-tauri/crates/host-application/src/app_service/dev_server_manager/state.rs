@@ -247,8 +247,9 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
     ) -> Option<String> {
-        self.build_continuation_target_get(repo_path, task_id)
+        self.task_worktree_get(repo_path, task_id)
             .ok()
-            .and_then(|target| target.map(|entry| entry.working_directory))
+            .flatten()
+            .map(|entry| entry.working_directory)
     }
 }

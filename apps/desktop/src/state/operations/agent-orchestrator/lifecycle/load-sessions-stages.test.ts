@@ -29,7 +29,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeKind: "opencode",
   runtimeId: null,
-  runId: null,
   runtimeRoute: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
@@ -301,7 +300,6 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-stdio",
-            runId: null,
             runtimeRoute: { type: "stdio" },
             runtimeConnection: {
               type: "stdio",
@@ -404,7 +402,6 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-1",
-            runId: null,
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             runtimeConnection: {
               type: "local_http",
@@ -431,7 +428,6 @@ describe("load-sessions-stages", () => {
       "session-1": createSession({
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
-        runId: "run-current",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory,
       }),
@@ -509,7 +505,6 @@ describe("load-sessions-stages", () => {
       ok: true,
       runtimeKind: "opencode",
       runtimeId: "runtime-current",
-      runId: "run-current",
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       runtimeConnection: {
         type: "local_http",
@@ -524,7 +519,6 @@ describe("load-sessions-stages", () => {
         ok: true,
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
-        runId: "run-current",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         runtimeConnection: {
           type: "local_http",

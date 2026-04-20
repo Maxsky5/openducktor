@@ -32,7 +32,7 @@ export const executeFreshStart = async ({
       ? input.targetWorkingDirectory
       : await resolveFreshStartTargetWorkingDirectory({
           ctx,
-          resolveBuildContinuationTarget: deps.runtime.resolveBuildContinuationTarget,
+          resolveTaskWorktree: deps.runtime.resolveTaskWorktree,
         });
 
   const resolved = await resolveRuntimeAndModel({

@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
-    DevServerEvent, DevServerGroupState, GitPort, RunEvent, RunSummary, RuntimeCheck,
-    RuntimeInstanceSummary, RuntimeRole, RuntimeRoute, TaskCard, TaskStore,
+    DevServerEvent, DevServerGroupState, GitPort, RuntimeCheck, RuntimeInstanceSummary,
+    RuntimeRole, RuntimeRoute, TaskCard, TaskStore,
 };
-use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig, RuntimeConfigStore};
+use host_infra_system::{AppConfigStore, GitCliPort, RuntimeConfigStore};
 use serde::{Deserialize, Serialize};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -19,7 +19,6 @@ use std::time::Instant;
 pub mod build_orchestrator;
 
 mod dev_server_manager;
-mod events;
 mod filesystem;
 mod git_provider;
 mod hook_security;
@@ -43,7 +42,6 @@ pub(crate) mod test_support;
 mod workflow_rules;
 mod workspace_policy;
 
-pub(crate) use events::emit_event;
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
 pub use odt_mcp::{
     OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
@@ -76,10 +74,10 @@ pub(crate) use runtime_session_status::{
     RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
 };
 pub(crate) use service_core::{
-    AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess, RunProcess,
+    AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess,
     RuntimeCleanupTarget,
 };
-pub use service_core::{AppService, DevServerEmitter, RunEmitter};
+pub use service_core::{AppService, DevServerEmitter};
 #[cfg(test)]
 pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
@@ -106,9 +104,8 @@ pub(crate) use workflow_rules::{
 
 #[cfg(test)]
 pub(crate) use opencode_runtime::{
-    build_opencode_config_content, default_mcp_workspace_root, find_openducktor_workspace_root,
-    is_orphaned_opencode_server_process, parse_mcp_command_json, resolve_mcp_command,
-    wait_for_local_server,
+    build_opencode_config_content, default_mcp_workspace_root, is_orphaned_opencode_server_process,
+    parse_mcp_command_json, resolve_mcp_command, wait_for_local_server,
 };
 #[cfg(test)]
 pub(crate) use workflow_rules::allows_transition;

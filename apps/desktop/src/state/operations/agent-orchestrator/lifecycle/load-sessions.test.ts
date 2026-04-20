@@ -9,11 +9,17 @@ import {
   sessionMessagesToArray,
   someSessionMessageForTest,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState as BaseAgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createLoadAgentSessions } from "./load-sessions";
+
+type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
+
+type LegacyRunSummary = { runId: string; worktreePath: string };
+
+let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
 
 const taskFixture = createTaskCardFixture({ title: "Task" });
 
@@ -72,8 +78,11 @@ describe("agent-orchestrator-load-sessions", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
     const hostModule = await import("../../shared/host");
+    legacyHost = hostModule.host as typeof hostModule.host & {
+      runsList: (repoPath?: string) => Promise<LegacyRunSummary[]>;
+    };
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runsList = async () => [];
+    legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (repoPath) => ({
       kind: "opencode",
       runtimeId: "runtime-1",
@@ -630,7 +639,7 @@ describe("agent-orchestrator-load-sessions", () => {
       runtimeListCalls.push(repoPath);
       return [];
     };
-    hostModule.host.runsList = async (repoPath) => {
+    legacyHost.runsList = async (repoPath) => {
       runsListCalls.push(repoPath ?? "");
       return [];
     };
@@ -1999,7 +2008,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
@@ -2014,7 +2023,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       }),
     ];
-    hostModule.host.runsList = async () => {
+    legacyHost.runsList = async () => {
       runLoads += 1;
       return [];
     };
@@ -2023,7 +2032,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await loadAgentSessions("task-1");
     } finally {
       hostModule.host.agentSessionsList = originalList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
     }
 
     expect(Object.keys(state)).toContain("session-1");
@@ -2167,7 +2176,6 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(observedRuntimeEndpoint).toBe("http://127.0.0.1:4555");
     expect(state["session-1"]?.runtimeKind).toBe("claude-code");
     expect(state["session-1"]?.runtimeId).toBe("runtime-1");
-    expect(state["session-1"]?.runId).toBeNull();
   });
 
   test("rejects requested-session warmup when persisted runtime metadata is missing", async () => {
@@ -2446,7 +2454,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
@@ -2462,7 +2470,7 @@ describe("agent-orchestrator-load-sessions", () => {
       }),
     ];
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runsList = async () => [
+    legacyHost.runsList = async () => [
       {
         runId: "run-1",
         runtimeKind: "opencode",
@@ -2490,7 +2498,7 @@ describe("agent-orchestrator-load-sessions", () => {
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
     }
 
     expect(historyLoads).toBe(1);
@@ -2817,7 +2825,6 @@ describe("agent-orchestrator-load-sessions", () => {
       throw new Error("Expected QA hydration to resolve a live runtime endpoint");
     }
     expect(String(observedRuntimeEndpoint)).toBe("http://127.0.0.1:4444");
-    expect(state["session-qa-1"]?.runId).toBeNull();
     expect(state["session-qa-1"]?.runtimeId).toBe("runtime-1");
     expect(sessionMessageAt(getSession(state, "session-qa-1"), 0)?.id).toBe(
       "history:session-start:session-qa-1",
@@ -2872,7 +2879,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
@@ -2889,7 +2896,7 @@ describe("agent-orchestrator-load-sessions", () => {
       }),
     ];
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runsList = async () => [];
+    legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
@@ -2924,7 +2931,7 @@ describe("agent-orchestrator-load-sessions", () => {
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
@@ -2984,7 +2991,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
@@ -3000,7 +3007,7 @@ describe("agent-orchestrator-load-sessions", () => {
       }),
     ];
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runsList = async () => [];
+    legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => ({
       kind: runtimeKind,
       runtimeId: "runtime-shared",
@@ -3025,7 +3032,7 @@ describe("agent-orchestrator-load-sessions", () => {
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
@@ -3081,7 +3088,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
@@ -3113,7 +3120,7 @@ describe("agent-orchestrator-load-sessions", () => {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
     ]) as typeof hostModule.host.runtimeList;
-    hostModule.host.runsList = async () => [];
+    legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
@@ -3143,7 +3150,7 @@ describe("agent-orchestrator-load-sessions", () => {
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
@@ -3199,7 +3206,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
@@ -3216,7 +3223,7 @@ describe("agent-orchestrator-load-sessions", () => {
       }),
     ];
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runsList = async () => [];
+    legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
@@ -3246,7 +3253,7 @@ describe("agent-orchestrator-load-sessions", () => {
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
@@ -4178,7 +4185,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../shared/host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
-    const originalRunsList = hostModule.host.runsList;
+    const originalRunsList = legacyHost.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     const originalSpecGet = hostModule.host.specGet;
     const originalPlanGet = hostModule.host.planGet;
@@ -4199,7 +4206,7 @@ describe("agent-orchestrator-load-sessions", () => {
       }),
     ];
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runsList = async () => [];
+    legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async () => {
       throw new Error("runtime unavailable");
     };
@@ -4227,7 +4234,7 @@ describe("agent-orchestrator-load-sessions", () => {
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
-      hostModule.host.runsList = originalRunsList;
+      legacyHost.runsList = originalRunsList;
       hostModule.host.runtimeEnsure = originalEnsure;
       hostModule.host.specGet = originalSpecGet;
       hostModule.host.planGet = originalPlanGet;

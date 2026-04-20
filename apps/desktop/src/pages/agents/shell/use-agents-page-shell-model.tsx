@@ -19,7 +19,6 @@ import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   useChecksOperationsContext,
-  useDelegationEventsContext,
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import {
@@ -44,10 +43,7 @@ import {
   refreshRuntimeAttachmentSources,
 } from "../use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
-import {
-  useAgentStudioReadiness,
-  useRunCompletionRecoverySignal,
-} from "../use-agents-page-readiness";
+import { useAgentStudioReadiness } from "../use-agents-page-readiness";
 import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
@@ -151,7 +147,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const {
     isForegroundLoadingTasks,
     tasks,
-    runs,
     syncPullRequests,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
@@ -185,8 +180,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
-  const { runCompletionSignal } = useDelegationEventsContext();
-
   const {
     taskIdParam,
     sessionParam,
@@ -325,10 +318,44 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     ],
   );
 
-  const runCompletionRecoverySignal = useRunCompletionRecoverySignal({
-    activeSession: selection.viewActiveSession,
-    runCompletionSignal,
-  });
+  const [worktreeRecoverySignal, setWorktreeRecoverySignal] = useState(0);
+  const lastWorktreeRecoveryKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextRecoveryKey = [
+      workspaceRepoPath ?? "",
+      selection.viewTaskId ?? "",
+      selection.viewSelectedTask?.updatedAt ?? "",
+      selection.viewSelectedTask?.status ?? "",
+      selection.viewActiveSession?.sessionId ?? "",
+      selection.viewActiveSession?.status ?? "",
+      selection.viewActiveSession?.workingDirectory ?? "",
+      selection.isViewSessionHistoryHydrating ? "1" : "0",
+      isForegroundLoadingTasks ? "1" : "0",
+    ].join(":");
+
+    if (lastWorktreeRecoveryKeyRef.current === null) {
+      lastWorktreeRecoveryKeyRef.current = nextRecoveryKey;
+      return;
+    }
+
+    if (lastWorktreeRecoveryKeyRef.current === nextRecoveryKey) {
+      return;
+    }
+
+    lastWorktreeRecoveryKeyRef.current = nextRecoveryKey;
+    setWorktreeRecoverySignal((previous) => previous + 1);
+  }, [
+    isForegroundLoadingTasks,
+    selection.isViewSessionHistoryHydrating,
+    selection.viewActiveSession?.sessionId,
+    selection.viewActiveSession?.status,
+    selection.viewActiveSession?.workingDirectory,
+    selection.viewSelectedTask?.status,
+    selection.viewSelectedTask?.updatedAt,
+    selection.viewTaskId,
+    workspaceRepoPath,
+  ]);
 
   useEffect(() => {
     if (!workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
@@ -420,20 +447,17 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const rightPanelSessionRole = selection.viewActiveSession?.role ?? null;
   const rightPanelSessionStatus = selection.viewActiveSession?.status ?? null;
   const rightPanelSessionWorkingDirectory = selection.viewActiveSession?.workingDirectory ?? null;
-  const rightPanelSessionRunId = selection.viewActiveSession?.runId ?? null;
   const rightPanelHasActiveSession = selection.viewActiveSession != null;
   const rightPanelSession = useMemo<BuildToolsSessionDescriptor>(
     () => ({
       role: rightPanelSessionRole,
       status: rightPanelSessionStatus,
       workingDirectory: rightPanelSessionWorkingDirectory,
-      runId: rightPanelSessionRunId,
       hasActiveSession: rightPanelHasActiveSession,
     }),
     [
       rightPanelHasActiveSession,
       rightPanelSessionRole,
-      rightPanelSessionRunId,
       rightPanelSessionStatus,
       rightPanelSessionWorkingDirectory,
     ],
@@ -461,8 +485,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         isViewSessionHistoryHydrating={selection.isViewSessionHistoryHydrating}
         documentsModel={orchestration.agentStudioWorkspaceSidebarModel}
         repoSettings={orchestration.repoSettings}
-        runCompletionRecoverySignal={runCompletionRecoverySignal}
-        runs={runs}
+        worktreeRecoverySignal={worktreeRecoverySignal}
         setTaskTargetBranch={setTaskTargetBranch}
         detectingPullRequestTaskId={detectingPullRequestTaskId}
         onDetectPullRequest={handleDetectPullRequest}
@@ -496,7 +519,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       allTasks={tasks}
       taskSessionsByTaskId={EMPTY_TASK_SESSIONS_BY_TASK_ID}
       activeTaskSessionContextByTaskId={EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID}
-      runs={runs}
       workflowActionsEnabled={false}
       onOpenSession={noopOpenSession}
       onDetectPullRequest={handleDetectPullRequest}

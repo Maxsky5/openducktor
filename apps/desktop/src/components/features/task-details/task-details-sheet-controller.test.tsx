@@ -17,7 +17,6 @@ const taskDetailsSheetRenderMock = mock(
     activeWorkspace?: { workspaceId: string; workspaceName: string; repoPath: string } | null;
     task: TaskCard | null;
     allTasks: TaskCard[];
-    runs: unknown[];
     taskSessions: KanbanTaskSession[];
     hasActiveSession: boolean;
     open: boolean;
@@ -63,7 +62,6 @@ describe("TaskDetailsSheetController", () => {
           repoPath: "/repo-a",
         },
         allTasks: [task],
-        runs: [],
         taskSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
         onOpenSession: () => {},
@@ -83,7 +81,6 @@ describe("TaskDetailsSheetController", () => {
           repoPath: "/repo-a",
         },
         allTasks: [task],
-        runs: [],
         open: false,
         workflowActionsEnabled: false,
       }),
@@ -103,7 +100,6 @@ describe("TaskDetailsSheetController", () => {
           repoPath: "/repo-a",
         },
         allTasks: [task],
-        runs: [],
         open: true,
         workflowActionsEnabled: false,
       }),
@@ -131,7 +127,6 @@ describe("TaskDetailsSheetController", () => {
           repoPath: "/repo-a",
         },
         allTasks: [task],
-        runs: [],
         taskSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
         onOpenSession: () => {},
@@ -156,7 +151,6 @@ describe("TaskDetailsSheetController", () => {
           repoPath: "/repo-a",
         },
         open: true,
-        runs: [],
         onDetectPullRequest,
         onUnlinkPullRequest,
         detectingPullRequestTaskId: "task-1",

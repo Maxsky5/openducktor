@@ -6,13 +6,16 @@ use super::repo_health_snapshot::{
 use super::AppService;
 use crate::app_service::runtime_registry::{ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure};
 use crate::app_service::service_core::{RepoRuntimeHealthFlight, RepoRuntimeHealthFlightState};
-use crate::app_service::RuntimeStartupWaitFailure;
+use crate::app_service::{
+    RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTargetResolution,
+    RuntimeStartupWaitFailure,
+};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, RepoRuntimeHealthCheck, RepoRuntimeHealthObservation,
-    RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus, RunState,
-    RuntimeInstanceSummary, RuntimeRoute,
+    RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RepoRuntimeStartupStatus,
+    RuntimeInstanceSummary,
 };
 use std::sync::Arc;
 use std::time::Duration;

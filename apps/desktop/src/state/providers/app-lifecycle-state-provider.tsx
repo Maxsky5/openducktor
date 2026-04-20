@@ -1,7 +1,6 @@
 import type { PropsWithChildren, ReactElement } from "react";
 import {
   useChecksOperationsContext,
-  useDelegationEventsContext,
   useRequiredContext,
   useTaskControlContext,
   useWorkspaceOperationsContext,
@@ -17,12 +16,9 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
   const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { refreshRuntimeCheck, refreshBeadsCheckForRepo } = useChecksOperationsContext();
   const { refreshTaskData } = useTaskControlContext();
-  const { setEvents, setRunCompletionSignal } = useDelegationEventsContext();
 
   useAppLifecycle({
     activeWorkspace,
-    setEvents,
-    setRunCompletionSignal,
     refreshWorkspaces,
     refreshBranches,
     refreshRuntimeCheck,

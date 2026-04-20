@@ -1,6 +1,4 @@
-use super::super::super::{
-    terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
-};
+use super::super::super::{AgentRuntimeProcess, AppService, RuntimeCleanupTarget};
 use super::super::start_pipeline::{
     RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer,
 };
@@ -192,17 +190,6 @@ impl AppService {
         }
         if let Err(error) = self.stop_all_dev_servers() {
             cleanup_errors.push(format!("Failed stopping dev servers: {error:#}"));
-        }
-
-        match self.runs.lock() {
-            Ok(mut runs) => {
-                for (_, mut run) in runs.drain() {
-                    if let Some(child) = run.child.as_mut() {
-                        terminate_child_process(child);
-                    }
-                }
-            }
-            Err(_) => cleanup_errors.push("Run state lock poisoned".to_string()),
         }
 
         match self.agent_runtimes.lock() {

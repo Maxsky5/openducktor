@@ -1,9 +1,8 @@
 use anyhow::Result;
 use host_domain::{
-    AgentRuntimeKind, BuildContinuationTargetSource, GitCurrentBranch, RunState, RunSummary,
-    RuntimeInstanceSummary, RuntimeRole,
+    AgentRuntimeKind, GitCurrentBranch, RuntimeInstanceSummary, RuntimeRole,
 };
-use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
+use host_infra_system::AppConfigStore;
 use std::fs;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -13,12 +12,12 @@ use crate::app_service::opencode_runtime::test_support::{
     read_opencode_process_registry, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 use crate::app_service::test_support::{
-    build_service_with_store, builtin_opencode_runtime_descriptor, builtin_opencode_runtime_route,
-    create_fake_opencode, init_git_repo, install_fake_dolt, lock_env, make_session, make_task,
-    set_env_var, set_fake_opencode_and_bridge_binaries, spawn_sleep_process, unique_temp_path,
-    wait_for_path_exists, wait_for_process_exit,
+    add_workspace_with_repo_config, build_service_with_store, builtin_opencode_runtime_descriptor,
+    builtin_opencode_runtime_route, create_fake_opencode, init_git_repo, install_fake_dolt,
+    lock_env, make_session, make_task, set_env_var, set_fake_opencode_and_bridge_binaries,
+    unique_temp_path, wait_for_path_exists, wait_for_process_exit,
 };
-use crate::app_service::{AgentRuntimeProcess, RunProcess};
+use crate::app_service::AgentRuntimeProcess;
 
 fn runtime_summary_fixture(
     runtime_id: &str,
@@ -38,22 +37,6 @@ fn runtime_summary_fixture(
         runtime_route: builtin_opencode_runtime_route(port),
         started_at: "2026-02-20T12:00:00Z".to_string(),
         descriptor: builtin_opencode_runtime_descriptor(),
-    }
-}
-
-fn run_summary_fixture(repo_path: &str, task_id: &str, worktree_path: &str) -> RunSummary {
-    RunSummary {
-        run_id: "run-1".to_string(),
-        runtime_kind: AgentRuntimeKind::opencode(),
-        runtime_route: builtin_opencode_runtime_route(4444),
-        repo_path: repo_path.to_string(),
-        task_id: task_id.to_string(),
-        branch: format!("obp/{task_id}"),
-        worktree_path: worktree_path.to_string(),
-        port: Some(4444),
-        state: RunState::Running,
-        last_message: None,
-        started_at: "2026-02-22T08:00:00.000Z".to_string(),
     }
 }
 
@@ -323,7 +306,7 @@ fn runtime_list_prunes_stale_entries() -> Result<()> {
 }
 
 #[test]
-fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
+fn task_worktree_get_uses_task_worktree_without_builder_session() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-active-run");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -346,46 +329,19 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
         },
         config_store,
     );
-    service.workspace_add(repo_path.as_str())?;
-    service.runs.lock().expect("run lock poisoned").insert(
-        "run-1".to_string(),
-        RunProcess {
-            summary: run_summary_fixture(
-                repo_path.as_str(),
-                "task-1",
-                worktree.to_string_lossy().as_ref(),
-            ),
-            child: Some(spawn_sleep_process(20)),
-            _runtime_process_guard: None,
-            repo_path: repo_path.clone(),
-            task_id: "task-1".to_string(),
-            worktree_path: worktree.to_string_lossy().to_string(),
-            repo_config: RepoConfig {
-                default_runtime_kind: "opencode".to_string(),
-                worktree_base_path: Some(repo_root.join("worktrees").to_string_lossy().to_string()),
-                branch_prefix: "obp".to_string(),
-                default_target_branch: host_infra_system::GitTargetBranch {
-                    remote: Some("origin".to_string()),
-                    branch: "main".to_string(),
-                },
-                git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-                ..Default::default()
-            },
+    let _workspace = add_workspace_with_repo_config(
+        &service,
+        repo_path.as_str(),
+        host_infra_system::RepoConfig {
+            worktree_base_path: Some(repo_root.join("worktrees").to_string_lossy().to_string()),
+            ..Default::default()
         },
-    );
+    )?;
 
     let repo_path_with_trailing_separator = format!("{repo_path}/");
     let target = service
-        .build_continuation_target_get(repo_path_with_trailing_separator.as_str(), "task-1")?
-        .expect("active build run should produce a continuation target");
-    assert_eq!(target.source, BuildContinuationTargetSource::ActiveBuildRun);
+        .task_worktree_get(repo_path_with_trailing_separator.as_str(), "task-1")?
+        .expect("task worktree should produce a continuation target");
     assert_eq!(
         target.working_directory,
         worktree.to_string_lossy().to_string()
@@ -394,7 +350,7 @@ fn build_continuation_target_get_prefers_active_build_run() -> Result<()> {
 }
 
 #[test]
-fn build_continuation_target_get_falls_back_to_latest_builder_session_worktree() -> Result<()> {
+fn task_worktree_get_returns_none_without_task_owned_worktree() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-session");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -432,19 +388,13 @@ fn build_continuation_target_get_falls_back_to_latest_builder_session_worktree()
         .expect("task lock poisoned")
         .agent_sessions = vec![older, latest];
 
-    let target = service
-        .build_continuation_target_get(repo_path.as_str(), "task-1")?
-        .expect("latest builder session should produce a continuation target");
-    assert_eq!(target.source, BuildContinuationTargetSource::BuilderSession);
-    assert_eq!(
-        target.working_directory,
-        worktree.to_string_lossy().to_string()
-    );
+    let target = service.task_worktree_get(repo_path.as_str(), "task-1")?;
+    assert!(target.is_none());
     Ok(())
 }
 
 #[test]
-fn build_continuation_target_get_returns_none_when_builder_worktree_is_missing() -> Result<()> {
+fn task_worktree_get_returns_none_when_builder_worktree_is_missing() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-missing");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -481,14 +431,14 @@ fn build_continuation_target_get_returns_none_when_builder_worktree_is_missing()
         .agent_sessions = vec![session];
 
     let target = service
-        .build_continuation_target_get(repo_path.as_str(), "task-1")
+        .task_worktree_get(repo_path.as_str(), "task-1")
         .expect("missing builder target should be represented explicitly");
     assert!(target.is_none());
     Ok(())
 }
 
 #[test]
-fn build_continuation_target_get_rejects_repo_root_builder_session() -> Result<()> {
+fn task_worktree_get_rejects_repo_root_builder_session() -> Result<()> {
     let repo_root = unique_temp_path("qa-review-target-root");
     let repo = repo_root.join("repo");
     init_git_repo(&repo)?;
@@ -519,9 +469,7 @@ fn build_continuation_target_get_rejects_repo_root_builder_session() -> Result<(
         .expect("task lock poisoned")
         .agent_sessions = vec![session];
 
-    let error = service
-        .build_continuation_target_get(repo_path.as_str(), "task-1")
-        .expect_err("repo root builder session should be rejected");
-    assert!(error.to_string().contains("repository root"));
+    let target = service.task_worktree_get(repo_path.as_str(), "task-1")?;
+    assert!(target.is_none());
     Ok(())
 }

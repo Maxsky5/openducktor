@@ -13,7 +13,6 @@ export type BuildToolsSessionDescriptor = {
       : null
     : null;
   workingDirectory: string | null;
-  runId: string | null;
   hasActiveSession: boolean;
 };
 
@@ -30,8 +29,8 @@ type UseAgentStudioBuildToolsBootstrapArgs = {
 type BuildToolsBootstrapContext = {
   isEnabled: boolean;
   repoPath: string | null;
+  taskId: string | null;
   sessionWorkingDirectory: string | null;
-  sessionRunId: string | null;
   shouldEnableEventPolling: boolean;
   hasSelectedTask: boolean;
 };
@@ -47,7 +46,6 @@ export function useAgentStudioBuildToolsBootstrap({
 }: UseAgentStudioBuildToolsBootstrapArgs): BuildToolsBootstrapContext {
   const sessionRole = session.role;
   const sessionWorkingDirectory = session.workingDirectory;
-  const sessionRunId = session.runId;
   const hasActiveSession = session.hasActiveSession;
 
   return useMemo(() => {
@@ -57,8 +55,8 @@ export function useAgentStudioBuildToolsBootstrap({
       return {
         isEnabled: false,
         repoPath: null,
+        taskId: null,
         sessionWorkingDirectory: null,
-        sessionRunId: null,
         shouldEnableEventPolling: false,
         hasSelectedTask: Boolean(viewSelectedTask),
       };
@@ -69,8 +67,8 @@ export function useAgentStudioBuildToolsBootstrap({
     return {
       isEnabled: Boolean(workspaceRepoPath) && isBuildSessionContextStable,
       repoPath: isBuildSessionContextStable ? workspaceRepoPath : null,
+      taskId: isBuildSessionContextStable ? (viewSelectedTask?.id ?? null) : null,
       sessionWorkingDirectory: isBuildSessionContextStable ? sessionWorkingDirectory : null,
-      sessionRunId: isBuildSessionContextStable ? sessionRunId : null,
       shouldEnableEventPolling:
         Boolean(workspaceRepoPath) && isBuildSessionContextStable && hasActiveSession,
       hasSelectedTask: Boolean(viewSelectedTask),
@@ -82,7 +80,6 @@ export function useAgentStudioBuildToolsBootstrap({
     isViewSessionHistoryHydrating,
     panelKind,
     sessionRole,
-    sessionRunId,
     sessionWorkingDirectory,
     viewRole,
     viewSelectedTask,

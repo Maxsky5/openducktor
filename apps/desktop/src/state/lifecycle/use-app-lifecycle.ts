@@ -2,10 +2,8 @@ import {
   type BeadsCheck,
   externalTaskSyncEventSchema,
   type RepoStoreHealth,
-  type RunEvent,
-  runEventSchema,
 } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
@@ -13,7 +11,6 @@ import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { prependRunEvent } from "./app-lifecycle-model";
 
 const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
 const MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS = 256;
@@ -41,8 +38,6 @@ const rememberProcessedExternalTaskEvent = (
 
 type UseAppLifecycleArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  setEvents: Dispatch<SetStateAction<RunEvent[]>>;
-  setRunCompletionSignal: (runId: string, eventType: RunEvent["type"]) => void;
   refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
@@ -54,8 +49,6 @@ type UseAppLifecycleArgs = {
 
 export function useAppLifecycle({
   activeWorkspace,
-  setEvents,
-  setRunCompletionSignal,
   refreshWorkspaces,
   refreshBranches,
   refreshRuntimeCheck,
@@ -76,9 +69,6 @@ export function useAppLifecycle({
   }, [activeWorkspace, refreshTaskData]);
 
   useEffect(() => {
-    let disposed = false;
-    let unsubscribe: (() => void) | null = null;
-
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
       ([workspaceResult]) => {
         if (workspaceResult.status === "rejected") {
@@ -88,52 +78,7 @@ export function useAppLifecycle({
         }
       },
     );
-
-    hostBridge
-      .subscribeRunEvents((payload) => {
-        const parsed = runEventSchema.safeParse(payload);
-        if (!parsed.success) {
-          return;
-        }
-
-        setEvents((current) => prependRunEvent(current, parsed.data));
-        if (
-          parsed.data.type === "run_finished" ||
-          parsed.data.type === "ready_for_manual_done_confirmation" ||
-          parsed.data.type === "error"
-        ) {
-          setRunCompletionSignal(parsed.data.runId, parsed.data.type);
-          const repoPath = activeWorkspaceRef.current?.repoPath ?? null;
-          if (repoPath) {
-            void refreshTaskDataRef.current(repoPath).catch((error: unknown) => {
-              toast.error("Failed to refresh tasks", {
-                description: summarizeTaskLoadError({ error }),
-              });
-            });
-          }
-        }
-      })
-      .then((cleanup) => {
-        if (disposed) {
-          cleanup();
-          return;
-        }
-        unsubscribe = cleanup;
-      })
-      .catch((error: unknown) => {
-        if (disposed) {
-          return;
-        }
-        toast.error("Run event subscription failed", {
-          description: errorMessage(error),
-        });
-      });
-
-    return () => {
-      disposed = true;
-      unsubscribe?.();
-    };
-  }, [refreshRuntimeCheck, refreshWorkspaces, setEvents, setRunCompletionSignal]);
+  }, [refreshRuntimeCheck, refreshWorkspaces]);
 
   useEffect(() => {
     let disposed = false;

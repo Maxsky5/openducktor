@@ -1,7 +1,8 @@
 use crate::{as_error, run_service_blocking, runtime_ensure_failure_kind, AppState};
 use host_domain::{
-    BeadsCheck, BuildContinuationTarget, RepoRuntimeHealthCheck, RepoRuntimeStartupStatus,
+    BeadsCheck, RepoRuntimeHealthCheck, RepoRuntimeStartupStatus,
     RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary, SystemCheck,
+    TaskWorktreeSummary,
 };
 use tauri::State;
 
@@ -78,14 +79,14 @@ pub async fn runtime_list(
 }
 
 #[tauri::command]
-pub async fn build_continuation_target_get(
+pub async fn task_worktree_get(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-) -> Result<Option<BuildContinuationTarget>, String> {
+) -> Result<Option<TaskWorktreeSummary>, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("build_continuation_target_get", move || {
-        service.build_continuation_target_get(&repo_path, &task_id)
+    let result = run_service_blocking("task_worktree_get", move || {
+        service.task_worktree_get(&repo_path, &task_id)
     })
     .await;
     as_error(result)
@@ -169,29 +170,29 @@ mod tests {
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
-    struct BuildContinuationTargetGetPayload {
+    struct TaskWorktreeGetPayload {
         repo_path: String,
         task_id: String,
     }
 
     #[test]
-    fn build_continuation_target_get_payload_accepts_task_identifiers() {
+    fn task_worktree_get_payload_accepts_task_identifiers() {
         let payload = json!({
             "repoPath": "/repo",
             "taskId": "task-1",
         });
-        let parsed: BuildContinuationTargetGetPayload =
+        let parsed: TaskWorktreeGetPayload =
             serde_json::from_value(payload).expect("payload should deserialize");
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.task_id, "task-1");
     }
 
     #[test]
-    fn build_continuation_target_get_payload_rejects_missing_task_id() {
+    fn task_worktree_get_payload_rejects_missing_task_id() {
         let payload = json!({
             "repoPath": "/repo",
         });
-        let error = serde_json::from_value::<BuildContinuationTargetGetPayload>(payload)
+        let error = serde_json::from_value::<TaskWorktreeGetPayload>(payload)
             .expect_err("task id should be required at command boundary");
         let message = error.to_string();
         assert!(message.contains("taskId"));

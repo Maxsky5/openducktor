@@ -119,7 +119,7 @@ export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCa
   createSharedTaskCardFixture(PAGE_TASK_CARD_DEFAULTS, overrides);
 
 export const createAgentSessionFixture = (
-  overrides: Partial<AgentSessionState> = {},
+  overrides: Partial<AgentSessionState> & { runId?: string | null } = {},
 ): AgentSessionState => createSharedAgentSessionFixture(PAGE_SESSION_DEFAULTS, overrides);
 
 export const createHookHarness = <Props, State>(

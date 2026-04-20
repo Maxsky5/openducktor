@@ -15,7 +15,6 @@ export type ResolvedHydrationRuntime =
       ok: true;
       runtimeKind: RuntimeKind;
       runtimeId: string | null;
-      runId: string | null;
       runtimeRoute: RuntimeRoute;
       runtimeConnection: AgentRuntimeConnection;
     }
@@ -96,7 +95,6 @@ export const createHydrationRuntimeResolver = ({
         ok: true,
         runtimeKind,
         runtimeId: runtime.runtimeId,
-        runId: null,
         runtimeRoute: runtime.runtimeRoute,
         runtimeConnection,
       };
@@ -110,7 +108,6 @@ export const createHydrationRuntimeResolver = ({
         ok: true,
         runtimeKind,
         runtimeId: null,
-        runId: null,
         runtimeRoute: runtimeConnectionToRoute(preloadedRuntimeConnection),
         runtimeConnection: preloadedRuntimeConnection,
       };
@@ -140,7 +137,6 @@ export const createHydrationRuntimeResolver = ({
       ok: true,
       runtimeKind,
       runtimeId: workspaceRuntime.runtimeId,
-      runId: null,
       runtimeRoute: workspaceRuntime.runtimeRoute,
       runtimeConnection,
     };

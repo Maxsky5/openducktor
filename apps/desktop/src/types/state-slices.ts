@@ -1,4 +1,3 @@
-import type { BuildRespondInput } from "@openducktor/adapters-tauri-host";
 import type {
   BeadsCheck,
   GitBranch,
@@ -8,8 +7,6 @@ import type {
   GlobalGitConfig,
   PullRequest,
   RepoDevServerScript,
-  RunEvent,
-  RunSummary,
   RuntimeCheck,
   RuntimeKind,
   SettingsSnapshot,
@@ -130,7 +127,6 @@ export type TasksStateContextValue = {
     pullRequest: PullRequest;
   } | null;
   tasks: TaskCard[];
-  runs: RunSummary[];
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
   linkMergedPullRequest: () => Promise<void>;
@@ -150,11 +146,7 @@ export type TasksStateContextValue = {
 };
 
 export type DelegationStateContextValue = {
-  events: RunEvent[];
   delegateTask: (taskId: string) => Promise<void>;
-  delegateRespond: (runId: string, input: BuildRespondInput) => Promise<void>;
-  delegateStop: (runId: string) => Promise<void>;
-  delegateCleanup: (runId: string, mode: "success" | "failure") => Promise<void>;
 };
 
 export type SpecStateContextValue = {
@@ -184,12 +176,10 @@ export type AgentStateContextValue = {
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
-    preloadedRuns?: import("@openducktor/contracts").RunSummary[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
-    preloadedRuns?: import("@openducktor/contracts").RunSummary[];
     preloadedRuntimeLists?: Map<
       import("@openducktor/contracts").RuntimeKind,
       import("@openducktor/contracts").RuntimeInstanceSummary[]

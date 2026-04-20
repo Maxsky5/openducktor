@@ -26,7 +26,6 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
             <KanbanColumn
               key={column.id}
               column={column}
-              runStateByTaskId={model.runStateByTaskId}
               taskSessionsByTaskId={model.taskSessionsByTaskId}
               activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
               taskActivityStateByTaskId={model.taskActivityStateByTaskId}
