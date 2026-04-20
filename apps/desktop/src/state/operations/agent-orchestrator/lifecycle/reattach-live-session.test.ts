@@ -55,7 +55,7 @@ const sessionStateFixture: AgentSessionState = {
 };
 
 describe("reattach-live-session", () => {
-  test("clears pending input when the live snapshot is empty", async () => {
+  test("does not resume an idle snapshot with no pending input", async () => {
     let state = sessionStateFixture;
     let resumed = false;
     let attachedSessionId: string | null = null;
@@ -98,10 +98,61 @@ describe("reattach-live-session", () => {
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
+    expect(reattached).toBe(false);
+    expect(resumed).toBe(false);
+    expect(attachedSessionId).toBeNull();
+    expect(state.pendingPermissions).toEqual(sessionStateFixture.pendingPermissions);
+  });
+
+  test("reattaches an idle snapshot when pending input is still live", async () => {
+    let state = sessionStateFixture;
+    let resumed = false;
+    let attachedSessionId: string | null = null;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: (sessionId, updater) => {
+        if (sessionId !== "session-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: (_repoPath, sessionId) => {
+        attachedSessionId = sessionId;
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
+      resumeMissingLiveSession: async () => {
+        resumed = true;
+      },
+      listLiveAgentSessions: async () => [
+        {
+          externalSessionId: "external-1",
+          title: "Session",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "idle" },
+          pendingPermissions: [{ requestId: "permission-2", permission: "read", patterns: [] }],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ],
+      isStaleRepoOperation: () => false,
+      toLiveSessionState: () => "idle",
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
     expect(reattached).toBe(true);
     expect(resumed).toBe(true);
     expect(attachedSessionId === "session-1").toBe(true);
-    expect(state.pendingPermissions).toEqual([]);
+    expect(state.pendingPermissions).toEqual([
+      { requestId: "permission-2", permission: "read", patterns: [] },
+    ]);
   });
 
   test("returns false when no live snapshot matches the persisted session", async () => {

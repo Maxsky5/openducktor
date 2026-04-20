@@ -8,7 +8,6 @@ import {
   buildQuestionRequest,
   buildSession,
   buildTodoItem,
-  TEST_ROLE_OPTIONS,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread } from "./agent-chat-thread";
 
@@ -24,20 +23,20 @@ const buildBaseModel = () => ({
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
   isWaitingForRuntimeReadiness: false,
-  roleOptions: TEST_ROLE_OPTIONS,
   readinessState: "ready" as const,
-  agentStudioReady: true,
+  isInteractionEnabled: true,
   blockedReason: "",
   isLoadingChecks: false,
   onRefreshChecks: () => {},
-  taskSelected: true,
-  canKickoffNewSession: false,
-  kickoffLabel: "Start Spec",
-  onKickoff: () => {},
+  emptyState: {
+    title: "Send a message to start a new session automatically.",
+  },
   isStarting: false,
   isSending: false,
   sessionAgentColors: {},
+  canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
+  canReplyToPermissions: true,
   isSubmittingPermissionByRequestId: {},
   permissionReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
@@ -220,8 +219,11 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           session: null,
-          taskSelected: false,
-          canKickoffNewSession: true,
+          emptyState: {
+            title: "Select a task to begin.",
+            actionLabel: "Start Spec",
+            onAction: () => {},
+          },
         },
       }),
     );
@@ -317,9 +319,13 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           session: null,
-          taskSelected: true,
           isStarting: true,
-          canKickoffNewSession: true,
+          emptyState: {
+            title: "Initializing session...",
+            actionLabel: "Start Spec",
+            onAction: () => {},
+            isActionPending: true,
+          },
         },
       }),
     );
@@ -334,7 +340,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           readinessState: "blocked",
-          agentStudioReady: false,
+          isInteractionEnabled: false,
           blockedReason: "OpenCode runtime is unavailable",
           session: null,
         },
@@ -351,7 +357,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           readinessState: "checking",
-          agentStudioReady: false,
+          isInteractionEnabled: false,
           isWaitingForRuntimeReadiness: true,
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
@@ -371,7 +377,6 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           readinessState: "ready",
-          agentStudioReady: true,
           isWaitingForRuntimeReadiness: true,
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
@@ -393,7 +398,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           readinessState: "checking",
-          agentStudioReady: false,
+          isInteractionEnabled: false,
           isWaitingForRuntimeReadiness: false,
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],

@@ -475,7 +475,7 @@ function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): 
               key={option.scope}
               value={option.scope}
               className={cn(
-                "inline-flex h-7 flex-1 cursor-pointer justify-center rounded-sm px-3 text-xs",
+                "inline-flex h-7 flex-1 cursor-pointer justify-center rounded-sm px-3 text-xs transition-none",
                 "border-none bg-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
                 "text-muted-foreground hover:bg-background/80 hover:text-foreground data-[state=active]:border-transparent",
               )}

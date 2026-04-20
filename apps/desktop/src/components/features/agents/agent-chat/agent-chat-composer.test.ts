@@ -7,7 +7,7 @@ import { buildModelSelection } from "./agent-chat-test-fixtures";
 const buildModel = () => ({
   taskId: "task-1",
   displayedSessionId: "session-1",
-  agentStudioReady: true,
+  isInteractionEnabled: true,
   isReadOnly: false,
   readOnlyReason: null,
   busySendBlockedReason: null,
@@ -86,12 +86,12 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("22.5%");
   });
 
-  test("stop button is enabled when session is working even if agentStudioReady is false", () => {
+  test("stop button is enabled when session is working even when sends are otherwise disabled", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          agentStudioReady: false,
+          isInteractionEnabled: false,
           canStopSession: true,
           isSessionWorking: true,
         },

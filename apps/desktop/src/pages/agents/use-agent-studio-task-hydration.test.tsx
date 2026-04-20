@@ -76,7 +76,13 @@ describe("useAgentStudioTaskHydration", () => {
   });
 
   test("ensures view readiness for a ready session that still needs history", async () => {
-    const ensureSessionReadyForView = mock(async (): Promise<boolean> => true);
+    let resolveReady: (() => void) | undefined;
+    const ensureSessionReadyForView = mock(
+      async (): Promise<boolean> =>
+        await new Promise<boolean>((resolve) => {
+          resolveReady = () => resolve(true);
+        }),
+    );
     const harness = createHookHarness(
       createBaseArgs({
         activeSession: createSession(),
@@ -93,7 +99,11 @@ describe("useAgentStudioTaskHydration", () => {
         sessionId: "session-1",
         repoReadinessState: "ready",
       });
+      await harness.waitFor((state) => state.isActiveSessionHistoryHydrating);
       expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(true);
+      if (resolveReady) {
+        resolveReady();
+      }
     } finally {
       await harness.unmount();
     }

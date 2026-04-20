@@ -223,12 +223,10 @@ describe("useAgentStudioPageModels", () => {
     expect(state.agentChatModel.thread.showThinkingMessages).toBe(false);
 
     state.agentChatModel.thread.onRefreshChecks();
-    state.agentChatModel.thread.onKickoff();
     await state.agentChatModel.composer.onSend(createComposerDraft("message"));
     state.agentChatModel.composer.onStopSession();
 
     expect(onRefreshChecks).toHaveBeenCalledTimes(1);
-    expect(onKickoff).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
 
@@ -871,7 +869,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const state = harness.getLatest();
-    expect(state.agentChatModel.thread.canKickoffNewSession).toBe(false);
+    expect(state.agentChatModel.thread.emptyState?.actionLabel).toBeUndefined();
     expect(state.agentChatModel.composer.isReadOnly).toBe(true);
     expect(state.agentChatModel.composer.readOnlyReason).toContain("Planner is unavailable");
 

@@ -1,21 +1,16 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RefObject } from "react";
+import type { AgentRole } from "@openducktor/core";
 import type {
-  AgentChatComposerModel,
-  AgentChatModel,
-  AgentChatThreadModel,
   AgentRoleOption,
   AgentStudioHeaderModel,
   AgentStudioTaskTabsModel,
   AgentStudioWorkspaceDocument,
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxGroup } from "@/components/ui/combobox";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
-import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {
@@ -104,171 +99,4 @@ export const buildAgentStudioWorkspaceSidebarModel = (args: {
   activeDocument: AgentStudioWorkspaceDocument | null;
 }): AgentStudioWorkspaceSidebarModel => ({
   activeDocument: args.activeDocument,
-});
-
-type AgentChatThreadModelArgs = {
-  activeSession: AgentSessionState | null;
-  isSessionWorking: boolean;
-  showThinkingMessages: boolean;
-  isSessionViewLoading: boolean;
-  isSessionHistoryLoading: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  roleOptions: AgentRoleOption[];
-  agentStudioReadinessState: AgentStudioReadinessState;
-  agentStudioReady: boolean;
-  agentStudioBlockedReason: string | null;
-  isLoadingChecks: boolean;
-  onRefreshChecks: () => void;
-  taskId: string;
-  canKickoffNewSession: boolean;
-  kickoffLabel: string;
-  onKickoff: () => void;
-  isStarting: boolean;
-  isSending: boolean;
-  activeSessionAgentColors: Record<string, string>;
-  isSubmittingQuestionByRequestId: Record<string, boolean>;
-  onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
-  sessionRuntimeDataError: string | null;
-  todoPanelCollapsed: boolean;
-  onToggleTodoPanel: () => void;
-  messagesContainerRef: RefObject<HTMLDivElement | null>;
-  scrollToBottomOnSendRef: React.MutableRefObject<(() => void) | null>;
-  syncBottomAfterComposerLayoutRef: React.MutableRefObject<(() => void) | null>;
-};
-
-type AgentChatComposerModelArgs = {
-  taskId: string;
-  displayedSessionId: string | null;
-  agentStudioReady: boolean;
-  isReadOnly: boolean;
-  readOnlyReason: string | null;
-  busySendBlockedReason: string | null;
-  pendingInlineCommentCount: number;
-  draftStateKey: string;
-  onSend: AgentChatComposerModel["onSend"];
-  isSending: boolean;
-  isStarting: boolean;
-  isSessionWorking: boolean;
-  isWaitingInput: boolean;
-  waitingInputPlaceholder?: string | null;
-  isModelSelectionPending: boolean;
-  selectedModelSelection: AgentModelSelection | null;
-  selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
-  isSelectionCatalogLoading: boolean;
-  supportsSlashCommands: boolean;
-  supportsFileSearch: boolean;
-  slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
-  slashCommands: AgentChatModel["composer"]["slashCommands"];
-  slashCommandsError: string | null;
-  isSlashCommandsLoading: boolean;
-  searchFiles: AgentChatModel["composer"]["searchFiles"];
-  agentOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
-  variantOptions: ComboboxOption[];
-  onSelectAgent: (agent: string) => void;
-  onSelectModel: (model: string) => void;
-  onSelectVariant: (variant: string) => void;
-  activeSessionAgentColors?: Record<string, string>;
-  contextUsage: AgentChatModel["composer"]["contextUsage"];
-  canStopSession: boolean;
-  onStopSession: () => void;
-  composerFormRef: RefObject<HTMLFormElement | null>;
-  composerEditorRef: RefObject<HTMLDivElement | null>;
-  onComposerEditorInput: () => void;
-  scrollToBottomOnSendRef: AgentChatModel["composer"]["scrollToBottomOnSendRef"];
-  syncBottomAfterComposerLayoutRef: AgentChatModel["composer"]["syncBottomAfterComposerLayoutRef"];
-};
-
-export const buildAgentChatThreadModel = (
-  args: AgentChatThreadModelArgs,
-): AgentChatThreadModel => ({
-  session: args.activeSession,
-  isSessionWorking: args.isSessionWorking,
-  showThinkingMessages: args.showThinkingMessages,
-  isSessionViewLoading: args.isSessionViewLoading,
-  isSessionHistoryLoading: args.isSessionHistoryLoading,
-  isWaitingForRuntimeReadiness: args.isWaitingForRuntimeReadiness,
-  roleOptions: args.roleOptions,
-  readinessState: args.agentStudioReadinessState,
-  agentStudioReady: args.agentStudioReady,
-  blockedReason: args.agentStudioBlockedReason,
-  isLoadingChecks: args.isLoadingChecks,
-  onRefreshChecks: args.onRefreshChecks,
-  taskSelected: Boolean(args.taskId),
-  canKickoffNewSession: args.canKickoffNewSession,
-  kickoffLabel: args.kickoffLabel,
-  onKickoff: args.onKickoff,
-  isStarting: args.isStarting,
-  isSending: args.isSending,
-  sessionAgentColors: args.activeSessionAgentColors,
-  isSubmittingQuestionByRequestId: args.isSubmittingQuestionByRequestId,
-  onSubmitQuestionAnswers: args.onSubmitQuestionAnswers,
-  isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
-  permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
-  onReplyPermission: args.onReplyPermission,
-  sessionRuntimeDataError: args.sessionRuntimeDataError,
-  todoPanelCollapsed: args.todoPanelCollapsed,
-  onToggleTodoPanel: args.onToggleTodoPanel,
-  messagesContainerRef: args.messagesContainerRef,
-  scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
-  syncBottomAfterComposerLayoutRef: args.syncBottomAfterComposerLayoutRef,
-});
-
-export const buildAgentChatComposerModel = (
-  args: AgentChatComposerModelArgs,
-): AgentChatComposerModel => ({
-  taskId: args.taskId,
-  displayedSessionId: args.displayedSessionId,
-  agentStudioReady: args.agentStudioReady,
-  isReadOnly: args.isReadOnly,
-  readOnlyReason: args.readOnlyReason,
-  busySendBlockedReason: args.busySendBlockedReason,
-  pendingInlineCommentCount: args.pendingInlineCommentCount,
-  draftStateKey: args.draftStateKey,
-  onSend: args.onSend,
-  isSending: args.isSending,
-  isStarting: args.isStarting,
-  isSessionWorking: args.isSessionWorking,
-  isWaitingInput: args.isWaitingInput,
-  waitingInputPlaceholder: args.waitingInputPlaceholder ?? null,
-  isModelSelectionPending: args.isModelSelectionPending,
-  selectedModelSelection: args.selectedModelSelection,
-  ...(args.selectedModelDescriptor !== undefined
-    ? { selectedModelDescriptor: args.selectedModelDescriptor }
-    : {}),
-  isSelectionCatalogLoading: args.isSelectionCatalogLoading,
-  supportsSlashCommands: args.supportsSlashCommands,
-  supportsFileSearch: args.supportsFileSearch,
-  slashCommandCatalog: args.slashCommandCatalog,
-  slashCommands: args.slashCommands,
-  slashCommandsError: args.slashCommandsError,
-  isSlashCommandsLoading: args.isSlashCommandsLoading,
-  searchFiles: args.searchFiles,
-  agentOptions: args.agentOptions,
-  modelOptions: args.modelOptions,
-  modelGroups: args.modelGroups,
-  variantOptions: args.variantOptions,
-  onSelectAgent: args.onSelectAgent,
-  onSelectModel: args.onSelectModel,
-  onSelectVariant: args.onSelectVariant,
-  ...(args.activeSessionAgentColors ? { sessionAgentColors: args.activeSessionAgentColors } : {}),
-  contextUsage: args.contextUsage,
-  canStopSession: args.canStopSession,
-  onStopSession: args.onStopSession,
-  composerFormRef: args.composerFormRef,
-  composerEditorRef: args.composerEditorRef,
-  onComposerEditorInput: args.onComposerEditorInput,
-  scrollToBottomOnSendRef: args.scrollToBottomOnSendRef,
-  syncBottomAfterComposerLayoutRef: args.syncBottomAfterComposerLayoutRef,
-});
-
-export const buildAgentChatModel = (
-  args: AgentChatThreadModelArgs & AgentChatComposerModelArgs,
-): AgentChatModel => ({
-  thread: buildAgentChatThreadModel(args),
-  composer: buildAgentChatComposerModel(args),
 });

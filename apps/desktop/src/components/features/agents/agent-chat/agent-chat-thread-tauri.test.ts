@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
 import { createElement, createRef } from "react";
-import { buildMessage, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
+import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { AgentChatThread } from "./agent-chat-thread";
 
 const buildBaseModel = () => ({
@@ -10,20 +10,17 @@ const buildBaseModel = () => ({
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
   isWaitingForRuntimeReadiness: false,
-  roleOptions: TEST_ROLE_OPTIONS,
   readinessState: "ready" as const,
-  agentStudioReady: true,
+  isInteractionEnabled: true,
   blockedReason: "",
   isLoadingChecks: false,
   onRefreshChecks: () => {},
-  taskSelected: true,
-  canKickoffNewSession: false,
-  kickoffLabel: "Start Spec",
-  onKickoff: () => {},
   isStarting: false,
   isSending: false,
   sessionAgentColors: {},
+  canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
+  canReplyToPermissions: true,
   isSubmittingPermissionByRequestId: {},
   permissionReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},

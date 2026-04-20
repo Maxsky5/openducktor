@@ -1,5 +1,5 @@
 import { type ComponentProps, memo, type ReactElement, type ReactNode } from "react";
-import { AgentChat } from "@/components/features/agents/agent-chat/agent-chat";
+import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -57,9 +57,11 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
   chatModel,
 }: {
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
-  chatModel: ComponentProps<typeof AgentChat>["model"];
+  chatModel: ComponentProps<typeof AgentChatSurface>["model"];
 }): ReactElement {
-  return <AgentChat header={<AgentStudioHeader model={chatHeaderModel} />} model={chatModel} />;
+  return (
+    <AgentChatSurface header={<AgentStudioHeader model={chatHeaderModel} />} model={chatModel} />
+  );
 });
 
 type AgentsPageModalContentProps = {
@@ -97,7 +99,7 @@ type AgentsPageLayoutProps = {
   rightPanelToggleModel: ComponentProps<typeof AgentStudioTaskTabs>["rightPanelToggleModel"];
   hasSelectedTask: boolean;
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
-  chatModel: ComponentProps<typeof AgentChat>["model"];
+  chatModel: ComponentProps<typeof AgentChatSurface>["model"];
   isRightPanelVisible: boolean;
   rightPanelContent: ReactNode;
   mergedPullRequestModal: ReactNode;

@@ -42,6 +42,19 @@ export function TaskDetailsSheetFooter({
         }).allActions.length > 0
       : false,
   );
+  const extraMenuActions = [
+    ...(onDeleteSelect
+      ? [
+          {
+            id: "delete-task",
+            label: "Delete task",
+            icon: <Trash2 className="size-3.5" />,
+            destructive: true,
+            onSelect: onDeleteSelect,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">
@@ -70,19 +83,7 @@ export function TaskDetailsSheetFooter({
           primaryClassName="font-semibold"
           emptyLabel="No available workflow action"
           hideWhenEmpty
-          {...(onDeleteSelect
-            ? {
-                extraMenuActions: [
-                  {
-                    id: "delete-task",
-                    label: "Delete task",
-                    icon: <Trash2 className="size-3.5" />,
-                    destructive: true,
-                    onSelect: onDeleteSelect,
-                  },
-                ],
-              }
-            : {})}
+          {...(extraMenuActions.length > 0 ? { extraMenuActions } : {})}
         />
       ) : null}
     </div>

@@ -1,11 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
-import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  buildAgentChatModel,
   buildAgentStudioHeaderModel,
   buildAgentStudioTaskTabsModel,
   buildAgentStudioWorkspaceSidebarModel,
@@ -273,106 +271,5 @@ describe("agents-page-view-model", () => {
     });
 
     expect(onReplyPermission).not.toHaveBeenCalled();
-  });
-
-  test("buildAgentChatModel composes thread and composer behavior", async () => {
-    const onRefreshChecks = mock(() => {});
-    const onKickoff = mock(() => {});
-    const onSubmitQuestionAnswers = mock(async () => {});
-    const onReplyPermission = mock(async () => {});
-    const onToggleTodoPanel = mock(() => {});
-    const onSend = mock((_draft?: unknown) => true);
-    const onStopSession = mock(() => {});
-
-    const model = buildAgentChatModel({
-      activeSession: createSession(),
-      isSessionWorking: true,
-      showThinkingMessages: true,
-      isSessionViewLoading: false,
-      isSessionHistoryLoading: false,
-      isWaitingForRuntimeReadiness: false,
-      roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
-      agentStudioReadinessState: "ready",
-      agentStudioReady: true,
-      agentStudioBlockedReason: "",
-      isLoadingChecks: false,
-      onRefreshChecks,
-      taskId: "",
-      displayedSessionId: "session-1",
-      canKickoffNewSession: true,
-      kickoffLabel: "Start Spec",
-      onKickoff,
-      isStarting: false,
-      isSending: false,
-      activeSessionAgentColors: {},
-      isSubmittingQuestionByRequestId: {},
-      isSubmittingPermissionByRequestId: {},
-      permissionReplyErrorByRequestId: {},
-      onReplyPermission,
-      onSubmitQuestionAnswers,
-      sessionRuntimeDataError: null,
-      todoPanelCollapsed: false,
-      onToggleTodoPanel,
-      messagesContainerRef: { current: null },
-      scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
-      syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-      draftStateKey: "draft-1",
-      isReadOnly: false,
-      readOnlyReason: null,
-      busySendBlockedReason: null,
-      pendingInlineCommentCount: 0,
-      onSend: async (draft) => onSend(draft),
-      isWaitingInput: false,
-      isModelSelectionPending: false,
-      selectedModelSelection: null,
-      isSelectionCatalogLoading: false,
-      supportsSlashCommands: true,
-      supportsFileSearch: true,
-      slashCommandCatalog: { commands: [] },
-      slashCommands: [],
-      slashCommandsError: null,
-      isSlashCommandsLoading: false,
-      searchFiles: async () => [],
-      agentOptions: [],
-      modelOptions: [],
-      modelGroups: [],
-      variantOptions: [],
-      onSelectAgent: () => {},
-      onSelectModel: () => {},
-      onSelectVariant: () => {},
-      contextUsage: { totalTokens: 10, contextWindow: 100 },
-      canStopSession: true,
-      onStopSession,
-      composerFormRef: { current: null },
-      composerEditorRef: { current: null },
-      onComposerEditorInput: () => {},
-    });
-
-    expect(model.thread.taskSelected).toBe(false);
-    expect(model.thread.isSessionWorking).toBe(true);
-    expect(model.thread.showThinkingMessages).toBe(true);
-    expect(model.thread.readinessState).toBe("ready");
-    expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
-    expect(model.composer.supportsSlashCommands).toBe(true);
-    expect(model.composer.supportsFileSearch).toBe(true);
-    expect(model.composer.canStopSession).toBe(true);
-    expect(model.composer.waitingInputPlaceholder).toBeNull();
-    expect(model.composer.sessionAgentColors).toEqual({});
-
-    model.thread.onRefreshChecks();
-    model.thread.onKickoff();
-    await model.thread.onSubmitQuestionAnswers("req-1", [["yes"]]);
-    await model.thread.onReplyPermission("req-1", "reject");
-    model.thread.onToggleTodoPanel();
-    await model.composer.onSend(createComposerDraft("message"));
-    model.composer.onStopSession();
-
-    expect(onRefreshChecks).toHaveBeenCalledTimes(1);
-    expect(onKickoff).toHaveBeenCalledTimes(1);
-    expect(onSubmitQuestionAnswers).toHaveBeenCalledWith("req-1", [["yes"]]);
-    expect(onReplyPermission).toHaveBeenCalledWith("req-1", "reject");
-    expect(onToggleTodoPanel).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onStopSession).toHaveBeenCalledTimes(1);
   });
 });

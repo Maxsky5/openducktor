@@ -78,6 +78,12 @@ type UseAgentStudioSessionActionsArgs = {
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
+  scheduleSelectionIntent?: (intent: {
+    taskId: string;
+    sessionId: string | null;
+    role: AgentRole;
+    scenario: AgentScenario | null;
+  }) => void;
   onContextSwitchIntent?: () => void;
 };
 
@@ -104,6 +110,7 @@ export function useAgentStudioSessionActions({
   setTaskTargetBranch,
   answerAgentQuestion,
   updateQuery,
+  scheduleSelectionIntent,
   onContextSwitchIntent,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
@@ -393,6 +400,12 @@ export function useAgentStudioSessionActions({
           role: nextRole,
           scenario,
         });
+        scheduleSelectionIntent?.({
+          taskId,
+          sessionId: null,
+          role: nextRole,
+          scenario,
+        });
         return;
       }
 
@@ -418,12 +431,19 @@ export function useAgentStudioSessionActions({
         role: session.role,
         scenario: session.scenario,
       });
+      scheduleSelectionIntent?.({
+        taskId: session.taskId,
+        sessionId: session.sessionId,
+        role: session.role,
+        scenario: session.scenario,
+      });
     },
     [
       activeSessionId,
       activeSessionRole,
       onContextSwitchIntent,
       scenario,
+      scheduleSelectionIntent,
       sessionsForTask,
       taskId,
       updateQuery,
@@ -458,11 +478,18 @@ export function useAgentStudioSessionActions({
         role: selectedSession.role,
         scenario: selectedSession.scenario,
       });
+      scheduleSelectionIntent?.({
+        taskId: selectedSession.taskId,
+        sessionId: selectedSession.sessionId,
+        role: selectedSession.role,
+        scenario: selectedSession.scenario,
+      });
     },
     [
       activeSessionId,
       activeSessionRole,
       onContextSwitchIntent,
+      scheduleSelectionIntent,
       sessionsForTask,
       taskId,
       updateQuery,

@@ -1,31 +1,34 @@
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useEffect, useState } from "react";
+import {
+  deriveAgentSessionViewLifecycle,
+  type SessionRepoReadinessState,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  type AgentStudioReadinessState,
-  deriveAgentStudioTaskHydrationState,
-} from "./agent-studio-task-hydration-state";
-import {
   type RuntimeAttachmentCandidate,
-  useAgentStudioRuntimeAttachmentRetry,
-} from "./use-agent-studio-runtime-attachment-retry";
+  useAgentChatRuntimeAttachmentRetry,
+} from "./use-agent-chat-runtime-attachment-retry";
 
-type UseAgentStudioTaskHydrationParams = {
+type UseAgentChatSessionHydrationParams = {
   activeWorkspace: ActiveWorkspace | null;
   activeTaskId: string;
   activeSession: AgentSessionState | null;
-  agentStudioReadinessState: AgentStudioReadinessState;
+  persistedRecords?: AgentSessionRecord[];
+  repoReadinessState: SessionRepoReadinessState;
   ensureSessionReadyForView: (input: {
     taskId: string;
     sessionId: string;
-    repoReadinessState: AgentStudioReadinessState;
+    repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
+    persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
   runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
 };
 
-type UseAgentStudioTaskHydrationResult = {
+export type AgentChatSessionHydrationResult = {
   isActiveTaskHydrated: boolean;
   isActiveTaskHydrationFailed: boolean;
   isActiveSessionHistoryHydrated: boolean;
@@ -34,15 +37,16 @@ type UseAgentStudioTaskHydrationResult = {
   isWaitingForRuntimeReadiness: boolean;
 };
 
-export function useAgentStudioTaskHydration({
+export function useAgentChatSessionHydration({
   activeWorkspace,
   activeTaskId,
   activeSession,
-  agentStudioReadinessState,
+  persistedRecords,
+  repoReadinessState,
   ensureSessionReadyForView,
   refreshRuntimeAttachmentSources,
   runtimeAttachmentCandidates,
-}: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
+}: UseAgentChatSessionHydrationParams): AgentChatSessionHydrationResult {
   const activeSessionId = activeSession?.sessionId ?? null;
   const [requestState, setRequestState] = useState<{
     sessionId: string | null;
@@ -52,12 +56,12 @@ export function useAgentStudioTaskHydration({
     activeWorkspace && activeTaskId && activeSessionId
       ? `${activeWorkspace.repoPath}::${activeTaskId}::${activeSessionId}`
       : null;
-  const lifecycle = deriveAgentStudioTaskHydrationState({
-    activeSession,
-    agentStudioReadinessState,
+  const lifecycle = deriveAgentSessionViewLifecycle({
+    session: activeSession,
+    repoReadinessState,
   });
 
-  useAgentStudioRuntimeAttachmentRetry({
+  useAgentChatRuntimeAttachmentRetry({
     activeTaskId,
     activeSessionId,
     shouldWaitForSessionRuntime: lifecycle.shouldWaitForRuntimeAttachment,
@@ -65,7 +69,8 @@ export function useAgentStudioTaskHydration({
     runtimeAttachmentCandidates,
     ensureSessionReadyForView,
     refreshRuntimeAttachmentSources,
-    repoReadinessState: agentStudioReadinessState,
+    repoReadinessState,
+    ...(persistedRecords ? { persistedRecords } : {}),
   });
 
   const isRequestFailed =
@@ -91,7 +96,8 @@ export function useAgentStudioTaskHydration({
     void ensureSessionReadyForView({
       taskId: activeTaskId,
       sessionId: activeSessionId,
-      repoReadinessState: agentStudioReadinessState,
+      repoReadinessState,
+      ...(persistedRecords ? { persistedRecords } : {}),
     })
       .then(() => {
         setRequestState((current) =>
@@ -110,9 +116,10 @@ export function useAgentStudioTaskHydration({
   }, [
     activeSessionId,
     activeTaskId,
-    agentStudioReadinessState,
     ensureSessionReadyForView,
     lifecycle.phase,
+    persistedRecords,
+    repoReadinessState,
     shouldEnsureSessionReady,
   ]);
 

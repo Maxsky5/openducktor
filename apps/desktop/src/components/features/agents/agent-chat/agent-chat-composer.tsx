@@ -91,7 +91,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   isSelectionCatalogLoading,
   selectorDisabled,
   taskId,
-  agentStudioReady,
+  isInteractionEnabled,
   isStarting,
   isReadOnly,
   onSelectAgent,
@@ -114,7 +114,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   isSelectionCatalogLoading: boolean;
   selectorDisabled: boolean;
   taskId: string;
-  agentStudioReady: boolean;
+  isInteractionEnabled: boolean;
   isStarting: boolean;
   isReadOnly: boolean;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
@@ -188,7 +188,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               !taskId ||
               variantOptions.length === 0 ||
               isStarting ||
-              !agentStudioReady ||
+              !isInteractionEnabled ||
               isReadOnly
             }
             onValueChange={onSelectVariant}
@@ -254,7 +254,7 @@ export const AgentChatComposer = forwardRef<
   const {
     taskId,
     displayedSessionId,
-    agentStudioReady,
+    isInteractionEnabled,
     isReadOnly,
     readOnlyReason,
     busySendBlockedReason,
@@ -300,7 +300,7 @@ export const AgentChatComposer = forwardRef<
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
   const isComposerInputDisabled =
-    !agentStudioReady ||
+    !isInteractionEnabled ||
     isReadOnly ||
     isModelSelectionPending ||
     isWaitingInput ||
@@ -397,7 +397,7 @@ export const AgentChatComposer = forwardRef<
     hasSlashAttachmentConflict ||
     !taskId ||
     !hasComposerSendContent(draft, pendingInlineCommentCount) ||
-    !agentStudioReady;
+    !isInteractionEnabled;
 
   latestDraftRef.current = draft;
   latestOnSendRef.current = onSend;
@@ -418,7 +418,7 @@ export const AgentChatComposer = forwardRef<
   }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
   const selectorDisabled =
-    !taskId || isSelectionCatalogLoading || isSubmitting || !agentStudioReady || isReadOnly;
+    !taskId || isSelectionCatalogLoading || isSubmitting || !isInteractionEnabled || isReadOnly;
 
   const composerAccentColor = useMemo(() => {
     const agentName = selectedModelSelection?.profileId;
@@ -644,7 +644,7 @@ export const AgentChatComposer = forwardRef<
             isSelectionCatalogLoading={isSelectionCatalogLoading}
             selectorDisabled={selectorDisabled}
             taskId={taskId}
-            agentStudioReady={agentStudioReady}
+            isInteractionEnabled={isInteractionEnabled}
             isStarting={isStarting}
             isReadOnly={isReadOnly}
             onSelectAgent={onSelectAgent}

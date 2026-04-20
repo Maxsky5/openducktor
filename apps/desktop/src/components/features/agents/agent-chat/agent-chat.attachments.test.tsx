@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { AgentChat } from "./agent-chat";
-import { buildModelSelection, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
+import { buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
+  mode: "interactive" as const,
   thread: {
     session: buildSession({
       status: "running" as const,
@@ -15,20 +16,17 @@ const buildModel = () => ({
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,
-    roleOptions: TEST_ROLE_OPTIONS,
     readinessState: "ready" as const,
-    agentStudioReady: true,
+    isInteractionEnabled: true,
     blockedReason: "",
     isLoadingChecks: false,
     onRefreshChecks: () => {},
-    taskSelected: true,
-    canKickoffNewSession: false,
-    kickoffLabel: "Start Spec",
-    onKickoff: () => {},
     isStarting: false,
     isSending: false,
     sessionAgentColors: {},
+    canSubmitQuestionAnswers: true,
     isSubmittingQuestionByRequestId: {},
+    canReplyToPermissions: true,
     isSubmittingPermissionByRequestId: {},
     permissionReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
@@ -43,7 +41,7 @@ const buildModel = () => ({
   composer: {
     taskId: "task-1",
     displayedSessionId: "session-1",
-    agentStudioReady: true,
+    isInteractionEnabled: true,
     isReadOnly: false,
     readOnlyReason: null,
     busySendBlockedReason: null,

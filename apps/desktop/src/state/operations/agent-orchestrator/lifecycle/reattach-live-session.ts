@@ -46,6 +46,14 @@ export const createReattachLiveSession = ({
   isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
+  const isAttachableLiveSnapshot = (snapshot: LiveAgentSessionSnapshot): boolean => {
+    if (snapshot.pendingPermissions.length > 0 || snapshot.pendingQuestions.length > 0) {
+      return true;
+    }
+
+    return snapshot.status.type !== "idle";
+  };
+
   const awaitUnlessStale = async <T>(
     operation: Promise<T>,
   ): Promise<T | typeof STALE_REPO_ABORT> => {
@@ -88,7 +96,7 @@ export const createReattachLiveSession = ({
     const liveSession = liveAgentSessions.find(
       (session) => session.externalSessionId === externalSessionId,
     );
-    if (!liveSession) {
+    if (!liveSession || !isAttachableLiveSnapshot(liveSession)) {
       return false;
     }
 
