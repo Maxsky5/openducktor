@@ -5,6 +5,7 @@ import type {
   RepoPromptOverrides,
   RuntimeKind,
   RuntimeRoute,
+  SettingsSnapshot,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import {
@@ -223,13 +224,19 @@ export const loadRepoPromptOverrides = async (
   options?: {
     queryClient?: QueryClient;
     hostClient?: RuntimeWorkspaceQueryHost;
+    loadRepoConfig?: () => Promise<RepoConfig>;
+    loadSettingsSnapshot?: () => Promise<SettingsSnapshot>;
   },
 ): Promise<RepoPromptOverrides> => {
   const queryClient = options?.queryClient ?? appQueryClient;
   const hostClient = options?.hostClient;
   const [repoConfig, snapshot] = await Promise.all([
-    loadRepoConfigFromQuery(queryClient, workspaceId, hostClient),
-    loadSettingsSnapshotFromQuery(queryClient, hostClient),
+    options?.loadRepoConfig
+      ? options.loadRepoConfig()
+      : loadRepoConfigFromQuery(queryClient, workspaceId, hostClient),
+    options?.loadSettingsSnapshot
+      ? options.loadSettingsSnapshot()
+      : loadSettingsSnapshotFromQuery(queryClient, hostClient),
   ]);
 
   return mergePromptOverrides({

@@ -8,7 +8,7 @@ import {
   type SettingsSnapshot,
   type TaskWorktreeSummary,
 } from "@openducktor/contracts";
-import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "../../shared/host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
@@ -358,7 +358,6 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("loads effective prompt overrides by merging global and repository values", async () => {
-    const queryClient = createQueryClient();
     const repoConfig = createPromptOverrideRepoConfig({
       "kickoff.planner_initial": {
         template: "repo planner {{task.id}}",
@@ -380,11 +379,8 @@ describe("agent-orchestrator-runtime", () => {
     });
 
     const overrides = await loadRepoPromptOverrides("/tmp/repo", {
-      queryClient,
-      hostClient: {
-        workspaceGetRepoConfig: async () => repoConfig,
-        workspaceGetSettingsSnapshot: async () => snapshot,
-      },
+      loadRepoConfig: async () => repoConfig,
+      loadSettingsSnapshot: async () => snapshot,
     });
 
     expect(overrides["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
@@ -393,7 +389,6 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("resolves effective overrides deterministically for every prompt template id", async () => {
-    const queryClient = createQueryClient();
     const globalPromptOverrides = Object.fromEntries(
       agentPromptTemplateIdValues.map((templateId) => [
         templateId,
@@ -416,12 +411,8 @@ describe("agent-orchestrator-runtime", () => {
     );
 
     const overrides = await loadRepoPromptOverrides("/tmp/repo", {
-      queryClient,
-      hostClient: {
-        workspaceGetRepoConfig: async () => createPromptOverrideRepoConfig(repoPromptOverrides),
-        workspaceGetSettingsSnapshot: async () =>
-          createPromptOverrideSettingsSnapshot(globalPromptOverrides),
-      },
+      loadRepoConfig: async () => createPromptOverrideRepoConfig(repoPromptOverrides),
+      loadSettingsSnapshot: async () => createPromptOverrideSettingsSnapshot(globalPromptOverrides),
     });
 
     for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
