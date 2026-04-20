@@ -59,7 +59,7 @@ describe("agent-orchestrator/handlers/start-session-runtime", () => {
         ctx: createStartSessionContextFixture({ role: "qa" }),
         runtime: createRuntimeDependenciesFixture({
           resolveBuildContinuationTarget: async () =>
-            createBuildContinuationTargetFixture("/tmp/repo/worktree", "builder_session"),
+            createBuildContinuationTargetFixture("/tmp/repo/worktree"),
         }),
       }),
     ).resolves.toEqual({

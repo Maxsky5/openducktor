@@ -230,6 +230,6 @@ impl<'a> PullRequestWorkflowService<'a> {
 
 fn can_skip_relinked_pull_request_cleanup(message: &str) -> bool {
     message.contains("requires a builder worktree for task")
-        || message.contains("the latest builder workspace is detached")
+        || message.contains("the builder worktree is detached")
         || message.contains("requires a builder branch name")
 }

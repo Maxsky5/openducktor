@@ -1,4 +1,4 @@
-import type { BuildContinuationTarget } from "@openducktor/contracts";
+import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   RuntimeDependencies,
@@ -9,10 +9,8 @@ import type {
 
 export const createBuildContinuationTargetFixture = (
   workingDirectory: string,
-  source: BuildContinuationTarget["source"] = "active_build_run",
-): BuildContinuationTarget => ({
+): TaskWorktreeSummary => ({
   workingDirectory,
-  source,
 });
 
 export const createStartSessionContextFixture = (
@@ -72,7 +70,6 @@ export const createBuildSessionFixture = (overrides = {}) =>
       startedAt: "2026-02-22T08:20:00.000Z",
       runtimeKind: "opencode",
       runtimeId: null,
-      runId: null,
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
       selectedModel: null,

@@ -3,7 +3,6 @@ import type {
   GitTargetBranch,
   PullRequest,
   RepoStoreHealth,
-  RunSummary,
   TaskCard,
   TaskCreateInput,
   TaskStatus,
@@ -35,7 +34,6 @@ type UseTaskOperationsArgs = {
 
 type UseTaskOperationsResult = {
   tasks: TaskCard[];
-  runs: RunSummary[];
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
@@ -652,7 +650,6 @@ export function useTaskOperations({
   }, []);
 
   const tasks = activeRepoPath ? (repoTaskDataQuery.data?.tasks ?? []) : [];
-  const runs = activeRepoPath ? (repoTaskDataQuery.data?.runs ?? []) : [];
   const isForegroundLoadingTasks =
     isManualLoadingTasks || (activeRepoPath !== null && repoTaskDataQuery.isPending);
   const isRefreshingTasksInBackground =
@@ -661,7 +658,6 @@ export function useTaskOperations({
 
   return {
     tasks,
-    runs,
     isForegroundLoadingTasks,
     isRefreshingTasksInBackground,
     isLoadingTasks,

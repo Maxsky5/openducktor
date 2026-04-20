@@ -7,7 +7,6 @@ use host_domain::{
     RepoRuntimeStartupStage, RepoRuntimeStartupStatus, SystemOpenInToolInfo,
 };
 
-pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
 pub type DevServerEmitter = Arc<dyn Fn(DevServerEvent) + Send + Sync + 'static>;
 
 pub(super) struct RuntimeEnsureFlight {
@@ -150,7 +149,6 @@ pub struct AppService {
     pub(super) config_store: AppConfigStore,
     pub(super) runtime_config_store: RuntimeConfigStore,
     pub(super) runtime_registry: AppRuntimeRegistry,
-    pub(super) runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
     pub(super) repo_runtime_health_flights:
@@ -173,16 +171,6 @@ pub struct AppService {
     pub(super) hook_trust_challenges: Arc<Mutex<HashMap<String, HookTrustChallenge>>>,
     pub(super) dev_server_groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
     pub(super) mcp_bridge_process: Arc<Mutex<Option<McpBridgeProcess>>>,
-}
-
-pub(crate) struct RunProcess {
-    pub(super) summary: RunSummary,
-    pub(super) child: Option<Child>,
-    pub(super) _runtime_process_guard: Option<RuntimeProcessGuard>,
-    pub(super) repo_path: String,
-    pub(super) task_id: String,
-    pub(super) worktree_path: String,
-    pub(super) repo_config: RepoConfig,
 }
 
 pub(crate) struct AgentRuntimeProcess {
@@ -281,7 +269,6 @@ impl AppService {
             config_store,
             runtime_config_store,
             runtime_registry,
-            runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
             repo_runtime_health_flights: Arc::new(Mutex::new(HashMap::new())),

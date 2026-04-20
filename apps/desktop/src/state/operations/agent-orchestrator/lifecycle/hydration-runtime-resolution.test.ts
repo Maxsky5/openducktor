@@ -67,7 +67,6 @@ describe("createHydrationRuntimeResolver", () => {
     }
 
     expect(result.runtimeId).toBe("runtime-1");
-    expect(result.runId).toBeNull();
     expect(result.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4555",
@@ -89,7 +88,6 @@ describe("createHydrationRuntimeResolver", () => {
     }
 
     expect(result.runtimeId).toBe("runtime-1");
-    expect(result.runId).toBeNull();
     expect(result.runtimeConnection).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4555",
@@ -127,7 +125,6 @@ describe("createHydrationRuntimeResolver", () => {
     }
 
     expect(result.runtimeId).toBeNull();
-    expect(result.runId).toBeNull();
     expect(result.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:9999",
@@ -160,7 +157,6 @@ describe("createHydrationRuntimeResolver", () => {
     }
 
     expect(result.runtimeId).toBeNull();
-    expect(result.runId).toBeNull();
     expect(result.runtimeConnection).toEqual({
       type: "stdio",
       workingDirectory,

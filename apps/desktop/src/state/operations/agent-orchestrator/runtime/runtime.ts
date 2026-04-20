@@ -1,11 +1,11 @@
 import type {
-  BuildContinuationTarget,
+  BuildSessionBootstrap,
   GitTargetBranch,
   RepoConfig,
   RepoPromptOverrides,
-  RunSummary,
   RuntimeKind,
   RuntimeRoute,
+  TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import {
   type AgentModelSelection,
@@ -21,13 +21,11 @@ import { host } from "../../shared/host";
 import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { MISSING_BUILD_TARGET_ERROR } from "../handlers/start-session-constants";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { normalizeWorkingDirectory, runningStates } from "../support/core";
 
 export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;
   kind?: string;
   runtimeId: string | null;
-  runId: string | null;
   runtimeConnection?: AgentRuntimeConnection;
   runtimeRoute: RuntimeRoute | null;
   workingDirectory: string;
@@ -164,7 +162,6 @@ export type TaskDocuments = {
 };
 
 type EnsureRuntimeDependencies = {
-  runsRef: { current: RunSummary[] };
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 };
 
@@ -232,8 +229,8 @@ export const loadRepoPromptOverrides = async (
 export const loadBuildContinuationTarget = async (
   repoPath: string,
   taskId: string,
-): Promise<BuildContinuationTarget | null> => {
-  return host.buildContinuationTargetGet(repoPath, taskId);
+): Promise<TaskWorktreeSummary | null> => {
+  return host.taskWorktreeGet(repoPath, taskId);
 };
 
 export const loadRepoDefaultRuntimeKind = async (
@@ -245,7 +242,7 @@ export const loadRepoDefaultRuntimeKind = async (
   return roleDefault?.runtimeKind ?? config?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND;
 };
 
-export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeDependencies) => {
+export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependencies) => {
   return async (
     repoPath: string,
     taskId: string,
@@ -257,7 +254,6 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     },
   ): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
-    const normalizedTargetWorkingDirectory = normalizeWorkingDirectory(targetWorkingDirectory);
     const workspaceId = options?.workspaceId?.trim() ?? "";
     const runtimeKind = options?.runtimeKind?.trim()
       ? options.runtimeKind
@@ -268,14 +264,12 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           })();
     const toRuntimeInfo = (input: {
       runtimeId: string | null;
-      runId: string | null;
       runtimeRoute: RuntimeRoute;
       runtimeConnection: AgentRuntimeConnection;
       workingDirectory: string;
     }): RuntimeInfo => ({
       runtimeKind,
       runtimeId: input.runtimeId,
-      runId: input.runId,
       runtimeRoute: input.runtimeRoute,
       runtimeConnection: requireRuntimeConnectionSupport(
         runtimeKind,
@@ -287,47 +281,6 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
 
     if (role === "build") {
       if (targetWorkingDirectory) {
-        const matchingRun = runsRef.current.find(
-          (entry) =>
-            entry.repoPath === repoPath &&
-            entry.taskId === taskId &&
-            runningStates.has(entry.state) &&
-            normalizeWorkingDirectory(entry.worktreePath) === normalizedTargetWorkingDirectory,
-        );
-        if (matchingRun) {
-          const { runtimeConnection } = resolveRuntimeRouteConnection(
-            matchingRun.runtimeRoute,
-            matchingRun.worktreePath,
-          );
-          return toRuntimeInfo({
-            runtimeId: null,
-            runId: matchingRun.runId,
-            runtimeRoute: matchingRun.runtimeRoute,
-            runtimeConnection,
-            workingDirectory: matchingRun.worktreePath,
-          });
-        }
-
-        const taskRun = runsRef.current.find(
-          (entry) =>
-            entry.repoPath === repoPath &&
-            entry.taskId === taskId &&
-            runningStates.has(entry.state),
-        );
-        if (taskRun && normalizedTargetWorkingDirectory === normalizeWorkingDirectory(repoPath)) {
-          const { runtimeConnection } = resolveRuntimeRouteConnection(
-            taskRun.runtimeRoute,
-            taskRun.worktreePath,
-          );
-          return toRuntimeInfo({
-            runtimeId: null,
-            runId: taskRun.runId,
-            runtimeRoute: taskRun.runtimeRoute,
-            runtimeConnection,
-            workingDirectory: taskRun.worktreePath,
-          });
-        }
-
         const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
           repoPath,
           runtimeKind,
@@ -340,71 +293,39 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         );
         return toRuntimeInfo({
           runtimeId: runtime.runtimeId,
-          runId: null,
           runtimeRoute: runtime.runtimeRoute,
           runtimeConnection,
           workingDirectory: targetWorkingDirectory,
         });
       }
 
-      let run = runsRef.current.find(
-        (entry) =>
-          entry.repoPath === repoPath && entry.taskId === taskId && runningStates.has(entry.state),
+      const bootstrap: BuildSessionBootstrap = await host.buildStart(repoPath, taskId, runtimeKind);
+      runOrchestratorSideEffect(
+        "runtime-refresh-task-data-after-build-start",
+        refreshTaskData(repoPath),
+        {
+          tags: { repoPath, taskId, role },
+        },
       );
-      if (!run) {
-        run = await host.buildStart(repoPath, taskId, runtimeKind);
-        runOrchestratorSideEffect(
-          "runtime-refresh-task-data-after-build-start",
-          refreshTaskData(repoPath),
-          {
-            tags: { repoPath, taskId, role },
-          },
-        );
-      }
       const { runtimeConnection } = resolveRuntimeRouteConnection(
-        run.runtimeRoute,
-        run.worktreePath,
+        bootstrap.runtimeRoute,
+        bootstrap.workingDirectory,
       );
       return toRuntimeInfo({
         runtimeId: null,
-        runId: run.runId,
-        runtimeRoute: run.runtimeRoute,
+        runtimeRoute: bootstrap.runtimeRoute,
         runtimeConnection,
-        workingDirectory: run.worktreePath,
+        workingDirectory: bootstrap.workingDirectory,
       });
     }
 
     if (role === "qa") {
       const continuationTarget =
-        targetWorkingDirectory.length === 0
-          ? await host.buildContinuationTargetGet(repoPath, taskId)
-          : null;
+        targetWorkingDirectory.length === 0 ? await host.taskWorktreeGet(repoPath, taskId) : null;
       const workingDirectory = targetWorkingDirectory || continuationTarget?.workingDirectory;
       if (!workingDirectory) {
         throw new Error(MISSING_BUILD_TARGET_ERROR);
       }
-      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-      const matchingRun = runsRef.current.find(
-        (entry) =>
-          entry.repoPath === repoPath &&
-          entry.taskId === taskId &&
-          runningStates.has(entry.state) &&
-          normalizeWorkingDirectory(entry.worktreePath) === normalizedWorkingDirectory,
-      );
-      if (matchingRun) {
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          matchingRun.runtimeRoute,
-          matchingRun.worktreePath,
-        );
-        return toRuntimeInfo({
-          runtimeId: null,
-          runId: matchingRun.runId,
-          runtimeRoute: matchingRun.runtimeRoute,
-          runtimeConnection,
-          workingDirectory: matchingRun.worktreePath,
-        });
-      }
-
       const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
         repoPath,
         runtimeKind,
@@ -417,7 +338,6 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       );
       return toRuntimeInfo({
         runtimeId: runtime.runtimeId,
-        runId: null,
         runtimeRoute: runtime.runtimeRoute,
         runtimeConnection,
         workingDirectory,
@@ -437,7 +357,6 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     );
     return toRuntimeInfo({
       runtimeId: runtime.runtimeId,
-      runId: null,
       runtimeRoute: runtime.runtimeRoute,
       runtimeConnection,
       workingDirectory,

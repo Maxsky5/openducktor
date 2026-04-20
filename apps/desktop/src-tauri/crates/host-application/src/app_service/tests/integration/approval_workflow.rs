@@ -996,7 +996,7 @@ fn task_approval_context_still_errors_for_detached_builder_branch() -> Result<()
         .expect_err("detached builder branch should still fail");
     assert!(error
         .to_string()
-        .contains("requires a builder branch, but the latest builder workspace is detached"));
+        .contains("requires a builder branch, but the builder worktree is detached"));
 
     let _ = fs::remove_dir_all(root);
     Ok(())

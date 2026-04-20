@@ -657,7 +657,8 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
         config_store,
     );
     let repo_path = repo.to_string_lossy().to_string();
-    let worktree_path = repo.join(".openducktor-worktree");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
     fs::create_dir_all(&worktree_path).expect("create worktree path");
     let worktree_path = worktree_path.to_string_lossy().to_string();
 
@@ -675,6 +676,7 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
                     .workspace_select(workspace.as_str())
                     .expect("workspace should load"),
                 RepoConfig {
+                    worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                     trusted_hooks: true,
                     dev_servers: vec![
                         RepoDevServerScript {

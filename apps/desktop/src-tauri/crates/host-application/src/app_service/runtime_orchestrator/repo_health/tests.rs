@@ -4,6 +4,7 @@ use crate::app_service::runtime_registry::{
     ResolvedRuntimeMcpStatus, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
 };
 use crate::app_service::test_support::builtin_opencode_runtime_descriptor;
+use host_domain::RuntimeRoute;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;

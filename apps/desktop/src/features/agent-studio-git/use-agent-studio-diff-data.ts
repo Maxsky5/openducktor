@@ -12,28 +12,28 @@ import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-re
 
 export function useAgentStudioDiffData({
   repoPath,
+  taskId,
   sessionWorkingDirectory,
-  sessionRunId,
   defaultTargetBranch,
   preconditionError = null,
   branchIdentityKey = null,
   enablePolling,
-  runCompletionRecoverySignal,
+  worktreeRecoverySignal,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const targetBranch = canonicalTargetBranch(defaultTargetBranch);
   const effectiveRepoPath = preconditionError ? null : repoPath;
   const {
     worktreePath,
-    worktreeResolutionRunId,
+    worktreeResolutionTaskId,
     shouldBlockDiffLoading,
     isWorktreeResolutionResolving,
     worktreeResolutionError,
     retryWorktreeResolution,
   } = useAgentStudioWorktreeResolution({
     repoPath: effectiveRepoPath,
+    taskId,
     sessionWorkingDirectory,
-    sessionRunId,
-    ...(runCompletionRecoverySignal == null ? {} : { runCompletionRecoverySignal }),
+    ...(worktreeRecoverySignal == null ? {} : { worktreeRecoverySignal }),
   });
 
   const requestContextKey = useMemo(() => {
@@ -41,10 +41,10 @@ export function useAgentStudioDiffData({
       return null;
     }
 
-    return `${effectiveRepoPath}::${targetBranch}::${worktreePath ?? ""}::${worktreeResolutionRunId ?? ""}::${
+    return `${effectiveRepoPath}::${targetBranch}::${worktreePath ?? ""}::${worktreeResolutionTaskId ?? ""}::${
       branchIdentityKey ?? ""
     }`;
-  }, [branchIdentityKey, effectiveRepoPath, targetBranch, worktreePath, worktreeResolutionRunId]);
+  }, [branchIdentityKey, effectiveRepoPath, targetBranch, worktreePath, worktreeResolutionTaskId]);
 
   const {
     activeScopeState,

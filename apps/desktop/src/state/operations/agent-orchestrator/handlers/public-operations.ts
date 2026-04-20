@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -48,12 +47,10 @@ type CreatePublicOperationsArgs = {
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
     preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;

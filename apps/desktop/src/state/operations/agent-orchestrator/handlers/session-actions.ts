@@ -1,11 +1,11 @@
 import type {
   AgentSessionRecord,
   AgentSessionStopTarget,
-  BuildContinuationTarget,
   GitTargetBranch,
   RepoPromptOverrides,
   RuntimeKind,
   TaskCard,
+  TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
@@ -54,7 +54,7 @@ type SessionActionsDependencies = {
   resolveBuildContinuationTarget?: (
     repoPath: string,
     taskId: string,
-  ) => Promise<BuildContinuationTarget | null>;
+  ) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;

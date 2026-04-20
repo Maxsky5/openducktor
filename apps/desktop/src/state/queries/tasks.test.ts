@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 import {
@@ -64,7 +64,6 @@ describe("tasks query cache helpers", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
       tasks: [taskFixture],
-      runs: [] satisfies RunSummary[],
     });
     queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [taskFixture]);
     queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
@@ -75,7 +74,6 @@ describe("tasks query cache helpers", () => {
 
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
-      runs: RunSummary[];
     }>(taskQueryKeys.repoData("/repo"));
     const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
       taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
@@ -96,7 +94,6 @@ describe("tasks query cache helpers", () => {
           agentSessions: [sessionFixture],
         },
       ],
-      runs: [] satisfies RunSummary[],
     });
     queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
       {
@@ -120,7 +117,6 @@ describe("tasks query cache helpers", () => {
 
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
-      runs: RunSummary[];
     }>(taskQueryKeys.repoData("/repo"));
     const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
       taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
@@ -132,66 +128,30 @@ describe("tasks query cache helpers", () => {
     expect(kanbanTasks?.[0]?.agentSessions).toEqual([updatedSession]);
   });
 
-  test("repoVisibleTasksQueryOptions loads visible tasks without requesting runs", async () => {
+  test("repoVisibleTasksQueryOptions loads visible tasks", async () => {
     const queryClient = new QueryClient();
     const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
-    const originalRunsList = host.runsList;
-    const runsList = mock(async (): Promise<RunSummary[]> => {
-      throw new Error("runs should not be requested");
-    });
 
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
-    try {
-      const tasks = await queryClient.fetchQuery(repoVisibleTasksQueryOptions("/repo"));
+    const tasks = await queryClient.fetchQuery(repoVisibleTasksQueryOptions("/repo"));
 
-      expect(tasks).toEqual([taskFixture]);
-      expect(tasksList).toHaveBeenCalledWith("/repo");
-      expect(runsList).not.toHaveBeenCalled();
-    } finally {
-      host.runsList = originalRunsList;
-    }
+    expect(tasks).toEqual([taskFixture]);
+    expect(tasksList).toHaveBeenCalledWith("/repo");
   });
 
-  test("loadRepoTaskDataFromQuery prepopulates visible tasks and runs caches", async () => {
+  test("loadRepoTaskDataFromQuery prepopulates visible tasks cache", async () => {
     const queryClient = new QueryClient();
-    const originalRunsList = host.runsList;
     const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
-    const runsList = mock(
-      async (): Promise<RunSummary[]> => [
-        {
-          runId: "run-1",
-          runtimeKind: "opencode",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4000" },
-          repoPath: "/repo",
-          taskId: "task-1",
-          branch: "main",
-          worktreePath: "/tmp/worktree",
-          port: 4000,
-          state: "running",
-          lastMessage: null,
-          startedAt: "2026-03-22T12:00:00.000Z",
-        },
-      ],
-    );
 
     host.tasksList = tasksList;
-    host.runsList = runsList;
 
-    try {
-      const repoTaskData = await loadRepoTaskDataFromQuery(queryClient, "/repo");
+    const repoTaskData = await loadRepoTaskDataFromQuery(queryClient, "/repo");
 
-      expect(repoTaskData.tasks).toEqual([taskFixture]);
-      expect(queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"))).toEqual([
-        taskFixture,
-      ]);
-      expect(queryClient.getQueryData<RunSummary[]>(taskQueryKeys.runs("/repo"))).toEqual(
-        repoTaskData.runs,
-      );
-    } finally {
-      host.runsList = originalRunsList;
-    }
+    expect(repoTaskData.tasks).toEqual([taskFixture]);
+    expect(queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"))).toEqual([
+      taskFixture,
+    ]);
   });
 
   test("refetchActiveKanbanQueries refreshes only active kanban queries for the target repo", async () => {

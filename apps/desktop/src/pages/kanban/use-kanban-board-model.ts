@@ -1,4 +1,4 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
@@ -22,16 +22,6 @@ const shouldDisplayKanbanTaskSession = (session: AgentSessionSummary): boolean =
   }
 
   return ACTIVE_SESSION_STATUS.has(session.status);
-};
-
-const compareRunRecency = (left: RunSummary, right: RunSummary): number => {
-  if (left.startedAt !== right.startedAt) {
-    return left.startedAt > right.startedAt ? -1 : 1;
-  }
-  if (left.runId === right.runId) {
-    return 0;
-  }
-  return left.runId > right.runId ? -1 : 1;
 };
 
 const compareTaskSessionOrder = (left: AgentSessionSummary, right: AgentSessionSummary): number => {
@@ -113,21 +103,6 @@ export const buildActiveTaskSessionContextByTaskId = (
         presentationState: toKanbanSessionPresentationState(session),
       },
     ]),
-  );
-};
-
-export const buildRunStateByTaskId = (runs: RunSummary[]): Map<string, RunSummary["state"]> => {
-  const latestRunByTaskId = new Map<string, RunSummary>();
-
-  for (const run of runs) {
-    const current = latestRunByTaskId.get(run.taskId);
-    if (!current || compareRunRecency(run, current) < 0) {
-      latestRunByTaskId.set(run.taskId, run);
-    }
-  }
-
-  return new Map(
-    Array.from(latestRunByTaskId.entries()).map(([taskId, run]) => [taskId, run.state]),
   );
 };
 
@@ -222,7 +197,6 @@ type UseKanbanBoardModelArgs = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   tasks: TaskCard[];
-  runs: RunSummary[];
   sessions: AgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
@@ -244,7 +218,6 @@ export function useKanbanBoardModel({
   isLoadingTasks,
   isSwitchingWorkspace,
   tasks,
-  runs,
   sessions,
   onOpenDetails,
   onDelegate,
@@ -258,8 +231,6 @@ export function useKanbanBoardModel({
   onResetImplementation,
 }: UseKanbanBoardModelArgs): KanbanPageContentModel {
   const columns = useMemo(() => mapToKanbanColumns(tasks), [tasks]);
-
-  const runStateByTaskId = useMemo(() => buildRunStateByTaskId(runs), [runs]);
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
 
@@ -286,7 +257,6 @@ export function useKanbanBoardModel({
     isLoadingTasks,
     isSwitchingWorkspace,
     columns: columnsWithSortedTasks,
-    runStateByTaskId,
     taskSessionsByTaskId,
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,

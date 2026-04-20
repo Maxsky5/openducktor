@@ -50,9 +50,6 @@ impl<'a> ImplementationResetService<'a> {
             context.repo.tasks[index] = updated.clone();
         }
 
-        self.service
-            .clear_task_runs(context.repo.repo_path.as_str(), task_id.as_str())?;
-
         Ok(self.service.enrich_task(updated, &context.repo.tasks))
     }
 

@@ -512,7 +512,7 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("reuse confirm does not wait for repo settings when the reused session has no saved model", async () => {
-    const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+    const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const loadRepoSettings = mock(
       async () =>
         ({
@@ -543,11 +543,11 @@ describe("useKanbanSessionStartFlow", () => {
       startAgentSession,
     });
 
-    const buildContinuationTargetGet = mock(async () => ({
+    const taskWorktreeGet = mock(async () => ({
       workingDirectory: "/repo/worktrees/task-1",
       source: "builder_session" as const,
     }));
-    host.buildContinuationTargetGet = buildContinuationTargetGet;
+    host.taskWorktreeGet = taskWorktreeGet;
 
     try {
       await harness.mount();
@@ -572,7 +572,7 @@ describe("useKanbanSessionStartFlow", () => {
       });
 
       expect(loadRepoSettings).not.toHaveBeenCalled();
-      expect(buildContinuationTargetGet).not.toHaveBeenCalled();
+      expect(taskWorktreeGet).not.toHaveBeenCalled();
       expect(startAgentSession).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: "TASK-1",
@@ -585,7 +585,7 @@ describe("useKanbanSessionStartFlow", () => {
 
       startSessionDeferred.resolve("session-new");
     } finally {
-      host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+      host.taskWorktreeGet = originalBuildContinuationTargetGet;
       await harness.unmount();
     }
   });

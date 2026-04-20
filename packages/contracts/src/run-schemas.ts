@@ -102,17 +102,6 @@ export const beadsCheckSchema = z.object({
 });
 export type BeadsCheck = z.infer<typeof beadsCheckSchema>;
 
-export const runStateSchema = z.enum([
-  "starting",
-  "running",
-  "blocked",
-  "awaiting_done_confirmation",
-  "completed",
-  "failed",
-  "stopped",
-]);
-export type RunState = z.infer<typeof runStateSchema>;
-
 export const runtimeRouteSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -128,32 +117,20 @@ export const runtimeRouteSchema = z.discriminatedUnion("type", [
 ]);
 export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
 
-export const runSummarySchema = z.object({
-  runId: z.string(),
+export const buildSessionBootstrapSchema = z.object({
   runtimeKind: runtimeKindSchema,
   runtimeRoute: runtimeRouteSchema,
-  repoPath: z.string(),
-  taskId: z.string(),
-  branch: z.string(),
-  worktreePath: z.string(),
-  port: z.number().int().positive().nullable().optional(),
-  state: runStateSchema,
-  lastMessage: z.string().nullable(),
-  startedAt: z.string(),
+  workingDirectory: z.string().trim().min(1),
 });
-export type RunSummary = z.infer<typeof runSummarySchema>;
+export type BuildSessionBootstrap = z.infer<typeof buildSessionBootstrapSchema>;
 
 export const runtimeInstanceSummaryRoleSchema = z.literal("workspace");
 export type RuntimeInstanceSummaryRole = z.infer<typeof runtimeInstanceSummaryRoleSchema>;
 
-export const buildContinuationTargetSourceSchema = z.enum(["active_build_run", "builder_session"]);
-export type BuildContinuationTargetSource = z.infer<typeof buildContinuationTargetSourceSchema>;
-
-export const buildContinuationTargetSchema = z.object({
+export const taskWorktreeSummarySchema = z.object({
   workingDirectory: z.string().trim().min(1),
-  source: buildContinuationTargetSourceSchema,
 });
-export type BuildContinuationTarget = z.infer<typeof buildContinuationTargetSchema>;
+export type TaskWorktreeSummary = z.infer<typeof taskWorktreeSummarySchema>;
 
 export const runtimeInstanceSummarySchema = z.object({
   kind: runtimeKindSchema,
@@ -200,7 +177,7 @@ export const repoRuntimeHealthObservationSchema = z.enum([
   "observing_existing_startup",
   "started_by_diagnostics",
   "restarted_for_mcp",
-  "restart_skipped_active_run",
+  "restart_skipped_active_session",
 ]);
 export type RepoRuntimeHealthObservation = z.infer<typeof repoRuntimeHealthObservationSchema>;
 
@@ -247,63 +224,3 @@ export const repoRuntimeHealthCheckSchema = z.object({
   mcp: repoRuntimeHealthMcpSchema.nullable(),
 });
 export type RepoRuntimeHealthCheck = z.infer<typeof repoRuntimeHealthCheckSchema>;
-
-export const runEventSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("run_started"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("agent_thought"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("tool_execution"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("permission_required"),
-    runId: z.string(),
-    message: z.string(),
-    command: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("post_hook_started"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("post_hook_failed"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("ready_for_manual_done_confirmation"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-  z.object({
-    type: z.literal("run_finished"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-    success: z.boolean(),
-  }),
-  z.object({
-    type: z.literal("error"),
-    runId: z.string(),
-    message: z.string(),
-    timestamp: z.string(),
-  }),
-]);
-export type RunEvent = z.infer<typeof runEventSchema>;

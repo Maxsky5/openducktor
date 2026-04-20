@@ -13,7 +13,7 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 const actualHostClientModule = await import("@/lib/host-client");
 const actualSonnerModule = await import("sonner");
 
-let subscribedRunListener: ((payload: unknown) => void) | null = null;
+let _subscribedRunListener: ((payload: unknown) => void) | null = null;
 let subscribedTaskListener: ((payload: unknown) => void) | null = null;
 let subscribeRunEventsImpl: ((listener: (payload: unknown) => void) => Promise<() => void>) | null =
   null;
@@ -64,6 +64,8 @@ type UseAppLifecycleArgs = Parameters<
 type LegacyUseAppLifecycleArgs = Omit<UseAppLifecycleArgs, "activeWorkspace"> & {
   activeWorkspace?: ActiveWorkspace | null;
   activeRepo?: string | null;
+  setEvents?: unknown;
+  setRunCompletionSignal?: unknown;
 };
 
 const normalizeHookArgs = ({
@@ -76,9 +78,9 @@ const normalizeHookArgs = ({
 });
 beforeEach(() => {
   subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
-    subscribedRunListener = listener;
+    _subscribedRunListener = listener;
     return () => {
-      subscribedRunListener = null;
+      _subscribedRunListener = null;
     };
   };
   subscribeTaskEventsImpl = async (listener: (payload: unknown) => void) => {
@@ -150,7 +152,7 @@ beforeEach(() => {
       dismiss: toastDismiss,
     },
   }));
-  subscribedRunListener = null;
+  _subscribedRunListener = null;
   subscribedTaskListener = null;
   toastError.mockClear();
   toastLoading.mockClear();
@@ -171,102 +173,6 @@ afterEach(async () => {
 });
 
 describe("useAppLifecycle", () => {
-  test("refreshes active repo task data when a run completion event arrives", async () => {
-    const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = LegacyUseAppLifecycleArgs;
-
-    const refreshTaskData = mock(async (_repoPath: string) => {});
-    const setRunCompletionSignal = mock((_runId: string, _eventType) => {});
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(normalizeHookArgs(args));
-      return null;
-    };
-    const harness = createSharedHookHarness(Harness, {
-      args: {
-        activeRepo: "/repo",
-        setEvents: mock((_updater) => {}),
-        setRunCompletionSignal,
-        refreshWorkspaces: mock(async () => {}),
-        refreshBranches: mock(async () => {}),
-        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () =>
-          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
-        ),
-        refreshTaskData,
-        clearBranchData: mock(() => {}),
-      } satisfies HookArgs,
-    });
-    await harness.mount();
-    try {
-      refreshTaskData.mockClear();
-      if (!subscribedRunListener) {
-        throw new Error("Expected run event listener to be registered");
-      }
-
-      await harness.run(() => {
-        subscribedRunListener?.({
-          type: "run_finished",
-          runId: "run-1",
-          message: "done",
-          timestamp: "2026-03-15T10:00:00.000Z",
-          success: true,
-        });
-      });
-
-      expect(setRunCompletionSignal).toHaveBeenCalledWith("run-1", "run_finished");
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo");
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("cleans up a run-event subscription that resolves after unmount", async () => {
-    const { useAppLifecycle } = await import("./use-app-lifecycle");
-    type HookArgs = LegacyUseAppLifecycleArgs;
-
-    const deferred = createDeferred<() => void>();
-    let cleanupCalls = 0;
-    subscribeRunEventsImpl = async (listener: (payload: unknown) => void) => {
-      subscribedRunListener = listener;
-      return deferred.promise;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      useAppLifecycle(normalizeHookArgs(args));
-      return null;
-    };
-    const harness = createSharedHookHarness(Harness, {
-      args: {
-        activeRepo: "/repo",
-        setEvents: mock((_updater) => {}),
-        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
-        refreshWorkspaces: mock(async () => {}),
-        refreshBranches: mock(async () => {}),
-        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
-        refreshBeadsCheckForRepo: mock(async () =>
-          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
-        ),
-        refreshTaskData: mock(async () => {}),
-        clearBranchData: mock(() => {}),
-      } satisfies HookArgs,
-    });
-
-    await harness.mount();
-    await harness.unmount();
-
-    deferred.resolve(() => {
-      cleanupCalls += 1;
-      subscribedRunListener = null;
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(cleanupCalls).toBe(1);
-    expect(subscribedRunListener).toBeNull();
-  });
-
   test("refreshes active repo task data when an external task event arrives", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;

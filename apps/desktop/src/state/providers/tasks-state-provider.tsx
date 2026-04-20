@@ -16,7 +16,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const { refreshBeadsCheckForRepo } = useChecksOperationsContext();
   const {
     tasks,
-    runs,
     isForegroundLoadingTasks,
     isRefreshingTasksInBackground,
     isLoadingTasks,
@@ -60,7 +59,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
         unlinkingPullRequestTaskId,
         pendingMergedPullRequest,
         tasks,
-        runs,
         refreshTasks,
         syncPullRequests,
         linkMergedPullRequest,
@@ -99,7 +97,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       syncPullRequests,
       unlinkPullRequest,
       resumeDeferredTask,
-      runs,
       tasks,
       transitionTask,
       updateTask,
@@ -110,9 +107,8 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const taskDataValue = useMemo<TaskDataContextValue>(
     () => ({
       tasks,
-      runs,
     }),
-    [runs, tasks],
+    [tasks],
   );
 
   const taskControlValue = useMemo<TaskControlContextValue>(

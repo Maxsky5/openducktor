@@ -159,7 +159,6 @@ describe("TaskDetailsSheet", () => {
           },
           task,
           allTasks: [task],
-          runs: [],
           open: true,
           onOpenChange: () => {},
         }),

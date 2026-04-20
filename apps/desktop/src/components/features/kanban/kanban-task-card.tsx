@@ -1,4 +1,4 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
@@ -10,8 +10,6 @@ import {
   IssueTypeBadge,
   PriorityBadge,
   QaRejectedBadge,
-  RunStateBadge,
-  type VisibleKanbanRunState,
 } from "@/components/features/kanban/kanban-task-badges";
 import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
 import {
@@ -34,29 +32,8 @@ import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
 
-const toVisibleKanbanRunState = (
-  runState: RunSummary["state"] | undefined,
-): VisibleKanbanRunState | undefined => {
-  if (!runState) {
-    return undefined;
-  }
-
-  if (
-    runState === "starting" ||
-    runState === "running" ||
-    runState === "awaiting_done_confirmation" ||
-    runState === "completed" ||
-    runState === "stopped"
-  ) {
-    return undefined;
-  }
-
-  return runState;
-};
-
 type KanbanTaskCardProps = {
   task: TaskCard;
-  runState?: RunSummary["state"] | undefined;
   taskSessions?: KanbanTaskSession[] | undefined;
   hasActiveSession?: boolean;
   activeSessionRole?: AgentRole;
@@ -174,7 +151,6 @@ const areKanbanTaskCardPropsEqual = (
   next: KanbanTaskCardProps,
 ): boolean =>
   areTaskCardsEquivalent(previous.task, next.task) &&
-  previous.runState === next.runState &&
   areRunningTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
   previous.hasActiveSession === next.hasActiveSession &&
   previous.activeSessionRole === next.activeSessionRole &&
@@ -242,13 +218,7 @@ const getCardActivityClassName = ({
   return "kanban-active-session-card border-info-border shadow-info-border";
 };
 
-function TaskPrimaryMeta({
-  task,
-  runState,
-}: {
-  task: TaskCard;
-  runState: VisibleKanbanRunState | undefined;
-}): ReactElement {
+function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <IssueTypeBadge issueType={task.issueType} />
@@ -262,7 +232,6 @@ function TaskPrimaryMeta({
           {task.subtaskIds.length} subtasks
         </Badge>
       ) : null}
-      {runState ? <RunStateBadge runState={runState} /> : null}
       {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
     </div>
   );
@@ -324,18 +293,12 @@ function TaskLabelRow({ labels }: { labels: string[] }): ReactElement {
   );
 }
 
-function TaskMeta({
-  task,
-  runState,
-}: {
-  task: TaskCard;
-  runState: VisibleKanbanRunState | undefined;
-}): ReactElement {
+function TaskMeta({ task }: { task: TaskCard }): ReactElement {
   const displayLabels = toDisplayTaskLabels(task.labels);
 
   return (
     <div className="flex flex-col gap-1.5">
-      <TaskPrimaryMeta task={task} runState={runState} />
+      <TaskPrimaryMeta task={task} />
       {displayLabels.length > 0 ? <TaskLabelRow labels={displayLabels} /> : null}
     </div>
   );
@@ -514,7 +477,6 @@ function TaskActions({
 
 export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
-  runState,
   taskSessions = [],
   hasActiveSession,
   activeSessionRole,
@@ -532,7 +494,6 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
 }: KanbanTaskCardProps): ReactElement {
   const hasActiveSessionValue = hasActiveSession ?? taskSessions.length > 0;
   const isWaitingInput = taskActivityState === "waiting_input";
-  const visibleRunState = toVisibleKanbanRunState(runState);
   const cardActivityClassName = getCardActivityClassName({
     hasActiveSession: hasActiveSessionValue,
     isWaitingInput,
@@ -581,7 +542,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
             </div>
           </div>
         </div>
-        <TaskMeta task={task} runState={visibleRunState} />
+        <TaskMeta task={task} />
         <TaskActions
           task={task}
           taskSessions={taskSessions}

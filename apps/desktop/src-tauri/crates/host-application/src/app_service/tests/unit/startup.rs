@@ -178,7 +178,6 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
             &AgentRuntimeKind::opencode(),
             "/tmp/repo",
             "task-42",
-            "run-abc",
         )
         .expect_err("invalid config should fail build startup policy resolution");
     let message = format!("{error:#}");

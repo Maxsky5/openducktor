@@ -2,9 +2,9 @@ import {
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
   type BeadsCheck,
-  type BuildContinuationTarget,
+  type BuildSessionBootstrap,
   beadsCheckSchema,
-  buildContinuationTargetSchema,
+  buildSessionBootstrapSchema,
   type DevServerGroupState,
   devServerGroupStateSchema,
   type FailureKind,
@@ -13,14 +13,12 @@ import {
   pullRequestSchema,
   type RepoRuntimeHealthCheck,
   type RepoRuntimeStartupStatus,
-  type RunSummary,
   type RuntimeCheck,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
   type RuntimeKind,
   repoRuntimeHealthCheckSchema,
   repoRuntimeStartupStatusSchema,
-  runSummarySchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
   runtimeInstanceSummarySchema,
@@ -30,21 +28,17 @@ import {
   type TaskCard,
   type TaskDirectMergeInput,
   type TaskDirectMergeResult,
+  type TaskWorktreeSummary,
   taskApprovalContextLoadResultSchema,
   taskCardSchema,
   taskDirectMergeInputSchema,
   taskDirectMergeResultSchema,
   taskPullRequestDetectResultSchema,
+  taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
-
-export type BuildCleanupMode = "success" | "failure";
-export type BuildRespondInput =
-  | { action: "approve" }
-  | { action: "deny" }
-  | { action: "message"; message: string };
 
 type RuntimeEnsureFailureKind = FailureKind;
 
@@ -170,11 +164,6 @@ const beadsCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<BeadsCh
   return beadsCheckSchema.parse(payload);
 };
 
-const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<RunSummary[]> => {
-  const payload = await invokeFn("runs_list", { repoPath });
-  return parseArray(runSummarySchema, payload, "runs_list");
-};
-
 const runtimeList = async (
   invokeFn: InvokeFn,
   repoPath: string | undefined,
@@ -189,16 +178,16 @@ const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescri
   return parseArray(runtimeDescriptorSchema, payload, "runtime_definitions_list");
 };
 
-const buildContinuationTargetGet = async (
+const taskWorktreeGet = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
-): Promise<BuildContinuationTarget | null> => {
-  const payload = await invokeFn("build_continuation_target_get", {
+): Promise<TaskWorktreeSummary | null> => {
+  const payload = await invokeFn("task_worktree_get", {
     repoPath,
     taskId,
   });
-  return buildContinuationTargetSchema.nullable().parse(payload);
+  return taskWorktreeSummarySchema.nullable().parse(payload);
 };
 
 const runtimeStop = async (invokeFn: InvokeFn, runtimeId: string): Promise<{ ok: boolean }> => {
@@ -265,9 +254,9 @@ const buildStart = async (
   repoPath: string,
   taskId: string,
   runtimeKind: RuntimeKind,
-): Promise<RunSummary> => {
+): Promise<BuildSessionBootstrap> => {
   const payload = await invokeFn("build_start", { repoPath, taskId, runtimeKind });
-  return runSummarySchema.parse(payload);
+  return buildSessionBootstrapSchema.parse(payload);
 };
 
 const devServerGetState = async (
@@ -462,24 +451,6 @@ const repoPullRequestSync = async (
   return parseOkResult(payload, "repo_pull_request_sync");
 };
 
-const buildRespond = async (
-  invokeFn: InvokeFn,
-  runId: string,
-  input: BuildRespondInput,
-): Promise<{ ok: boolean }> => {
-  const response = await invokeFn("build_respond", {
-    runId,
-    action: input.action,
-    ...(input.action === "message" ? { payload: input.message } : {}),
-  });
-  return parseOkResult(response, "build_respond");
-};
-
-const buildStop = async (invokeFn: InvokeFn, runId: string): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("build_stop", { runId });
-  return parseOkResult(payload, "build_stop");
-};
-
 const agentSessionStop = async (
   invokeFn: InvokeFn,
   target: AgentSessionStopTarget,
@@ -488,15 +459,6 @@ const agentSessionStop = async (
     request: agentSessionStopTargetSchema.parse(target),
   });
   return parseOkResult(payload, "agent_session_stop");
-};
-
-const buildCleanup = async (
-  invokeFn: InvokeFn,
-  runId: string,
-  mode: BuildCleanupMode,
-): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn("build_cleanup", { runId, mode });
-  return parseOkResult(payload, "build_cleanup");
 };
 
 export class TauriAgentClient {
@@ -517,10 +479,6 @@ export class TauriAgentClient {
     return beadsCheck(this.invokeFn, repoPath);
   }
 
-  async runsList(repoPath?: string): Promise<RunSummary[]> {
-    return runsList(this.invokeFn, repoPath);
-  }
-
   async runtimeList(
     repoPath: string | undefined,
     runtimeKind: RuntimeKind,
@@ -532,11 +490,8 @@ export class TauriAgentClient {
     return runtimeDefinitionsList(this.invokeFn);
   }
 
-  async buildContinuationTargetGet(
-    repoPath: string,
-    taskId: string,
-  ): Promise<BuildContinuationTarget | null> {
-    return buildContinuationTargetGet(this.invokeFn, repoPath, taskId);
+  async taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null> {
+    return taskWorktreeGet(this.invokeFn, repoPath, taskId);
   }
 
   async runtimeStop(runtimeId: string): Promise<{ ok: boolean }> {
@@ -572,7 +527,7 @@ export class TauriAgentClient {
     repoPath: string,
     taskId: string,
     runtimeKind: RuntimeKind,
-  ): Promise<RunSummary> {
+  ): Promise<BuildSessionBootstrap> {
     return buildStart(this.invokeFn, repoPath, taskId, runtimeKind);
   }
 
@@ -665,19 +620,7 @@ export class TauriAgentClient {
     return result;
   }
 
-  async buildRespond(runId: string, input: BuildRespondInput): Promise<{ ok: boolean }> {
-    return buildRespond(this.invokeFn, runId, input);
-  }
-
-  async buildStop(runId: string): Promise<{ ok: boolean }> {
-    return buildStop(this.invokeFn, runId);
-  }
-
   async agentSessionStop(target: AgentSessionStopTarget): Promise<{ ok: boolean }> {
     return agentSessionStop(this.invokeFn, target);
-  }
-
-  async buildCleanup(runId: string, mode: BuildCleanupMode): Promise<{ ok: boolean }> {
-    return buildCleanup(this.invokeFn, runId, mode);
   }
 }

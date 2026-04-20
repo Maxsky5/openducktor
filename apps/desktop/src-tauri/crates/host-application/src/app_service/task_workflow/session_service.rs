@@ -1,87 +1,35 @@
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    AgentSessionDocument, BuildContinuationTarget, BuildContinuationTargetSource, RunState,
-};
+use host_domain::{AgentSessionDocument, TaskWorktreeSummary};
+use host_infra_system::resolve_effective_worktree_base_dir_for_workspace;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 impl AppService {
-    pub(super) fn build_continuation_target_lookup(
+    pub(super) fn task_worktree_lookup(
         &self,
         repo_path: &str,
         task_id: &str,
-    ) -> Result<BuildContinuationTargetLookup> {
+    ) -> Result<TaskWorktreeLookup> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        let normalized_repo_path = normalize_path_for_comparison(repo_path.as_str());
-
-        let active_worktree_path: Option<String> = {
-            let runs = self
-                .runs
-                .lock()
-                .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            runs.values()
-                .filter(|run| {
-                    normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo_path
-                        && run.task_id == task_id
-                        && matches!(
-                            run.summary.state,
-                            RunState::Starting
-                                | RunState::Running
-                                | RunState::Blocked
-                                | RunState::AwaitingDoneConfirmation
-                        )
-                })
-                .max_by(|left, right| left.summary.started_at.cmp(&right.summary.started_at))
-                .map(|run| run.worktree_path.clone())
-        };
-
-        if let Some(worktree_path) = active_worktree_path {
-            let working_directory = validate_build_continuation_working_directory(
-                repo_path.as_str(),
-                task_id,
-                &worktree_path,
-            )?;
-            return Ok(BuildContinuationTargetLookup::Found(
-                BuildContinuationTarget {
+        match self.resolve_task_worktree_path(repo_path.as_str(), task_id)? {
+            ResolvedTaskWorktreePath::TaskOwned(worktree_path) => {
+                let working_directory = validate_build_continuation_working_directory(
+                    repo_path.as_str(),
+                    task_id,
+                    &worktree_path,
+                )?;
+                return Ok(TaskWorktreeLookup::Found(TaskWorktreeSummary {
                     working_directory,
-                    source: BuildContinuationTargetSource::ActiveBuildRun,
-                },
-            ));
-        }
-
-        let sessions = self.agent_sessions_list(repo_path.as_str(), task_id)?;
-        let latest_builder_session = sessions
-            .into_iter()
-            .filter(|session| {
-                TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build)
-            })
-            .max_by(|left, right| session_sort_key(left).cmp(&session_sort_key(right)));
-        let Some(latest_builder_session) = latest_builder_session else {
-            return Ok(BuildContinuationTargetLookup::NoBuilderContext);
-        };
-
-        let working_directory = match validate_build_continuation_working_directory(
-            repo_path.as_str(),
-            task_id,
-            &latest_builder_session.working_directory,
-        ) {
-            Ok(working_directory) => working_directory,
-            Err(error) => {
-                let message = error.to_string();
-                if message.contains("The latest builder workspace does not exist") {
-                    return Ok(BuildContinuationTargetLookup::MissingBuilderWorktree);
-                }
-                return Err(error);
+                }));
             }
-        };
-        Ok(BuildContinuationTargetLookup::Found(
-            BuildContinuationTarget {
-                working_directory,
-                source: BuildContinuationTargetSource::BuilderSession,
-            },
-        ))
+            ResolvedTaskWorktreePath::BuilderSessionHistory => {
+                return Ok(TaskWorktreeLookup::MissingBuilderWorktree);
+            }
+            ResolvedTaskWorktreePath::None => {}
+        }
+        Ok(TaskWorktreeLookup::NoBuilderContext)
     }
 
     pub fn agent_sessions_list(
@@ -136,28 +84,24 @@ impl AppService {
         Ok(sessions_by_task)
     }
 
-    pub fn build_continuation_target_get(
+    pub fn task_worktree_get(
         &self,
         repo_path: &str,
         task_id: &str,
-    ) -> Result<Option<BuildContinuationTarget>> {
-        match self.build_continuation_target_lookup(repo_path, task_id)? {
-            BuildContinuationTargetLookup::Found(target) => Ok(Some(target)),
-            BuildContinuationTargetLookup::NoBuilderContext
-            | BuildContinuationTargetLookup::MissingBuilderWorktree => Ok(None),
+    ) -> Result<Option<TaskWorktreeSummary>> {
+        match self.task_worktree_lookup(repo_path, task_id)? {
+            TaskWorktreeLookup::Found(target) => Ok(Some(target)),
+            TaskWorktreeLookup::NoBuilderContext
+            | TaskWorktreeLookup::MissingBuilderWorktree => Ok(None),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum BuildContinuationTargetLookup {
-    Found(BuildContinuationTarget),
+pub(super) enum TaskWorktreeLookup {
+    Found(TaskWorktreeSummary),
     NoBuilderContext,
     MissingBuilderWorktree,
-}
-
-fn session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (session.started_at.as_str(), session.session_id.as_str())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -262,6 +206,52 @@ fn try_canonicalize_existing_path(path: &str) -> Option<PathBuf> {
     fs::canonicalize(trimmed).ok()
 }
 
+fn resolve_task_worktree_root(service: &AppService, repo_path: &str) -> Result<PathBuf> {
+    let repo_config = service.workspace_get_repo_config_by_repo_path(repo_path)?;
+    resolve_effective_worktree_base_dir_for_workspace(
+        repo_config.workspace_id.as_str(),
+        repo_config.worktree_base_path.as_deref(),
+    )
+    .with_context(|| {
+        format!(
+            "Failed resolving task worktree base for workspace {} ({repo_path})",
+            repo_config.workspace_id
+        )
+    })
+}
+
+impl AppService {
+    fn resolve_task_worktree_path(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<ResolvedTaskWorktreePath> {
+        let deterministic_worktree = resolve_task_worktree_root(self, repo_path)?.join(task_id);
+        if deterministic_worktree.exists() {
+            return Ok(ResolvedTaskWorktreePath::TaskOwned(
+                deterministic_worktree.to_string_lossy().to_string(),
+            ));
+        }
+
+        let sessions = self.agent_sessions_list(repo_path, task_id)?;
+        let has_builder_session = sessions
+            .into_iter()
+            .any(|session| TaskAgentRole::parse(session.role.trim()) == Some(TaskAgentRole::Build));
+
+        Ok(if has_builder_session {
+            ResolvedTaskWorktreePath::BuilderSessionHistory
+        } else {
+            ResolvedTaskWorktreePath::None
+        })
+    }
+}
+
+enum ResolvedTaskWorktreePath {
+    TaskOwned(String),
+    BuilderSessionHistory,
+    None,
+}
+
 fn validate_build_continuation_working_directory(
     repo_path: &str,
     task_id: &str,
@@ -269,14 +259,12 @@ fn validate_build_continuation_working_directory(
 ) -> Result<String> {
     let trimmed = working_directory.trim();
     if trimmed.is_empty() {
-        return Err(anyhow!(
-            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The latest builder workspace is empty."
-        ));
+        return Err(anyhow!("Builder continuation cannot start until a builder worktree exists for task {task_id}."));
     }
 
     if !Path::new(trimmed).exists() {
         return Err(anyhow!(
-            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The latest builder workspace does not exist: {trimmed}"
+            "Builder continuation cannot start until a builder worktree exists for task {task_id}. Expected worktree at: {trimmed}"
         ));
     }
 
@@ -284,7 +272,7 @@ fn validate_build_continuation_working_directory(
     let normalized_working_directory = normalize_path_for_comparison(trimmed);
     if normalized_working_directory == normalized_repo {
         return Err(anyhow!(
-            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The latest builder workspace points to the repository root."
+            "Builder continuation cannot start until a builder worktree exists for task {task_id}. The resolved worktree points to the repository root."
         ));
     }
 

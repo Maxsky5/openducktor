@@ -1,26 +1,11 @@
-use super::super::{
-    emit_event, AppService, RunEmitter, RuntimeSessionStatusProbeOutcome,
-    RuntimeSessionStatusProbeTargetResolution,
-};
+use super::super::{AppService, RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTargetResolution};
 use anyhow::{anyhow, Result};
-use host_domain::{
-    now_rfc3339, AgentRuntimeKind, AgentSessionDocument, AgentSessionStopRequest, RunEvent,
-    RunState, RuntimeRoute,
-};
+use host_domain::{AgentRuntimeKind, AgentSessionDocument, AgentSessionStopRequest, RuntimeRoute};
 use std::path::{Component, PathBuf};
-
-struct BuildRunStopContext {
-    runtime_kind: AgentRuntimeKind,
-    runtime_route: RuntimeRoute,
-    repo_path: String,
-    task_id: String,
-    worktree_path: String,
-}
 
 struct SessionStopResolution {
     session: AgentSessionDocument,
     runtime_route: RuntimeRoute,
-    associated_build_run_id: Option<String>,
 }
 
 struct LiveSessionStopRouteResolver<'a> {
@@ -31,33 +16,7 @@ struct LiveSessionStopRouteResolver<'a> {
 }
 
 impl AppService {
-    pub fn build_stop(&self, run_id: &str, emitter: RunEmitter) -> Result<bool> {
-        let stop_context = {
-            let runs = self
-                .runs
-                .lock()
-                .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            let run = runs
-                .get(run_id)
-                .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
-            BuildRunStopContext {
-                runtime_kind: run.summary.runtime_kind.clone(),
-                runtime_route: run.summary.runtime_route.clone(),
-                repo_path: run.repo_path.clone(),
-                task_id: run.task_id.clone(),
-                worktree_path: run.worktree_path.clone(),
-            }
-        };
-        self.abort_build_session_for_stop(&stop_context)?;
-        self.mark_run_stopped_after_session_stop(run_id, emitter)?;
-        Ok(true)
-    }
-
-    pub fn agent_session_stop(
-        &self,
-        request: AgentSessionStopRequest,
-        emitter: RunEmitter,
-    ) -> Result<bool> {
+    pub fn agent_session_stop(&self, request: AgentSessionStopRequest) -> Result<bool> {
         let repo_path = self.resolve_task_repo_path(&request.repo_path)?;
         let resolution = self.resolve_session_stop_resolution(repo_path.as_str(), &request)?;
 
@@ -67,44 +26,7 @@ impl AppService {
             &resolution.session,
         )?;
 
-        if let Some(run_id) = resolution.associated_build_run_id.as_deref() {
-            self.mark_run_stopped_after_session_stop(run_id, emitter)?;
-        }
-
         Ok(true)
-    }
-
-    fn mark_run_stopped_after_session_stop(&self, run_id: &str, emitter: RunEmitter) -> Result<()> {
-        let mut runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let run = runs
-            .get_mut(run_id)
-            .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
-
-        run.summary.state = RunState::Stopped;
-        run.summary.last_message = Some("Run stopped by user".to_string());
-
-        emit_event(
-            &emitter,
-            RunEvent::RunFinished {
-                run_id: run_id.to_string(),
-                message: "Run stopped".to_string(),
-                timestamp: now_rfc3339(),
-                success: false,
-            },
-        );
-
-        Ok(())
-    }
-
-    fn abort_build_session_for_stop(&self, context: &BuildRunStopContext) -> Result<()> {
-        let Some(session) = self.find_abortable_build_session_for_stop(context)? else {
-            return Ok(());
-        };
-        self.stop_persisted_session(&context.runtime_kind, &context.runtime_route, &session)?;
-        Ok(())
     }
 
     fn stop_persisted_session(
@@ -147,16 +69,10 @@ impl AppService {
             session: &session,
         }
         .resolve()?;
-        let associated_build_run_id = if session.role.trim() == "build" {
-            self.resolve_build_run_id_for_session_stop(repo_path, request, &runtime_route)?
-        } else {
-            None
-        };
 
         Ok(SessionStopResolution {
             session,
             runtime_route,
-            associated_build_run_id,
         })
     }
 
@@ -176,7 +92,6 @@ impl AppService {
                     request.task_id
                 )
             })?;
-
         self.validate_session_stop_request(request, &session)?;
         Ok(session)
     }
@@ -227,68 +142,6 @@ impl AppService {
 
         Ok(())
     }
-
-    fn resolve_build_run_id_for_session_stop(
-        &self,
-        repo_path: &str,
-        request: &AgentSessionStopRequest,
-        runtime_route: &RuntimeRoute,
-    ) -> Result<Option<String>> {
-        let normalized_repo_path = normalize_path_for_comparison(repo_path);
-        let normalized_working_directory =
-            normalize_path_for_comparison(request.working_directory.as_str());
-        let runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let matching_run_ids = runs
-            .iter()
-            .filter(|(_, run)| is_live_stoppable_run_state(&run.summary.state))
-            .filter(|(_, run)| run.task_id == request.task_id)
-            .filter(|(_, run)| run.summary.runtime_kind == request.runtime_kind)
-            .filter(|(_, run)| run.summary.runtime_route == *runtime_route)
-            .filter(|(_, run)| {
-                normalize_path_for_comparison(run.repo_path.as_str()) == normalized_repo_path
-            })
-            .filter(|(_, run)| {
-                normalize_path_for_comparison(run.worktree_path.as_str())
-                    == normalized_working_directory
-            })
-            .map(|(run_id, _)| run_id.clone())
-            .collect::<Vec<_>>();
-
-        match matching_run_ids.as_slice() {
-            [run_id] => Ok(Some(run_id.clone())),
-            [] => Ok(None),
-            _ => Err(anyhow!(
-                "Multiple live build runs matched session {}: {}",
-                request.session_id,
-                matching_run_ids.join(", ")
-            )),
-        }
-    }
-
-    fn find_abortable_build_session_for_stop(
-        &self,
-        context: &BuildRunStopContext,
-    ) -> Result<Option<AgentSessionDocument>> {
-        let normalized_worktree = normalize_path_for_comparison(context.worktree_path.as_str());
-        Ok(self
-            .agent_sessions_list(context.repo_path.as_str(), context.task_id.as_str())?
-            .into_iter()
-            .filter(|session| session.role.trim() == "build")
-            .filter(|session| session.runtime_kind.trim() == context.runtime_kind.as_str())
-            .filter(is_active_build_session)
-            .filter(|session| {
-                normalize_path_for_comparison(session.working_directory.as_str())
-                    == normalized_worktree
-            })
-            .max_by(|left, right| {
-                build_session_sort_key(left)
-                    .cmp(&build_session_sort_key(right))
-                    .then_with(|| left.session_id.cmp(&right.session_id))
-            }))
-    }
 }
 
 impl LiveSessionStopRouteResolver<'_> {
@@ -301,7 +154,7 @@ impl LiveSessionStopRouteResolver<'_> {
                 return Err(anyhow!(
                     "Multiple live runtime routes matched session {}",
                     self.request.session_id
-                ))
+                ));
             }
         }
 
@@ -310,8 +163,7 @@ impl LiveSessionStopRouteResolver<'_> {
             return Ok(runtime_route.clone());
         }
 
-        let probed_routes =
-            self.probe_repo_runtime_routes_for_live_session(repo_routes.as_slice())?;
+        let probed_routes = self.probe_repo_runtime_routes_for_live_session(repo_routes.as_slice())?;
         match probed_routes.as_slice() {
             [runtime_route] => Ok(runtime_route.clone()),
             [] => Err(anyhow!(
@@ -326,79 +178,32 @@ impl LiveSessionStopRouteResolver<'_> {
     }
 
     fn collect_exact_routes(&self) -> Result<Vec<RuntimeRoute>> {
-        let normalized_repo_path = normalize_path_for_comparison(self.repo_path);
         let normalized_working_directory =
             normalize_path_for_comparison(self.request.working_directory.as_str());
         let mut routes = Vec::new();
-
-        {
-            let runs = self
-                .service
-                .runs
-                .lock()
-                .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            for run in runs.values() {
-                if !is_live_stoppable_run_state(&run.summary.state)
-                    || run.task_id != self.request.task_id
-                    || run.summary.runtime_kind != self.request.runtime_kind
-                    || normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo_path
-                    || normalize_path_for_comparison(run.worktree_path.as_str())
-                        != normalized_working_directory
-                {
-                    continue;
-                }
-
-                push_unique_runtime_route(&mut routes, run.summary.runtime_route.clone());
+        let runtimes = self
+            .service
+            .runtime_list(self.request.runtime_kind.as_str(), Some(self.repo_path))?;
+        for runtime in runtimes {
+            if normalize_path_for_comparison(runtime.working_directory.as_str())
+                != normalized_working_directory
+            {
+                continue;
             }
-        }
 
-        {
-            let runtimes = self
-                .service
-                .runtime_list(self.request.runtime_kind.as_str(), Some(self.repo_path))?;
-            for runtime in runtimes {
-                if normalize_path_for_comparison(runtime.working_directory.as_str())
-                    != normalized_working_directory
-                {
-                    continue;
-                }
-
-                push_unique_runtime_route(&mut routes, runtime.runtime_route);
-            }
+            push_unique_runtime_route(&mut routes, runtime.runtime_route);
         }
 
         Ok(routes)
     }
 
     fn collect_repo_runtime_routes(&self) -> Result<Vec<RuntimeRoute>> {
-        let normalized_repo_path = normalize_path_for_comparison(self.repo_path);
         let mut routes = Vec::new();
-
-        {
-            let runs = self
-                .service
-                .runs
-                .lock()
-                .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            for run in runs.values() {
-                if !is_live_stoppable_run_state(&run.summary.state)
-                    || run.summary.runtime_kind != self.request.runtime_kind
-                    || normalize_path_for_comparison(run.repo_path.as_str()) != normalized_repo_path
-                {
-                    continue;
-                }
-
-                push_unique_runtime_route(&mut routes, run.summary.runtime_route.clone());
-            }
-        }
-
-        {
-            let runtimes = self
-                .service
-                .runtime_list(self.request.runtime_kind.as_str(), Some(self.repo_path))?;
-            for runtime in runtimes {
-                push_unique_runtime_route(&mut routes, runtime.runtime_route);
-            }
+        let runtimes = self
+            .service
+            .runtime_list(self.request.runtime_kind.as_str(), Some(self.repo_path))?;
+        for runtime in runtimes {
+            push_unique_runtime_route(&mut routes, runtime.runtime_route);
         }
 
         Ok(routes)
@@ -450,43 +255,19 @@ impl LiveSessionStopRouteResolver<'_> {
             .load_cached_runtime_session_statuses_for_targets(unique_probe_targets.as_slice())?;
         let mut matching_routes = Vec::new();
         for (runtime_route, probe_target) in probe_targets {
-            if statuses_by_target
-                .get(&probe_target)
-                .is_some_and(|outcome| {
-                    matches!(
-                        outcome,
-                        RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)
-                            if snapshot.has_live_session(external_session_id)
-                    )
-                })
-            {
+            if statuses_by_target.get(&probe_target).is_some_and(|outcome| {
+                matches!(
+                    outcome,
+                    RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)
+                        if snapshot.has_live_session(external_session_id)
+                )
+            }) {
                 push_unique_runtime_route(&mut matching_routes, runtime_route);
             }
         }
 
         Ok(matching_routes)
     }
-}
-
-fn build_session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
-    (session.started_at.as_str(), session.session_id.as_str())
-}
-
-fn is_active_build_session(session: &AgentSessionDocument) -> bool {
-    session
-        .external_session_id
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-}
-
-fn is_live_stoppable_run_state(state: &RunState) -> bool {
-    matches!(
-        state,
-        RunState::Starting
-            | RunState::Running
-            | RunState::Blocked
-            | RunState::AwaitingDoneConfirmation
-    )
 }
 
 fn push_unique_runtime_route(routes: &mut Vec<RuntimeRoute>, runtime_route: RuntimeRoute) {
@@ -518,8 +299,7 @@ fn normalize_path_for_comparison(path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_service::{test_support::build_service_with_state, RunProcess};
-    use host_domain::RunSummary;
+    use crate::app_service::test_support::build_service_with_state;
 
     #[test]
     fn stop_opencode_session_rejects_stdio_routes() {
@@ -538,84 +318,5 @@ mod tests {
         assert!(error
             .to_string()
             .contains("local_http runtime route with a port"));
-    }
-
-    #[test]
-    fn resolve_build_run_id_for_session_stop_fails_when_multiple_runs_match() {
-        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let repo_path = "/tmp/repo".to_string();
-        let worktree_path = "/tmp/repo/worktree".to_string();
-        let runtime_route = RuntimeRoute::LocalHttp {
-            endpoint: "http://127.0.0.1:4312".to_string(),
-        };
-
-        service.runs.lock().expect("run lock poisoned").insert(
-            "run-primary".to_string(),
-            RunProcess {
-                summary: RunSummary {
-                    run_id: "run-primary".to_string(),
-                    runtime_kind: AgentRuntimeKind::opencode(),
-                    runtime_route: runtime_route.clone(),
-                    repo_path: repo_path.clone(),
-                    task_id: "task-1".to_string(),
-                    branch: "odt/task-1".to_string(),
-                    worktree_path: worktree_path.clone(),
-                    port: Some(4312),
-                    state: RunState::Running,
-                    last_message: None,
-                    started_at: "2026-02-20T12:00:00Z".to_string(),
-                },
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                worktree_path: worktree_path.clone(),
-                repo_config: Default::default(),
-            },
-        );
-        service.runs.lock().expect("run lock poisoned").insert(
-            "run-duplicate".to_string(),
-            RunProcess {
-                summary: RunSummary {
-                    run_id: "run-duplicate".to_string(),
-                    runtime_kind: AgentRuntimeKind::opencode(),
-                    runtime_route: runtime_route.clone(),
-                    repo_path: repo_path.clone(),
-                    task_id: "task-1".to_string(),
-                    branch: "odt/task-1".to_string(),
-                    worktree_path: worktree_path.clone(),
-                    port: Some(4312),
-                    state: RunState::Running,
-                    last_message: None,
-                    started_at: "2026-02-20T12:00:01Z".to_string(),
-                },
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                worktree_path: worktree_path.clone(),
-                repo_config: Default::default(),
-            },
-        );
-
-        let error = service
-            .resolve_build_run_id_for_session_stop(
-                repo_path.as_str(),
-                &AgentSessionStopRequest {
-                    repo_path: repo_path.clone(),
-                    task_id: "task-1".to_string(),
-                    session_id: "build-session".to_string(),
-                    runtime_kind: AgentRuntimeKind::opencode(),
-                    working_directory: worktree_path,
-                    external_session_id: Some("external-build-session".to_string()),
-                },
-                &runtime_route,
-            )
-            .expect_err("ambiguous build runs should fail fast");
-
-        let error_message = error.to_string();
-        assert!(error_message.contains("Multiple live build runs matched session build-session"));
-        assert!(error_message.contains("run-primary"));
-        assert!(error_message.contains("run-duplicate"));
     }
 }

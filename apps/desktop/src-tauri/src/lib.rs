@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Context};
 use external_task_sync::{start_task_event_relay, TaskEventRelayState, TASK_EVENT_NAME};
-use host_application::{AppService, DevServerEmitter, RunEmitter};
+use host_application::{AppService, DevServerEmitter};
 #[cfg(test)]
 use host_domain::TaskStatus;
-use host_domain::{DevServerEvent, RunEvent, TASK_METADATA_NAMESPACE};
+use host_domain::{DevServerEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RuntimeConfigStore};
 use pull_request_sync::start_pull_request_sync_loop;
@@ -255,12 +255,6 @@ fn validate_startup_config(
     })?;
     Ok(())
 }
-pub(crate) fn run_emitter<R: tauri::Runtime>(app: AppHandle<R>) -> RunEmitter {
-    Arc::new(move |event: RunEvent| {
-        let _ = app.emit("openducktor://run-event", event);
-    })
-}
-
 pub(crate) fn dev_server_emitter<R: tauri::Runtime>(app: AppHandle<R>) -> DevServerEmitter {
     Arc::new(move |event: DevServerEvent| {
         let _ = app.emit("openducktor://dev-server-event", event);
@@ -411,10 +405,7 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         dev_server_start,
         dev_server_stop,
         dev_server_restart,
-        build_respond,
-        build_stop,
         agent_session_stop,
-        build_cleanup,
         build_blocked,
         build_resumed,
         build_completed,
@@ -428,10 +419,9 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         repo_pull_request_sync,
         human_request_changes,
         human_approve,
-        runs_list,
         runtime_definitions_list,
         runtime_list,
-        build_continuation_target_get,
+        task_worktree_get,
         runtime_stop,
         runtime_ensure,
         runtime_startup_status,

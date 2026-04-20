@@ -22,7 +22,6 @@ const toBuildToolsSession = (
   role: session?.role ?? null,
   status: session?.status ?? null,
   workingDirectory: session?.workingDirectory ?? null,
-  runId: session?.runId ?? null,
   hasActiveSession: session != null,
 });
 
@@ -45,7 +44,6 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
           createAgentSessionFixture({
             role: "build",
             workingDirectory: "/repo/worktree",
-            runId: "run-1",
           }),
         ),
         isViewSessionHistoryHydrating: true,
@@ -59,7 +57,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         isEnabled: false,
         repoPath: null,
         sessionWorkingDirectory: null,
-        sessionRunId: null,
+        taskId: null,
         shouldEnableEventPolling: false,
         hasSelectedTask: false,
       });
@@ -76,7 +74,6 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
           createAgentSessionFixture({
             role: "build",
             workingDirectory: "/repo/worktree",
-            runId: "run-1",
           }),
         ),
       }),
@@ -89,7 +86,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         isEnabled: true,
         repoPath: "/repo",
         sessionWorkingDirectory: "/repo/worktree",
-        sessionRunId: "run-1",
+        taskId: "task-1",
         shouldEnableEventPolling: true,
         hasSelectedTask: true,
       });

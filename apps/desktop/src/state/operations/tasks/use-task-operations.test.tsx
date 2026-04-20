@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
+import type { BeadsCheck, TaskCard, TaskCreateInput } from "@openducktor/contracts";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { toast } from "sonner";
@@ -23,6 +23,26 @@ import {
 } from "../agent-orchestrator/events/session-events";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
+
+type LegacyRunSummary = {
+  runId: string;
+  runtimeKind: string;
+  runtimeRoute: { type: "local_http"; endpoint: string } | { type: "stdio" };
+  repoPath: string;
+  taskId: string;
+  branch: string;
+  worktreePath: string;
+  port: number | null;
+  state: string;
+  lastMessage: string | null;
+  startedAt: string;
+};
+
+const legacyHost = host as typeof host & {
+  runsList: (repoPath?: string) => Promise<LegacyRunSummary[]>;
+};
+
+type RunSummary = LegacyRunSummary;
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -87,7 +107,6 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
-  runId: null,
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4321" },
   workingDirectory: "/repo",
   messages: [],
@@ -277,11 +296,11 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
   const original = {
     repoPullRequestSync: host.repoPullRequestSync,
     tasksList: host.tasksList,
-    runsList: host.runsList,
+    runsList: legacyHost.runsList,
   };
   host.repoPullRequestSync = repoPullRequestSync;
   host.tasksList = tasksList;
-  host.runsList = runsList;
+  legacyHost.runsList = runsList;
 
   const harness = createTaskAndKanbanHarness({
     activeRepo: "/repo",
@@ -351,7 +370,7 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
     await harness.unmount();
     host.repoPullRequestSync = original.repoPullRequestSync;
     host.tasksList = original.tasksList;
-    host.runsList = original.runsList;
+    legacyHost.runsList = original.runsList;
   }
 };
 
@@ -382,7 +401,7 @@ describe("use-task-operations", () => {
     toast.success = originalToastSuccess;
   });
 
-  test("refreshTaskData filters deferred tasks and loads runs", async () => {
+  test("refreshTaskData filters deferred tasks", async () => {
     const tasksList = mock(async () => [makeTask("A", "open"), makeTask("B", "deferred")]);
     const runsList = mock(
       async (): Promise<RunSummary[]> => [
@@ -407,10 +426,10 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -437,13 +456,11 @@ describe("use-task-operations", () => {
       await harness.waitFor((value) => value.tasks.map((task) => task.id).join(",") === "A");
 
       expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
-      expect(harness.getLatest().runs).toHaveLength(1);
       expect(tasksList).toHaveBeenCalledWith("/repo");
-      expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -457,10 +474,10 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -492,12 +509,11 @@ describe("use-task-operations", () => {
       await harness.waitFor((value) => value.tasks[0]?.status === "ready_for_dev");
 
       expect(tasksList).toHaveBeenCalledTimes(3);
-      expect(runsList).toHaveBeenCalledTimes(3);
       expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -513,11 +529,11 @@ describe("use-task-operations", () => {
     const original = {
       taskResetImplementation: host.taskResetImplementation,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskResetImplementation = taskResetImplementation;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -540,7 +556,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskResetImplementation = original.taskResetImplementation;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -591,13 +607,13 @@ describe("use-task-operations", () => {
     const original = {
       taskReset: host.taskReset,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
       taskDocumentGet: host.taskDocumentGet,
       taskDocumentGetFresh: host.taskDocumentGetFresh,
     };
     host.taskReset = taskReset;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     host.taskDocumentGet = (async () => ({
       markdown: "",
       updatedAt: null,
@@ -692,7 +708,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskReset = original.taskReset;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       host.taskDocumentGet = original.taskDocumentGet;
       host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
@@ -741,10 +757,10 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const refreshBeadsCheckForRepo = async (): Promise<BeadsCheck> => makeBeadsCheck();
     const harness = createHookHarness({
@@ -792,13 +808,12 @@ describe("use-task-operations", () => {
       await refreshPromise;
 
       expect(harness.getLatest().tasks).toEqual([]);
-      expect(harness.getLatest().runs).toEqual([]);
     } finally {
       deferredTasks.resolve([]);
       deferredRuns.resolve([]);
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -813,12 +828,12 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
       toastError: toast.error,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
 
     const harness = createHookHarness({
@@ -846,7 +861,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
     }
   });
@@ -886,11 +901,11 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -912,7 +927,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -925,11 +940,11 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -968,13 +983,12 @@ describe("use-task-operations", () => {
       await harness.waitFor((value) => !value.isLoadingTasks);
 
       expect(tasksList).toHaveBeenCalledTimes(1);
-      expect(runsList).toHaveBeenCalledTimes(1);
     } finally {
       repoPullRequestSyncDeferred.resolve({ ok: true });
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -989,13 +1003,13 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
       toastError: toast.error,
       consoleWarn: console.warn,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
     console.warn = consoleWarn as unknown as typeof console.warn;
 
@@ -1045,7 +1059,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
       console.warn = original.consoleWarn;
     }
@@ -1063,13 +1077,13 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
       toastError: toast.error,
       consoleWarn: console.warn,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
     console.warn = consoleWarn as unknown as typeof console.warn;
 
@@ -1116,7 +1130,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
       console.warn = original.consoleWarn;
     }
@@ -1148,11 +1162,11 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1204,7 +1218,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -1217,11 +1231,11 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -1253,13 +1267,12 @@ describe("use-task-operations", () => {
 
       expect(harness.getLatest().isLoadingTasks).toBe(false);
       expect(tasksList).toHaveBeenCalledTimes(1);
-      expect(runsList).toHaveBeenCalledTimes(1);
     } finally {
       repoPullRequestSyncDeferred.resolve({ ok: true });
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -1294,13 +1307,13 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
       toastError: toast.error,
       consoleWarn: console.warn,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
     console.warn = consoleWarn as unknown as typeof console.warn;
 
@@ -1343,7 +1356,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.error = original.toastError;
       console.warn = original.consoleWarn;
     }
@@ -1358,11 +1371,11 @@ describe("use-task-operations", () => {
     const original = {
       repoPullRequestSync: host.repoPullRequestSync,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.repoPullRequestSync = repoPullRequestSync;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
@@ -1405,12 +1418,11 @@ describe("use-task-operations", () => {
           return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
-      expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -1421,10 +1433,10 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const queryClient = createQueryClient();
     let latest: ReturnType<typeof useTaskOperations> | null = null;
@@ -1489,11 +1501,10 @@ describe("use-task-operations", () => {
           return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
-      expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -1518,12 +1529,12 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
       taskDocumentGet: host.taskDocumentGet,
       taskDocumentGetFresh: host.taskDocumentGetFresh,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     host.taskDocumentGet = taskDocumentGet;
     host.taskDocumentGetFresh = taskDocumentGetFresh;
 
@@ -1611,7 +1622,7 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       host.taskDocumentGet = original.taskDocumentGet;
       host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
@@ -1631,11 +1642,11 @@ describe("use-task-operations", () => {
     const original = {
       taskDelete: host.taskDelete,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskDelete = taskDelete;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const queryClient = createQueryClient();
     let latest: ReturnType<typeof useTaskOperations> | null = null;
@@ -1698,7 +1709,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskDelete = original.taskDelete;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -1719,10 +1730,10 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
@@ -1821,14 +1832,13 @@ describe("use-task-operations", () => {
             return args[0] === "/repo" && args[1] === 1;
           }),
         ).toBe(true);
-        expect(runsList).toHaveBeenCalledWith("/repo");
       } finally {
         unsubscribe();
       }
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -1868,11 +1878,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const originalToastSuccess = toast.success;
     const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
@@ -1895,7 +1905,6 @@ describe("use-task-operations", () => {
 
       expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
       expect(tasksList).toHaveBeenCalledWith("/repo");
-      expect(runsList).toHaveBeenCalledWith("/repo");
       expect(harness.getLatest().tasks[0]?.pullRequest?.number).toBe(17);
       expect(toastSuccess).toHaveBeenCalledWith("Pull request linked", {
         description: "PR #17",
@@ -1904,7 +1913,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.success = originalToastSuccess;
     }
   });
@@ -1931,11 +1940,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -1992,7 +2001,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2017,11 +2026,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -2058,7 +2067,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2085,12 +2094,12 @@ describe("use-task-operations", () => {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const originalToastSuccess = toast.success;
     const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
@@ -2126,7 +2135,6 @@ describe("use-task-operations", () => {
         closedAt: "2026-02-20T10:00:00Z",
       });
       expect(tasksList).toHaveBeenCalledWith("/repo");
-      expect(runsList).toHaveBeenCalledWith("/repo");
       expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
       expect(harness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
       expect(toastSuccess).toHaveBeenCalledWith("Merged pull request linked", {
@@ -2137,7 +2145,7 @@ describe("use-task-operations", () => {
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.success = originalToastSuccess;
     }
   });
@@ -2170,12 +2178,12 @@ describe("use-task-operations", () => {
       taskPullRequestDetect: host.taskPullRequestDetect,
       taskPullRequestLinkMerged: host.taskPullRequestLinkMerged,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.taskPullRequestLinkMerged = taskPullRequestLinkMerged;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
@@ -2228,13 +2236,12 @@ describe("use-task-operations", () => {
           return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
-      expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.taskPullRequestLinkMerged = original.taskPullRequestLinkMerged;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2275,11 +2282,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const originalToastWarning = toast.warning;
     const toastWarning = mock((_message: string, _options?: { description?: string }) => "");
@@ -2310,7 +2317,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.warning = originalToastWarning;
     }
   });
@@ -2325,11 +2332,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestDetect: host.taskPullRequestDetect,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
@@ -2357,7 +2364,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.error = originalToastError;
     }
   });
@@ -2404,11 +2411,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestUnlink: host.taskPullRequestUnlink,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestUnlink = taskPullRequestUnlink;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
     (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
@@ -2437,7 +2444,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestUnlink = original.taskPullRequestUnlink;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.error = originalToastError;
     }
   });
@@ -2450,11 +2457,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestUnlink: host.taskPullRequestUnlink,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestUnlink = taskPullRequestUnlink;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const originalToastSuccess = toast.success;
     const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
@@ -2474,7 +2481,6 @@ describe("use-task-operations", () => {
 
       expect(taskPullRequestUnlink).toHaveBeenCalledWith("/repo", "A");
       expect(tasksList).toHaveBeenCalledWith("/repo");
-      expect(runsList).toHaveBeenCalledWith("/repo");
       expect(harness.getLatest().tasks[0]?.pullRequest).toBeUndefined();
       expect(toastSuccess).toHaveBeenCalledWith("Pull request unlinked", {
         description: "A",
@@ -2483,7 +2489,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestUnlink = original.taskPullRequestUnlink;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
       toast.success = originalToastSuccess;
     }
   });
@@ -2497,11 +2503,11 @@ describe("use-task-operations", () => {
     const original = {
       taskPullRequestUnlink: host.taskPullRequestUnlink,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskPullRequestUnlink = taskPullRequestUnlink;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -2532,7 +2538,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskPullRequestUnlink = original.taskPullRequestUnlink;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2549,11 +2555,11 @@ describe("use-task-operations", () => {
     const original = {
       taskCreate: host.taskCreate,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskCreate = taskCreate;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -2584,7 +2590,7 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.taskCreate = original.taskCreate;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2606,11 +2612,11 @@ describe("use-task-operations", () => {
     const original = {
       taskCreate: host.taskCreate,
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.taskCreate = taskCreate;
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createTaskAndKanbanHarness({
       activeRepo: "/repo",
@@ -2659,12 +2665,11 @@ describe("use-task-operations", () => {
           return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
-      expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
       await harness.unmount();
       host.taskCreate = original.taskCreate;
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 
@@ -2715,10 +2720,10 @@ describe("use-task-operations", () => {
 
     const original = {
       tasksList: host.tasksList,
-      runsList: host.runsList,
+      runsList: legacyHost.runsList,
     };
     host.tasksList = tasksList;
-    host.runsList = runsList;
+    legacyHost.runsList = runsList;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -2739,7 +2744,7 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
-      host.runsList = original.runsList;
+      legacyHost.runsList = original.runsList;
     }
   });
 });

@@ -175,20 +175,6 @@ impl<'a> TaskDeletionService<'a> {
                     &cleanup_progress.deleted_branches,
                 )
             })?;
-        for target_task_id in &deletion_plan.target_task_ids {
-            self.service
-                .clear_task_runs(context.repo.repo_path.as_str(), target_task_id)
-                .with_context(|| {
-                    format!("Failed to clear run state for deleted task {target_task_id}")
-                })
-                .map_err(|error| {
-                    with_delete_cleanup_progress(
-                        error,
-                        &cleanup_progress.removed_worktrees,
-                        &cleanup_progress.deleted_branches,
-                    )
-                })?;
-        }
         Ok(())
     }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { canDetectTaskPullRequest, statusBadgeClassName } from "./task-display";
 
 const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
@@ -30,31 +30,9 @@ const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-const makeRun = (overrides: Partial<RunSummary> = {}): RunSummary => ({
-  runId: "run-1",
-  runtimeKind: "opencode",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:3000",
-  },
-  repoPath: "/repo",
-  taskId: "TASK-1",
-  branch: "odt/task-1",
-  worktreePath: "/repo/.worktrees/task-1",
-  port: 3000,
-  state: "running",
-  lastMessage: null,
-  startedAt: "2026-03-13T10:00:00Z",
-  ...overrides,
-});
-
 describe("canDetectTaskPullRequest", () => {
-  test("returns false for in-progress tasks without builder workspace evidence", () => {
-    expect(canDetectTaskPullRequest(makeTask(), [])).toBe(false);
-  });
-
-  test("returns true when an active builder run exists for the task", () => {
-    expect(canDetectTaskPullRequest(makeTask(), [makeRun()])).toBe(true);
+  test("returns false for in-progress tasks without completed builder workflow", () => {
+    expect(canDetectTaskPullRequest(makeTask())).toBe(false);
   });
 
   test("returns true when the builder workflow is completed", () => {
@@ -68,7 +46,6 @@ describe("canDetectTaskPullRequest", () => {
             qa: { required: false, canSkip: true, available: false, completed: false },
           },
         }),
-        [],
       ),
     ).toBe(true);
   });

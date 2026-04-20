@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -34,23 +34,6 @@ const taskFixture: TaskCard = {
   createdAt: "2026-03-01T09:00:00.000Z",
 };
 
-const runFixture: RunSummary = {
-  runId: "run-1",
-  runtimeKind: "opencode",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4444",
-  },
-  repoPath: "/tmp/repo-a",
-  taskId: "task-1",
-  branch: "obp/task-1",
-  worktreePath: "/tmp/repo-a/worktree",
-  port: 4444,
-  state: "running",
-  lastMessage: null,
-  startedAt: "2026-03-01T09:00:00.000Z",
-};
-
 const createSessionFixture = (): AgentSessionState => ({
   runtimeKind: "opencode",
   sessionId: "session-1",
@@ -62,7 +45,6 @@ const createSessionFixture = (): AgentSessionState => ({
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",
-  runId: "run-1",
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo-a",
   messages: [],
@@ -140,7 +122,6 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     const harness = createHookHarness({
       activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
       tasks: [taskFixture],
-      runs: [runFixture],
     });
     const unsubscribeCalls: string[] = [];
 
@@ -164,7 +145,6 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       await harness.update({
         activeWorkspace: createActiveWorkspace("/tmp/repo-b"),
         tasks: [taskFixture],
-        runs: [runFixture],
       });
 
       expect(unsubscribeCalls).toEqual(["first", "second"]);
@@ -175,38 +155,28 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     }
   });
 
-  test("keeps task and run refs synchronized with latest hook inputs", async () => {
+  test("keeps task refs synchronized with latest hook inputs", async () => {
     const nextTask: TaskCard = {
       ...taskFixture,
       id: "task-2",
       title: "Task 2",
     };
-    const nextRun: RunSummary = {
-      ...runFixture,
-      runId: "run-2",
-      taskId: "task-2",
-    };
 
     const harness = createHookHarness({
       activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
       tasks: [taskFixture],
-      runs: [runFixture],
     });
 
     try {
       await harness.mount();
 
       expect(harness.getLatest().refBridges.taskRef.current).toEqual([taskFixture]);
-      expect(harness.getLatest().refBridges.runsRef.current).toEqual([runFixture]);
-
       await harness.update({
         activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
         tasks: [nextTask],
-        runs: [nextRun],
       });
 
       expect(harness.getLatest().refBridges.taskRef.current).toEqual([nextTask]);
-      expect(harness.getLatest().refBridges.runsRef.current).toEqual([nextRun]);
     } finally {
       await harness.unmount();
     }

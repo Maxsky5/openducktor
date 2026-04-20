@@ -7,7 +7,7 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState as BaseAgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import { createStartAgentSession } from "./start-session";
@@ -15,6 +15,8 @@ import {
   type FlatStartSessionDependencies,
   toStartSessionDependencies,
 } from "./start-session.test-helpers";
+
+type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 
 const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
   return createStartAgentSession(toStartSessionDependencies(deps));
@@ -115,7 +117,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -160,7 +161,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -227,7 +227,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -307,7 +306,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -397,7 +395,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -471,7 +468,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         ensureRuntime: async () => ({
           kind: "opencode",
           runtimeId: "runtime-1",
-          runId: null,
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo",
         }),
@@ -547,7 +543,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -604,7 +599,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -630,7 +624,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -684,7 +677,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -710,7 +702,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:00:00.000Z",
             runtimeId: null,
-            runId: "run-1",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -736,7 +727,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -806,7 +796,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-old",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/old-worktree",
             messages: [],
@@ -832,7 +821,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/new-worktree",
       }),
@@ -887,7 +875,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -913,7 +900,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -964,7 +950,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
-          runId: "run-2",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
@@ -1006,7 +991,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -1083,7 +1067,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -1114,7 +1097,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1190,7 +1172,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -1222,7 +1203,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -1287,7 +1267,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startedAt: "2026-02-22T08:20:00.000Z",
           updatedAt: "2026-02-22T08:20:00.000Z",
           runtimeId: "runtime-1",
-          runId: "run-2",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
         }),
@@ -1311,7 +1290,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
-            runId: "run-1",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -1336,7 +1314,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1400,7 +1377,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
-          runId: "run-1",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
@@ -1431,7 +1407,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1476,7 +1451,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startedAt: "2026-02-22T08:20:00.000Z",
         updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1492,7 +1466,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startedAt: "2026-02-22T08:10:00.000Z",
         updatedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1508,7 +1481,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startedAt: "2026-02-22T08:30:00.000Z",
         updatedAt: "2026-02-22T08:30:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-3",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1529,7 +1501,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -1550,7 +1521,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:30:00.000Z",
             runtimeId: "runtime-1",
-            runId: "run-3",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -1604,7 +1574,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -1689,7 +1658,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1789,7 +1757,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "stopped",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: null,
-        runId: null,
         runtimeRoute: null,
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -1845,7 +1812,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -1865,7 +1831,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             ...sourceBuild,
             status: "idle",
             runtimeId: "runtime-1",
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             messages: [],
           },
@@ -1944,7 +1909,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: null,
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -1991,7 +1955,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: null,
         runtimeConnection: {
           type: "local_http",
@@ -2045,7 +2008,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
-          runId: null,
           runtimeRoute: null,
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
@@ -2088,7 +2050,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: null,
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2138,7 +2099,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -2187,7 +2147,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2241,7 +2200,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -2303,7 +2261,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2352,7 +2309,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: "runtime-1",
-          runId: "run-2",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
@@ -2397,7 +2353,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-2",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2475,7 +2430,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startedAt: "2026-02-22T08:20:00.000Z",
         updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         selectedModel: {
@@ -2502,7 +2456,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2523,7 +2476,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:20:00.000Z",
             runtimeId: "runtime-1",
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -2600,7 +2552,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startedAt: "2026-02-22T08:20:00.000Z",
           updatedAt: "2026-02-22T08:20:00.000Z",
           runtimeId: "runtime-1",
-          runId: "run-2",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
           selectedModel: {
@@ -2627,7 +2578,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "claude-code",
         runtimeId: "runtime-claude",
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2648,7 +2598,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             status: "idle",
             startedAt: "2026-02-22T08:20:00.000Z",
             runtimeId: "runtime-1",
-            runId: "run-2",
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
@@ -2717,7 +2666,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -2780,7 +2728,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         return {
           kind: "opencode",
           runtimeId: null,
-          runId: null,
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo",
         };
@@ -2845,7 +2792,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -2920,7 +2866,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         return {
           kind: "opencode",
           runtimeId: null,
-          runId: null,
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: options?.targetWorkingDirectory ?? "/tmp/repo",
         };
@@ -2972,7 +2917,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
       }),
@@ -3041,7 +2985,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3110,7 +3053,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3180,7 +3122,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3248,7 +3189,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3333,7 +3273,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3410,7 +3349,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         return {
           kind: "opencode",
           runtimeId: null,
-          runId: "run-1",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
         };
@@ -3476,7 +3414,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3543,7 +3480,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -3590,7 +3526,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3659,7 +3594,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
-        runId: "run-2",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         messages: [],
@@ -3702,7 +3636,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: "runtime-1",
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -3778,7 +3711,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
-        runId: "run-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),

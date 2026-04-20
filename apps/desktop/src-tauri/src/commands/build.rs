@@ -1,26 +1,25 @@
 use crate::{
-    as_error, dev_server_emitter, run_emitter, run_service_blocking, AppState,
-    BuildCompletePayload, PullRequestContentPayload, TaskDirectMergePayload,
+    as_error, dev_server_emitter, run_service_blocking, AppState, BuildCompletePayload,
+    PullRequestContentPayload, TaskDirectMergePayload,
 };
-use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
-    AgentRuntimeKind, AgentSessionStopRequest, DevServerGroupState, PullRequestRecord, RunSummary,
-    TaskApprovalContextLoadResult, TaskCard, TaskDirectMergeResult, TaskPullRequestDetectResult,
+    AgentRuntimeKind, AgentSessionStopRequest, BuildSessionBootstrap, DevServerGroupState,
+    PullRequestRecord, TaskApprovalContextLoadResult, TaskCard, TaskDirectMergeResult,
+    TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn build_start<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle<R>,
+    _app: AppHandle<R>,
     repo_path: String,
     task_id: String,
     runtime_kind: AgentRuntimeKind,
-) -> Result<RunSummary, String> {
+) -> Result<BuildSessionBootstrap, String> {
     let service = state.service.clone();
-    let emitter = run_emitter(app);
     let result = run_service_blocking("build_start", move || {
-        service.build_start(&repo_path, &task_id, runtime_kind.as_str(), emitter)
+        service.build_start(&repo_path, &task_id, runtime_kind.as_str())
     })
     .await;
     as_error(result)
@@ -87,67 +86,15 @@ pub async fn dev_server_restart<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn build_respond<R: tauri::Runtime>(
-    state: State<'_, AppState>,
-    app: AppHandle<R>,
-    run_id: String,
-    action: BuildResponseAction,
-    payload: Option<String>,
-) -> Result<serde_json::Value, String> {
-    as_error(
-        state
-            .service
-            .build_respond(&run_id, action, payload.as_deref(), run_emitter(app))
-            .map(|ok| serde_json::json!({ "ok": ok })),
-    )
-}
-
-#[tauri::command]
-pub async fn build_stop<R: tauri::Runtime>(
-    state: State<'_, AppState>,
-    app: AppHandle<R>,
-    run_id: String,
-) -> Result<serde_json::Value, String> {
-    let service = state.service.clone();
-    let emitter = run_emitter(app);
-    let result = run_service_blocking("build_stop", move || {
-        service
-            .build_stop(&run_id, emitter)
-            .map(|ok| serde_json::json!({ "ok": ok }))
-    })
-    .await;
-    as_error(result)
-}
-
-#[tauri::command]
 pub async fn agent_session_stop<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle<R>,
+    _app: AppHandle<R>,
     request: AgentSessionStopRequest,
 ) -> Result<serde_json::Value, String> {
     let service = state.service.clone();
-    let emitter = run_emitter(app);
     let result = run_service_blocking("agent_session_stop", move || {
         service
-            .agent_session_stop(request, emitter)
-            .map(|ok| serde_json::json!({ "ok": ok }))
-    })
-    .await;
-    as_error(result)
-}
-
-#[tauri::command]
-pub async fn build_cleanup<R: tauri::Runtime>(
-    state: State<'_, AppState>,
-    app: AppHandle<R>,
-    run_id: String,
-    mode: CleanupMode,
-) -> Result<serde_json::Value, String> {
-    let service = state.service.clone();
-    let emitter = run_emitter(app);
-    let result = run_service_blocking("build_cleanup", move || {
-        service
-            .build_cleanup(&run_id, mode, emitter)
+            .agent_session_stop(request)
             .map(|ok| serde_json::json!({ "ok": ok }))
     })
     .await;
@@ -370,15 +317,4 @@ pub async fn human_approve(
     task_id: String,
 ) -> Result<TaskCard, String> {
     as_error(state.service.human_approve(&repo_path, &task_id))
-}
-
-#[tauri::command]
-pub async fn runs_list(
-    state: State<'_, AppState>,
-    repo_path: Option<String>,
-) -> Result<Vec<RunSummary>, String> {
-    let service = state.service.clone();
-    let result =
-        run_service_blocking("runs_list", move || service.runs_list(repo_path.as_deref())).await;
-    as_error(result)
 }

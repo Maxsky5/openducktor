@@ -1,14 +1,12 @@
-import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 import { toVisibleTasks } from "../read-models/task-read-model";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
-const RUN_DATA_STALE_TIME_MS = 30_000;
 
 export type RepoTaskData = {
   tasks: TaskCard[];
-  runs: RunSummary[];
 };
 
 export const taskQueryKeys = {
@@ -18,21 +16,14 @@ export const taskQueryKeys = {
   kanbanDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "kanban-data", repoPath] as const,
   kanbanData: (repoPath: string, doneVisibleDays: number) =>
     [...taskQueryKeys.kanbanDataPrefix(repoPath), doneVisibleDays] as const,
-  runs: (repoPath: string) => [...taskQueryKeys.all, "runs", repoPath] as const,
 };
 
 export const repoTaskDataQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.repoData(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
-      const [taskList, runList] = await Promise.all([
-        host.tasksList(repoPath),
-        host.runsList(repoPath),
-      ]);
-
       return {
-        tasks: toVisibleTasks(taskList),
-        runs: runList,
+        tasks: toVisibleTasks(await host.tasksList(repoPath)),
       };
     },
     staleTime: TASK_DATA_STALE_TIME_MS,
@@ -58,13 +49,6 @@ export const kanbanTaskListQueryOptions = (repoPath: string, doneVisibleDays: nu
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
-const repoRunsQueryOptions = (repoPath: string) =>
-  queryOptions({
-    queryKey: taskQueryKeys.runs(repoPath),
-    queryFn: (): Promise<RunSummary[]> => host.runsList(repoPath),
-    staleTime: RUN_DATA_STALE_TIME_MS,
-  });
-
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
@@ -72,24 +56,13 @@ export const loadRepoTaskDataFromQuery = (
   queryClient.fetchQuery({
     ...repoTaskDataQueryOptions(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
-      const [taskList, runList] = await Promise.all([
-        host.tasksList(repoPath),
-        host.runsList(repoPath),
-      ]);
       const repoTaskData = {
-        tasks: toVisibleTasks(taskList),
-        runs: runList,
+        tasks: toVisibleTasks(await host.tasksList(repoPath)),
       };
       queryClient.setQueryData(taskQueryKeys.visibleTasks(repoPath), repoTaskData.tasks);
-      queryClient.setQueryData(taskQueryKeys.runs(repoPath), repoTaskData.runs);
       return repoTaskData;
     },
   });
-
-export const loadRepoRunsFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-): Promise<RunSummary[]> => queryClient.fetchQuery(repoRunsQueryOptions(repoPath));
 
 export const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
@@ -184,16 +157,8 @@ export const invalidateRepoTaskListQueries = (
 export const invalidateRepoTaskQueries = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<unknown[]> => {
-  return Promise.all([
-    invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" }),
-    queryClient.invalidateQueries({
-      queryKey: taskQueryKeys.runs(repoPath),
-      exact: true,
-      refetchType: "none",
-    }),
-  ]);
-};
+): Promise<unknown[]> =>
+  Promise.all([invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" })]);
 
 export const upsertAgentSessionInRepoTaskData = (
   queryClient: QueryClient,

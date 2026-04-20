@@ -101,7 +101,6 @@ describe("app-state-context-values", () => {
       unlinkingPullRequestTaskId: null,
       pendingMergedPullRequest: null,
       tasks: [],
-      runs: [],
       refreshTasks: async () => {},
       syncPullRequests: async (_taskId: string) => {},
       linkMergedPullRequest: async () => {},
@@ -120,11 +119,7 @@ describe("app-state-context-values", () => {
       humanRequestChangesTask: async () => {},
     };
     const delegationValue: DelegationStateContextValue = {
-      events: [],
       delegateTask: async () => {},
-      delegateRespond: async () => {},
-      delegateStop: async () => {},
-      delegateCleanup: async () => {},
     };
     const specValue: SpecStateContextValue = {
       loadSpec: async () => "",

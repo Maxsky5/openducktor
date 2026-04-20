@@ -75,10 +75,9 @@ const AGENT_METHODS = [
   "systemCheck",
   "runtimeCheck",
   "beadsCheck",
-  "runsList",
   "runtimeDefinitionsList",
   "runtimeList",
-  "buildContinuationTargetGet",
+  "taskWorktreeGet",
   "runtimeStop",
   "runtimeEnsure",
   "runtimeStartupStatus",
@@ -102,10 +101,7 @@ const AGENT_METHODS = [
   "repoPullRequestSync",
   "humanRequestChanges",
   "humanApprove",
-  "buildRespond",
-  "buildStop",
   "agentSessionStop",
-  "buildCleanup",
 ] as const satisfies readonly MethodName<TauriAgentClient>[];
 
 const GIT_METHODS = [
@@ -175,7 +171,6 @@ const bindDelegates = <
 };
 
 export type TauriHostClient = TauriHostClientApi & PlannerTools;
-export type { BuildRespondInput } from "./build-runtime-client";
 
 const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
   const metadataCache = new TaskMetadataCache();

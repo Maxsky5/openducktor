@@ -88,7 +88,7 @@ afterEach(async () => {
 
 const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
 beforeEach(() => {
   toastErrorMock.mockClear();
@@ -116,7 +116,7 @@ beforeEach(() => {
     workspaces: {},
     globalPromptOverrides: {},
   });
-  host.buildContinuationTargetGet = async () => ({
+  host.taskWorktreeGet = async () => ({
     workingDirectory: "/repo/worktrees/task-1",
     source: "builder_session",
   });
@@ -125,7 +125,7 @@ beforeEach(() => {
 afterEach(() => {
   host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
   host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-  host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+  host.taskWorktreeGet = originalBuildContinuationTargetGet;
 });
 
 describe("useAgentStudioFreshSessionCreation", () => {

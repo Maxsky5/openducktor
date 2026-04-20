@@ -85,7 +85,6 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
-  runId: null,
   runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo/worktree",
   historyHydrationState: "hydrated",
@@ -234,15 +233,19 @@ export const createTaskCardFixture = (
   return structuredClone(merged);
 };
 
+type LegacyAgentSessionOverrides = Partial<AgentSessionState> & {
+  runId?: string | null;
+};
+
 export const createAgentSessionFixture = (
-  defaults: Partial<AgentSessionState> = {},
-  overrides: Partial<AgentSessionState> = {},
+  defaults: LegacyAgentSessionOverrides = {},
+  overrides: LegacyAgentSessionOverrides = {},
 ): AgentSessionState => {
   const repoPath =
     overrides.repoPath ?? defaults.repoPath ?? BASE_AGENT_SESSION_FIXTURE.repoPath ?? "/repo";
   const { repoPath: _baseRepoPath, ...baseSession } = BASE_AGENT_SESSION_FIXTURE;
-  const { repoPath: _defaultRepoPath, ...defaultSession } = defaults;
-  const { repoPath: _overrideRepoPath, ...overrideSession } = overrides;
+  const { repoPath: _defaultRepoPath, runId: _defaultRunId, ...defaultSession } = defaults;
+  const { repoPath: _overrideRepoPath, runId: _overrideRunId, ...overrideSession } = overrides;
   const merged = createRepoScopedAgentSessionState(
     {
       ...baseSession,

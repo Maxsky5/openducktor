@@ -1,4 +1,4 @@
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
@@ -15,7 +15,6 @@ type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => 
 type OrchestratorMutableState = {
   sessionsById: AgentSessionsById;
   tasks: TaskCard[];
-  runs: RunSummary[];
   activeWorkspace: ActiveWorkspace | null;
   currentWorkspaceRepoPath: string | null;
   repoEpoch: number;
@@ -32,7 +31,6 @@ type OrchestratorMutableState = {
 type OrchestratorRefBridges = {
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   taskRef: MutableRefObject<TaskCard[]>;
-  runsRef: MutableRefObject<RunSummary[]>;
   activeWorkspaceRef: MutableRefObject<ActiveWorkspace | null>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
@@ -51,7 +49,6 @@ type OrchestratorRefBridges = {
 type UseOrchestratorSessionStateArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
-  runs: RunSummary[];
 };
 
 type UseOrchestratorSessionStateResult = {
@@ -85,14 +82,12 @@ const clearUnsubscribers = (unsubscribers: Map<string, () => void>): void => {
 export const useOrchestratorSessionState = ({
   activeWorkspace,
   tasks,
-  runs,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const sessionStore = useMemo(() => createAgentSessionsStore(), []);
   const mutableStateRef = useRef<OrchestratorMutableState>({
     sessionsById: {},
     tasks,
-    runs,
     activeWorkspace,
     currentWorkspaceRepoPath: workspaceRepoPath,
     repoEpoch: 0,
@@ -109,7 +104,6 @@ export const useOrchestratorSessionState = ({
     () => ({
       sessionsRef: createMutableBridge(mutableStateRef, "sessionsById"),
       taskRef: createMutableBridge(mutableStateRef, "tasks"),
-      runsRef: createMutableBridge(mutableStateRef, "runs"),
       activeWorkspaceRef: createMutableBridge(mutableStateRef, "activeWorkspace"),
       currentWorkspaceRepoPathRef: createMutableBridge(mutableStateRef, "currentWorkspaceRepoPath"),
       repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
@@ -145,8 +139,7 @@ export const useOrchestratorSessionState = ({
   useEffect(() => {
     mutableStateRef.current.activeWorkspace = activeWorkspace;
     mutableStateRef.current.tasks = tasks;
-    mutableStateRef.current.runs = runs;
-  }, [activeWorkspace, runs, tasks]);
+  }, [activeWorkspace, tasks]);
 
   useEffect(() => {
     if (mutableStateRef.current.currentWorkspaceRepoPath === workspaceRepoPath) {

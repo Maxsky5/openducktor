@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RunSummary, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
@@ -40,13 +40,13 @@ import {
 import { findLastUserSessionMessage } from "./support/messages";
 
 const hasAttachedRuntime = (
-  session: Pick<AgentSessionState, "runId" | "runtimeId" | "runtimeRoute"> | null | undefined,
+  session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
 ): boolean => {
   if (!session) {
     return false;
   }
 
-  return session.runId !== null || session.runtimeId !== null || session.runtimeRoute !== null;
+  return session.runtimeId !== null || session.runtimeRoute !== null;
 };
 
 const withRuntimeRecoveryState = (
@@ -61,7 +61,6 @@ const withRuntimeRecoveryState = (
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
-  runs: RunSummary[];
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   agentEngine: AgentEnginePort;
 };
@@ -77,7 +76,6 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
     sessionId: string;
     recoveryDedupKey?: string | null;
     persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
   }) => Promise<boolean>;
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
@@ -86,7 +84,6 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
 export function useAgentOrchestratorOperations({
   activeWorkspace,
   tasks,
-  runs,
   refreshTaskData,
   agentEngine,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
@@ -94,7 +91,6 @@ export function useAgentOrchestratorOperations({
   const { sessionStore, refBridges, commitSessions } = useOrchestratorSessionState({
     activeWorkspace,
     tasks,
-    runs,
   });
   const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
@@ -367,13 +363,11 @@ export function useAgentOrchestratorOperations({
       sessionId,
       recoveryDedupKey,
       persistedRecords,
-      preloadedRuns,
     }: {
       taskId: string;
       sessionId: string;
       recoveryDedupKey?: string | null;
       persistedRecords?: AgentSessionRecord[];
-      preloadedRuns?: RunSummary[];
     }): Promise<boolean> => {
       updateSession(
         sessionId,
@@ -388,7 +382,6 @@ export function useAgentOrchestratorOperations({
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
-          ...(preloadedRuns ? { preloadedRuns } : {}),
         });
       } catch (error) {
         attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
@@ -419,14 +412,12 @@ export function useAgentOrchestratorOperations({
       repoReadinessState,
       recoveryDedupKey,
       persistedRecords,
-      preloadedRuns,
     }: {
       taskId: string;
       sessionId: string;
       repoReadinessState: SessionRepoReadinessState;
       recoveryDedupKey?: string | null;
       persistedRecords?: AgentSessionRecord[];
-      preloadedRuns?: RunSummary[];
     }): Promise<boolean> => {
       const session = sessionsRef.current[sessionId] ?? null;
       const lifecycle = deriveAgentSessionViewLifecycle({
@@ -444,7 +435,6 @@ export function useAgentOrchestratorOperations({
           sessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
-          ...(preloadedRuns ? { preloadedRuns } : {}),
         });
       }
 
@@ -528,7 +518,6 @@ export function useAgentOrchestratorOperations({
       await repoSessionHydrationService.reconcilePendingTasks({
         repoPath: workspaceRepoPath,
         tasks,
-        runs,
         isCancelled: () => cancelled,
         isCurrentRepo: isCurrentActiveRepo,
       });
@@ -540,7 +529,6 @@ export function useAgentOrchestratorOperations({
   }, [
     workspaceRepoPath,
     isCurrentActiveRepo,
-    runs,
     repoSessionHydrationService,
     sessionRetryTick,
     tasks,
@@ -549,10 +537,9 @@ export function useAgentOrchestratorOperations({
   const ensureRuntime = useMemo(
     () =>
       createEnsureRuntime({
-        runsRef: refBridges.runsRef,
         refreshTaskData,
       }),
-    [refBridges, refreshTaskData],
+    [refreshTaskData],
   );
 
   const invalidateSessionStopQueries = useCallback(

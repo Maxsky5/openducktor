@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  RunSummary,
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -27,19 +26,16 @@ export type SessionHydrationOperations = {
     sessionId: string;
     recoveryDedupKey?: string | null;
     persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
   }) => Promise<boolean>;
   retrySessionRuntimeAttachment: (input: {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
     persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
   }) => Promise<void>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
-    preloadedRuns?: RunSummary[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
     preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
@@ -80,7 +76,6 @@ export const createSessionHydrationOperations = ({
       sessionId,
       recoveryDedupKey,
       persistedRecords,
-      preloadedRuns,
     }) => {
       const sessionBeforeRecovery = getSessionSnapshot(sessionId);
       const hadLocalTranscriptBeforeRecovery =
@@ -93,7 +88,6 @@ export const createSessionHydrationOperations = ({
             mode: "recover_runtime_attachment",
             targetSessionId: sessionId,
             ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
-            ...(preloadedRuns ? { preloadedRuns } : {}),
             historyPolicy: "none",
           },
           persistedRecords,
@@ -129,13 +123,7 @@ export const createSessionHydrationOperations = ({
 
       return attached;
     },
-    retrySessionRuntimeAttachment: ({
-      taskId,
-      sessionId,
-      recoveryDedupKey,
-      persistedRecords,
-      preloadedRuns,
-    }) =>
+    retrySessionRuntimeAttachment: ({ taskId, sessionId, recoveryDedupKey, persistedRecords }) =>
       loadAgentSessions(
         taskId,
         withPersistedRecords(
@@ -143,7 +131,6 @@ export const createSessionHydrationOperations = ({
             mode: "recover_runtime_attachment",
             targetSessionId: sessionId,
             ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
-            ...(preloadedRuns ? { preloadedRuns } : {}),
             historyPolicy: "none",
           },
           persistedRecords,
@@ -152,7 +139,6 @@ export const createSessionHydrationOperations = ({
     reconcileLiveTaskSessions: ({
       taskId,
       persistedRecords,
-      preloadedRuns,
       preloadedRuntimeLists,
       preloadedRuntimeConnectionsByKey,
       preloadedLiveAgentSessionsByKey,
@@ -164,7 +150,6 @@ export const createSessionHydrationOperations = ({
           {
             mode: "reconcile_live",
             historyPolicy: "none",
-            ...(preloadedRuns ? { preloadedRuns } : {}),
             ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
             ...(preloadedRuntimeConnectionsByKey ? { preloadedRuntimeConnectionsByKey } : {}),
             ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),

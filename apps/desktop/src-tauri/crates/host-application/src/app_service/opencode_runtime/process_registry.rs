@@ -118,6 +118,7 @@ impl Drop for TrackedOpencodeProcessGuard {
 
 #[cfg(test)]
 impl TrackedOpencodeProcessGuard {
+    #[allow(dead_code)]
     pub(crate) fn new_for_test(
         tracked_processes: Arc<Mutex<HashMap<u32, usize>>>,
         opencode_process_registry_path: PathBuf,

@@ -3,7 +3,6 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RunSummary,
   type TaskCard,
 } from "@openducktor/contracts";
 import { toast } from "sonner";
@@ -85,18 +84,17 @@ const taskFixture2: TaskCard = {
   title: "Task 2",
 };
 
-const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
 beforeEach(async () => {
   await clearAppQueryClient();
-  host.buildContinuationTargetGet = async () => ({
+  host.taskWorktreeGet = async () => ({
     workingDirectory: "/tmp/repo/worktree",
-    source: "builder_session",
   });
 });
 
 afterEach(() => {
-  host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+  host.taskWorktreeGet = originalBuildContinuationTargetGet;
 });
 
 const persistedSessionFixture: AgentSessionRecord = {
@@ -131,21 +129,13 @@ const taskFixture2WithPersistedBuildSession: TaskCard = {
   ],
 };
 
-const runningRunFixture: RunSummary = {
-  runId: "run-1",
+const buildBootstrapFixture = {
   runtimeKind: "opencode",
   runtimeRoute: {
-    type: "local_http",
+    type: "local_http" as const,
     endpoint: "http://127.0.0.1:4444",
   },
-  repoPath: "/tmp/repo",
-  taskId: "task-1",
-  branch: "obp/task-1",
-  worktreePath: "/tmp/repo/worktree",
-  port: 4444,
-  state: "running",
-  lastMessage: null,
-  startedAt: "2026-02-22T08:00:00.000Z",
+  workingDirectory: "/tmp/repo/worktree",
 };
 
 const BUILD_SELECTION = {
@@ -178,7 +168,6 @@ const createHookHarness = (args: {
   activeRepo: string | null;
   activeWorkspace?: import("@openducktor/contracts").WorkspaceRecord | null;
   tasks: TaskCard[];
-  runs: RunSummary[];
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: OpencodeSdkAdapter;
 }) => {
@@ -240,7 +229,6 @@ const createHookHarness = (args: {
       activeRepo: string | null;
       activeWorkspace: import("@openducktor/contracts").WorkspaceRecord | null;
       tasks: TaskCard[];
-      runs: RunSummary[];
       refreshTaskData: (repoPath: string) => Promise<void>;
       agentEngine: OpencodeSdkAdapter;
     }>,
@@ -295,7 +283,6 @@ describe("use-agent-orchestrator-operations", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
   const originalRuntimeList = host.runtimeList;
-  const originalRunsList = host.runsList;
   const originalRuntimeEnsure = host.runtimeEnsure;
   const originalListLiveAgentSessionSnapshots =
     OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -335,7 +322,6 @@ describe("use-agent-orchestrator-operations", () => {
       globalPromptOverrides: {},
     });
     host.runtimeList = async () => [];
-    host.runsList = async () => [];
     host.runtimeEnsure = async (repoPath, runtimeKind) => ({
       kind: runtimeKind,
       runtimeId: "runtime-1",
@@ -360,7 +346,6 @@ describe("use-agent-orchestrator-operations", () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.runtimeList = originalRuntimeList;
-    host.runsList = originalRunsList;
     host.runtimeEnsure = originalRuntimeEnsure;
     OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
       originalListLiveAgentSessionSnapshots;
@@ -376,7 +361,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalSpecGet = host.specGet;
       const originalPlanGet = host.planGet;
       const originalQaGetReport = host.qaGetReport;
-      const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
       const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
       const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
@@ -395,7 +380,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.buildContinuationTargetGet = async () => ({
+      host.taskWorktreeGet = async () => ({
         workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
@@ -419,7 +404,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -450,7 +434,7 @@ describe("use-agent-orchestrator-operations", () => {
         host.specGet = originalSpecGet;
         host.planGet = originalPlanGet;
         host.qaGetReport = originalQaGetReport;
-        host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+        host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
         OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
         OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
@@ -542,7 +526,6 @@ describe("use-agent-orchestrator-operations", () => {
             agentSessions: [persistedSessionFixture],
           },
         ],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -585,7 +568,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalSpecGet = host.specGet;
       const originalPlanGet = host.planGet;
       const originalQaGetReport = host.qaGetReport;
-      const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
       const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
       const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
@@ -599,7 +582,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.buildContinuationTargetGet = async () => ({
+      host.taskWorktreeGet = async () => ({
         workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
@@ -631,7 +614,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [unavailableTask],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -660,7 +642,7 @@ describe("use-agent-orchestrator-operations", () => {
         host.specGet = originalSpecGet;
         host.planGet = originalPlanGet;
         host.qaGetReport = originalQaGetReport;
-        host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+        host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
         OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
         OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
@@ -684,7 +666,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalQaGetReport = host.qaGetReport;
       const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
       const originalBuildStart = host.buildStart;
-      const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
       const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
@@ -719,10 +701,9 @@ describe("use-agent-orchestrator-operations", () => {
         promptOverrides: {},
         agentDefaults: {},
       });
-      host.buildStart = async () => runningRunFixture;
-      host.buildContinuationTargetGet = async () => ({
+      host.buildStart = async () => buildBootstrapFixture;
+      host.taskWorktreeGet = async () => ({
         workingDirectory: "/tmp/repo/worktree",
-        source: "active_build_run",
       });
 
       OpencodeSdkAdapter.prototype.startSession = async () => {
@@ -748,7 +729,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -791,7 +771,7 @@ describe("use-agent-orchestrator-operations", () => {
         host.qaGetReport = originalQaGetReport;
         host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
         host.buildStart = originalBuildStart;
-        host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+        host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
         OpencodeSdkAdapter.prototype.startSession = originalStartSession;
         OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
@@ -820,7 +800,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalSpecGet = host.specGet;
       const originalPlanGet = host.planGet;
       const originalQaGetReport = host.qaGetReport;
-      const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
       const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
@@ -836,7 +816,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.buildContinuationTargetGet = async () => ({
+      host.taskWorktreeGet = async () => ({
         workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
@@ -876,7 +856,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -927,7 +906,7 @@ describe("use-agent-orchestrator-operations", () => {
         host.specGet = originalSpecGet;
         host.planGet = originalPlanGet;
         host.qaGetReport = originalQaGetReport;
-        host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+        host.taskWorktreeGet = originalBuildContinuationTargetGet;
         host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
 
         OpencodeSdkAdapter.prototype.startSession = originalStartSession;
@@ -948,9 +927,8 @@ describe("use-agent-orchestrator-operations", () => {
       const originalPlanGet = host.planGet;
       const originalQaGetReport = host.qaGetReport;
       const originalRuntimeList = host.runtimeList;
-      const originalRunsList = host.runsList;
       const originalRuntimeEnsure = host.runtimeEnsure;
-      const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
@@ -969,7 +947,6 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.runtimeList = async () => [];
-      host.runsList = async () => [];
       host.runtimeEnsure = async () => ({
         runtimeId: "runtime-1",
         kind: "opencode",
@@ -984,7 +961,7 @@ describe("use-agent-orchestrator-operations", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       });
-      host.buildContinuationTargetGet = async () => ({
+      host.taskWorktreeGet = async () => ({
         workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
@@ -1024,7 +1001,6 @@ describe("use-agent-orchestrator-operations", () => {
             ],
           },
         ],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -1056,9 +1032,8 @@ describe("use-agent-orchestrator-operations", () => {
         host.planGet = originalPlanGet;
         host.qaGetReport = originalQaGetReport;
         host.runtimeList = originalRuntimeList;
-        host.runsList = originalRunsList;
         host.runtimeEnsure = originalRuntimeEnsure;
-        host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+        host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
         OpencodeSdkAdapter.prototype.startSession = originalStartSession;
         OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
@@ -1082,9 +1057,8 @@ describe("use-agent-orchestrator-operations", () => {
 
       host.agentSessionsList = async () => [];
       host.buildStart = async () => ({
-        ...runningRunFixture,
-        repoPath: "/tmp/repo-a",
-        worktreePath: "/tmp/repo-a/worktree",
+        ...buildBootstrapFixture,
+        workingDirectory: "/tmp/repo-a/worktree",
       });
       host.workspaceGetRepoConfig = async () => repoConfigDeferred.promise;
 
@@ -1104,7 +1078,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo-a",
         tasks: [taskFixture],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -1236,13 +1209,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo-a",
         tasks: [taskFixture],
-        runs: [
-          {
-            ...runningRunFixture,
-            repoPath: "/tmp/repo-a",
-            worktreePath: "/tmp/repo-a/worktree",
-          },
-        ],
         refreshTaskData: async () => {
           refreshCalls += 1;
           await refreshDeferred.promise;
@@ -1368,7 +1334,6 @@ describe("use-agent-orchestrator-operations", () => {
             ],
           },
         ],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -1495,7 +1460,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildStart = async () => {
         buildStartCalls += 1;
-        return runningRunFixture;
+        return buildBootstrapFixture;
       };
       host.workspaceGetRepoConfig = async () => ({
         workspaceId: "repo",
@@ -1541,13 +1506,11 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
       try {
         await harness.mount();
-        await harness.updateArgs({ runs: [runningRunFixture] });
 
         await harness.run(async () => {
           await harness.getLatest().startAgentSession({
@@ -1559,7 +1522,7 @@ describe("use-agent-orchestrator-operations", () => {
         });
 
         expect(buildStartCalls).toBe(0);
-        expect(startWorkingDirectory).toBe(runningRunFixture.worktreePath);
+        expect(startWorkingDirectory).toBe(buildBootstrapFixture.workingDirectory);
       } finally {
         await harness.unmount();
 
@@ -1618,7 +1581,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -1676,7 +1638,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalSpecGet = host.specGet;
       const originalPlanGet = host.planGet;
       const originalQaGetReport = host.qaGetReport;
-      const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
@@ -1695,7 +1657,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.buildContinuationTargetGet = async () => ({
+      host.taskWorktreeGet = async () => ({
         workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
       });
@@ -1735,7 +1697,6 @@ describe("use-agent-orchestrator-operations", () => {
             ],
           },
         ],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -1770,7 +1731,7 @@ describe("use-agent-orchestrator-operations", () => {
         host.specGet = originalSpecGet;
         host.planGet = originalPlanGet;
         host.qaGetReport = originalQaGetReport;
-        host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+        host.taskWorktreeGet = originalBuildContinuationTargetGet;
 
         OpencodeSdkAdapter.prototype.startSession = originalStartSession;
         OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
@@ -1785,7 +1746,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
-        runs: [],
         refreshTaskData: async () => {},
       });
       const originalAgentSessionsList = host.agentSessionsList;
@@ -1839,7 +1799,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo-a",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -1848,12 +1807,10 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.updateArgs({
           activeRepo: null,
           tasks: [],
-          runs: [],
         });
         await harness.updateArgs({
           activeRepo: "/tmp/repo-a",
           tasks: [taskFixtureWithPersistedBuildSession],
-          runs: [],
         });
         const hydrated = await harness.waitFor((state) => state.sessions.length === 1);
         expect(hydrated.sessions[0]?.sessionId).toBe("session-1");
@@ -1929,7 +1886,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -2022,7 +1978,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -2090,7 +2045,6 @@ describe("use-agent-orchestrator-operations", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runs: [],
       refreshTaskData: async () => {},
     });
 
@@ -2153,7 +2107,6 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
-      expect(recoveredSession?.runId).toBeNull();
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("hydrated");
       expect(
@@ -2239,7 +2192,6 @@ describe("use-agent-orchestrator-operations", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runs: [],
       refreshTaskData: async () => {},
     });
 
@@ -2339,7 +2291,6 @@ describe("use-agent-orchestrator-operations", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runs: [],
       refreshTaskData: async () => {},
     });
 
@@ -2433,7 +2384,6 @@ describe("use-agent-orchestrator-operations", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runs: [],
       refreshTaskData: async () => {},
     });
 
@@ -2523,7 +2473,6 @@ describe("use-agent-orchestrator-operations", () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixtureWithPersistedBuildSession],
-      runs: [],
       refreshTaskData: async () => {},
     });
 
@@ -2673,7 +2622,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -2777,7 +2725,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [runningRunFixture],
         refreshTaskData: async () => {},
       });
 
@@ -2856,7 +2803,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -2889,7 +2835,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession, taskFixture2WithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -3003,7 +2948,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession, taskFixture2WithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -3109,7 +3053,6 @@ describe("use-agent-orchestrator-operations", () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixtureWithPersistedBuildSession],
-        runs: [],
         refreshTaskData: async () => {},
       });
 
@@ -3118,7 +3061,6 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.updateArgs({
           activeRepo: "/tmp/repo",
           tasks: [taskFixtureWithPersistedBuildSession, taskFixture2WithPersistedBuildSession],
-          runs: [],
         });
         const resolved = await harness.waitFor((state) =>
           state.sessions.some(

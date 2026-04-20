@@ -232,7 +232,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   const originalWorkspaceList = host.workspaceList;
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-  const originalBuildContinuationTargetGet = host.buildContinuationTargetGet;
+  const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
   beforeEach(() => {
     host.workspaceList = async () => [
@@ -271,7 +271,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       workspaces: {},
       globalPromptOverrides: {},
     });
-    host.buildContinuationTargetGet = async () => ({
+    host.taskWorktreeGet = async () => ({
       workingDirectory: "/repo/worktrees/task-1",
       source: "builder_session",
     });
@@ -281,7 +281,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     host.workspaceList = originalWorkspaceList;
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    host.buildContinuationTargetGet = originalBuildContinuationTargetGet;
+    host.taskWorktreeGet = originalBuildContinuationTargetGet;
   });
 
   test("startSession starts a fresh session even when another session is active", async () => {

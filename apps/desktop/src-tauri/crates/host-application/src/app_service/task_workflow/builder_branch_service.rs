@@ -7,9 +7,9 @@ use super::cleanup_plans::{
     path_exists_including_broken_symlink,
 };
 use crate::app_service::service_core::AppService;
-use crate::app_service::task_workflow::session_service::BuildContinuationTargetLookup;
+use crate::app_service::task_workflow::session_service::TaskWorktreeLookup;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{BuildContinuationTargetSource, GitTargetBranch};
+use host_domain::GitTargetBranch;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::path::Path;
@@ -99,13 +99,13 @@ impl<'a> BuilderBranchService<'a> {
     ) -> Result<BuilderBranchContextLoadResult> {
         let target = match self
             .service
-            .build_continuation_target_lookup(repo_path, task_id)?
+            .task_worktree_lookup(repo_path, task_id)?
         {
-            BuildContinuationTargetLookup::Found(target) => target,
-            BuildContinuationTargetLookup::NoBuilderContext => {
+            TaskWorktreeLookup::Found(target) => target,
+            TaskWorktreeLookup::NoBuilderContext => {
                 return Ok(BuilderBranchContextLoadResult::MissingContext);
             }
-            BuildContinuationTargetLookup::MissingBuilderWorktree => {
+            TaskWorktreeLookup::MissingBuilderWorktree => {
                 return Ok(BuilderBranchContextLoadResult::MissingWorktree(
                     MissingBuilderWorktree::new(task_id, operation_label),
                 ));
@@ -134,7 +134,7 @@ impl<'a> BuilderBranchService<'a> {
         };
         if current_branch.detached {
             return Err(anyhow!(
-                "{operation_label} requires a builder branch, but the latest builder workspace is detached."
+                "{operation_label} requires a builder branch, but the builder worktree is detached."
             ));
         }
         let source_branch = current_branch
@@ -235,17 +235,15 @@ impl<'a> BuilderBranchService<'a> {
     ) -> Result<Option<BuilderCleanupTarget>> {
         if let Ok(Some(target)) = self
             .service
-            .build_continuation_target_get(repo_path, task_id)
+            .task_worktree_get(repo_path, task_id)
         {
-            if matches!(target.source, BuildContinuationTargetSource::ActiveBuildRun) {
-                if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
-                    repo_path,
-                    task_id,
-                    target.working_directory,
-                    preferred_source_branch,
-                )? {
-                    return Ok(Some(cleanup_target));
-                }
+            if let Some(cleanup_target) = self.cleanup_target_for_working_directory(
+                repo_path,
+                task_id,
+                target.working_directory,
+                preferred_source_branch,
+            )? {
+                return Ok(Some(cleanup_target));
             }
         }
 
@@ -362,24 +360,25 @@ impl<'a> BuilderBranchService<'a> {
 mod tests {
     use super::BuilderBranchService;
     use crate::app_service::test_support::{
-        add_workspace_with_repo_config, build_service_with_store, builtin_opencode_runtime_route,
-        init_git_repo, make_session, make_task, unique_temp_path,
+        add_workspace_with_repo_config, build_service_with_store, init_git_repo, make_session,
+        make_task, unique_temp_path,
     };
     use anyhow::Result;
-    use host_domain::{AgentRuntimeKind, GitCurrentBranch, RunState, RunSummary, TaskStatus};
-    use host_infra_system::AppConfigStore;
+    use host_domain::{GitCurrentBranch, TaskStatus};
+    use host_infra_system::{AppConfigStore, RepoConfig};
     use std::fs;
 
     #[test]
     fn load_builder_branch_context_rejects_detached_branch() -> Result<()> {
         let root = unique_temp_path("builder-branch-detached");
         let repo = root.join("repo");
-        let worktree = root.join("worktree");
+        let worktree_base = root.join("worktrees");
+        let worktree = worktree_base.join("task-1");
         init_git_repo(&repo)?;
         fs::create_dir_all(&worktree)?;
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
-        let (service, task_state, git_state) = build_service_with_store(
+        let (service, _task_state, git_state) = build_service_with_store(
             vec![make_task("task-1", "task", TaskStatus::HumanReview)],
             vec![],
             GitCurrentBranch {
@@ -390,14 +389,14 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
-        let mut session = make_session("task-1", "session-build");
-        session.working_directory = worktree.to_string_lossy().to_string();
-        task_state
-            .lock()
-            .expect("task state lock poisoned")
-            .agent_sessions
-            .push(session);
+        add_workspace_with_repo_config(
+            &service,
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )?;
         git_state
             .lock()
             .expect("git state lock poisoned")
@@ -416,7 +415,7 @@ mod tests {
             .expect_err("detached builder branch should be rejected");
         assert_eq!(
             error.to_string(),
-            "Pull request detection requires a builder branch, but the latest builder workspace is detached."
+            "Pull request detection requires a builder branch, but the builder worktree is detached."
         );
 
         let _ = fs::remove_dir_all(root);
@@ -590,10 +589,11 @@ mod tests {
     }
 
     #[test]
-    fn latest_cleanup_target_prefers_active_build_run_over_sessions() -> Result<()> {
-        let root = unique_temp_path("builder-branch-active-run");
+    fn latest_cleanup_target_prefers_task_worktree_over_sessions() -> Result<()> {
+        let root = unique_temp_path("builder-branch-task-worktree");
         let repo = root.join("repo");
-        let active_worktree = root.join("active");
+        let worktree_base = root.join("worktrees");
+        let active_worktree = worktree_base.join("task-1");
         let older_worktree = root.join("older");
         init_git_repo(&repo)?;
         fs::create_dir_all(&active_worktree)?;
@@ -611,7 +611,14 @@ mod tests {
             config_store,
         );
         let repo_path = repo.to_string_lossy().to_string();
-        service.workspace_add(repo_path.as_str())?;
+        let _workspace = add_workspace_with_repo_config(
+            &service,
+            repo_path.as_str(),
+            host_infra_system::RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )?;
 
         let mut older = make_session("task-1", "session-1");
         older.started_at = "2026-03-11T10:00:00Z".to_string();
@@ -621,32 +628,6 @@ mod tests {
             .expect("task state lock poisoned")
             .agent_sessions
             .push(older);
-
-        let active_repo_path = repo.to_string_lossy().to_string();
-        service.runs.lock().expect("run lock poisoned").insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: RunSummary {
-                    run_id: "run-1".to_string(),
-                    runtime_kind: AgentRuntimeKind::opencode(),
-                    runtime_route: builtin_opencode_runtime_route(4444),
-                    repo_path: active_repo_path.clone(),
-                    task_id: "task-1".to_string(),
-                    branch: "odt/task-1".to_string(),
-                    worktree_path: active_worktree.to_string_lossy().to_string(),
-                    port: Some(4444),
-                    state: RunState::Running,
-                    last_message: None,
-                    started_at: "2026-03-11T11:00:00Z".to_string(),
-                },
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: active_repo_path,
-                task_id: "task-1".to_string(),
-                worktree_path: active_worktree.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig::default(),
-            },
-        );
 
         let mut git = git_state.lock().expect("git state lock poisoned");
         git.current_branches_by_path.insert(
@@ -669,7 +650,7 @@ mod tests {
 
         let target = BuilderBranchService::new(&service)
             .latest_cleanup_target(repo_path.as_str(), "task-1", Some("odt/task-1"))?
-            .expect("expected active run cleanup target");
+            .expect("expected task worktree cleanup target");
 
         assert_eq!(target.working_directory, active_worktree.to_string_lossy());
 

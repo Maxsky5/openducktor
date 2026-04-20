@@ -1,7 +1,5 @@
 import type {
   BeadsCheck,
-  RunEvent,
-  RunSummary,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
@@ -81,7 +79,6 @@ export type ChecksOperationsContextValue = {
 
 export type TaskDataContextValue = {
   tasks: TaskCard[];
-  runs: RunSummary[];
 };
 
 export type TaskRefreshOptions = {
@@ -101,18 +98,6 @@ export type WorkspaceOperationsContextValue = {
   clearBranchData: () => void;
 };
 
-export type RunCompletionSignal = {
-  runId: string;
-  eventType: RunEvent["type"];
-  version: number;
-};
-
-export type DelegationEventsContextValue = {
-  setEvents: Dispatch<SetStateAction<RunEvent[]>>;
-  runCompletionSignal: RunCompletionSignal | null;
-  setRunCompletionSignal: (runId: string, eventType: RunEvent["type"]) => void;
-};
-
 export const ActiveWorkspaceContext = createContext<ActiveWorkspaceContextValue | null>(null);
 export const RuntimeDefinitionsContext = createContext<RuntimeDefinitionsContextValue | null>(null);
 export const ChecksOperationsContext = createContext<ChecksOperationsContextValue | null>(null);
@@ -121,7 +106,6 @@ export const TaskControlContext = createContext<TaskControlContextValue | null>(
 export const WorkspaceOperationsContext = createContext<WorkspaceOperationsContextValue | null>(
   null,
 );
-export const DelegationEventsContext = createContext<DelegationEventsContextValue | null>(null);
 
 export const useRequiredContext = <T>(context: Context<T | null>, name: string): T => {
   const value = useContext(context);
@@ -148,9 +132,6 @@ export const useTaskControlContext = (): TaskControlContextValue =>
 
 export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue =>
   useRequiredContext(WorkspaceOperationsContext, "useWorkspaceOperationsContext");
-
-export const useDelegationEventsContext = (): DelegationEventsContextValue =>
-  useRequiredContext(DelegationEventsContext, "useDelegationEventsContext");
 
 export const useAgentSessionsContext = (): AgentSessionsStore =>
   useRequiredContext(AgentSessionsContext, "useAgentSessions");

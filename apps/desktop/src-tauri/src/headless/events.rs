@@ -2,7 +2,7 @@ use super::command_support::HeadlessCommandError;
 use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive};
 use axum::response::IntoResponse;
-use host_application::{DevServerEmitter, RunEmitter};
+use host_application::DevServerEmitter;
 use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::pin::Pin;
@@ -94,21 +94,6 @@ pub(super) fn parse_last_event_id(
     })?;
     value.parse::<u64>().map(Some).map_err(|error| {
         HeadlessCommandError::bad_request(format!("Invalid Last-Event-ID header: {error}"))
-    })
-}
-
-pub(super) fn make_emitter(events: HeadlessEventBus) -> RunEmitter {
-    Arc::new(move |event| match serde_json::to_string(&event) {
-        Ok(payload) => {
-            events.emit(payload);
-        }
-        Err(error) => {
-            tracing::warn!(
-                target: "openducktor.browser-backend",
-                error = %error,
-                "Failed to serialize run event for browser SSE"
-            );
-        }
     })
 }
 
