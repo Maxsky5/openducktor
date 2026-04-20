@@ -1,7 +1,5 @@
 use anyhow::Result;
-use host_domain::{
-    AgentRuntimeKind, GitCurrentBranch, RuntimeInstanceSummary, RuntimeRole,
-};
+use host_domain::{AgentRuntimeKind, GitCurrentBranch, RuntimeInstanceSummary, RuntimeRole};
 use host_infra_system::AppConfigStore;
 use std::fs;
 use std::process::{Command, Stdio};

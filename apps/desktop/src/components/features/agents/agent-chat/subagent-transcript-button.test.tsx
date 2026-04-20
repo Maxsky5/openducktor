@@ -35,7 +35,7 @@ describe("SubagentTranscriptButton", () => {
     ).toBeNull();
   });
 
-  test("opens a read-only transcript request for supported subagent tool calls", () => {
+  test("opens a read-only session view request for supported subagent tool calls", () => {
     const onOpenTranscript = mock(() => {});
 
     render(
@@ -46,13 +46,13 @@ describe("SubagentTranscriptButton", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "View subagent transcript" }));
+    fireEvent.click(screen.getByRole("button", { name: "View subagent activity" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
       taskId: "task-1",
       sessionId: "session-child-1",
-      title: "Subagent transcript",
-      description: "Read-only transcript for subagent session session-child-1.",
+      title: "Subagent activity",
+      description: "View what this subagent did.",
     });
   });
 
@@ -65,7 +65,7 @@ describe("SubagentTranscriptButton", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent transcript" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
 
     rerender(
       <SubagentTranscriptButton
@@ -75,10 +75,10 @@ describe("SubagentTranscriptButton", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent transcript" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
   });
 
-  test("prevents parent summary clicks when opening the transcript", () => {
+  test("prevents parent summary clicks when opening the session view", () => {
     const onOpenTranscript = mock(() => {});
     const onParentClick = mock(() => {});
     document.body.addEventListener("click", onParentClick);
@@ -92,7 +92,7 @@ describe("SubagentTranscriptButton", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "View subagent transcript" }));
+      fireEvent.click(screen.getByRole("button", { name: "View subagent activity" }));
 
       expect(onOpenTranscript).toHaveBeenCalledTimes(1);
       expect(onParentClick).not.toHaveBeenCalled();

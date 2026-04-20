@@ -1,4 +1,5 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import {
   createContext,
@@ -9,7 +10,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useActiveWorkspace } from "@/state/app-state-provider";
+import { useActiveWorkspace, useTasksState } from "@/state/app-state-provider";
 import { host } from "@/state/operations/host";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 
@@ -18,6 +19,11 @@ export type OpenAgentSessionTranscriptRequest = {
   sessionId: string;
   title?: string;
   description?: string;
+  fallbackSession?: {
+    role: AgentRole;
+    runtimeKind: RuntimeKind;
+    workingDirectory: string;
+  };
 };
 
 type AgentSessionTranscriptDialogContextValue = {
@@ -28,32 +34,76 @@ type AgentSessionTranscriptDialogContextValue = {
 const AgentSessionTranscriptDialogContext =
   createContext<AgentSessionTranscriptDialogContextValue | null>(null);
 
-const DEFAULT_TITLE = "Session transcript";
+const DEFAULT_TITLE = "Conversation";
 
-const buildDefaultDescription = (sessionId: string): string =>
-  `Read-only transcript for session ${sessionId}.`;
+const buildDefaultDescription = (): string => "Read-only conversation.";
 
-export function AgentSessionTranscriptDialogProvider({
-  children,
-}: PropsWithChildren): ReactElement {
+function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
   const activeWorkspace = useActiveWorkspace();
+  const { tasks } = useTasksState();
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
   const repoPath = activeWorkspace?.repoPath ?? null;
-  const taskId = request?.taskId ?? "";
   const sessionId = request?.sessionId ?? null;
   const open = request !== null;
-
-  const { data: persistedRecords } = useQuery<AgentSessionRecord[]>({
-    queryKey: ["agent-session-transcript-dialog", repoPath, taskId],
-    enabled: open && repoPath !== null && taskId.length > 0,
-    queryFn: async (): Promise<AgentSessionRecord[]> => {
-      if (!repoPath || taskId.length === 0) {
-        throw new Error("Cannot load transcript session records without an active repository.");
+  const candidateTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    const requestedTaskId = request?.taskId?.trim() ?? "";
+    if (requestedTaskId.length > 0) {
+      ids.add(requestedTaskId);
+    }
+    for (const task of tasks) {
+      if (task.id.trim().length > 0) {
+        ids.add(task.id);
       }
-      return host.agentSessionsList(repoPath, taskId);
+    }
+    return Array.from(ids).sort();
+  }, [request?.taskId, tasks]);
+
+  const {
+    data: sessionRecordsByTaskId,
+    isPending,
+    isFetching,
+  } = useQuery<Record<string, AgentSessionRecord[]>>({
+    queryKey: ["agent-session-dialog", "session-records", repoPath, sessionId, candidateTaskIds],
+    enabled: open && repoPath !== null && sessionId !== null && candidateTaskIds.length > 0,
+    queryFn: async (): Promise<Record<string, AgentSessionRecord[]>> => {
+      if (!repoPath || !sessionId || candidateTaskIds.length === 0) {
+        throw new Error("Cannot load session records without repository and session context.");
+      }
+      return host.agentSessionsListBulk(repoPath, candidateTaskIds);
     },
-    staleTime: 30_000,
+    staleTime: 0,
   });
+  const resolvedTaskId = useMemo(() => {
+    const requestedTaskId = request?.taskId?.trim() ?? "";
+    if (!sessionId) {
+      return requestedTaskId;
+    }
+
+    const localTask = tasks.find((task) =>
+      (task.agentSessions ?? []).some((record) => record.sessionId === sessionId),
+    );
+    if (localTask) {
+      return localTask.id;
+    }
+
+    if (sessionRecordsByTaskId) {
+      for (const [taskId, records] of Object.entries(sessionRecordsByTaskId)) {
+        if (records.some((record) => record.sessionId === sessionId)) {
+          return taskId;
+        }
+      }
+    }
+
+    return requestedTaskId;
+  }, [request?.taskId, sessionId, sessionRecordsByTaskId, tasks]);
+  const persistedRecords = useMemo(() => {
+    if (!resolvedTaskId) {
+      return undefined;
+    }
+    return sessionRecordsByTaskId?.[resolvedTaskId];
+  }, [resolvedTaskId, sessionRecordsByTaskId]);
+  const isResolvingRequestedSession = open && (isPending || isFetching);
 
   const openSessionTranscript = useCallback((nextRequest: OpenAgentSessionTranscriptRequest) => {
     setRequest(nextRequest);
@@ -76,9 +126,11 @@ export function AgentSessionTranscriptDialogProvider({
       {children}
       <AgentSessionTranscriptDialog
         activeWorkspace={activeWorkspace}
-        taskId={taskId}
+        taskId={resolvedTaskId}
         sessionId={sessionId}
         {...(persistedRecords ? { persistedRecords } : {})}
+        {...(request?.fallbackSession ? { fallbackSession: request.fallbackSession } : {})}
+        isResolvingRequestedSession={isResolvingRequestedSession}
         open={open}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
@@ -86,13 +138,14 @@ export function AgentSessionTranscriptDialogProvider({
           }
         }}
         title={request?.title ?? DEFAULT_TITLE}
-        description={
-          request?.description ??
-          (sessionId ? buildDefaultDescription(sessionId) : "Read-only session transcript.")
-        }
+        description={request?.description ?? buildDefaultDescription()}
       />
     </AgentSessionTranscriptDialogContext.Provider>
   );
+}
+
+export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren): ReactElement {
+  return <AgentSessionTranscriptDialogProvider>{children}</AgentSessionTranscriptDialogProvider>;
 }
 
 export const useOptionalAgentSessionTranscriptDialog =
@@ -104,7 +157,7 @@ export const useAgentSessionTranscriptDialog = (): AgentSessionTranscriptDialogC
   const context = useOptionalAgentSessionTranscriptDialog();
   if (!context) {
     throw new Error(
-      "useAgentSessionTranscriptDialog must be used within AgentSessionTranscriptDialogProvider.",
+      "useAgentSessionTranscriptDialog must be used within AgentSessionTranscriptDialogHost.",
     );
   }
   return context;

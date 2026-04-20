@@ -180,7 +180,11 @@ export const createLoadAgentSessions = ({
         recordsToHydrate,
         historyHydrationSessionIds,
       });
-      const promptAssembler = createHydrationPromptAssemblerStage({ taskId, taskRef });
+      const promptAssembler = createHydrationPromptAssemblerStage({
+        taskId,
+        taskRef,
+        ...(options?.historyPreludeMode ? { historyPreludeMode: options.historyPreludeMode } : {}),
+      });
 
       const { reattachedSessionIds } = await reconcileLiveSessionsStage({
         intent,

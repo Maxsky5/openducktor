@@ -1,6 +1,7 @@
 use super::super::{
     AppService, RuntimeInstanceSummary, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use anyhow::{anyhow, Context, Result};
@@ -27,7 +28,11 @@ impl AppService {
         let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
         self.ensure_runtime_supports_all_workflow_scopes(runtime_kind.clone())?;
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
-        self.resolve_build_startup_policy(&runtime_kind, prerequisites.repo_path.as_str(), task_id)?;
+        self.resolve_build_startup_policy(
+            &runtime_kind,
+            prerequisites.repo_path.as_str(),
+            task_id,
+        )?;
         let prepared_worktree = self.prepare_build_worktree(&prerequisites, task_id)?;
         let runtime_summary = self
             .runtime_ensure(runtime_kind.as_str(), prerequisites.repo_path.as_str())
@@ -90,7 +95,9 @@ impl AppService {
         runtime_summary
             .runtime_route
             .local_http_port()
-            .ok_or_else(|| anyhow!("Build sessions require a local_http runtime route with a port"))?;
+            .ok_or_else(|| {
+                anyhow!("Build sessions require a local_http runtime route with a port")
+            })?;
         self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
             task_id,

@@ -557,6 +557,28 @@ describe("load-sessions-stages", () => {
     });
   });
 
+  test("prompt assembler can skip synthetic prelude messages entirely", async () => {
+    const assembler = createHydrationPromptAssemblerStage({
+      taskId: "task-1",
+      taskRef: { current: [createTaskFixture()] },
+      historyPreludeMode: "none",
+    });
+
+    const prelude = await assembler.buildHydrationPreludeMessages({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+    const systemPrompt = await assembler.buildHydrationSystemPrompt({
+      record: createRecord({ role: "planner", scenario: "planner_initial" }),
+      resolvedScenario: "planner_initial",
+      promptOverrides: {},
+    });
+
+    expect(systemPrompt).toBe("");
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(0);
+  });
+
   test("prompt assembler builds system prompt and header messages when the task exists", async () => {
     const assembler = createHydrationPromptAssemblerStage({
       taskId: "task-1",

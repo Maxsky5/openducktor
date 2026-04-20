@@ -1,4 +1,6 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
+import { defaultAgentScenarioForRole } from "@openducktor/core";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
@@ -8,6 +10,7 @@ import {
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import type { AgentSessionHistoryPreludeMode } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type RuntimeAttachmentSource,
@@ -20,24 +23,51 @@ import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
+const SYNTHETIC_HISTORY_PRELUDE_MODE: AgentSessionHistoryPreludeMode = "none";
 const NOOP_SUBMIT_ANSWERS = async (_requestId: string, _answers: string[][]): Promise<void> => {};
 const NOOP_REPLY_PERMISSION = async (
   _requestId: string,
   _reply: "once" | "always" | "reject",
 ): Promise<void> => {};
+const toFallbackPersistedRecord = ({
+  sessionId,
+  fallbackSession,
+}: {
+  sessionId: string;
+  fallbackSession: NonNullable<UseReadonlySessionTranscriptSurfaceModelArgs["fallbackSession"]>;
+}): AgentSessionRecord => ({
+  sessionId,
+  externalSessionId: sessionId,
+  role: fallbackSession.role,
+  scenario: defaultAgentScenarioForRole(fallbackSession.role),
+  startedAt: SYNTHETIC_SESSION_STARTED_AT,
+  runtimeKind: fallbackSession.runtimeKind,
+  workingDirectory: fallbackSession.workingDirectory,
+  selectedModel: null,
+});
 
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
+  fallbackSession?: {
+    role: AgentRole;
+    runtimeKind: RuntimeKind;
+    workingDirectory: string;
+  };
+  isResolvingRequestedSession: boolean;
 };
+
+const SYNTHETIC_SESSION_STARTED_AT = "1970-01-01T00:00:00.000Z";
 
 export function useReadonlySessionTranscriptSurfaceModel({
   activeWorkspace,
   taskId,
   sessionId,
   persistedRecords,
+  fallbackSession,
+  isResolvingRequestedSession,
 }: UseReadonlySessionTranscriptSurfaceModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
@@ -51,7 +81,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
     readSessionModelCatalog,
     readSessionTodos,
   } = useAgentOperations();
-  const session = useAgentSession(sessionId ?? null);
+  const liveSession = useAgentSession(sessionId ?? null);
+  const session = liveSession;
   const { data: showThinkingMessages = DEFAULT_SHOW_THINKING_MESSAGES } = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
@@ -124,27 +155,60 @@ export function useReadonlySessionTranscriptSurfaceModel({
     readSessionModelCatalog,
     readSessionTodos,
   });
+  const usesSyntheticRequestedRecord = useMemo(() => {
+    if (!sessionId) {
+      return false;
+    }
+    const currentRecords = persistedRecords ?? [];
+    const hasRequestedRecord = currentRecords.some((record) => record.sessionId === sessionId);
+    return (
+      !hasRequestedRecord &&
+      Boolean(fallbackSession) &&
+      (fallbackSession?.workingDirectory.trim().length ?? 0) > 0
+    );
+  }, [fallbackSession, persistedRecords, sessionId]);
+  const effectivePersistedRecords = useMemo(() => {
+    if (!sessionId) {
+      return persistedRecords;
+    }
+    const currentRecords = persistedRecords ?? [];
+    if (!usesSyntheticRequestedRecord || !fallbackSession) {
+      return persistedRecords;
+    }
+    return [...currentRecords, toFallbackPersistedRecord({ sessionId, fallbackSession })];
+  }, [fallbackSession, persistedRecords, sessionId, usesSyntheticRequestedRecord]);
+  const historyPreludeMode = usesSyntheticRequestedRecord
+    ? SYNTHETIC_HISTORY_PRELUDE_MODE
+    : undefined;
+  const allowLiveSessionResume = usesSyntheticRequestedRecord ? false : undefined;
   const hasPersistedSessionRecord = useMemo(
-    () => Boolean(sessionId && persistedRecords?.some((record) => record.sessionId === sessionId)),
-    [persistedRecords, sessionId],
+    () =>
+      Boolean(
+        sessionId && effectivePersistedRecords?.some((record) => record.sessionId === sessionId),
+      ),
+    [effectivePersistedRecords, sessionId],
   );
 
   useEffect(() => {
-    if (!activeWorkspace || !taskId || !sessionId || session || !hasPersistedSessionRecord) {
+    if (!activeWorkspace || !taskId || !sessionId || liveSession || !hasPersistedSessionRecord) {
       return;
     }
 
     void hydrateRequestedTaskSessionHistory({
       taskId,
       sessionId,
-      ...(persistedRecords ? { persistedRecords } : {}),
+      ...(historyPreludeMode ? { historyPreludeMode } : {}),
+      ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
+      ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
     }).catch(() => {});
   }, [
     activeWorkspace,
+    effectivePersistedRecords,
     hasPersistedSessionRecord,
     hydrateRequestedTaskSessionHistory,
-    persistedRecords,
-    session,
+    historyPreludeMode,
+    allowLiveSessionResume,
+    liveSession,
     sessionId,
     taskId,
   ]);
@@ -163,7 +227,9 @@ export function useReadonlySessionTranscriptSurfaceModel({
     activeWorkspace,
     activeTaskId: taskId,
     activeSession: runtimeData.session,
-    ...(persistedRecords ? { persistedRecords } : {}),
+    ...(historyPreludeMode ? { historyPreludeMode } : {}),
+    ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
+    ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
     repoReadinessState: runtimeReadiness.readinessState,
     ensureSessionReadyForView,
     refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
@@ -172,11 +238,28 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
   const isSessionWorking =
     runtimeData.session?.status === "running" || runtimeData.session?.status === "starting";
+  const shouldShowPendingSessionResolution =
+    Boolean(sessionId) &&
+    activeWorkspace !== null &&
+    (isResolvingRequestedSession || (runtimeData.session === null && hasPersistedSessionRecord));
+  const emptyState = useMemo(() => {
+    if (shouldShowPendingSessionResolution) {
+      return null;
+    }
+    if (sessionId && activeWorkspace) {
+      return {
+        title: "Conversation unavailable.",
+      };
+    }
+    return {
+      title: "Select a repository and session to view the conversation.",
+    };
+  }, [activeWorkspace, sessionId, shouldShowPendingSessionResolution]);
 
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
     session: runtimeData.session,
-    isTaskHydrating: false,
+    isTaskHydrating: shouldShowPendingSessionResolution,
     contextSwitchVersion: 0,
     showThinkingMessages: activeWorkspace ? showThinkingMessages : DEFAULT_SHOW_THINKING_MESSAGES,
     isSessionWorking,
@@ -184,12 +267,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     isWaitingForRuntimeReadiness: hydration.isWaitingForRuntimeReadiness,
     sessionRuntimeDataError: runtimeData.runtimeDataError,
     runtimeReadiness,
-    emptyState: {
-      title:
-        sessionId && activeWorkspace
-          ? "Loading transcript..."
-          : "Select a repository and session to view a transcript.",
-    },
+    emptyState,
     pendingQuestions: {
       canSubmit: false,
       isSubmittingByRequestId: {},

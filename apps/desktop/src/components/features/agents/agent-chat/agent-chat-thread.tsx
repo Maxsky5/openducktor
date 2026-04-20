@@ -50,6 +50,7 @@ type AgentChatThreadMotionRowProps = {
   sessionAgentColors: Record<string, string>;
   sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -65,6 +66,7 @@ type AgentChatTranscriptProps = {
   sessionAgentColors: Record<string, string>;
   sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
@@ -173,6 +175,7 @@ const AgentChatThreadMotionRow = memo(
     sessionAgentColors,
     sessionTaskId,
     sessionRole,
+    sessionSelectedModel,
     sessionWorkingDirectory,
     sessionRuntimeKind,
     resolveRowRef,
@@ -184,6 +187,7 @@ const AgentChatThreadMotionRow = memo(
           isStreamingAssistantMessage={isStreamingAssistantMessage}
           sessionTaskId={sessionTaskId}
           sessionRole={sessionRole}
+          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -195,6 +199,7 @@ const AgentChatThreadMotionRow = memo(
     return (
       previousProps.sessionTaskId === nextProps.sessionTaskId &&
       previousProps.sessionRole === nextProps.sessionRole &&
+      previousProps.sessionSelectedModel === nextProps.sessionSelectedModel &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
@@ -211,6 +216,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors,
   sessionTaskId,
   sessionRole,
+  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   resolveRowRef,
@@ -221,6 +227,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors: Record<string, string>;
   sessionTaskId: AgentSessionState["taskId"] | null;
   sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -237,6 +244,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           }
           sessionTaskId={sessionTaskId}
           sessionRole={sessionRole}
+          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -257,6 +265,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionAgentColors,
   sessionTaskId,
   sessionRole,
+  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   messagesContainerRef,
@@ -310,9 +319,9 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       ) : null}
 
       <div ref={messagesContentRef} className="space-y-1">
-        {!hasSession ? (
+        {!hasSession && !visibleStatusOverlay ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-            <p>{emptyState?.title ?? "No transcript available."}</p>
+            <p>{emptyState?.title ?? "No conversation available."}</p>
             {emptyState?.actionLabel && emptyState.onAction ? (
               <Button
                 type="button"
@@ -346,6 +355,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
                 sessionTaskId={sessionTaskId}
                 sessionRole={sessionRole}
+                sessionSelectedModel={sessionSelectedModel}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
@@ -771,6 +781,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionAgentColors={sessionAgentColors}
         sessionTaskId={sessionTaskId}
         sessionRole={sessionRole}
+        sessionSelectedModel={sessionSelectedModel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
         messagesContainerRef={messagesContainerRef}

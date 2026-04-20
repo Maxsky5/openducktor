@@ -53,9 +53,12 @@ impl<'a> TaskActivityGuard<'a> {
         }
 
         active_tasks.sort_by(|left, right| left.0.cmp(&right.0));
-        let qa_only = active_tasks
-            .iter()
-            .all(|(_, evidence)| evidence.active_session_roles.iter().all(|role| role == "qa"));
+        let qa_only = active_tasks.iter().all(|(_, evidence)| {
+            evidence
+                .active_session_roles
+                .iter()
+                .all(|role| role == "qa")
+        });
         let active_summary = active_tasks
             .iter()
             .map(|(task_id, evidence)| format!("{task_id} ({})", evidence.delete_blocker_summary()))
@@ -105,7 +108,8 @@ impl<'a> TaskActivityGuard<'a> {
     ) -> Result<TaskActiveWorkEvidence> {
         let runtime_routes_by_session =
             TaskRuntimeRouteIndex::collect(self.service, repo_path, task_id)?;
-        let probe_plan = self.build_probe_plan(sessions, session_roles, &runtime_routes_by_session)?;
+        let probe_plan =
+            self.build_probe_plan(sessions, session_roles, &runtime_routes_by_session)?;
 
         let probe_outcomes_by_target = self
             .service
@@ -113,7 +117,9 @@ impl<'a> TaskActivityGuard<'a> {
         let active_session_roles = self
             .collect_active_session_roles(&probe_plan.session_plans, &probe_outcomes_by_target)?;
 
-        Ok(TaskActiveWorkEvidence { active_session_roles })
+        Ok(TaskActiveWorkEvidence {
+            active_session_roles,
+        })
     }
 
     fn build_probe_plan(

@@ -738,7 +738,7 @@ describe("AgentChatThread", () => {
     );
 
     expect(html).toContain("Loading session");
-    expect(html).toContain("Loading the selected session transcript.");
+    expect(html).toContain("Loading the selected conversation.");
     expect(html).not.toContain("Old cached message");
   });
 

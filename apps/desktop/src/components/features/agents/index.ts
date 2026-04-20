@@ -8,10 +8,6 @@ export type {
   AgentChatThreadModel,
   AgentRoleOption,
 } from "./agent-chat";
-export {
-  AgentSessionTranscriptDialogProvider,
-  type OpenAgentSessionTranscriptRequest,
-} from "./agent-chat";
 export { AgentChatSurface } from "./agent-chat/agent-chat";
 export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
 export type { AgentStudioHeaderModel } from "./agent-studio-header";

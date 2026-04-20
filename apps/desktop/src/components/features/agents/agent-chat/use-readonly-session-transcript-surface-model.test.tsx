@@ -168,6 +168,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         taskId: "TASK-1",
         sessionId: "session-1",
         persistedRecords,
+        isResolvingRequestedSession: false,
       },
       { wrapper },
     );
@@ -182,6 +183,57 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         persistedRecords,
       });
       expect(ensureSessionReadyForView).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("hydrates a fallback subagent session record when no persisted records exist", async () => {
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        taskId: "TASK-1",
+        sessionId: "session-subagent-1",
+        fallbackSession: {
+          role: "build",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        },
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "TASK-1",
+        sessionId: "session-subagent-1",
+        historyPreludeMode: "none",
+        allowLiveSessionResume: false,
+        persistedRecords: [
+          {
+            sessionId: "session-subagent-1",
+            externalSessionId: "session-subagent-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            startedAt: "1970-01-01T00:00:00.000Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo-a",
+            selectedModel: null,
+          },
+        ],
+      });
     } finally {
       await harness.unmount();
     }

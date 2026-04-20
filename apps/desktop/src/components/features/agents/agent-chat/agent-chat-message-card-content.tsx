@@ -463,6 +463,8 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 type MessageBodyProps = {
   message: AgentChatMessage;
   sessionTaskId?: string | null;
+  sessionRole?: AgentRole | null;
+  sessionRuntimeKind?: import("@openducktor/contracts").RuntimeKind | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
@@ -474,6 +476,8 @@ type MessageBodyProps = {
 export const MessageBody = ({
   message,
   sessionTaskId,
+  sessionRole,
+  sessionRuntimeKind,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
@@ -493,6 +497,8 @@ export const MessageBody = ({
         <WorkflowToolMessage
           meta={meta}
           taskId={sessionTaskId ?? null}
+          sessionRole={sessionRole ?? null}
+          sessionRuntimeKind={sessionRuntimeKind ?? null}
           messageTimestamp={message.timestamp}
           sessionWorkingDirectory={sessionWorkingDirectory}
           workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
@@ -503,6 +509,8 @@ export const MessageBody = ({
       <RegularToolMessage
         meta={meta}
         taskId={sessionTaskId ?? null}
+        sessionRole={sessionRole ?? null}
+        sessionRuntimeKind={sessionRuntimeKind ?? null}
         messageContent={message.content}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}

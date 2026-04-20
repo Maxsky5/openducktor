@@ -48,6 +48,10 @@ type EnsureSessionReadyDependencies = {
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
 const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
+const normalizeLiveSessionTitle = (title: string | undefined): string | undefined => {
+  const trimmed = title?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+};
 
 const toLiveSessionState = (
   status: Awaited<ReturnType<AgentEnginePort["listLiveAgentSessionSnapshots"]>>[number]["status"],
@@ -208,6 +212,7 @@ export const createEnsureSessionReady = ({
         assertNotStale();
         const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
         const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
+        const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot?.title);
         updateSession(
           sessionId,
           (current) => ({
@@ -216,6 +221,7 @@ export const createEnsureSessionReady = ({
             runtimeId: attachedRuntimeId,
             runtimeRoute: attachedRuntimeRoute,
             workingDirectory: attachedWorkingDirectory,
+            ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
             pendingPermissions,
             pendingQuestions,
             ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),

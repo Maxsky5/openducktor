@@ -2,7 +2,7 @@ import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import { useEffect, useRef } from "react";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { normalizeWorkingDirectory } from "@/state/operations/agent-orchestrator/support/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionHistoryPreludeMode, AgentSessionState } from "@/types/agent-orchestrator";
 
 const RUNTIME_ATTACHMENT_POLLING_INTERVAL_MS = 2_000;
 
@@ -103,6 +103,8 @@ export function useAgentChatRuntimeAttachmentRetry({
   ensureSessionReadyForView,
   refreshRuntimeAttachmentSources,
   repoReadinessState,
+  historyPreludeMode,
+  allowLiveSessionResume,
   persistedRecords,
 }: {
   activeTaskId: string;
@@ -115,10 +117,14 @@ export function useAgentChatRuntimeAttachmentRetry({
     sessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
   repoReadinessState: SessionRepoReadinessState;
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
+  allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
 }): void {
   const lastAttachmentAttemptRef = useRef<{
@@ -169,6 +175,8 @@ export function useAgentChatRuntimeAttachmentRetry({
       sessionId: activeSessionId,
       repoReadinessState,
       recoveryDedupKey,
+      ...(historyPreludeMode ? { historyPreludeMode } : {}),
+      ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
       ...(persistedRecords ? { persistedRecords } : {}),
     }).catch(() => {
       // The operation layer surfaces actionable errors.
@@ -178,6 +186,8 @@ export function useAgentChatRuntimeAttachmentRetry({
     activeSessionId,
     activeTaskId,
     ensureSessionReadyForView,
+    historyPreludeMode,
+    allowLiveSessionResume,
     persistedRecords,
     repoReadinessState,
     runtimeAttachmentCandidates,

@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import {
   Bot,
@@ -121,6 +121,8 @@ const formatToolInput = (
 type WorkflowToolMessageProps = {
   meta: ToolMeta;
   taskId?: string | null;
+  sessionRole?: AgentRole | null;
+  sessionRuntimeKind?: RuntimeKind | null;
   messageTimestamp: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
@@ -129,6 +131,8 @@ type WorkflowToolMessageProps = {
 export const WorkflowToolMessage = ({
   meta,
   taskId,
+  sessionRole,
+  sessionRuntimeKind,
   messageTimestamp,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
@@ -185,7 +189,13 @@ export const WorkflowToolMessage = ({
             {formatAgentDuration(durationMs)}
           </span>
         ) : null}
-        <SubagentTranscriptButton taskId={taskId ?? null} meta={meta} />
+        <SubagentTranscriptButton
+          taskId={taskId ?? null}
+          sessionRole={sessionRole ?? null}
+          sessionRuntimeKind={sessionRuntimeKind ?? null}
+          sessionWorkingDirectory={sessionWorkingDirectory}
+          meta={meta}
+        />
       </div>
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
@@ -224,6 +234,8 @@ export const WorkflowToolMessage = ({
 type RegularToolMessageProps = {
   meta: ToolMeta;
   taskId?: string | null;
+  sessionRole?: AgentRole | null;
+  sessionRuntimeKind?: RuntimeKind | null;
   messageContent: string;
   messageTimestamp: string;
   timeLabel: string;
@@ -234,6 +246,8 @@ type RegularToolMessageProps = {
 export const RegularToolMessage = ({
   meta,
   taskId,
+  sessionRole,
+  sessionRuntimeKind,
   messageContent,
   messageTimestamp,
   timeLabel,
@@ -292,7 +306,13 @@ export const RegularToolMessage = ({
         <p className="truncate text-muted-foreground">{summaryText}</p>
       ) : null}
       <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
-        <SubagentTranscriptButton taskId={taskId ?? null} meta={meta} />
+        <SubagentTranscriptButton
+          taskId={taskId ?? null}
+          sessionRole={sessionRole ?? null}
+          sessionRuntimeKind={sessionRuntimeKind ?? null}
+          sessionWorkingDirectory={sessionWorkingDirectory}
+          meta={meta}
+        />
         {isActive ? <LoaderCircle className="size-3 animate-spin" /> : null}
         {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
         {timeLabel ? <span>{timeLabel}</span> : null}

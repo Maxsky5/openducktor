@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
 
 describe("getAgentChatThreadState", () => {
-  test("keeps runtime waiting separate from transcript hiding", () => {
+  test("keeps runtime waiting separate from conversation hiding", () => {
     const state = getAgentChatThreadState({
       isSessionViewLoading: false,
       isSessionHistoryLoading: false,
@@ -18,7 +18,7 @@ describe("getAgentChatThreadState", () => {
     expect(state.isTranscriptLoading).toBe(false);
   });
 
-  test("treats history hydration as transcript-loading state", () => {
+  test("treats history hydration as conversation-loading state", () => {
     const state = getAgentChatThreadState({
       isSessionViewLoading: false,
       isSessionHistoryLoading: true,
@@ -31,7 +31,7 @@ describe("getAgentChatThreadState", () => {
     expect(state.isTranscriptLoading).toBe(true);
     expect(state.hideTranscriptWhileHydrating).toBe(true);
     expect(state.statusOverlay?.kind).toBe("session_loading");
-    expect(state.statusOverlay?.description).toBe("Loading the selected session transcript.");
+    expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
   });
 
   test("shows blocked card only for explicit blocked reason", () => {

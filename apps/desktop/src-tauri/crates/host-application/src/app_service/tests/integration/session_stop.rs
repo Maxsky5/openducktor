@@ -86,7 +86,8 @@ fn agent_session_stop_aborts_builder_session_via_repo_runtime_probe() -> Result<
     );
 
     let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
-    let bootstrap = start_build_session(&service, repo_path.as_str(), Some("external-build-session"))?;
+    let bootstrap =
+        start_build_session(&service, repo_path.as_str(), Some("external-build-session"))?;
 
     let stopped = service.agent_session_stop(make_agent_session_stop_request(
         repo_path.as_str(),

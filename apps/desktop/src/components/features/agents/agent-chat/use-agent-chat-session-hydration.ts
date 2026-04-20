@@ -4,7 +4,7 @@ import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionHistoryPreludeMode, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type RuntimeAttachmentCandidate,
@@ -15,6 +15,8 @@ type UseAgentChatSessionHydrationParams = {
   activeWorkspace: ActiveWorkspace | null;
   activeTaskId: string;
   activeSession: AgentSessionState | null;
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
+  allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
   repoReadinessState: SessionRepoReadinessState;
   ensureSessionReadyForView: (input: {
@@ -22,6 +24,8 @@ type UseAgentChatSessionHydrationParams = {
     sessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   refreshRuntimeAttachmentSources: () => Promise<void>;
@@ -41,6 +45,8 @@ export function useAgentChatSessionHydration({
   activeWorkspace,
   activeTaskId,
   activeSession,
+  historyPreludeMode,
+  allowLiveSessionResume,
   persistedRecords,
   repoReadinessState,
   ensureSessionReadyForView,
@@ -70,6 +76,8 @@ export function useAgentChatSessionHydration({
     ensureSessionReadyForView,
     refreshRuntimeAttachmentSources,
     repoReadinessState,
+    ...(historyPreludeMode ? { historyPreludeMode } : {}),
+    ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
     ...(persistedRecords ? { persistedRecords } : {}),
   });
 
@@ -97,6 +105,8 @@ export function useAgentChatSessionHydration({
       taskId: activeTaskId,
       sessionId: activeSessionId,
       repoReadinessState,
+      ...(historyPreludeMode ? { historyPreludeMode } : {}),
+      ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
       ...(persistedRecords ? { persistedRecords } : {}),
     })
       .then(() => {
@@ -117,6 +127,8 @@ export function useAgentChatSessionHydration({
     activeSessionId,
     activeTaskId,
     ensureSessionReadyForView,
+    historyPreludeMode,
+    allowLiveSessionResume,
     lifecycle.phase,
     persistedRecords,
     repoReadinessState,

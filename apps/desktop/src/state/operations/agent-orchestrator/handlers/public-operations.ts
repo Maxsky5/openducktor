@@ -16,7 +16,11 @@ import type {
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionHistoryPreludeMode,
+  AgentSessionLoadOptions,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
@@ -39,6 +43,8 @@ type CreatePublicOperationsArgs = {
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
     sessionId: string;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
@@ -46,6 +52,8 @@ type CreatePublicOperationsArgs = {
     sessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {

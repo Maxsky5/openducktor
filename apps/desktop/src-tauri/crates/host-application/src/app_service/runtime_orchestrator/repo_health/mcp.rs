@@ -151,15 +151,22 @@ impl AppService {
         let probe_target_resolution = self
             .runtime_registry
             .runtime(runtime_kind)?
-            .session_status_probe_target(&runtime.runtime_route, runtime.working_directory.as_str())?;
+            .session_status_probe_target(
+                &runtime.runtime_route,
+                runtime.working_directory.as_str(),
+            )?;
         let RuntimeSessionStatusProbeTargetResolution::Target(probe_target) =
             probe_target_resolution
         else {
             return Ok(true);
         };
-        let statuses = self.load_cached_runtime_session_statuses_for_targets(std::slice::from_ref(&probe_target))?;
+        let statuses = self.load_cached_runtime_session_statuses_for_targets(
+            std::slice::from_ref(&probe_target),
+        )?;
         match statuses.get(&probe_target) {
-            Some(RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)) => Ok(snapshot.has_any_live_sessions()),
+            Some(RuntimeSessionStatusProbeOutcome::Snapshot(snapshot)) => {
+                Ok(snapshot.has_any_live_sessions())
+            }
             Some(RuntimeSessionStatusProbeOutcome::Unsupported) => Ok(true),
             Some(RuntimeSessionStatusProbeOutcome::ActionableError(error)) => {
                 Err(anyhow!(error.to_string()))
@@ -202,7 +209,9 @@ impl AppService {
                     available_tool_ids: Vec::new(),
                     progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
                         stage: RuntimeHealthWorkflowStage::RestartSkippedActiveSession,
-                        observation: Some(RepoRuntimeHealthObservation::RestartSkippedActiveSession),
+                        observation: Some(
+                            RepoRuntimeHealthObservation::RestartSkippedActiveSession,
+                        ),
                         host: host_status,
                         checked_at: checked_at.to_string(),
                         failure_reason: None,

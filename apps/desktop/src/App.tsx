@@ -1,7 +1,7 @@
 import { lazy, type ReactElement, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AgentSessionTranscriptDialogProvider } from "@/components/features/agents";
 import { AppShell } from "@/components/layout/app-shell";
+import { ApplicationOverlays } from "@/components/layout/application-overlays";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-provider";
@@ -48,7 +48,7 @@ export function App(): ReactElement {
     <QueryProvider>
       <ThemeProvider>
         <AppStateProvider>
-          <AgentSessionTranscriptDialogProvider>
+          <ApplicationOverlays>
             <Routes>
               <Route element={<AppShell />}>
                 <Route path="/" element={<Navigate to="/kanban" replace />} />
@@ -63,7 +63,7 @@ export function App(): ReactElement {
               </Route>
             </Routes>
             <Toaster />
-          </AgentSessionTranscriptDialogProvider>
+          </ApplicationOverlays>
         </AppStateProvider>
       </ThemeProvider>
     </QueryProvider>

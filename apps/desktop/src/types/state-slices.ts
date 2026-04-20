@@ -168,6 +168,8 @@ export type AgentStateContextValue = {
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
     sessionId: string;
+    historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
@@ -175,6 +177,8 @@ export type AgentStateContextValue = {
     sessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {

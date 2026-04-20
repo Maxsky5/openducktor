@@ -6,6 +6,10 @@ import { mergeModelSelection, normalizePersistedSelection } from "../support/mod
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
 const STALE_REPO_ABORT = Symbol("stale-repo-abort");
+const normalizeLiveSessionTitle = (title: string): string | undefined => {
+  const trimmed = title.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
 
 type CreateReattachLiveSessionArgs = {
   adapter: {
@@ -30,6 +34,7 @@ type CreateReattachLiveSessionArgs = {
     runtimeKind: RuntimeKind;
     runtimeConnection: AgentRuntimeConnection;
   }) => Promise<void>;
+  allowResumeMissingSession?: boolean;
   isStaleRepoOperation: () => boolean;
   toLiveSessionState: (status: LiveAgentSessionSnapshot["status"]) => AgentSessionState["status"];
 };
@@ -43,6 +48,7 @@ export const createReattachLiveSession = ({
   resolveHydrationRuntime,
   listLiveAgentSessions,
   resumeMissingLiveSession,
+  allowResumeMissingSession = true,
   isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
@@ -101,8 +107,12 @@ export const createReattachLiveSession = ({
     }
 
     const nextStatus = toLiveSessionState(liveSession.status);
+    const liveSessionTitle = normalizeLiveSessionTitle(liveSession.title);
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!attachedExistingSession) {
+      if (!allowResumeMissingSession) {
+        return false;
+      }
       if (!resumeMissingLiveSession) {
         throw new Error(
           `Cannot reattach live session ${record.sessionId} without a resumeMissingLiveSession handler.`,
@@ -134,6 +144,7 @@ export const createReattachLiveSession = ({
         workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
         runtimeRecoveryState: "idle",
         status: nextStatus,
+        ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
         pendingPermissions: liveSession.pendingPermissions,
         pendingQuestions: liveSession.pendingQuestions,
         promptOverrides,
