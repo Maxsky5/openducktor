@@ -3,10 +3,12 @@ import {
   agentPromptTemplateIdValues,
   type BuildSessionBootstrap,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoConfig,
   type RuntimeInstanceSummary,
+  type SettingsSnapshot,
   type TaskWorktreeSummary,
 } from "@openducktor/contracts";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import { host } from "../../shared/host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
@@ -43,6 +45,36 @@ const sharedRuntimeFixture: RuntimeInstanceSummary = {
 const taskWorktreeFixture: TaskWorktreeSummary = {
   workingDirectory: "/tmp/repo/worktree",
 };
+
+const createPromptOverrideRepoConfig = (
+  promptOverrides: RepoConfig["promptOverrides"],
+): RepoConfig => ({
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/tmp/repo",
+  defaultRuntimeKind: "opencode",
+  branchPrefix: "obp",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: { providers: {} },
+  trustedHooks: false,
+  hooks: { preStart: [], postComplete: [] },
+  devServers: [],
+  worktreeFileCopies: [],
+  promptOverrides,
+  agentDefaults: {},
+});
+
+const createPromptOverrideSettingsSnapshot = (
+  globalPromptOverrides: SettingsSnapshot["globalPromptOverrides"],
+): SettingsSnapshot => ({
+  theme: "light",
+  git: { defaultMergeMethod: "merge_commit" },
+  chat: { showThinkingMessages: false },
+  kanban: { doneVisibleDays: 1 },
+  autopilot: { rules: [] },
+  workspaces: {},
+  globalPromptOverrides,
+});
 
 describe("agent-orchestrator-runtime", () => {
   beforeEach(async () => {
@@ -326,65 +358,42 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("loads effective prompt overrides by merging global and repository values", async () => {
-    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    host.workspaceGetRepoConfig = async () => ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      trustedHooks: false,
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeFileCopies: [],
-      promptOverrides: {
-        "kickoff.planner_initial": {
-          template: "repo planner {{task.id}}",
-          baseVersion: 1,
-          enabled: true,
-        },
-        "kickoff.spec_initial": {
-          template: "repo disabled {{task.id}}",
-          baseVersion: 1,
-          enabled: false,
-        },
+    const queryClient = createQueryClient();
+    const repoConfig = createPromptOverrideRepoConfig({
+      "kickoff.planner_initial": {
+        template: "repo planner {{task.id}}",
+        baseVersion: 1,
+        enabled: true,
       },
-      agentDefaults: {},
+      "kickoff.spec_initial": {
+        template: "repo disabled {{task.id}}",
+        baseVersion: 1,
+        enabled: false,
+      },
     });
-    host.workspaceGetSettingsSnapshot = async () => ({
-      theme: "light" as const,
-      git: { defaultMergeMethod: "merge_commit" },
-      chat: { showThinkingMessages: false },
-      kanban: { doneVisibleDays: 1 },
-      autopilot: { rules: [] },
-      workspaces: {},
-      globalPromptOverrides: {
-        "kickoff.spec_initial": {
-          template: "global kickoff {{task.id}}",
-          baseVersion: 1,
-          enabled: true,
-        },
+    const snapshot = createPromptOverrideSettingsSnapshot({
+      "kickoff.spec_initial": {
+        template: "global kickoff {{task.id}}",
+        baseVersion: 1,
+        enabled: true,
       },
     });
 
-    try {
-      const overrides = await loadRepoPromptOverrides("/tmp/repo");
-      expect(overrides["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
-      expect(overrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
-      expect(overrides["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
-    } finally {
-      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    }
+    const overrides = await loadRepoPromptOverrides("/tmp/repo", {
+      queryClient,
+      hostClient: {
+        workspaceGetRepoConfig: async () => repoConfig,
+        workspaceGetSettingsSnapshot: async () => snapshot,
+      },
+    });
+
+    expect(overrides["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
+    expect(overrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
+    expect(overrides["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
   });
 
   test("resolves effective overrides deterministically for every prompt template id", async () => {
-    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-
+    const queryClient = createQueryClient();
     const globalPromptOverrides = Object.fromEntries(
       agentPromptTemplateIdValues.map((templateId) => [
         templateId,
@@ -406,43 +415,21 @@ describe("agent-orchestrator-runtime", () => {
       ]),
     );
 
-    host.workspaceGetRepoConfig = async () => ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      trustedHooks: false,
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeFileCopies: [],
-      promptOverrides: repoPromptOverrides,
-      agentDefaults: {},
-    });
-    host.workspaceGetSettingsSnapshot = async () => ({
-      theme: "light" as const,
-      git: { defaultMergeMethod: "merge_commit" },
-      chat: { showThinkingMessages: false },
-      kanban: { doneVisibleDays: 1 },
-      autopilot: { rules: [] },
-      workspaces: {},
-      globalPromptOverrides,
+    const overrides = await loadRepoPromptOverrides("/tmp/repo", {
+      queryClient,
+      hostClient: {
+        workspaceGetRepoConfig: async () => createPromptOverrideRepoConfig(repoPromptOverrides),
+        workspaceGetSettingsSnapshot: async () =>
+          createPromptOverrideSettingsSnapshot(globalPromptOverrides),
+      },
     });
 
-    try {
-      const overrides = await loadRepoPromptOverrides("/tmp/repo");
-      for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
-        const override = overrides[templateId];
-        expect(override).toBeDefined();
-        expect(override?.template).toBe(
-          index % 2 === 0 ? `repo ${templateId}` : `global ${templateId}`,
-        );
-      }
-    } finally {
-      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
+      const override = overrides[templateId];
+      expect(override).toBeDefined();
+      expect(override?.template).toBe(
+        index % 2 === 0 ? `repo ${templateId}` : `global ${templateId}`,
+      );
     }
   });
 });

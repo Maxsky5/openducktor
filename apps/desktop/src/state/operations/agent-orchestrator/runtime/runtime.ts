@@ -14,6 +14,7 @@ import {
   mergePromptOverrides,
   requireRuntimeConnection,
 } from "@openducktor/core";
+import type { QueryClient } from "@tanstack/react-query";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -165,6 +166,11 @@ type EnsureRuntimeDependencies = {
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
 };
 
+type RuntimeWorkspaceQueryHost = Pick<
+  typeof host,
+  "workspaceGetRepoConfig" | "workspaceGetSettingsSnapshot"
+>;
+
 export const loadTaskDocuments = async (
   repoPath: string,
   taskId: string,
@@ -214,10 +220,16 @@ export const loadRepoDefaultModel = async (
 
 export const loadRepoPromptOverrides = async (
   workspaceId: string,
+  options?: {
+    queryClient?: QueryClient;
+    hostClient?: RuntimeWorkspaceQueryHost;
+  },
 ): Promise<RepoPromptOverrides> => {
+  const queryClient = options?.queryClient ?? appQueryClient;
+  const hostClient = options?.hostClient;
   const [repoConfig, snapshot] = await Promise.all([
-    loadRepoConfig(workspaceId),
-    loadSettingsSnapshotFromQuery(appQueryClient),
+    loadRepoConfigFromQuery(queryClient, workspaceId, hostClient),
+    loadSettingsSnapshotFromQuery(queryClient, hostClient),
   ]);
 
   return mergePromptOverrides({
