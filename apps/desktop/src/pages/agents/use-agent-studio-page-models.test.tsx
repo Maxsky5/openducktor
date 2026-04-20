@@ -183,6 +183,29 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioPageModels, initialProps);
 
 describe("useAgentStudioPageModels", () => {
+  test("keeps the interactive composer model available before a task is selected", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeTabValue: "",
+          taskId: "",
+          selectedTask: null,
+          sessionsForTask: [],
+          activeSession: null,
+          contextSessionsLength: 0,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const state = harness.getLatest();
+    expect(state.agentChatModel.composer.taskId).toBe("");
+    expect(state.agentChatModel.thread.emptyState?.title).toBe("Select a task to begin.");
+
+    await harness.unmount();
+  });
+
   test("builds page models and forwards wrapper callbacks", async () => {
     const onRefreshChecks = mock(async () => {});
     const onKickoff = mock(async () => {});

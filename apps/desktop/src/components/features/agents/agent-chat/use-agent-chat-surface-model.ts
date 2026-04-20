@@ -269,7 +269,7 @@ export function useAgentChatSurfaceModel({
       ? getAgentSessionWaitingInputPlaceholder(composer.activeSession)
       : null;
   const hasComposer = composer != null;
-  const composerTaskId = composer?.taskId;
+  const composerTaskId = composer?.taskId ?? "";
   const composerActiveSessionIsLoadingModelCatalog =
     composer?.activeSession?.isLoadingModelCatalog ?? false;
   const composerActiveSessionSelectedModel = composer?.activeSession?.selectedModel ?? null;
@@ -377,7 +377,7 @@ export function useAgentChatSurfaceModel({
   }, [composerSessionId, stopAgentSession]);
 
   const composerModel = useMemo(() => {
-    if (mode !== "interactive" || !hasComposer || !composerTaskId) {
+    if (mode !== "interactive" || !hasComposer) {
       return undefined;
     }
 
