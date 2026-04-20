@@ -223,14 +223,12 @@ const resolveSubagentCorrelationKey = (input: {
   sessionId?: string;
   agent?: string;
   prompt?: string;
-  description?: string;
 }): string => {
   const agent = input.agent?.trim() ?? "";
   const prompt = input.prompt?.trim() ?? "";
-  const description = input.description?.trim() ?? "";
 
-  if (agent || prompt || description) {
-    return ["spawn", input.messageId, agent, prompt, description].join(":");
+  if (agent || prompt) {
+    return ["spawn", input.messageId, agent, prompt].join(":");
   }
 
   if (input.sessionId) {
@@ -253,7 +251,13 @@ const buildSubagentStreamPart = (input: {
   startedAtMs?: number;
   endedAtMs?: number;
 }): SubagentStreamPart => {
-  const correlationKey = resolveSubagentCorrelationKey(input);
+  const correlationKey = resolveSubagentCorrelationKey({
+    messageId: input.messageId,
+    partId: input.partId,
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.agent ? { agent: input.agent } : {}),
+    ...(input.prompt ? { prompt: input.prompt } : {}),
+  });
 
   return {
     kind: "subagent",

@@ -77,7 +77,7 @@ describe("stream-part-mapper", () => {
       kind: "subagent",
       messageId: "assistant-subtask-1",
       partId: "subtask-1",
-      correlationKey: "spawn:assistant-subtask-1:build:Implement the plan:Implement the plan",
+      correlationKey: "spawn:assistant-subtask-1:build:Implement the plan",
       status: "running",
       agent: "build",
       prompt: "Implement the plan",
@@ -118,7 +118,7 @@ describe("stream-part-mapper", () => {
       kind: "subagent",
       messageId: "assistant-tool-subagent-1",
       partId: "tool-subagent-1",
-      correlationKey: "spawn:assistant-tool-subagent-1:planner:Inspect the tests:Done subtask",
+      correlationKey: "spawn:assistant-tool-subagent-1:planner:Inspect the tests",
       status: "completed",
       agent: "planner",
       prompt: "Inspect the tests",
@@ -132,6 +132,53 @@ describe("stream-part-mapper", () => {
       startedAtMs: 10,
       endedAtMs: 40,
     });
+  });
+
+  test("keeps the same correlation key when tool completion changes the description", () => {
+    const spawnPart = {
+      id: "subtask-identity-1",
+      sessionID: "session-1",
+      messageID: "assistant-identity-1",
+      type: "subtask",
+      agent: "build",
+      prompt: "Inspect the repo",
+      description: "Starting work",
+    } as unknown as Part;
+
+    const completionPart = {
+      id: "tool-identity-1",
+      sessionID: "session-1",
+      messageID: "assistant-identity-1",
+      callID: "call-identity-1",
+      type: "tool",
+      tool: "delegate",
+      state: {
+        status: "completed",
+        input: {
+          agent: "build",
+          prompt: "Inspect the repo",
+        },
+        output: {
+          result: "Finished work",
+          sessionId: "session-child-identity-1",
+        },
+      },
+    } as unknown as Part;
+
+    const spawned = mapPartToAgentStreamPart(spawnPart);
+    const completed = mapPartToAgentStreamPart(completionPart);
+
+    if (!spawned || spawned.kind !== "subagent") {
+      throw new Error("Expected spawned subagent part");
+    }
+    if (!completed || completed.kind !== "subagent") {
+      throw new Error("Expected completed subagent part");
+    }
+
+    expect(spawned.correlationKey).toBe("spawn:assistant-identity-1:build:Inspect the repo");
+    expect(completed.correlationKey).toBe("spawn:assistant-identity-1:build:Inspect the repo");
+    expect(completed.description).toBe("Finished work");
+    expect(completed.sessionId).toBe("session-child-identity-1");
   });
 
   test("derives preview hints for current tool families", () => {

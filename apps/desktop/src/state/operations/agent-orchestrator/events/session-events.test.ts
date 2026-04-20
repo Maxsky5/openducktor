@@ -2210,8 +2210,25 @@ describe("agent-orchestrator-session-events", () => {
       part: {
         kind: "subagent",
         messageId: "m1",
-        partId: "p-subtask",
-        correlationKey: "spawn:m1:build:Do work:Done subtask",
+        partId: "p-subtask-spawn",
+        correlationKey: "spawn:m1:build:Do work",
+        status: "running",
+        agent: "build",
+        prompt: "Do work",
+        description: "Starting subagent",
+        startedAtMs: 100,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.350Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-complete",
+        correlationKey: "spawn:m1:build:Do work",
         status: "completed",
         agent: "build",
         prompt: "Do work",
@@ -2289,6 +2306,11 @@ describe("agent-orchestrator-session-events", () => {
           message.role === "system" && message.content.includes("Subagent (build): Done subtask"),
       ),
     ).toBe(true);
+    expect(
+      getSessionMessages(sessionsRef).filter(
+        (message) => message.role === "system" && message.meta?.kind === "subagent",
+      ),
+    ).toHaveLength(1);
     const subagentMessage = getSessionMessages(sessionsRef).find(
       (message) => message.role === "system" && message.meta?.kind === "subagent",
     );
@@ -2297,7 +2319,9 @@ describe("agent-orchestrator-session-events", () => {
     }
     expect(subagentMessage.meta.status).toBe("completed");
     expect(subagentMessage.meta.sessionId).toBe("session-child-1");
-    expect(subagentMessage.meta.correlationKey).toBe("spawn:m1:build:Do work:Done subtask");
+    expect(subagentMessage.meta.correlationKey).toBe("spawn:m1:build:Do work");
+    expect(subagentMessage.meta.startedAtMs).toBe(100);
+    expect(subagentMessage.meta.endedAtMs).toBe(300);
     expect(
       getSessionMessages(sessionsRef).some(
         (message) =>
