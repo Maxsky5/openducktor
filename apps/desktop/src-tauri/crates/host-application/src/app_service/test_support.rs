@@ -159,7 +159,9 @@ pub(crate) fn builtin_opencode_runtime_descriptor() -> host_domain::RuntimeDescr
 }
 
 pub(crate) fn builtin_opencode_runtime_route(port: u16) -> host_domain::RuntimeRoute {
-    builtin_opencode_runtime_definition().route_for_port(port)
+    host_domain::RuntimeRoute::LocalHttp {
+        endpoint: format!("http://127.0.0.1:{port}"),
+    }
 }
 
 #[derive(Debug, Default)]

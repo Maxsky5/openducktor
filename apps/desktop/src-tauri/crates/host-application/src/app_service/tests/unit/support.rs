@@ -22,7 +22,7 @@ pub(super) use std::sync::{Arc, Mutex};
 pub(super) use std::time::{Duration, Instant};
 
 pub(super) use crate::app_service::runtime_registry::{
-    AppRuntime, AppRuntimeRegistry, ExternalRuntimeStart,
+    AppRuntime, AppRuntimeRegistry, ExternalRuntimeStart, HostManagedRuntimeStart,
 };
 pub(super) use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_runtime_registry,
@@ -297,32 +297,23 @@ impl AppRuntime for TestRuntimeAdapter {
         }
     }
 
-    fn track_process(&self, _service: &AppService, _child_id: u32) -> Result<RuntimeProcessGuard> {
-        Err(anyhow::anyhow!(
-            "track_process should not be used in this test"
-        ))
-    }
-
-    fn spawn_server(
+    #[cfg(test)]
+    fn track_pending_process(
         &self,
         _service: &AppService,
-        _working_directory: &std::path::Path,
-        _workspace_id_for_mcp: &str,
-        _port: u16,
-    ) -> Result<std::process::Child> {
-        Err(anyhow::anyhow!("spawn should not be used in this test"))
+        _child_id: u32,
+    ) -> Result<RuntimeProcessGuard> {
+        Err(anyhow::anyhow!("pending-process tracking should not be used in this test"))
     }
 
-    fn wait_until_ready(
+    fn start_host_managed(
         &self,
         _service: &AppService,
         _input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
-        _child: &mut std::process::Child,
-        _port: u16,
         _runtime_id: &str,
         _startup_policy: crate::app_service::RuntimeStartupReadinessPolicy,
-    ) -> Result<crate::app_service::RuntimeStartupWaitReport> {
-        Err(anyhow::anyhow!("wait should not be used in this test"))
+    ) -> Result<HostManagedRuntimeStart> {
+        Err(anyhow::anyhow!("host-managed start should not be used in this test"))
     }
 
     fn runtime_health(&self) -> RuntimeHealth {
@@ -437,8 +428,5 @@ pub(super) fn test_runtime_definition_with_provisioning(
             },
         },
         RuntimeStartupReadinessConfig::default(),
-        |port| host_domain::RuntimeRoute::LocalHttp {
-            endpoint: format!("http://127.0.0.1:{port}"),
-        },
     )
 }

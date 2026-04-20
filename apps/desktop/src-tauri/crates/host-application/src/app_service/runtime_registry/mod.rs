@@ -10,7 +10,6 @@ use host_domain::{
     AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary, RuntimeRegistry,
 };
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
 use std::process::Child;
 use std::sync::Arc;
 
@@ -35,27 +34,27 @@ pub(crate) trait AppRuntime: Send + Sync {
         Err(anyhow!("Runtime does not support external provisioning"))
     }
 
-    // Host-managed runtimes must return a tracked process guard so cleanup and
-    // stale-runtime pruning stay coupled to the spawned child lifecycle.
-    fn track_process(&self, _service: &AppService, _child_id: u32) -> Result<RuntimeProcessGuard>;
-
-    fn wait_until_ready(
+    // Host-managed runtimes own startup details, including how they obtain the
+    // final runtime route and how they couple process tracking to readiness.
+    fn start_host_managed(
         &self,
-        service: &AppService,
-        input: &super::runtime_orchestrator::RuntimeStartInput<'_>,
-        child: &mut Child,
-        port: u16,
-        runtime_id: &str,
-        startup_policy: RuntimeStartupReadinessPolicy,
-    ) -> Result<RuntimeStartupWaitReport>;
+        _service: &AppService,
+        _input: &super::runtime_orchestrator::RuntimeStartInput<'_>,
+        _runtime_id: &str,
+        _startup_policy: RuntimeStartupReadinessPolicy,
+    ) -> Result<HostManagedRuntimeStart> {
+        Err(anyhow!("Runtime does not support host-managed provisioning"))
+    }
 
-    fn spawn_server(
+    #[cfg(test)]
+    #[expect(dead_code, reason = "used only by shutdown tests to seed pending OpenCode process tracking")]
+    fn track_pending_process(
         &self,
-        service: &AppService,
-        working_directory: &Path,
-        workspace_id_for_mcp: &str,
-        port: u16,
-    ) -> Result<Child>;
+        _service: &AppService,
+        _child_id: u32,
+    ) -> Result<RuntimeProcessGuard> {
+        Err(anyhow!("Runtime does not support pending-process tracking"))
+    }
 
     fn runtime_health(&self) -> RuntimeHealth;
 
@@ -152,6 +151,13 @@ pub(crate) trait AppRuntime: Send + Sync {
 }
 
 pub(crate) struct ExternalRuntimeStart {
+    pub(crate) runtime_route: RuntimeRoute,
+    pub(crate) startup_report: RuntimeStartupWaitReport,
+}
+
+pub(crate) struct HostManagedRuntimeStart {
+    pub(crate) child: Child,
+    pub(crate) runtime_process_guard: RuntimeProcessGuard,
     pub(crate) runtime_route: RuntimeRoute,
     pub(crate) startup_report: RuntimeStartupWaitReport,
 }

@@ -45,9 +45,6 @@ fn runtime_registry_with_test_runtime() -> RuntimeRegistry {
                     },
                 },
                 RuntimeStartupReadinessConfig::default(),
-                |port| host_domain::RuntimeRoute::LocalHttp {
-                    endpoint: format!("http://127.0.0.1:{port}"),
-                },
             ),
         ],
         Some(AgentRuntimeKind::opencode()),

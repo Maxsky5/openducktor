@@ -35,4 +35,12 @@ impl AppService {
     ) -> anyhow::Error {
         anyhow!("{base_error}\nAlso failed to remove QA worktree: {cleanup_error}")
     }
+
+    pub(crate) fn cleanup_failed_host_managed_start(
+        &self,
+        child: Option<&mut Child>,
+        cleanup_target: Option<&RuntimeCleanupTarget>,
+    ) -> Result<()> {
+        Self::cleanup_started_runtime(child, cleanup_target)
+    }
 }

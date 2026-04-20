@@ -1,4 +1,3 @@
-use super::RuntimeRoute;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -201,19 +200,13 @@ impl RuntimeStartupReadinessConfig {
 pub struct RuntimeDefinition {
     descriptor: RuntimeDescriptor,
     default_startup_config: RuntimeStartupReadinessConfig,
-    route_for_port: fn(u16) -> RuntimeRoute,
 }
 
 impl RuntimeDefinition {
-    pub fn new(
-        descriptor: RuntimeDescriptor,
-        default_startup_config: RuntimeStartupReadinessConfig,
-        route_for_port: fn(u16) -> RuntimeRoute,
-    ) -> Self {
+    pub fn new(descriptor: RuntimeDescriptor, default_startup_config: RuntimeStartupReadinessConfig) -> Self {
         Self {
             descriptor,
             default_startup_config,
-            route_for_port,
         }
     }
 
@@ -227,10 +220,6 @@ impl RuntimeDefinition {
 
     pub fn default_startup_config(&self) -> &RuntimeStartupReadinessConfig {
         &self.default_startup_config
-    }
-
-    pub fn route_for_port(&self, port: u16) -> RuntimeRoute {
-        (self.route_for_port)(port)
     }
 
     pub fn validate_for_openducktor(&self) -> Vec<String> {
@@ -370,19 +359,6 @@ fn opencode_workflow_tool_aliases_by_canonical() -> BTreeMap<String, Vec<String>
         .collect()
 }
 
-fn local_http_endpoint_for_port(port: u16) -> String {
-    let mut endpoint = String::new();
-    endpoint.push_str("http://127.0.0.1:");
-    endpoint.push_str(port.to_string().as_str());
-    endpoint
-}
-
-fn local_http_route_for_port(port: u16) -> RuntimeRoute {
-    RuntimeRoute::LocalHttp {
-        endpoint: local_http_endpoint_for_port(port),
-    }
-}
-
 fn opencode_runtime_definition() -> RuntimeDefinition {
     let kind = AgentRuntimeKind::opencode();
     RuntimeDefinition::new(
@@ -417,7 +393,6 @@ fn opencode_runtime_definition() -> RuntimeDefinition {
             },
         },
         RuntimeStartupReadinessConfig::default(),
-        local_http_route_for_port,
     )
 }
 
@@ -440,8 +415,8 @@ pub fn default_runtime_kind() -> AgentRuntimeKind {
 #[cfg(test)]
 mod tests {
     use super::{
-        local_http_route_for_port, AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition,
-        RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
+        AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
+        RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
         RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
     use anyhow::Result;
@@ -478,7 +453,6 @@ mod tests {
                 capabilities: capabilities_with_scopes(REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec()),
             },
             RuntimeStartupReadinessConfig::default(),
-            local_http_route_for_port,
         )
     }
 
@@ -631,8 +605,8 @@ mod tests {
         assert_eq!(definitions[0].kind().as_str(), "opencode");
         assert_eq!(definitions[1].kind().as_str(), "test-runtime");
         assert_eq!(
-            definitions[1].route_for_port(4311).local_http_port(),
-            Some(4311)
+            definitions[1].default_startup_config().timeout_ms,
+            RuntimeStartupReadinessConfig::default().timeout_ms
         );
     }
 }

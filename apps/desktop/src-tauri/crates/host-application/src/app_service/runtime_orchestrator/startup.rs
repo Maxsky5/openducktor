@@ -4,10 +4,8 @@ use super::super::{
 };
 use super::start_pipeline::{RuntimeStartInput, SpawnedRuntimeServer};
 use super::startup_status::RuntimeStartupProgress;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use host_domain::{RuntimeProvisioningMode, RuntimeRole};
-use host_infra_system::pick_free_port;
-use std::path::Path;
 use uuid::Uuid;
 
 impl AppService {
@@ -27,13 +25,13 @@ impl AppService {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
                     StartupEventContext::new(
                         startup_scope,
-                        repo_path,
-                        Some(task_id),
-                        role.as_str(),
-                        0,
-                        None,
-                        None,
-                    ),
+                    repo_path,
+                    Some(task_id),
+                    role.as_str(),
+                    None,
+                    None,
+                    None,
+                ),
                     RuntimeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));
@@ -55,60 +53,24 @@ impl AppService {
                 elapsed_ms: None,
             },
         )?;
-        let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let startup_policy = input.startup_policy;
         let definition = self.runtime_registry.definition(&input.runtime_kind)?;
         let runtime = self.runtime_registry.runtime(&input.runtime_kind)?;
         match definition.descriptor().capabilities.provisioning_mode {
             RuntimeProvisioningMode::HostManaged => {
-                let mut child = runtime.spawn_server(
-                    self,
-                    Path::new(input.working_directory.as_str()),
-                    input.workspace_id_for_mcp,
-                    port,
-                )?;
-                let runtime_process_guard = match runtime.track_process(self, child.id()) {
-                    Ok(guard) => guard,
-                    Err(error) => {
-                        let tracking_error = anyhow!(error).context(input.tracking_error_context);
-                        if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                            Some(&mut child),
-                            input.cleanup_target.as_ref(),
-                        ) {
-                            return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
-                        }
-                        return Err(tracking_error);
-                    }
-                };
-                let startup_report = match runtime.wait_until_ready(
-                    self,
-                    input,
-                    &mut child,
-                    port,
-                    runtime_id.as_str(),
-                    startup_policy,
-                ) {
-                    Ok(report) => report,
-                    Err(startup_error) => {
-                        if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                            Some(&mut child),
-                            input.cleanup_target.as_ref(),
-                        ) {
-                            return Err(Self::append_cleanup_error(startup_error, cleanup_error));
-                        }
-                        return Err(startup_error);
-                    }
-                };
+                let host_managed_start = runtime
+                    .start_host_managed(self, input, runtime_id.as_str(), startup_policy)
+                    .with_context(|| input.startup_error_context.clone())?;
 
                 Ok(SpawnedRuntimeServer {
                     runtime_id,
-                    runtime_route: definition.route_for_port(port),
-                    child: Some(child),
-                    _runtime_process_guard: Some(runtime_process_guard),
+                    runtime_route: host_managed_start.runtime_route,
+                    child: Some(host_managed_start.child),
+                    _runtime_process_guard: Some(host_managed_start.runtime_process_guard),
                     startup_started_at_instant: input.startup_started_at_instant,
                     startup_started_at: input.startup_started_at.clone(),
-                    startup_report,
+                    startup_report: host_managed_start.startup_report,
                 })
             }
             RuntimeProvisioningMode::External => {

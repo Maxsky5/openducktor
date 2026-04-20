@@ -65,13 +65,13 @@ impl AppService {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
                     StartupEventContext::new(
                         "build_runtime",
-                        repo_path,
-                        Some(task_id),
-                        "build",
-                        0,
-                        Some(StartupEventCorrelation::new("task_id", task_id)),
-                        None,
-                    ),
+                    repo_path,
+                    Some(task_id),
+                    "build",
+                    None,
+                    Some(StartupEventCorrelation::new("task_id", task_id)),
+                    None,
+                ),
                     RuntimeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));
@@ -92,6 +92,10 @@ impl AppService {
             runtime_summary,
             task_id,
         } = input;
+        self.task_transition_to_in_progress_without_related_tasks(
+            prerequisites.repo_path.as_str(),
+            task_id,
+        )?;
 
         let working_directory = prepared_worktree
             .worktree_dir
@@ -99,18 +103,11 @@ impl AppService {
             .ok_or_else(|| anyhow!("Invalid worktree path"))?
             .to_string();
 
-        let bootstrap = BuildSessionBootstrap {
+        Ok(BuildSessionBootstrap {
             runtime_kind,
             runtime_route: runtime_summary.runtime_route,
             working_directory,
-        };
-
-        self.task_transition_to_in_progress_without_related_tasks(
-            prerequisites.repo_path.as_str(),
-            task_id,
-        )?;
-
-        Ok(bootstrap)
+        })
     }
 }
 
@@ -151,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn initiate_build_mode_allows_stdio_routes_and_transitions_task() {
+    fn initiate_build_mode_accepts_stdio_routes_before_transitioning_task() {
         let (service, task_state, _git_state) =
             build_service_with_state(vec![make_task("task-1", "task", TaskStatus::Open)]);
 
@@ -165,18 +162,16 @@ mod tests {
                 runtime_summary: make_stdio_runtime_summary(),
                 task_id: "task-1",
             })
-            .expect("stdio build routes should be accepted");
+            .expect("stdio build routes should remain bootstrap-compatible");
 
-        assert_eq!(bootstrap.runtime_route, RuntimeRoute::Stdio);
-        assert_eq!(
-            bootstrap.working_directory,
-            "/tmp/worktrees/task-1".to_string()
-        );
-        assert!(task_state
+        assert!(matches!(bootstrap.runtime_route, RuntimeRoute::Stdio));
+        assert_eq!(bootstrap.working_directory, "/tmp/worktrees/task-1");
+        let updated_patches = &task_state
             .lock()
             .expect("task store lock poisoned")
-            .updated_patches
-            .iter()
-            .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
+            .updated_patches;
+        assert_eq!(updated_patches.len(), 1);
+        assert_eq!(updated_patches[0].0, "task-1");
+        assert_eq!(updated_patches[0].1.status, Some(TaskStatus::InProgress));
     }
 }
