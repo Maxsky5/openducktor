@@ -75,6 +75,8 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
     taskId: string;
     sessionId: string;
     recoveryDedupKey?: string | null;
+    historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   sessionStore: AgentSessionsStore;

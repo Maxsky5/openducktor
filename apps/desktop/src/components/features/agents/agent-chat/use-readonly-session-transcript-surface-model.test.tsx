@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -8,6 +8,14 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 const hydrateRequestedTaskSessionHistory = mock(async () => {});
 const ensureSessionReadyForView = mock(async () => true);
 const useAgentSessionMock = mock((_sessionId: string | null) => null);
+let latestSurfaceModelArgs: Record<string, unknown> | null = null;
+let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
+let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
+let actualWorkspaceQueries: Awaited<typeof import("@/state/queries/workspace")>;
+let actualRepoRuntimeReadiness: Awaited<typeof import("./use-repo-runtime-readiness")>;
+let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-data")>;
+let actualSessionHydration: Awaited<typeof import("./use-agent-chat-session-hydration")>;
+let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
 
 const persistedRecords: AgentSessionRecord[] = [
   {
@@ -27,10 +35,31 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement => (
 );
 
 describe("useReadonlySessionTranscriptSurfaceModel", () => {
+  beforeAll(async () => {
+    [
+      actualAppStateProvider,
+      actualAppStateContexts,
+      actualWorkspaceQueries,
+      actualRepoRuntimeReadiness,
+      actualRuntimeData,
+      actualSessionHydration,
+      actualSurfaceModel,
+    ] = await Promise.all([
+      import("@/state/app-state-provider"),
+      import("@/state/app-state-contexts"),
+      import("@/state/queries/workspace"),
+      import("./use-repo-runtime-readiness"),
+      import("./use-agent-chat-session-runtime-data"),
+      import("./use-agent-chat-session-hydration"),
+      import("./use-agent-chat-surface-model"),
+    ]);
+  });
+
   beforeEach(() => {
     hydrateRequestedTaskSessionHistory.mockClear();
     ensureSessionReadyForView.mockClear();
     useAgentSessionMock.mockClear();
+    latestSurfaceModelArgs = null;
 
     mock.module("@/state/app-state-provider", () => ({
       useAgentOperations: () => ({
@@ -102,54 +131,54 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }));
 
     mock.module("./use-agent-chat-surface-model", () => ({
-      useAgentChatSurfaceModel: () => ({
-        mode: "non_interactive" as const,
-        thread: {
-          session: null,
-          isSessionWorking: false,
-          showThinkingMessages: false,
-          isSessionViewLoading: false,
-          isSessionHistoryLoading: false,
-          isWaitingForRuntimeReadiness: false,
-          readinessState: "ready" as const,
-          isInteractionEnabled: false,
-          blockedReason: null,
-          isLoadingChecks: false,
-          onRefreshChecks: () => {},
-          emptyState: null,
-          isStarting: false,
-          isSending: false,
-          sessionAgentColors: {},
-          canSubmitQuestionAnswers: false,
-          isSubmittingQuestionByRequestId: {},
-          onSubmitQuestionAnswers: async () => {},
-          canReplyToPermissions: false,
-          isSubmittingPermissionByRequestId: {},
-          permissionReplyErrorByRequestId: {},
-          onReplyPermission: async () => {},
-          sessionRuntimeDataError: null,
-          todoPanelCollapsed: true,
-          onToggleTodoPanel: () => {},
-          messagesContainerRef: { current: null },
-          scrollToBottomOnSendRef: { current: null },
-          syncBottomAfterComposerLayoutRef: { current: null },
-        },
-      }),
+      useAgentChatSurfaceModel: (args: Record<string, unknown>) => {
+        latestSurfaceModelArgs = args;
+        return {
+          mode: "non_interactive" as const,
+          thread: {
+            session: null,
+            isSessionWorking: false,
+            showThinkingMessages: false,
+            isSessionViewLoading: false,
+            isSessionHistoryLoading: false,
+            isWaitingForRuntimeReadiness: false,
+            readinessState: "ready" as const,
+            isInteractionEnabled: false,
+            blockedReason: null,
+            isLoadingChecks: false,
+            onRefreshChecks: () => {},
+            emptyState: null,
+            isStarting: false,
+            isSending: false,
+            sessionAgentColors: {},
+            canSubmitQuestionAnswers: false,
+            isSubmittingQuestionByRequestId: {},
+            onSubmitQuestionAnswers: async () => {},
+            canReplyToPermissions: false,
+            isSubmittingPermissionByRequestId: {},
+            permissionReplyErrorByRequestId: {},
+            onReplyPermission: async () => {},
+            sessionRuntimeDataError: null,
+            todoPanelCollapsed: true,
+            onToggleTodoPanel: () => {},
+            messagesContainerRef: { current: null },
+            scrollToBottomOnSendRef: { current: null },
+            syncBottomAfterComposerLayoutRef: { current: null },
+          },
+        };
+      },
     }));
   });
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
-      ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
-      ["@/state/queries/workspace", () => import("@/state/queries/workspace")],
-      ["./use-repo-runtime-readiness", () => import("./use-repo-runtime-readiness")],
-      [
-        "./use-agent-chat-session-runtime-data",
-        () => import("./use-agent-chat-session-runtime-data"),
-      ],
-      ["./use-agent-chat-session-hydration", () => import("./use-agent-chat-session-hydration")],
-      ["./use-agent-chat-surface-model", () => import("./use-agent-chat-surface-model")],
+      ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
+      ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
+      ["@/state/queries/workspace", () => Promise.resolve(actualWorkspaceQueries)],
+      ["./use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
+      ["./use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
+      ["./use-agent-chat-session-hydration", () => Promise.resolve(actualSessionHydration)],
+      ["./use-agent-chat-surface-model", () => Promise.resolve(actualSurfaceModel)],
     ]);
   });
 
@@ -235,6 +264,47 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         ],
       });
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows a failure empty state when requested history hydration fails", async () => {
+    hydrateRequestedTaskSessionHistory.mockImplementationOnce(async () => {
+      throw new Error("hydrate boom");
+    });
+    const originalConsoleWarn = console.warn;
+    const consoleWarn = mock(() => {});
+    console.warn = consoleWarn;
+
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => latestSurfaceModelArgs?.emptyState !== null);
+
+      expect(latestSurfaceModelArgs?.emptyState).toEqual({
+        title: "Failed to load conversation.",
+      });
+      expect(consoleWarn).toHaveBeenCalled();
+    } finally {
+      console.warn = originalConsoleWarn;
       await harness.unmount();
     }
   });

@@ -856,12 +856,11 @@ export const hydrateSessionRecordsStage = async ({
             selectedModel,
           }),
         ]);
-        return {
+        const nextSession: AgentSessionState = {
           ...current,
           runtimeKind,
           runtimeId,
           runtimeRoute,
-          ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
           status: liveSessionStatus ?? current.status,
           workingDirectory,
           historyHydrationState: "hydrated",
@@ -872,6 +871,14 @@ export const hydrateSessionRecordsStage = async ({
           contextUsage: historyToSessionContextUsage(history, selectedModel),
           messages: mergeHydratedMessages(current.sessionId, hydratedMessages, current.messages),
         };
+        if (liveRuntimeSnapshot) {
+          if (liveSessionTitle) {
+            nextSession.title = liveSessionTitle;
+          } else {
+            delete nextSession.title;
+          }
+        }
+        return nextSession;
       },
       { persist: false },
     );

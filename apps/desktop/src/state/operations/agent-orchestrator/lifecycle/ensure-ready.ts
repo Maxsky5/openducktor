@@ -322,6 +322,7 @@ export const createEnsureSessionReady = ({
     assertNotStale();
     const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
     const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
+    const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot?.title);
 
     updateSession(sessionId, (current) => ({
       ...current,
@@ -330,6 +331,7 @@ export const createEnsureSessionReady = ({
       runtimeId: runtime.runtimeId,
       runtimeRoute: runtime.runtimeRoute,
       workingDirectory: runtime.workingDirectory,
+      ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
       promptOverrides: promptContext.promptOverrides,
       pendingPermissions,
       pendingQuestions,

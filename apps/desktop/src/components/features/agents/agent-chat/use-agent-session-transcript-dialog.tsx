@@ -35,60 +35,122 @@ const AgentSessionTranscriptDialogContext =
   createContext<AgentSessionTranscriptDialogContextValue | null>(null);
 
 const DEFAULT_TITLE = "Conversation";
-
-const buildDefaultDescription = (): string => "Read-only conversation.";
+const DEFAULT_DESCRIPTION = "Read-only conversation.";
 
 function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
   const activeWorkspace = useActiveWorkspace();
   const { tasks } = useTasksState();
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
   const repoPath = activeWorkspace?.repoPath ?? null;
+  const requestedTaskId = request?.taskId?.trim() ?? "";
   const sessionId = request?.sessionId ?? null;
   const open = request !== null;
-  const candidateTaskIds = useMemo(() => {
-    const ids = new Set<string>();
-    const requestedTaskId = request?.taskId?.trim() ?? "";
-    if (requestedTaskId.length > 0) {
-      ids.add(requestedTaskId);
+  const requestedTask = useMemo(
+    () => (requestedTaskId ? (tasks.find((task) => task.id === requestedTaskId) ?? null) : null),
+    [requestedTaskId, tasks],
+  );
+  const locallyResolvedTask = useMemo(() => {
+    if (!sessionId) {
+      return requestedTask;
     }
+    if (
+      requestedTask &&
+      (requestedTask.agentSessions ?? []).some((record) => record.sessionId === sessionId)
+    ) {
+      return requestedTask;
+    }
+    return (
+      tasks.find((task) =>
+        (task.agentSessions ?? []).some((record) => record.sessionId === sessionId),
+      ) ?? null
+    );
+  }, [requestedTask, sessionId, tasks]);
+  const needsAuthoritativeSessionLookup =
+    open && repoPath !== null && sessionId !== null && !locallyResolvedTask;
+  const requestedTaskCandidateIds = useMemo(
+    () => (requestedTaskId ? [requestedTaskId] : []),
+    [requestedTaskId],
+  );
+  const workspaceTaskCandidateIds = useMemo(() => {
+    const ids = new Set<string>();
     for (const task of tasks) {
-      if (task.id.trim().length > 0) {
-        ids.add(task.id);
+      const taskId = task.id.trim();
+      if (taskId.length > 0) {
+        ids.add(taskId);
       }
     }
     return Array.from(ids).sort();
-  }, [request?.taskId, tasks]);
+  }, [tasks]);
 
-  const {
-    data: sessionRecordsByTaskId,
-    isPending,
-    isFetching,
-  } = useQuery<Record<string, AgentSessionRecord[]>>({
-    queryKey: ["agent-session-dialog", "session-records", repoPath, sessionId, candidateTaskIds],
-    enabled: open && repoPath !== null && sessionId !== null && candidateTaskIds.length > 0,
+  const { data: requestedTaskSessionRecordsByTaskId, isPending: isRequestedTaskLookupPending } =
+    useQuery<Record<string, AgentSessionRecord[]>>({
+      queryKey: [
+        "agent-session-dialog",
+        "requested-task-session-records",
+        repoPath,
+        sessionId,
+        requestedTaskCandidateIds,
+      ],
+      enabled: needsAuthoritativeSessionLookup && requestedTaskCandidateIds.length > 0,
+      queryFn: async (): Promise<Record<string, AgentSessionRecord[]>> => {
+        if (!repoPath || !sessionId || requestedTaskCandidateIds.length === 0) {
+          throw new Error("Cannot load session records without repository and session context.");
+        }
+        return host.agentSessionsListBulk(repoPath, requestedTaskCandidateIds);
+      },
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+    });
+  const requestedTaskHasSession = useMemo(() => {
+    if (!sessionId || requestedTaskId.length === 0) {
+      return false;
+    }
+    return (
+      requestedTaskSessionRecordsByTaskId?.[requestedTaskId]?.some(
+        (record) => record.sessionId === sessionId,
+      ) ?? false
+    );
+  }, [requestedTaskId, requestedTaskSessionRecordsByTaskId, sessionId]);
+  const shouldRunWorkspaceLookup =
+    needsAuthoritativeSessionLookup &&
+    !requestedTaskHasSession &&
+    (requestedTaskCandidateIds.length === 0 || !isRequestedTaskLookupPending) &&
+    workspaceTaskCandidateIds.length > 0;
+  const { data: workspaceSessionRecordsByTaskId, isPending: isWorkspaceLookupPending } = useQuery<
+    Record<string, AgentSessionRecord[]>
+  >({
+    queryKey: [
+      "agent-session-dialog",
+      "workspace-session-records",
+      repoPath,
+      sessionId,
+      workspaceTaskCandidateIds,
+    ],
+    enabled: shouldRunWorkspaceLookup,
     queryFn: async (): Promise<Record<string, AgentSessionRecord[]>> => {
-      if (!repoPath || !sessionId || candidateTaskIds.length === 0) {
+      if (!repoPath || !sessionId || workspaceTaskCandidateIds.length === 0) {
         throw new Error("Cannot load session records without repository and session context.");
       }
-      return host.agentSessionsListBulk(repoPath, candidateTaskIds);
+      return host.agentSessionsListBulk(repoPath, workspaceTaskCandidateIds);
     },
     staleTime: 0,
+    refetchOnWindowFocus: false,
   });
   const resolvedTaskId = useMemo(() => {
-    const requestedTaskId = request?.taskId?.trim() ?? "";
     if (!sessionId) {
       return requestedTaskId;
     }
 
-    const localTask = tasks.find((task) =>
-      (task.agentSessions ?? []).some((record) => record.sessionId === sessionId),
-    );
-    if (localTask) {
-      return localTask.id;
+    if (locallyResolvedTask) {
+      return locallyResolvedTask.id;
     }
 
-    if (sessionRecordsByTaskId) {
-      for (const [taskId, records] of Object.entries(sessionRecordsByTaskId)) {
+    if (requestedTaskHasSession) {
+      return requestedTaskId;
+    }
+
+    if (workspaceSessionRecordsByTaskId) {
+      for (const [taskId, records] of Object.entries(workspaceSessionRecordsByTaskId)) {
         if (records.some((record) => record.sessionId === sessionId)) {
           return taskId;
         }
@@ -96,14 +158,38 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     }
 
     return requestedTaskId;
-  }, [request?.taskId, sessionId, sessionRecordsByTaskId, tasks]);
+  }, [
+    locallyResolvedTask,
+    requestedTaskHasSession,
+    requestedTaskId,
+    sessionId,
+    workspaceSessionRecordsByTaskId,
+  ]);
   const persistedRecords = useMemo(() => {
     if (!resolvedTaskId) {
       return undefined;
     }
-    return sessionRecordsByTaskId?.[resolvedTaskId];
-  }, [resolvedTaskId, sessionRecordsByTaskId]);
-  const isResolvingRequestedSession = open && (isPending || isFetching);
+    if (locallyResolvedTask && locallyResolvedTask.id === resolvedTaskId) {
+      return locallyResolvedTask.agentSessions;
+    }
+    if (requestedTaskHasSession && resolvedTaskId === requestedTaskId) {
+      return requestedTaskSessionRecordsByTaskId?.[resolvedTaskId];
+    }
+    return workspaceSessionRecordsByTaskId?.[resolvedTaskId];
+  }, [
+    locallyResolvedTask,
+    requestedTaskHasSession,
+    requestedTaskId,
+    requestedTaskSessionRecordsByTaskId,
+    resolvedTaskId,
+    workspaceSessionRecordsByTaskId,
+  ]);
+  const isResolvingRequestedSession =
+    open &&
+    ((requestedTaskCandidateIds.length > 0 &&
+      needsAuthoritativeSessionLookup &&
+      isRequestedTaskLookupPending) ||
+      (shouldRunWorkspaceLookup && isWorkspaceLookupPending));
 
   const openSessionTranscript = useCallback((nextRequest: OpenAgentSessionTranscriptRequest) => {
     setRequest(nextRequest);
@@ -138,7 +224,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
           }
         }}
         title={request?.title ?? DEFAULT_TITLE}
-        description={request?.description ?? buildDefaultDescription()}
+        description={request?.description ?? DEFAULT_DESCRIPTION}
       />
     </AgentSessionTranscriptDialogContext.Provider>
   );

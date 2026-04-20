@@ -62,6 +62,8 @@ export const useAgentChatSessionRuntimeData = ({
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";
+  const shouldHydrateTodos =
+    shouldHydrateRuntimeData && session !== null && session.todos.length === 0;
 
   const catalogQuery = useQuery({
     queryKey:
@@ -87,7 +89,7 @@ export const useAgentChatSessionRuntimeData = ({
 
   const todosQuery = useQuery({
     queryKey:
-      shouldHydrateRuntimeData && runtimeQueryInput && session
+      shouldHydrateTodos && runtimeQueryInput && session
         ? sessionTodosQueryOptions(
             runtimeQueryInput.runtimeKind,
             runtimeQueryInput.runtimeConnection,
@@ -105,7 +107,7 @@ export const useAgentChatSessionRuntimeData = ({
         session.externalSessionId,
       );
     },
-    enabled: shouldHydrateRuntimeData && session !== null,
+    enabled: shouldHydrateTodos,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 

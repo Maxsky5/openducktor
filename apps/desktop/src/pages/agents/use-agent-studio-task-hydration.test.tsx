@@ -104,6 +104,8 @@ describe("useAgentStudioTaskHydration", () => {
       if (resolveReady) {
         resolveReady();
       }
+      await harness.waitFor((state) => !state.isActiveSessionHistoryHydrating);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
     } finally {
       await harness.unmount();
     }

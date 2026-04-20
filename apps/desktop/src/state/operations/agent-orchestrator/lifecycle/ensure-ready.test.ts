@@ -639,6 +639,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     adapter.hasSession = () => false;
     adapter.resumeSession = async (input) => {
       resumedInput = input;
@@ -652,6 +653,17 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      {
+        externalSessionId: "external-1",
+        title: "Builder Session",
+        workingDirectory: "/tmp/repo/worktree",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: { type: "idle" },
+        pendingPermissions: [],
+        pendingQuestions: [],
+      },
+    ];
 
     const sessionsRef = {
       current: {
@@ -709,9 +721,11 @@ describe("agent-orchestrator-ensure-ready", () => {
           profileId: "Hephaestus (Deep Agent)",
         },
       });
+      expect(sessionsRef.current["session-1"]?.title).toBe("Builder Session");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
     }
   });
 

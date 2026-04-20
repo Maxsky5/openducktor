@@ -26,7 +26,7 @@ const sessionRecordFixture: AgentSessionRecord = {
   selectedModel: null,
 };
 
-const sessionStateFixture: AgentSessionState = {
+const createSessionStateFixture = (): AgentSessionState => ({
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -52,11 +52,11 @@ const sessionStateFixture: AgentSessionState = {
   selectedModel: null,
   isLoadingModelCatalog: false,
   promptOverrides: {},
-};
+});
 
 describe("reattach-live-session", () => {
   test("does not resume an idle snapshot with no pending input", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
     let resumed = false;
     let attachedSessionId: string | null = null;
 
@@ -101,11 +101,11 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(false);
     expect(resumed).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state.pendingPermissions).toEqual(sessionStateFixture.pendingPermissions);
+    expect(state.pendingPermissions).toEqual(createSessionStateFixture().pendingPermissions);
   });
 
   test("reattaches an idle snapshot when pending input is still live", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
     let resumed = false;
     let attachedSessionId: string | null = null;
 
@@ -156,7 +156,7 @@ describe("reattach-live-session", () => {
   });
 
   test("does not resume a missing live session when resume is explicitly disabled", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
     let resumed = false;
     let attachedSessionId: string | null = null;
 
@@ -202,11 +202,11 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(false);
     expect(resumed).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state).toEqual(sessionStateFixture);
+    expect(state).toEqual(createSessionStateFixture());
   });
 
   test("returns false when no live snapshot matches the persisted session", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
 
     const reattachLiveSession = createReattachLiveSession({
       adapter: {
@@ -231,11 +231,11 @@ describe("reattach-live-session", () => {
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
     expect(reattached).toBe(false);
-    expect(state.pendingPermissions).toEqual(sessionStateFixture.pendingPermissions);
+    expect(state.pendingPermissions).toEqual(createSessionStateFixture().pendingPermissions);
   });
 
   test("does not attach or update when the repo becomes stale after resume", async () => {
-    let state = sessionStateFixture;
+    let state = createSessionStateFixture();
     let attachedSessionId: string | null = null;
     let stale = false;
     let resumeCalls = 0;
@@ -282,7 +282,7 @@ describe("reattach-live-session", () => {
     expect(resumeCalls).toBe(1);
     expect(reattached).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state).toEqual(sessionStateFixture);
+    expect(state).toEqual(createSessionStateFixture());
   });
 
   test("does not resume when the repo becomes stale after live lookup", async () => {

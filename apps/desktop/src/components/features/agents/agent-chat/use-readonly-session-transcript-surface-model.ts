@@ -2,7 +2,7 @@ import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { defaultAgentScenarioForRole } from "@openducktor/core";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useChecksOperationsContext,
   useRuntimeDefinitionsContext,
@@ -188,19 +188,24 @@ export function useReadonlySessionTranscriptSurfaceModel({
       ),
     [effectivePersistedRecords, sessionId],
   );
+  const [requestedHistoryHydrationFailed, setRequestedHistoryHydrationFailed] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspace || !taskId || !sessionId || liveSession || !hasPersistedSessionRecord) {
       return;
     }
 
+    setRequestedHistoryHydrationFailed(false);
     void hydrateRequestedTaskSessionHistory({
       taskId,
       sessionId,
       ...(historyPreludeMode ? { historyPreludeMode } : {}),
       ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
       ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
-    }).catch(() => {});
+    }).catch((error) => {
+      console.warn("Failed to hydrate read-only session history", error);
+      setRequestedHistoryHydrationFailed(true);
+    });
   }, [
     activeWorkspace,
     effectivePersistedRecords,
@@ -241,10 +246,18 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const shouldShowPendingSessionResolution =
     Boolean(sessionId) &&
     activeWorkspace !== null &&
-    (isResolvingRequestedSession || (runtimeData.session === null && hasPersistedSessionRecord));
+    (isResolvingRequestedSession ||
+      (runtimeData.session === null &&
+        hasPersistedSessionRecord &&
+        !requestedHistoryHydrationFailed));
   const emptyState = useMemo(() => {
     if (shouldShowPendingSessionResolution) {
       return null;
+    }
+    if (requestedHistoryHydrationFailed) {
+      return {
+        title: "Failed to load conversation.",
+      };
     }
     if (sessionId && activeWorkspace) {
       return {
@@ -254,7 +267,12 @@ export function useReadonlySessionTranscriptSurfaceModel({
     return {
       title: "Select a repository and session to view the conversation.",
     };
-  }, [activeWorkspace, sessionId, shouldShowPendingSessionResolution]);
+  }, [
+    activeWorkspace,
+    requestedHistoryHydrationFailed,
+    sessionId,
+    shouldShowPendingSessionResolution,
+  ]);
 
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
