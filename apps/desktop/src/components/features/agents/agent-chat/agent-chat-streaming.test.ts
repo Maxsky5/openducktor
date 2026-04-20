@@ -51,7 +51,7 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
     expect(resolveActiveStreamingAssistantMessageId(session)).toBe("assistant-intermediate");
   });
 
-  test("keeps tracking a live non-final assistant row after later subtask rows are appended", () => {
+  test("keeps tracking a live non-final assistant row after later subagent rows are appended", () => {
     const session = buildSession({
       status: "running",
       messages: [
@@ -63,11 +63,13 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
             isFinal: false,
           },
         }),
-        buildMessage("system", "Subtask (planner): inspect tests", {
-          id: "subtask:planner-1",
+        buildMessage("system", "Subagent (planner): inspect tests", {
+          id: "subagent:planner-1",
           meta: {
-            kind: "subtask",
+            kind: "subagent",
             partId: "part-subtask-1",
+            correlationKey: "spawn:assistant-subtask-live:planner:Inspect the tests:inspect tests",
+            status: "running",
             agent: "planner",
             prompt: "Inspect the tests",
             description: "inspect tests",

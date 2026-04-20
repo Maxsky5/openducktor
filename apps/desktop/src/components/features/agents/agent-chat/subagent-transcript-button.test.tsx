@@ -1,47 +1,27 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
-import { extractSubagentSessionId } from "./tool-summary";
 
-const createToolMeta = (overrides: Partial<ToolMeta> = {}): ToolMeta => ({
-  kind: "tool",
+const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta => ({
+  kind: "subagent",
   partId: "part-1",
-  callId: "call-1",
-  tool: "subtask",
+  correlationKey: "session:assistant-1:session-child-1",
   status: "completed",
-  metadata: {
-    sessionId: "session-child-1",
-  },
+  agent: "build",
+  description: "Did work",
+  sessionId: "session-child-1",
   ...overrides,
 });
 
 describe("SubagentTranscriptButton", () => {
-  test("extracts only subagent-related session ids", () => {
-    expect(extractSubagentSessionId(createToolMeta())).toBe("session-child-1");
-    expect(
-      extractSubagentSessionId(
-        createToolMeta({
-          tool: "read",
-        }),
-      ),
-    ).toBeNull();
-    expect(
-      extractSubagentSessionId(
-        createToolMeta({
-          metadata: {},
-        }),
-      ),
-    ).toBeNull();
-  });
-
-  test("opens a read-only session view request for supported subagent tool calls", () => {
+  test("opens a read-only session view request for subagent cards", () => {
     const onOpenTranscript = mock(() => {});
 
     render(
       <SubagentTranscriptButton
         taskId="task-1"
-        meta={createToolMeta()}
+        meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
     );
@@ -60,17 +40,20 @@ describe("SubagentTranscriptButton", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
         taskId={null}
-        meta={createToolMeta()}
+        meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
     );
 
     expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
 
+    const metaWithoutSessionId = createSubagentMeta();
+    delete metaWithoutSessionId.sessionId;
+
     rerender(
       <SubagentTranscriptButton
         taskId="task-1"
-        meta={createToolMeta({ tool: "read" })}
+        meta={metaWithoutSessionId}
         onOpenTranscript={() => {}}
       />,
     );
@@ -87,7 +70,7 @@ describe("SubagentTranscriptButton", () => {
       render(
         <SubagentTranscriptButton
           taskId="task-1"
-          meta={createToolMeta()}
+          meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
         />,
       );

@@ -1,7 +1,11 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
-import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import {
+  findLastSessionMessageByRole,
+  findSessionMessageById,
+  upsertSessionMessage,
+} from "../support/messages";
 import type {
   DraftChannel,
   SessionEvent,
@@ -11,6 +15,7 @@ import type {
 } from "./session-event-types";
 import {
   createPrePartTodoSettlement,
+  eventTimestampMs,
   scheduleDraftFlush,
   toPartStreamKey,
 } from "./session-helpers";
@@ -340,29 +345,116 @@ const handleReasoningPart = (
 const handleSubtaskPart = (
   context: SessionPartEventContext,
   event: SessionPartEvent,
-  part: Extract<SessionPart, { kind: "subtask" }>,
+  part: Extract<SessionPart, { kind: "subagent" }>,
   streamMessageKey: string,
   prepareCurrent: PrepareCurrent,
 ): void => {
+  type SubagentMessageMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
+  const eventTimestamp = eventTimestampMs(event.timestamp);
+
+  const resolveNextStatus = (
+    existingStatus: Extract<SessionPart, { kind: "subagent" }>["status"] | undefined,
+    incomingStatus: Extract<SessionPart, { kind: "subagent" }>["status"],
+  ): Extract<SessionPart, { kind: "subagent" }>["status"] => {
+    if (existingStatus === "error") {
+      return "error";
+    }
+    if (incomingStatus === "error") {
+      return "error";
+    }
+    if (existingStatus === "completed") {
+      return "completed";
+    }
+    if (incomingStatus === "completed") {
+      return "completed";
+    }
+    if (existingStatus === "running" && incomingStatus === "pending") {
+      return "running";
+    }
+
+    return incomingStatus;
+  };
+
+  const formatSubagentContent = (meta: {
+    agent?: string;
+    prompt?: string;
+    description?: string;
+    sessionId?: string;
+  }): string => {
+    const agentLabel = meta.agent?.trim() || "subagent";
+    const summary =
+      meta.description?.trim() ||
+      meta.prompt?.trim() ||
+      (meta.sessionId ? `Session ${meta.sessionId.slice(0, 8)}` : "Subagent activity");
+
+    return `Subagent (${agentLabel}): ${summary}`;
+  };
+
   context.store.updateSession(
     context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
+      const existingMessage =
+        (part.sessionId
+          ? findLastSessionMessageByRole(
+              prepared,
+              "system",
+              (message) =>
+                message.meta?.kind === "subagent" && message.meta.sessionId === part.sessionId,
+            )
+          : undefined) ??
+        findLastSessionMessageByRole(
+          prepared,
+          "system",
+          (message) =>
+            message.meta?.kind === "subagent" &&
+            message.meta.correlationKey === part.correlationKey,
+        );
+      const existingMeta = existingMessage?.meta?.kind === "subagent" ? existingMessage.meta : null;
+      const status = resolveNextStatus(existingMeta?.status, part.status);
+      const metadata =
+        existingMeta?.metadata && part.metadata
+          ? { ...existingMeta.metadata, ...part.metadata }
+          : (part.metadata ?? existingMeta?.metadata);
+      const startedAtMs =
+        typeof existingMeta?.startedAtMs === "number" && typeof part.startedAtMs === "number"
+          ? Math.min(existingMeta.startedAtMs, part.startedAtMs)
+          : (part.startedAtMs ?? existingMeta?.startedAtMs ?? eventTimestamp);
+      const endedAtMs =
+        typeof existingMeta?.endedAtMs === "number" && typeof part.endedAtMs === "number"
+          ? Math.max(existingMeta.endedAtMs, part.endedAtMs)
+          : status === "completed" || status === "error"
+            ? (part.endedAtMs ?? existingMeta?.endedAtMs ?? eventTimestamp)
+            : undefined;
+      const agent = part.agent ?? existingMeta?.agent;
+      const prompt = part.prompt ?? existingMeta?.prompt;
+      const description = part.description ?? existingMeta?.description;
+      const sessionId = part.sessionId ?? existingMeta?.sessionId;
+      const executionMode = part.executionMode ?? existingMeta?.executionMode;
+      const nextMeta: SubagentMessageMeta = {
+        kind: "subagent",
+        partId: part.partId,
+        correlationKey: part.correlationKey,
+        status,
+        ...(typeof agent === "string" ? { agent } : {}),
+        ...(typeof prompt === "string" ? { prompt } : {}),
+        ...(typeof description === "string" ? { description } : {}),
+        ...(typeof sessionId === "string" ? { sessionId } : {}),
+        ...(executionMode ? { executionMode } : {}),
+        ...(metadata ? { metadata } : {}),
+        ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+        ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+      };
+
       return {
         ...prepared,
         status: "running",
         messages: upsertSessionMessage(prepared, {
-          id: `subtask:${streamMessageKey}`,
+          id: existingMessage?.id ?? `subagent:${part.sessionId ?? streamMessageKey}`,
           role: "system",
-          content: `Subtask (${part.agent}): ${part.description}`,
+          content: formatSubagentContent(nextMeta),
           timestamp: event.timestamp,
-          meta: {
-            kind: "subtask",
-            partId: part.partId,
-            agent: part.agent,
-            prompt: part.prompt,
-            description: part.description,
-          },
+          meta: nextMeta,
         }),
       };
     },
@@ -427,7 +519,7 @@ export const handleAssistantPart = (
     case "tool":
       handleToolPart(context, event, part, streamMessageKey, prepareCurrent);
       return;
-    case "subtask":
+    case "subagent":
       handleSubtaskPart(context, event, part, streamMessageKey, prepareCurrent);
       return;
     case "step":

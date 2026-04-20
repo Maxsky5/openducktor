@@ -58,6 +58,82 @@ const createToolPart = ({
 };
 
 describe("stream-part-mapper", () => {
+  test("maps raw subtask parts to canonical subagent parts", () => {
+    const part = {
+      id: "subtask-1",
+      sessionID: "session-1",
+      messageID: "assistant-subtask-1",
+      type: "subtask",
+      agent: "build",
+      prompt: "Implement the plan",
+      description: "Implement the plan",
+      model: "gpt-5",
+      command: "build",
+    } as unknown as Part;
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-subtask-1",
+      partId: "subtask-1",
+      correlationKey: "spawn:assistant-subtask-1:build:Implement the plan:Implement the plan",
+      status: "running",
+      agent: "build",
+      prompt: "Implement the plan",
+      description: "Implement the plan",
+      metadata: {
+        model: "gpt-5",
+        command: "build",
+      },
+    });
+  });
+
+  test("maps subagent tool families to canonical subagent parts", () => {
+    const part = createToolPart({
+      id: "tool-subagent-1",
+      tool: "delegate",
+      status: "completed",
+      input: {
+        agent: "planner",
+        prompt: "Inspect the tests",
+      },
+      output: {
+        result: "Done subtask",
+        sessionId: "session-child-1",
+      },
+      metadata: {
+        background: true,
+        summary: [{ id: 1 }],
+      },
+      time: {
+        start: 10,
+        end: 40,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-tool-subagent-1",
+      partId: "tool-subagent-1",
+      correlationKey: "spawn:assistant-tool-subagent-1:planner:Inspect the tests:Done subtask",
+      status: "completed",
+      agent: "planner",
+      prompt: "Inspect the tests",
+      description: "Done subtask",
+      sessionId: "session-child-1",
+      executionMode: "background",
+      metadata: {
+        background: true,
+        summary: [{ id: 1 }],
+      },
+      startedAtMs: 10,
+      endedAtMs: 40,
+    });
+  });
+
   test("derives preview hints for current tool families", () => {
     const scenarios = [
       {

@@ -325,12 +325,17 @@ describe("agent-orchestrator/support/persistence", () => {
               endedAtMs: 200,
             },
             {
-              kind: "subtask",
+              kind: "subagent",
               messageId: "m-assistant",
               partId: "p-subtask",
+              correlationKey: "spawn:m-assistant:build:Implement:Did work",
+              status: "completed",
               agent: "build",
               prompt: "Implement",
               description: "Did work",
+              sessionId: "session-child-1",
+              startedAtMs: 300,
+              endedAtMs: 450,
             },
             {
               kind: "step",
@@ -357,9 +362,19 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(messages.some((entry) => entry.role === "tool")).toBe(true);
     expect(
       messages.some(
-        (entry) => entry.role === "system" && entry.content.includes("Subtask (build)"),
+        (entry) => entry.role === "system" && entry.content.includes("Subagent (build)"),
       ),
     ).toBe(true);
+
+    const subagent = messages.find(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    if (!subagent || subagent.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent message with subagent meta");
+    }
+    expect(subagent.meta.status).toBe("completed");
+    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.correlationKey).toBe("spawn:m-assistant:build:Implement:Did work");
 
     const assistant = messages.find(
       (entry) => entry.role === "assistant" && entry.content === "Done",

@@ -5,6 +5,8 @@ import type {
   AgentRole,
   AgentScenario,
   AgentSessionTodoItem,
+  AgentSubagentExecutionMode,
+  AgentSubagentStatus,
   AgentUserMessageDisplayPart,
   AgentUserMessageState,
 } from "@openducktor/core";
@@ -63,11 +65,18 @@ export type AgentChatMessageMeta =
       cost?: number;
     }
   | {
-      kind: "subtask";
+      kind: "subagent";
       partId: string;
-      agent: string;
-      prompt: string;
-      description: string;
+      correlationKey: string;
+      status: AgentSubagentStatus;
+      agent?: string;
+      prompt?: string;
+      description?: string;
+      sessionId?: string;
+      executionMode?: AgentSubagentExecutionMode;
+      metadata?: Record<string, unknown>;
+      startedAtMs?: number;
+      endedAtMs?: number;
     }
   | {
       kind: "session_notice";

@@ -23,23 +23,61 @@ export const runtimeSupportedScopesSchema = z
     message: "Supported runtime scopes must be unique.",
   });
 
-export const runtimeCapabilitiesSchema = z.object({
-  supportsProfiles: z.boolean(),
-  supportsVariants: z.boolean(),
-  supportsSlashCommands: z.boolean(),
-  supportsFileSearch: z.boolean(),
-  supportsOdtWorkflowTools: z.boolean(),
-  supportsSessionFork: z.boolean(),
-  supportsQueuedUserMessages: z.boolean(),
-  supportsPermissionRequests: z.boolean(),
-  supportsQuestionRequests: z.boolean(),
-  supportsTodos: z.boolean(),
-  supportsDiff: z.boolean(),
-  supportsFileStatus: z.boolean(),
-  supportsMcpStatus: z.boolean(),
-  supportedScopes: runtimeSupportedScopesSchema,
-  provisioningMode: runtimeProvisioningModeSchema,
-});
+export const runtimeSubagentExecutionModeValues = ["foreground", "background"] as const;
+export const runtimeSubagentExecutionModeSchema = z.enum(runtimeSubagentExecutionModeValues);
+export type RuntimeSubagentExecutionMode = z.infer<typeof runtimeSubagentExecutionModeSchema>;
+
+export const runtimeSupportedSubagentExecutionModesSchema = z
+  .array(runtimeSubagentExecutionModeSchema)
+  .refine((modes) => new Set(modes).size === modes.length, {
+    message: "Supported subagent execution modes must be unique.",
+  });
+
+export const runtimeCapabilitiesSchema = z
+  .object({
+    supportsProfiles: z.boolean(),
+    supportsVariants: z.boolean(),
+    supportsSlashCommands: z.boolean(),
+    supportsFileSearch: z.boolean(),
+    supportsOdtWorkflowTools: z.boolean(),
+    supportsSessionFork: z.boolean(),
+    supportsQueuedUserMessages: z.boolean(),
+    supportsPermissionRequests: z.boolean(),
+    supportsQuestionRequests: z.boolean(),
+    supportsTodos: z.boolean(),
+    supportsDiff: z.boolean(),
+    supportsFileStatus: z.boolean(),
+    supportsMcpStatus: z.boolean(),
+    supportsSubagents: z.boolean(),
+    supportedSubagentExecutionModes: runtimeSupportedSubagentExecutionModesSchema,
+    supportedScopes: runtimeSupportedScopesSchema,
+    provisioningMode: runtimeProvisioningModeSchema,
+  })
+  .superRefine((capabilities, context) => {
+    if (
+      capabilities.supportsSubagents &&
+      capabilities.supportedSubagentExecutionModes.length === 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["supportedSubagentExecutionModes"],
+        message:
+          "Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
+      });
+    }
+
+    if (
+      !capabilities.supportsSubagents &&
+      capabilities.supportedSubagentExecutionModes.length > 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["supportedSubagentExecutionModes"],
+        message:
+          "Runtime descriptors that do not support subagents must not declare subagent execution modes.",
+      });
+    }
+  });
 export type RuntimeCapabilities = z.infer<typeof runtimeCapabilitiesSchema>;
 
 export const runtimeCapabilityKeyValues = [
@@ -56,6 +94,7 @@ export const runtimeCapabilityKeyValues = [
   "supportsDiff",
   "supportsFileStatus",
   "supportsMcpStatus",
+  "supportsSubagents",
 ] as const;
 export const runtimeCapabilityKeySchema = z.enum(runtimeCapabilityKeyValues);
 export type RuntimeCapabilityKey = z.infer<typeof runtimeCapabilityKeySchema>;
@@ -76,6 +115,7 @@ export const optionalRuntimeCapabilityKeys = [
   "supportsDiff",
   "supportsFileStatus",
   "supportsMcpStatus",
+  "supportsSubagents",
 ] as const satisfies readonly RuntimeCapabilityKey[];
 
 export const runtimeRequiredScopesByRole = {
@@ -116,6 +156,7 @@ export const runtimeCapabilityClasses = {
   supportsDiff: "optional",
   supportsFileStatus: "optional",
   supportsMcpStatus: "optional",
+  supportsSubagents: "optional",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;
 
 export const runtimeRefSchema = z.object({

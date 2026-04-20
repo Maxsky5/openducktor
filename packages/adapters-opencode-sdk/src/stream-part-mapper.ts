@@ -2,6 +2,7 @@ import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart } from "@openducktor/core";
 import {
   asUnknownRecord,
+  readBooleanProp,
   readNumberProp,
   readRecordProp,
   readStringProp,
@@ -139,7 +140,207 @@ const extractPartTiming = (
 
 type ToolPart = Extract<Part, { type: "tool" }>;
 type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
+type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ToolStatus = ToolStreamPart["status"];
+
+const SUBAGENT_TOOL_NAMES = new Set(["task", "delegate", "subtask"]);
+
+const normalizeToolName = (value: string): string => {
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.startsWith("functions.") ? trimmed.slice("functions.".length) : trimmed;
+};
+
+const readTrimmedString = (source: unknown, keys: string[]): string | undefined => {
+  const value = readStringProp(source, keys);
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["executionMode"] => {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "background" || normalized === "foreground") {
+      return normalized;
+    }
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "background" : "foreground";
+  }
+
+  return undefined;
+};
+
+const resolveSubagentExecutionMode = (
+  ...sources: unknown[]
+): SubagentStreamPart["executionMode"] => {
+  for (const source of sources) {
+    const direct = normalizeSubagentExecutionMode(source);
+    if (direct) {
+      return direct;
+    }
+
+    const record = asUnknownRecord(source);
+    if (!record) {
+      continue;
+    }
+
+    const fromMode = normalizeSubagentExecutionMode(
+      readStringProp(record, ["executionMode", "execution_mode", "mode", "runMode", "run_mode"]),
+    );
+    if (fromMode) {
+      return fromMode;
+    }
+
+    const fromBackground = normalizeSubagentExecutionMode(
+      readBooleanProp(record, ["background", "isBackground", "is_background"]),
+    );
+    if (fromBackground) {
+      return fromBackground;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveSubagentSessionId = (...sources: unknown[]): string | undefined => {
+  for (const source of sources) {
+    const sessionId = readTrimmedString(source, ["sessionId", "sessionID", "session_id"]);
+    if (sessionId) {
+      return sessionId;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveSubagentCorrelationKey = (input: {
+  messageId: string;
+  partId: string;
+  sessionId?: string;
+  agent?: string;
+  prompt?: string;
+  description?: string;
+}): string => {
+  const agent = input.agent?.trim() ?? "";
+  const prompt = input.prompt?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+
+  if (agent || prompt || description) {
+    return ["spawn", input.messageId, agent, prompt, description].join(":");
+  }
+
+  if (input.sessionId) {
+    return ["session", input.messageId, input.sessionId].join(":");
+  }
+
+  return ["part", input.messageId, input.partId].join(":");
+};
+
+const buildSubagentStreamPart = (input: {
+  messageId: string;
+  partId: string;
+  status: SubagentStreamPart["status"];
+  agent?: string;
+  prompt?: string;
+  description?: string;
+  sessionId?: string;
+  executionMode?: SubagentStreamPart["executionMode"];
+  metadata?: Record<string, unknown>;
+  startedAtMs?: number;
+  endedAtMs?: number;
+}): SubagentStreamPart => {
+  const correlationKey = resolveSubagentCorrelationKey(input);
+
+  return {
+    kind: "subagent",
+    messageId: input.messageId,
+    partId: input.partId,
+    correlationKey,
+    status: input.status,
+    ...(input.agent ? { agent: input.agent } : {}),
+    ...(input.prompt ? { prompt: input.prompt } : {}),
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.executionMode ? { executionMode: input.executionMode } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+    ...(typeof input.startedAtMs === "number" ? { startedAtMs: input.startedAtMs } : {}),
+    ...(typeof input.endedAtMs === "number" ? { endedAtMs: input.endedAtMs } : {}),
+  };
+};
+
+const resolveSubagentAgent = (...sources: unknown[]): string | undefined => {
+  for (const source of sources) {
+    const agent = readTrimmedString(source, ["agent", "name"]);
+    if (agent) {
+      return agent;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveSubagentPrompt = (...sources: unknown[]): string | undefined => {
+  for (const source of sources) {
+    const prompt = readTrimmedString(source, ["prompt", "message"]);
+    if (prompt) {
+      return prompt;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveSubagentDescription = (...sources: unknown[]): string | undefined => {
+  for (const source of sources) {
+    const description = readTrimmedString(source, ["description", "result", "message"]);
+    if (description) {
+      return description;
+    }
+  }
+
+  return undefined;
+};
+
+const buildSubagentFromToolPart = (
+  part: ToolPart,
+  toolState: Record<string, unknown>,
+  normalizedStatus: ToolStatus,
+  timing: ReturnType<typeof extractPartTiming>,
+  metadata: Record<string, unknown> | undefined,
+): SubagentStreamPart => {
+  const rawInput = readUnknownProp(toolState, "input");
+  const rawOutput = readUnknownProp(toolState, "output");
+  const input = asUnknownRecord(rawInput);
+  const output = asUnknownRecord(rawOutput) ?? parseStructuredTextObject(rawOutput);
+  const sessionId = resolveSubagentSessionId(metadata, input, output);
+  const agent = resolveSubagentAgent(input, metadata, output);
+  const prompt = resolveSubagentPrompt(input, metadata, output);
+  const description =
+    resolveSubagentDescription(input, output, metadata) ??
+    deriveToolPreview({
+      tool: part.tool,
+      rawInput,
+      rawOutput,
+      ...(metadata ? { metadata } : {}),
+    });
+
+  return buildSubagentStreamPart({
+    messageId: part.messageID,
+    partId: part.id,
+    status: normalizedStatus,
+    ...(agent ? { agent } : {}),
+    ...(prompt ? { prompt } : {}),
+    ...(description ? { description } : {}),
+    ...(sessionId ? { sessionId } : {}),
+    executionMode: resolveSubagentExecutionMode(metadata, input, output),
+    ...(metadata ? { metadata } : {}),
+    ...timing,
+  });
+};
 
 const normalizeToolStatus = (rawStatus: string, hasEndedTiming: boolean): ToolStatus => {
   const normalized = rawStatus.trim().toLowerCase();
@@ -253,6 +454,11 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         readStringProp(toolState, ["status"]) ?? "",
         typeof timing.endedAtMs === "number",
       );
+
+      if (SUBAGENT_TOOL_NAMES.has(normalizeToolName(part.tool))) {
+        return buildSubagentFromToolPart(part, toolState, normalizedStatus, timing, metadata);
+      }
+
       return buildToolStreamPart(part, toolState, normalizedStatus, timing, metadata);
     }
     case "step-start":
@@ -274,15 +480,22 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         ...(typeof totalTokens === "number" ? { totalTokens } : {}),
       };
     }
-    case "subtask":
-      return {
-        kind: "subtask",
+    case "subtask": {
+      const subtaskMetadata = normalizeMetadata({
+        ...(part.model ? { model: part.model } : {}),
+        ...(part.command ? { command: part.command } : {}),
+      });
+
+      return buildSubagentStreamPart({
         messageId: part.messageID,
         partId: part.id,
+        status: "running",
         agent: part.agent,
         prompt: part.prompt,
         description: part.description,
-      };
+        ...(subtaskMetadata ? { metadata: subtaskMetadata } : {}),
+      });
+    }
     default:
       return null;
   }

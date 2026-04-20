@@ -5,6 +5,7 @@ import type {
   AgentSessionStartMode as ContractsAgentSessionStartMode,
   AgentToolName as ContractsAgentToolName,
   KnownGitProviderId as ContractsKnownGitProviderId,
+  RuntimeSubagentExecutionMode as ContractsRuntimeSubagentExecutionMode,
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
   RuntimeCapabilities,
@@ -88,6 +89,8 @@ export type AgentRuntimeConnection = RuntimeTransport;
 export type AgentRuntimeDefinition = RuntimeDescriptor;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
+export type AgentSubagentExecutionMode = ContractsRuntimeSubagentExecutionMode;
+export type AgentSubagentStatus = "pending" | "running" | "completed" | "error";
 
 export type AgentFileSearchResultKind =
   | "directory"
@@ -323,12 +326,19 @@ export type AgentStreamPart =
       totalTokens?: number;
     }
   | {
-      kind: "subtask";
+      kind: "subagent";
       messageId: string;
       partId: string;
-      agent: string;
-      prompt: string;
-      description: string;
+      correlationKey: string;
+      status: AgentSubagentStatus;
+      agent?: string;
+      prompt?: string;
+      description?: string;
+      sessionId?: string;
+      executionMode?: AgentSubagentExecutionMode;
+      metadata?: Record<string, unknown>;
+      startedAtMs?: number;
+      endedAtMs?: number;
     };
 
 export type AgentSessionStatus =

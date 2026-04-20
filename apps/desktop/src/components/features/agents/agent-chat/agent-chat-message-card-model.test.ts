@@ -423,7 +423,7 @@ describe("agent-chat-message-card-model", () => {
       ).toBe("boom");
     });
 
-    test("builds task summaries from metadata and session id", () => {
+    test("falls back to empty text when task metadata does not expose a generic summary", () => {
       expect(
         buildToolSummary(
           createToolMeta({
@@ -432,7 +432,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "",
         ),
-      ).toBe("2 subagent tool steps");
+      ).toBe("");
 
       expect(
         buildToolSummary(
@@ -442,7 +442,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "",
         ),
-      ).toBe("Subagent session 12345678");
+      ).toBe("");
     });
 
     test("prefers explicit error text and title with compaction", () => {
@@ -564,7 +564,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "",
         ),
-      ).toBe("2 subagent results");
+      ).toBe('[{"id":"a"},{"id":"b"}]');
 
       expect(
         buildToolSummary(
@@ -574,7 +574,7 @@ describe("agent-chat-message-card-model", () => {
           }),
           "",
         ),
-      ).toBe("2 subagent results");
+      ).toBe('{"summary":[{"id":"x"},{"id":"y"}]}');
 
       expect(
         buildToolSummary(

@@ -24,6 +24,14 @@ import {
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
+type LegacySubtaskHistoryPart = {
+  kind: "subtask";
+  partId: string;
+  agent: string;
+  prompt: string;
+  description: string;
+};
+type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   const runtimeKind = requireSessionRuntimeKindForPersistence(session);
@@ -196,7 +204,7 @@ const userMessageMeta = (
 
 const historyPartToChatMessage = (
   message: AgentSessionHistoryMessage,
-  part: HistoryPart,
+  part: HydrationHistoryPart,
 ): AgentChatMessage | null => {
   switch (part.kind) {
     case "reasoning": {
@@ -241,15 +249,41 @@ const historyPartToChatMessage = (
         },
       };
     }
-    case "subtask": {
+    case "subagent": {
       return {
-        id: `history:subtask:${message.messageId}:${part.partId}`,
+        id: `history:subagent:${message.messageId}:${part.partId}`,
         role: "system",
-        content: `Subtask (${part.agent}): ${part.description}`,
+        content: `Subagent (${part.agent ?? "subagent"}): ${
+          part.description ?? part.prompt ?? "Subagent activity"
+        }`,
         timestamp: message.timestamp,
         meta: {
-          kind: "subtask",
+          kind: "subagent",
           partId: part.partId,
+          correlationKey: part.correlationKey,
+          status: part.status,
+          ...(part.agent ? { agent: part.agent } : {}),
+          ...(part.prompt ? { prompt: part.prompt } : {}),
+          ...(part.description ? { description: part.description } : {}),
+          ...(part.sessionId ? { sessionId: part.sessionId } : {}),
+          ...(part.executionMode ? { executionMode: part.executionMode } : {}),
+          ...(part.metadata ? { metadata: part.metadata } : {}),
+          ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+          ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+        },
+      };
+    }
+    case "subtask": {
+      return {
+        id: `history:subagent:${message.messageId}:${part.partId}`,
+        role: "system",
+        content: `Subagent (${part.agent}): ${part.description}`,
+        timestamp: message.timestamp,
+        meta: {
+          kind: "subagent",
+          partId: part.partId,
+          correlationKey: `legacy:${message.messageId}:${part.partId}`,
+          status: "completed",
           agent: part.agent,
           prompt: part.prompt,
           description: part.description,
@@ -275,7 +309,7 @@ export const historyToChatMessages = (
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
 
-    for (const part of message.parts) {
+    for (const part of message.parts as HydrationHistoryPart[]) {
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
         next.push(partMessage);

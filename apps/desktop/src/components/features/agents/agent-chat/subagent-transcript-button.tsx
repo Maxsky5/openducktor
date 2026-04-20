@@ -3,8 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { extractSubagentSessionId } from "./tool-summary";
+import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
@@ -15,7 +14,7 @@ type SubagentTranscriptButtonProps = {
   sessionRole?: AgentRole | null;
   sessionRuntimeKind?: RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
-  meta: ToolMeta;
+  meta: SubagentMeta;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
 };
 
@@ -40,7 +39,7 @@ export function SubagentTranscriptButton({
   onOpenTranscript,
 }: SubagentTranscriptButtonProps): ReactElement | null {
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
-  const sessionId = extractSubagentSessionId(meta);
+  const sessionId = meta.sessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
   const fallbackSession =
     taskId &&
