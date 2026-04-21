@@ -424,7 +424,21 @@ The built-in runtime implementation is `opencode`. Its adapter, runtime registry
 
 ### Host-managed startup
 
-For `host_managed` runtimes, the Rust host contains the startup and readiness logic. `runtime_ensure` owns shared workspace-runtime startup, Builder startup goes through `build_start`, and QA task-context routing currently goes through build-continuation-aware orchestration rather than a separate generic task-runtime start command.
+For `host_managed` runtimes, the Rust host owns orchestration, but the runtime implementation owns the startup details that produce the live route.
+
+Current contract rules:
+
+- shared registration no longer stores a generic `port -> route` callback on `RuntimeDefinition`,
+- shared startup no longer allocates a generic startup port before every host-managed launch,
+- host-managed runtimes implement `start_host_managed(...) -> HostManagedRuntimeStart`,
+- that startup result is authoritative for the live `RuntimeRoute`, spawned child/process guard, and startup report,
+- transport-specific startup behavior such as OpenCode's local HTTP port allocation stays inside the owning runtime implementation.
+
+This keeps the shared startup contract route-driven. A host-managed runtime may still return `RuntimeRoute::LocalHttp` when that is real, but another runtime may return `RuntimeRoute::Stdio` or a dynamically discovered HTTP endpoint without forcing shared code to reconstruct the route from a host-picked port.
+
+Startup telemetry follows the same rule: `port` is optional in shared startup event payloads and is only populated when a real startup port exists.
+
+`runtime_ensure` still owns shared workspace-runtime startup, Builder startup still goes through `build_start`, and QA task-context routing still goes through build-continuation-aware orchestration rather than a separate generic task-runtime start command.
 
 ### Transport model
 

@@ -1,7 +1,7 @@
 use super::health_http::{
     RuntimeHealthCheckFailure, RuntimeHealthHttpClient, RuntimeMcpServerStatus,
 };
-use super::AppRuntime;
+use super::{AppRuntime, HostManagedRuntimeStart};
 use crate::app_service::opencode_runtime::{
     opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,
     OpenCodeProcessTracker,
@@ -12,19 +12,18 @@ use crate::app_service::{
     RuntimeRoute, RuntimeSessionStatusMap, RuntimeSessionStatusProbeError,
     RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
     RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
-    RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload,
+    RuntimeStartupReadinessPolicy, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary,
     RuntimeStartupReadinessConfig,
 };
+use host_infra_system::pick_free_port;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
-use std::path::Path;
-use std::process::Child;
 use std::time::Duration;
 use url::form_urlencoded;
 
@@ -34,6 +33,12 @@ pub(crate) struct OpenCodeRuntime {
 }
 
 impl OpenCodeRuntime {
+    fn local_http_route_for_port(port: u16) -> RuntimeRoute {
+        RuntimeRoute::LocalHttp {
+            endpoint: format!("http://127.0.0.1:{port}"),
+        }
+    }
+
     fn load_session_statuses(
         runtime_route: &RuntimeRoute,
         working_directory: &str,
@@ -307,6 +312,18 @@ impl OpenCodeRuntime {
                 .map_err(|error| RuntimeHealthCheckFailure::error(error.to_string()))?;
         Ok(RuntimeHealthHttpClient::new(endpoint))
     }
+
+    pub(crate) fn track_pending_process(
+        &self,
+        service: &AppService,
+        child_id: u32,
+    ) -> Result<RuntimeProcessGuard> {
+        self.process_tracker.track_process(
+            opencode_process_registry_path(&service.config_store).as_path(),
+            service.instance_pid,
+            child_id,
+        )
+    }
 }
 
 impl AppRuntime for OpenCodeRuntime {
@@ -323,33 +340,38 @@ impl AppRuntime for OpenCodeRuntime {
         ))
     }
 
-    fn spawn_server(
-        &self,
-        service: &AppService,
-        working_directory: &Path,
-        workspace_id_for_mcp: &str,
-        port: u16,
-    ) -> Result<Child> {
-        service.spawn_opencode_server(working_directory, workspace_id_for_mcp, port)
-    }
-
-    fn track_process(&self, service: &AppService, child_id: u32) -> Result<RuntimeProcessGuard> {
-        self.process_tracker.track_process(
-            opencode_process_registry_path(&service.config_store).as_path(),
-            service.instance_pid,
-            child_id,
-        )
-    }
-
-    fn wait_until_ready(
+    fn start_host_managed(
         &self,
         service: &AppService,
         input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
-        child: &mut Child,
-        port: u16,
         runtime_id: &str,
         startup_policy: RuntimeStartupReadinessPolicy,
-    ) -> Result<RuntimeStartupWaitReport> {
+    ) -> Result<HostManagedRuntimeStart> {
+        let port = pick_free_port()?;
+        let runtime_route = Self::local_http_route_for_port(port);
+        let mut child = service.spawn_opencode_server(
+            std::path::Path::new(input.working_directory.as_str()),
+            input.workspace_id_for_mcp,
+            port,
+        )?;
+        let runtime_process_guard = match self.track_pending_process(service, child.id()) {
+            Ok(guard) => guard,
+            Err(error) => {
+                let tracking_error =
+                    error.context("Failed tracking spawned OpenCode runtime process");
+                if let Err(cleanup_error) = AppService::cleanup_failed_host_managed_start(
+                    Some(&mut child),
+                    input.cleanup_target.as_ref(),
+                ) {
+                    return Err(AppService::append_runtime_cleanup_error(
+                        tracking_error,
+                        cleanup_error,
+                    ));
+                }
+                return Err(tracking_error);
+            }
+        };
+
         let startup_cancel_epoch = service.startup_cancel_epoch();
         let startup_cancel_snapshot = service.startup_cancel_snapshot();
         service.emit_opencode_startup_event(StartupEventPayload::wait_begin(
@@ -358,14 +380,14 @@ impl AppRuntime for OpenCodeRuntime {
                 input.repo_path,
                 Some(input.task_id),
                 input.role.as_str(),
-                port,
+                Some(port),
                 Some(StartupEventCorrelation::new("runtime_id", runtime_id)),
                 Some(startup_policy),
             ),
         ));
 
         match wait_for_runtime_with_process(
-            child,
+            &mut child,
             port,
             startup_policy,
             &startup_cancel_epoch,
@@ -390,13 +412,18 @@ impl AppRuntime for OpenCodeRuntime {
                         input.repo_path,
                         Some(input.task_id),
                         input.role.as_str(),
-                        port,
+                        Some(port),
                         Some(StartupEventCorrelation::new("runtime_id", runtime_id)),
                         Some(startup_policy),
                     ),
                     report,
                 ));
-                Ok(report)
+                Ok(HostManagedRuntimeStart {
+                    child,
+                    runtime_process_guard,
+                    runtime_route,
+                    startup_report: report,
+                })
             }
             Err(error) => {
                 service.emit_opencode_startup_event(StartupEventPayload::failed(
@@ -405,14 +432,24 @@ impl AppRuntime for OpenCodeRuntime {
                         input.repo_path,
                         Some(input.task_id),
                         input.role.as_str(),
-                        port,
+                        Some(port),
                         Some(StartupEventCorrelation::new("runtime_id", runtime_id)),
                         Some(startup_policy),
                     ),
                     error.report(),
                     error.reason(),
                 ));
-                Err(anyhow!(error).context(input.startup_error_context.clone()))
+                let startup_error = anyhow::Error::new(error);
+                if let Err(cleanup_error) = AppService::cleanup_failed_host_managed_start(
+                    Some(&mut child),
+                    input.cleanup_target.as_ref(),
+                ) {
+                    return Err(AppService::append_runtime_cleanup_error(
+                        startup_error,
+                        cleanup_error,
+                    ));
+                }
+                Err(startup_error)
             }
         }
     }

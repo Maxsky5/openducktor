@@ -58,7 +58,7 @@ fn opencode_startup_event_payload_contract_includes_correlation_and_metrics() {
             "/tmp/repo",
             Some("task-42"),
             "qa",
-            4242,
+            Some(4242),
             Some(StartupEventCorrelation::new("runtime_id", "runtime-abc")),
             Some(policy),
         ),
@@ -86,6 +86,29 @@ fn opencode_startup_event_payload_contract_includes_correlation_and_metrics() {
     assert_eq!(payload_json["metrics"]["ready"], 3);
     assert_eq!(payload_json["metrics"]["failed"], 1);
     assert_eq!(payload_json["alerts"][0], "startup_duration_high:321");
+}
+
+#[test]
+fn opencode_startup_event_payload_contract_allows_missing_port() {
+    let event = StartupEventPayload::failed(
+        StartupEventContext::new(
+            "agent_runtime",
+            "/tmp/repo",
+            Some("task-42"),
+            "qa",
+            None,
+            None,
+            None,
+        ),
+        OpencodeStartupWaitReport::zero(),
+        RuntimeStartupFailureReason::StartupConfigInvalid,
+    );
+
+    let payload = build_opencode_startup_event_payload(&event, None, Vec::new());
+    let payload_json = serde_json::to_value(payload).expect("payload should serialize");
+
+    assert!(payload_json["port"].is_null());
+    assert_eq!(payload_json["reason"], "startup_config_invalid");
 }
 
 #[test]

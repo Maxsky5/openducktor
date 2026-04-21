@@ -1,5 +1,53 @@
 use super::support::*;
 
+#[derive(Clone)]
+struct HostManagedStdioRuntimeAdapter;
+
+impl AppRuntime for HostManagedStdioRuntimeAdapter {
+    fn definition(&self) -> RuntimeDefinition {
+        test_runtime_definition("test-runtime", "Test Runtime")
+    }
+
+    fn startup_policy(&self, _service: &AppService) -> Result<OpencodeStartupReadinessPolicy> {
+        Ok(OpencodeStartupReadinessPolicy::default())
+    }
+
+    fn start_host_managed(
+        &self,
+        _service: &AppService,
+        _input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
+        _runtime_id: &str,
+        _startup_policy: crate::app_service::RuntimeStartupReadinessPolicy,
+    ) -> Result<HostManagedRuntimeStart> {
+        Ok(HostManagedRuntimeStart {
+            child: spawn_sleep_process(30),
+            runtime_process_guard: RuntimeProcessGuard::new(()),
+            runtime_route: host_domain::RuntimeRoute::Stdio,
+            startup_report: crate::app_service::RuntimeStartupWaitReport::zero(),
+        })
+    }
+
+    fn runtime_health(&self) -> RuntimeHealth {
+        RuntimeHealth {
+            kind: "test-runtime".to_string(),
+            ok: true,
+            version: None,
+            error: None,
+        }
+    }
+
+    fn stop_session(
+        &self,
+        _runtime_route: &host_domain::RuntimeRoute,
+        _external_session_id: &str,
+        _working_directory: &str,
+    ) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "stop_session should not be used in this test"
+        ))
+    }
+}
+
 #[test]
 fn runtime_ensure_registers_external_runtimes_without_local_child_processes() -> Result<()> {
     let repo_path = unique_temp_path("external-runtime");
@@ -60,6 +108,58 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
         .get(runtime.runtime_id.as_str())
         .expect("external runtime should be registered");
     assert!(registered.child.is_none());
+
+    Ok(())
+}
+
+#[test]
+fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_ports() -> Result<()> {
+    let repo_path = unique_temp_path("host-managed-stdio-runtime");
+    fs::create_dir_all(repo_path.join(".git"))?;
+
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+            }),
+            Arc::new(HostManagedStdioRuntimeAdapter),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, _task_state, _git_state) =
+        build_service_with_runtime_registry(vec![], runtime_registry);
+    service.workspace_add(repo_path.to_string_lossy().as_ref())?;
+
+    let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;
+
+    assert_eq!(runtime.kind, AgentRuntimeKind::from("test-runtime"));
+    assert!(matches!(runtime.runtime_route, host_domain::RuntimeRoute::Stdio));
+    assert_eq!(
+        service
+            .runtime_list("test-runtime", Some(repo_path.to_string_lossy().as_ref()))?
+            .len(),
+        1
+    );
+
+    let runtimes = service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned");
+    let registered = runtimes
+        .get(runtime.runtime_id.as_str())
+        .expect("host-managed runtime should be registered");
+    assert!(matches!(registered.summary.runtime_route, host_domain::RuntimeRoute::Stdio));
+    assert!(registered.child.is_some());
+    drop(runtimes);
+
+    assert!(service.runtime_stop(runtime.runtime_id.as_str())?);
 
     Ok(())
 }

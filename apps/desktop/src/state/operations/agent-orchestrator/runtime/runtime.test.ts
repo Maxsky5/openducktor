@@ -198,6 +198,27 @@ describe("agent-orchestrator-runtime", () => {
     await expect(runtimePromise).resolves.toEqual(raceResult);
   });
 
+  test("propagates build startup transport errors before returning an unusable stdio runtime", async () => {
+    const originalBuildStart = host.buildStart;
+    host.buildStart = async () => {
+      throw new Error("Runtime build session startup requires a local_http runtime route");
+    };
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        refreshTaskData: async () => {},
+      });
+
+      await expect(
+        ensureRuntime("/tmp/repo", "task-1", "build", {
+          workspaceId: "workspace-1",
+        }),
+      ).rejects.toThrow("Runtime build session startup requires a local_http runtime route");
+    } finally {
+      host.buildStart = originalBuildStart;
+    }
+  });
+
   test("uses shared repo runtime for build role when a target working directory is provided", async () => {
     let buildStartCalls = 0;
     let repoRuntimeEnsureCalls = 0;

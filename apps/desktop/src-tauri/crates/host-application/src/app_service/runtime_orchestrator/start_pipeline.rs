@@ -33,7 +33,6 @@ pub(crate) struct RuntimeStartInput<'a> {
     pub(crate) startup_policy: RuntimeStartupReadinessPolicy,
     pub(crate) working_directory: String,
     pub(crate) cleanup_target: Option<RuntimeCleanupTarget>,
-    pub(crate) tracking_error_context: &'static str,
     pub(crate) startup_error_context: String,
     pub(crate) post_start_policy: Option<RuntimePostStartPolicy<'a>>,
 }
@@ -168,7 +167,6 @@ mod tests {
                     startup_policy,
                     working_directory: repo_path.clone(),
                     cleanup_target: None,
-                    tracking_error_context: "Failed tracking spawned workspace runtime process",
                     startup_error_context,
                     post_start_policy: Some(RuntimePostStartPolicy {
                         existing_lookup: RuntimeExistingLookup {
@@ -279,7 +277,6 @@ mod tests {
                     startup_policy,
                     working_directory: repo_path.clone(),
                     cleanup_target: None,
-                    tracking_error_context: "Failed tracking spawned workspace runtime process",
                     startup_error_context,
                     post_start_policy: Some(RuntimePostStartPolicy {
                         existing_lookup: RuntimeExistingLookup {

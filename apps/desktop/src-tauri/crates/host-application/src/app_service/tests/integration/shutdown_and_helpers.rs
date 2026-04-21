@@ -36,7 +36,8 @@ use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
     find_openducktor_workspace_root, parse_mcp_command_json, read_opencode_version,
     resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
-    terminate_process_by_pid, validate_parent_relationships_for_update, AgentRuntimeProcess,
+    terminate_process_by_pid,
+    validate_parent_relationships_for_update, AgentRuntimeProcess,
     DevServerGroupRuntime, RunProcess, RuntimeCleanupTarget,
 };
 
@@ -195,8 +196,7 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let pending_pid = pending_child.id();
     let _pending_process_guard = service
         .runtime_registry
-        .runtime(&AgentRuntimeKind::opencode())?
-        .track_process(&service, pending_pid)?;
+        .track_pending_opencode_process_for_test(&service, pending_pid)?;
 
     service.shutdown()?;
 
@@ -257,8 +257,7 @@ fn shutdown_keeps_other_service_pending_opencode_processes_running() -> Result<(
     let service_two_pid = service_two_child.id();
     let service_two_guard = service_two
         .runtime_registry
-        .runtime(&AgentRuntimeKind::opencode())?
-        .track_process(&service_two, service_two_pid)?;
+        .track_pending_opencode_process_for_test(&service_two, service_two_pid)?;
 
     service_one.shutdown()?;
 
