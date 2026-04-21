@@ -278,6 +278,7 @@ describe("useAgentStudioModelSelection", () => {
     expect(state.sessionId).toBe("session-1");
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
+    expect(state.workingDirectory).toBe("/repo");
     expect(state.runtimeRoute).toBeNull();
     expect(state.isLoadingModelCatalog).toBe(true);
     expect(state.hasSelection).toBe(true);

@@ -128,7 +128,10 @@ export const resolveActiveSessionSelectionState = (
     modelCatalog: activeSession?.modelCatalog ?? null,
     runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
     runtimeRoute: activeSession?.runtimeRoute ?? null,
-    workingDirectory: activeSession?.workingDirectory?.trim() ?? "",
+    workingDirectory:
+      activeSession?.workingDirectory?.trim() ??
+      activeSessionSummary?.workingDirectory?.trim() ??
+      "",
     isLoadingModelCatalog:
       activeSession?.isLoadingModelCatalog === true ||
       (activeSession == null && activeSessionSummary != null),

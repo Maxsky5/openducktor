@@ -195,6 +195,52 @@ describe("load-sessions-stages", () => {
     });
   });
 
+  test("does not coerce a same-id non-assistant message into a final assistant row", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "shared-id",
+          role: "assistant",
+          content: "Final complete response",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "shared-id",
+          role: "tool",
+          content: "Tool output",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "completed",
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "shared-id",
+      role: "tool",
+      content: "Tool output",
+      meta: {
+        kind: "tool",
+        tool: "bash",
+        status: "completed",
+      },
+    });
+  });
+
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
     const existingSession = createSession({
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },

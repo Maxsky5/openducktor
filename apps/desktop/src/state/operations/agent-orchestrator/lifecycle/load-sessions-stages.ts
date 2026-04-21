@@ -235,6 +235,7 @@ export const mergeHydratedMessages = (
 
     if (
       isFinalAssistantChatMessage(hydratedMessage) &&
+      currentMessage.role === "assistant" &&
       !isFinalAssistantChatMessage(currentMessage)
     ) {
       const mergedMeta =
