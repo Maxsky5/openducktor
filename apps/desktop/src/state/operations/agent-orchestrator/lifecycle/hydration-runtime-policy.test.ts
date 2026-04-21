@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import {
-  canEnsureWorkspaceRuntimeForHydration,
-  canUseWorkspaceRuntimeForHydration,
-} from "./hydration-runtime-policy";
+import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 
 const createRecord = (
   role: AgentSessionRecord["role"],
@@ -26,16 +23,19 @@ describe("canUseWorkspaceRuntimeForHydration", () => {
     ).toBe(true);
   });
 
-  test("allows worktree build sessions", () => {
+  test("allows non-root build sessions", () => {
     expect(
-      canUseWorkspaceRuntimeForHydration(createRecord("build", "/tmp/repo/worktree"), "/tmp/repo"),
+      canUseWorkspaceRuntimeForHydration(
+        createRecord("build", "/tmp/openducktor-worktrees/task-1"),
+        "/tmp/repo",
+      ),
     ).toBe(true);
   });
 
-  test("rejects build sessions outside the repo worktree base", () => {
+  test("allows build sessions outside the repo root", () => {
     expect(
-      canUseWorkspaceRuntimeForHydration(createRecord("build", "/tmp/other"), "/tmp/repo"),
-    ).toBe(false);
+      canUseWorkspaceRuntimeForHydration(createRecord("build", "/tmp/other-worktree"), "/tmp/repo"),
+    ).toBe(true);
   });
 
   test("rejects worktree planner sessions", () => {
@@ -51,19 +51,5 @@ describe("canUseWorkspaceRuntimeForHydration", () => {
     expect(canUseWorkspaceRuntimeForHydration(createRecord("qa", "/tmp/repo"), "/tmp/repo")).toBe(
       false,
     );
-  });
-});
-
-describe("canEnsureWorkspaceRuntimeForHydration", () => {
-  test("allows repo-root roles to ensure a workspace runtime", () => {
-    expect(canEnsureWorkspaceRuntimeForHydration(createRecord("spec", "/tmp/repo"))).toBe(true);
-    expect(canEnsureWorkspaceRuntimeForHydration(createRecord("planner", "/tmp/repo"))).toBe(true);
-  });
-
-  test("rejects build and qa roles for ensured workspace hydration", () => {
-    expect(canEnsureWorkspaceRuntimeForHydration(createRecord("build", "/tmp/repo/task"))).toBe(
-      false,
-    );
-    expect(canEnsureWorkspaceRuntimeForHydration(createRecord("qa", "/tmp/repo/task"))).toBe(false);
   });
 });

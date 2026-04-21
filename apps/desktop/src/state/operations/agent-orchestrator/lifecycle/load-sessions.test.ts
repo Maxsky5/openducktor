@@ -45,16 +45,31 @@ const persistedSessionRecord = (
     runtimeKind?: AgentSessionRecord["runtimeKind"];
     selectedModel?: AgentSessionRecord["selectedModel"];
   } & Record<string, unknown>,
-): AgentSessionRecord => ({
-  runtimeKind: input.runtimeKind ?? "opencode",
-  sessionId: input.sessionId,
-  externalSessionId: input.externalSessionId,
-  role: input.role,
-  scenario: input.scenario,
-  startedAt: input.startedAt,
-  workingDirectory: input.workingDirectory,
-  selectedModel: input.selectedModel ?? null,
-});
+): AgentSessionRecord => {
+  const {
+    runtimeKind,
+    sessionId,
+    externalSessionId,
+    role,
+    scenario,
+    startedAt,
+    workingDirectory,
+    selectedModel,
+    ...rest
+  } = input;
+
+  return {
+    runtimeKind: runtimeKind ?? "opencode",
+    sessionId,
+    externalSessionId,
+    role,
+    scenario,
+    startedAt,
+    workingDirectory,
+    selectedModel: selectedModel ?? null,
+    ...rest,
+  };
+};
 
 const createAdapter = (
   overrides: Partial<Parameters<typeof createLoadAgentSessions>[0]["adapter"]> = {},
@@ -3159,7 +3174,7 @@ describe("agent-orchestrator-load-sessions", () => {
     );
   });
 
-  test("does not ensure a shared workspace runtime for qa sessions on worktree directories", async () => {
+  test("ensures a shared workspace runtime for qa sessions on non-root working directories", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const ensuredRuntimeKinds: string[] = [];
@@ -3244,13 +3259,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await expect(
-        loadAgentSessions("task-1", {
-          mode: "requested_history",
-          targetSessionId: "session-qa-worktree",
-          historyPolicy: "requested_only",
-        }),
-      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktrees/task-1.");
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetSessionId: "session-qa-worktree",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -3258,12 +3271,14 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
-    expect(ensuredRuntimeKinds).toEqual([]);
-    expect(
-      state["session-qa-worktree"]
-        ? sessionMessagesToArray(state["session-qa-worktree"])
-        : undefined,
-    ).toEqual([]);
+    expect(ensuredRuntimeKinds).toEqual(["opencode"]);
+    expect(state["session-qa-worktree"]?.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4777",
+    });
+    expect(sessionMessageAt(getSession(state, "session-qa-worktree"), 0)?.id).toBe(
+      "history:session-start:session-qa-worktree",
+    );
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {

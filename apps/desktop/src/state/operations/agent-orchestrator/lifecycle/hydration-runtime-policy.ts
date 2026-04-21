@@ -4,12 +4,6 @@ import { normalizeWorkingDirectory } from "../support/core";
 const REPO_ROOT_WORKSPACE_RUNTIME_ROLES = new Set<AgentSessionRecord["role"]>(["spec", "planner"]);
 const WORKTREE_WORKSPACE_RUNTIME_ROLES = new Set<AgentSessionRecord["role"]>(["build", "qa"]);
 
-export const canEnsureWorkspaceRuntimeForHydration = (
-  record: Pick<AgentSessionRecord, "role">,
-): boolean => {
-  return REPO_ROOT_WORKSPACE_RUNTIME_ROLES.has(record.role);
-};
-
 export const canUseWorkspaceRuntimeForHydration = (
   record: Pick<AgentSessionRecord, "role" | "workingDirectory">,
   repoPath: string,
@@ -23,10 +17,7 @@ export const canUseWorkspaceRuntimeForHydration = (
 
   if (WORKTREE_WORKSPACE_RUNTIME_ROLES.has(record.role)) {
     return (
-      normalizedWorkingDirectory.length > 0 &&
-      normalizedWorkingDirectory !== normalizedRepoPath &&
-      (normalizedWorkingDirectory.startsWith(`${normalizedRepoPath}/`) ||
-        normalizedWorkingDirectory.startsWith(`${normalizedRepoPath}\\`))
+      normalizedWorkingDirectory.length > 0 && normalizedWorkingDirectory !== normalizedRepoPath
     );
   }
 
