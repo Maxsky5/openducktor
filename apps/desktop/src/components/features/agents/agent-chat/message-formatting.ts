@@ -1,6 +1,7 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
+import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { stripToolPrefix } from "./tool-text-utils";
@@ -82,14 +83,11 @@ export const roleLabel = (
 };
 
 export const getAssistantFooterData = (message: AgentChatMessage): { infoParts: string[] } => {
-  if (message.role !== "assistant") {
+  if (!isFinalAssistantChatMessage(message)) {
     return { infoParts: [] };
   }
 
-  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  if (!assistantMeta || assistantMeta.isFinal !== true) {
-    return { infoParts: [] };
-  }
+  const assistantMeta = message.meta;
   const parts: string[] = [];
 
   const agentLabel = assistantMeta.profileId;

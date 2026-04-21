@@ -1,6 +1,7 @@
 import {
   findFirstChangedSessionMessageIndex,
   forEachSessionMessage,
+  isFinalAssistantChatMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -57,8 +58,7 @@ const appendMessageRows = (
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   const turnDurationMs = assistantMeta?.durationMs;
   const shouldShowTurnDuration =
-    message.role === "assistant" &&
-    assistantMeta?.isFinal === true &&
+    isFinalAssistantChatMessage(message) &&
     typeof turnDurationMs === "number" &&
     turnDurationMs > 0;
 

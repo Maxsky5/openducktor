@@ -423,6 +423,21 @@ export const findLastToolSessionMessage = (
   return findLastSessionMessageByRole(owner, "tool", predicate);
 };
 
+export const isFinalAssistantChatMessage = (
+  message: AgentChatMessage | undefined | null,
+): message is AgentChatMessage & {
+  role: "assistant";
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> & {
+    isFinal: true;
+  };
+} => {
+  return (
+    message?.role === "assistant" &&
+    message.meta?.kind === "assistant" &&
+    message.meta.isFinal === true
+  );
+};
+
 export const appendSessionMessage = (
   owner: SessionMessageOwner,
   message: AgentChatMessage,
