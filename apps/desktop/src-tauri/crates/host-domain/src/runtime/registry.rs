@@ -535,6 +535,22 @@ mod tests {
     }
 
     #[test]
+    fn builtin_opencode_runtime_stays_host_managed_with_local_http_routes() {
+        let definition = super::builtin_runtime_registry()
+            .definition_by_str("opencode")
+            .expect("opencode runtime should be registered");
+
+        assert!(matches!(
+            definition.descriptor().capabilities.provisioning_mode,
+            RuntimeProvisioningMode::HostManaged
+        ));
+        assert_eq!(
+            definition.route_for_port(43123),
+            super::local_http_route_for_port(43123)
+        );
+    }
+
+    #[test]
     fn runtime_descriptor_validation_reports_mandatory_capabilities_and_scopes() {
         let descriptor = RuntimeDescriptor {
             kind: AgentRuntimeKind::opencode(),
