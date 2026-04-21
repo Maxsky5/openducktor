@@ -64,6 +64,7 @@ export function useAgentChatWindow({
   } = useAgentChatHistoryWindow({
     rows,
     isSessionViewLoading,
+    activeSessionId,
     messagesContainerRef,
     userScrolledRef,
     ...(turns ? { turns } : {}),

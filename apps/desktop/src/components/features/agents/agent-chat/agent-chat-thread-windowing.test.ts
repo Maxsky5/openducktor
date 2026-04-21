@@ -7,6 +7,7 @@ import {
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
   getAgentChatWindowRowsKey,
+  resolveAgentChatWindowRowsState,
 } from "./agent-chat-thread-windowing";
 
 const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number) => {
@@ -80,21 +81,61 @@ describe("agent-chat-thread windowing helpers", () => {
         key: "session-1:assistant-0:duration",
         start: 0,
         end: 1,
-        rows: rows.slice(0, 2),
       },
       {
         key: "session-1:user-1",
         start: 2,
         end: 4,
-        rows: rows.slice(2, 5),
       },
       {
         key: "session-1:user-2",
         start: 5,
         end: 7,
-        rows: rows.slice(5, 8),
       },
     ]);
+  });
+
+  test("resolveAgentChatWindowRowsState reuses cached rows when switching back to a previously built session", () => {
+    const firstSession = buildSession({
+      sessionId: "session-a",
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-a-0" }),
+        buildMessage("user", "Question A", { id: "user-a-1" }),
+        buildMessage("assistant", "Answer A", { id: "assistant-a-1" }),
+      ],
+      pendingQuestions: [],
+    });
+    const secondSession = buildSession({
+      sessionId: "session-b",
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-b-0" }),
+        buildMessage("user", "Question B", { id: "user-b-1" }),
+        buildMessage("assistant", "Answer B", { id: "assistant-b-1" }),
+      ],
+      pendingQuestions: [],
+    });
+    const cache = new Map();
+
+    const firstState = resolveAgentChatWindowRowsState({
+      session: firstSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    resolveAgentChatWindowRowsState({
+      session: secondSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    const revisitedState = resolveAgentChatWindowRowsState({
+      session: firstSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(revisitedState.rows).toBe(firstState.rows);
+    expect(revisitedState.turns).toBe(firstState.turns);
   });
 
   test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {

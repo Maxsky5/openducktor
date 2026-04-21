@@ -12,6 +12,7 @@ import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 type UseAgentChatHistoryWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
+  activeSessionId: string | null;
   isSessionViewLoading: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
@@ -27,9 +28,39 @@ type UseAgentChatHistoryWindowResult = {
   revealAllHistory: () => void;
 };
 
+export const resolveAgentChatEffectiveTurnStart = ({
+  activeSessionId,
+  previousSessionId,
+  turnStart,
+  latestTurnStart,
+  rowsLength,
+  pendingLatestReset,
+}: {
+  activeSessionId: string | null;
+  previousSessionId: string | null;
+  turnStart: number;
+  latestTurnStart: number;
+  rowsLength: number;
+  pendingLatestReset: boolean;
+}): number => {
+  const clampedTurnStart =
+    rowsLength === 0 ? turnStart : Math.max(0, Math.min(turnStart, latestTurnStart));
+
+  if (pendingLatestReset && rowsLength > 0) {
+    return latestTurnStart;
+  }
+
+  if (previousSessionId !== activeSessionId) {
+    return latestTurnStart;
+  }
+
+  return clampedTurnStart;
+};
+
 export function useAgentChatHistoryWindow({
   rows,
   turns: providedTurns,
+  activeSessionId,
   isSessionViewLoading,
   messagesContainerRef,
   userScrolledRef,
@@ -47,15 +78,22 @@ export function useAgentChatHistoryWindow({
   const fillFrameRef = useRef<number | null>(null);
   const continuationFrameRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(isSessionViewLoading && rows.length === 0);
+  const previousSessionIdRef = useRef<string | null>(activeSessionId);
   const pendingScrollRestoreRef = useRef<{
     beforeScrollHeight: number;
     beforeScrollTop: number;
   } | null>(null);
   const latestTurnStart = getLatestTurnStart();
-  const clampedTurnStart =
-    rows.length === 0 ? turnStart : Math.max(0, Math.min(turnStart, latestTurnStart));
   const shouldUsePendingLatestTurnStart = pendingLatestResetRef.current && rows.length > 0;
-  const effectiveTurnStart = shouldUsePendingLatestTurnStart ? latestTurnStart : clampedTurnStart;
+  const didSessionChange = previousSessionIdRef.current !== activeSessionId;
+  const effectiveTurnStart = resolveAgentChatEffectiveTurnStart({
+    activeSessionId,
+    previousSessionId: previousSessionIdRef.current,
+    turnStart,
+    latestTurnStart,
+    rowsLength: rows.length,
+    pendingLatestReset: shouldUsePendingLatestTurnStart,
+  });
 
   const setTurnStartState = useCallback(
     (nextTurnStart: number) => {
@@ -164,11 +202,15 @@ export function useAgentChatHistoryWindow({
   // Intentionally runs after every commit so pending scroll restoration and
   // deferred-session latest-turn rebasing happen on the very next DOM update.
   useLayoutEffect(() => {
-    if (shouldUsePendingLatestTurnStart) {
+    if (didSessionChange) {
+      previousSessionIdRef.current = activeSessionId;
+      pendingLatestResetRef.current = isSessionViewLoading && rows.length === 0;
+    } else if (shouldUsePendingLatestTurnStart) {
       pendingLatestResetRef.current = false;
-      if (turnStart !== latestTurnStart) {
-        setTurnStartState(latestTurnStart);
-      }
+    }
+
+    if ((didSessionChange || shouldUsePendingLatestTurnStart) && turnStart !== latestTurnStart) {
+      setTurnStartState(latestTurnStart);
     }
 
     turnStartRef.current = effectiveTurnStart;
@@ -279,7 +321,6 @@ export function useAgentChatHistoryWindow({
         key: turn.key,
         start: turn.start - windowStart,
         end: turn.end - windowStart,
-        rows: turn.rows,
       })),
     [effectiveTurnStart, turns, windowStart],
   );

@@ -131,7 +131,7 @@ describe("useAgentChatTurnStaging", () => {
     await harness.unmount();
   });
 
-  test("does not stage turns when switching to another session", async () => {
+  test("stages turns again when switching back to another session", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(
       ({ activeSessionId, windowStart, nextTurns }) =>
@@ -168,10 +168,8 @@ describe("useAgentChatTurnStaging", () => {
       nextTurns: builderTurns,
     });
 
-    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(
-      builderTurns.map((turn) => turn.key),
-    );
-    expect(animationFrameCallbacks.size).toBe(0);
+    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(["turn-7"]);
+    expect(animationFrameCallbacks.size).toBeGreaterThan(0);
 
     await harness.unmount();
   });

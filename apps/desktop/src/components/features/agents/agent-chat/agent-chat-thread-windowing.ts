@@ -1,9 +1,16 @@
 import {
   findFirstChangedSessionMessageIndex,
   forEachSessionMessage,
+  getSessionMessageAt,
+  getSessionMessagesSlice,
   isFinalAssistantChatMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionMessages,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 
 /** Initial number of user turns rendered from the bottom of the transcript. */
 export const CHAT_TURN_WINDOW_INIT = 10;
@@ -26,7 +33,43 @@ export type AgentChatWindowTurn = {
   key: string;
   start: number;
   end: number;
+};
+
+export type AgentChatWindowRowsCacheEntry = {
+  messages: AgentSessionState["messages"];
   rows: AgentChatWindowRow[];
+  rowStartByMessageIndex: number[];
+  rebuildStartByMessageIndex: number[];
+  latestRebuildStartMessageIndex: number;
+  turns: AgentChatWindowTurn[];
+  hasAttachmentMessages: boolean;
+  lastUserMessageId: string | null;
+  activeStreamingAssistantMessageId: string | null;
+};
+
+const CHAT_WINDOW_ROWS_CACHE_LIMIT = 6;
+
+const toAgentChatWindowRowsCacheKey = (sessionId: string, showThinkingMessages: boolean): string =>
+  `${sessionId}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
+
+const touchAgentChatWindowRowsCacheEntry = (
+  cache: Map<string, AgentChatWindowRowsCacheEntry>,
+  cacheKey: string,
+  entry: AgentChatWindowRowsCacheEntry,
+): void => {
+  if (cache.has(cacheKey)) {
+    cache.delete(cacheKey);
+  }
+
+  cache.set(cacheKey, entry);
+
+  while (cache.size > CHAT_WINDOW_ROWS_CACHE_LIMIT) {
+    const oldestKey = cache.keys().next().value;
+    if (typeof oldestKey !== "string") {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
 };
 
 type BuildAgentChatWindowRowsOptions = {
@@ -39,6 +82,41 @@ export type AgentChatWindowRowsState = {
   rebuildStartByMessageIndex: number[];
   latestRebuildStartMessageIndex: number;
   turns: AgentChatWindowTurn[];
+  hasAttachmentMessages: boolean;
+  lastUserMessageId: string | null;
+  activeStreamingAssistantMessageId: string | null;
+};
+
+const isSessionMessagesState = (
+  messages: AgentSessionMessages,
+): messages is SessionMessagesState => {
+  return (
+    typeof messages === "object" &&
+    messages !== null &&
+    "count" in messages &&
+    "version" in messages
+  );
+};
+
+const areSessionMessageContainersEquivalent = (
+  previousMessages: AgentSessionMessages,
+  nextMessages: AgentSessionMessages,
+  sessionId: string,
+): boolean => {
+  if (previousMessages === nextMessages) {
+    return true;
+  }
+
+  if (isSessionMessagesState(previousMessages) && isSessionMessagesState(nextMessages)) {
+    return (
+      previousMessages.sessionId === sessionId &&
+      nextMessages.sessionId === sessionId &&
+      previousMessages.version === nextMessages.version &&
+      previousMessages.count === nextMessages.count
+    );
+  }
+
+  return false;
 };
 
 const appendMessageRows = (
@@ -89,9 +167,34 @@ export function buildAgentChatWindowRowsState(
   const turnStartIndices: number[] = [];
   let currentRebuildStartMessageIndex = 0;
   let hasVisibleMessages = false;
+  let hasAttachmentMessages = false;
+  let lastUserMessageId: string | null = null;
+  let activeStreamingAssistantMessageId: string | null = null;
 
   forEachSessionMessage(session, (message, messageIndex) => {
     const isVisibleMessage = !(message.role === "thinking" && !showThinkingMessages);
+
+    if (
+      !hasAttachmentMessages &&
+      message.meta?.kind === "user" &&
+      message.meta.parts?.some((part) => part.kind === "attachment")
+    ) {
+      hasAttachmentMessages = true;
+    }
+
+    if (message.role === "user") {
+      lastUserMessageId = message.id;
+    }
+
+    if (session.status === "running") {
+      const isStreamingAssistantMessage =
+        message.role === "assistant" &&
+        message.meta?.kind === "assistant" &&
+        message.meta.isFinal === false;
+      if (isStreamingAssistantMessage) {
+        activeStreamingAssistantMessageId = message.id;
+      }
+    }
 
     if (isVisibleMessage) {
       if (!hasVisibleMessages) {
@@ -135,8 +238,166 @@ export function buildAgentChatWindowRowsState(
       key: rows[start]?.key ?? `turn-${index}`,
       start,
       end: (turnStartIndices[index + 1] ?? rows.length) - 1,
-      rows: rows.slice(start, turnStartIndices[index + 1] ?? rows.length),
     })),
+    hasAttachmentMessages,
+    lastUserMessageId,
+    activeStreamingAssistantMessageId,
+  };
+}
+
+export function resolveAgentChatWindowRowsState({
+  session,
+  showThinkingMessages,
+  cache,
+}: {
+  session: AgentSessionState;
+  showThinkingMessages: boolean;
+  cache: Map<string, AgentChatWindowRowsCacheEntry>;
+}): Pick<
+  AgentChatWindowRowsState,
+  | "rows"
+  | "turns"
+  | "hasAttachmentMessages"
+  | "lastUserMessageId"
+  | "activeStreamingAssistantMessageId"
+> {
+  const cacheKey = toAgentChatWindowRowsCacheKey(session.sessionId, showThinkingMessages);
+  const cachedRows = cache.get(cacheKey);
+
+  if (cachedRows) {
+    if (
+      areSessionMessageContainersEquivalent(
+        cachedRows.messages,
+        session.messages,
+        session.sessionId,
+      )
+    ) {
+      touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cachedRows);
+      return {
+        rows: cachedRows.rows,
+        turns: cachedRows.turns,
+        hasAttachmentMessages: cachedRows.hasAttachmentMessages,
+        lastUserMessageId: cachedRows.lastUserMessageId,
+        activeStreamingAssistantMessageId: cachedRows.activeStreamingAssistantMessageId,
+      };
+    }
+
+    const firstChangedMessageIndex = findFirstChangedChatMessageIndex(cachedRows.messages, session);
+    if (firstChangedMessageIndex < 0) {
+      touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cachedRows);
+      return {
+        rows: cachedRows.rows,
+        turns: cachedRows.turns,
+        hasAttachmentMessages: cachedRows.hasAttachmentMessages,
+        lastUserMessageId: cachedRows.lastUserMessageId,
+        activeStreamingAssistantMessageId: cachedRows.activeStreamingAssistantMessageId,
+      };
+    }
+
+    const rebuildStartMessageIndex = (() => {
+      const cachedRebuildStart = cachedRows.rebuildStartByMessageIndex[firstChangedMessageIndex];
+      if (typeof cachedRebuildStart === "number") {
+        return cachedRebuildStart;
+      }
+
+      const changedMessage = getSessionMessageAt(session, firstChangedMessageIndex);
+      if (changedMessage?.role === "user") {
+        return firstChangedMessageIndex;
+      }
+
+      return cachedRows.latestRebuildStartMessageIndex;
+    })();
+
+    if (rebuildStartMessageIndex > 0) {
+      const prefixRowEnd =
+        cachedRows.rowStartByMessageIndex[rebuildStartMessageIndex] ?? cachedRows.rows.length;
+      const nextRows = cachedRows.rows.slice(0, prefixRowEnd);
+      const nextRowStartByMessageIndex = cachedRows.rowStartByMessageIndex.slice(
+        0,
+        rebuildStartMessageIndex,
+      );
+      const incrementalRowsState = buildAgentChatWindowRowsState(
+        {
+          ...session,
+          messages: getSessionMessagesSlice(session, rebuildStartMessageIndex),
+        },
+        { showThinkingMessages },
+      );
+
+      for (let index = 0; index < incrementalRowsState.rowStartByMessageIndex.length; index += 1) {
+        const rowStart = incrementalRowsState.rowStartByMessageIndex[index];
+        if (typeof rowStart !== "number") {
+          continue;
+        }
+        nextRowStartByMessageIndex[rebuildStartMessageIndex + index] = prefixRowEnd + rowStart;
+      }
+
+      const nextTurns = cachedRows.turns.slice();
+      while (nextTurns.length > 0) {
+        const lastTurn = nextTurns[nextTurns.length - 1];
+        if (!lastTurn || lastTurn.start < prefixRowEnd) {
+          break;
+        }
+        nextTurns.pop();
+      }
+      nextTurns.push(
+        ...incrementalRowsState.turns.map((turn) => ({
+          key: turn.key,
+          start: prefixRowEnd + turn.start,
+          end: prefixRowEnd + turn.end,
+        })),
+      );
+      nextRows.push(...incrementalRowsState.rows);
+
+      const nextCacheEntry: AgentChatWindowRowsCacheEntry = {
+        messages: session.messages,
+        rows: nextRows,
+        rowStartByMessageIndex: nextRowStartByMessageIndex,
+        rebuildStartByMessageIndex: [
+          ...cachedRows.rebuildStartByMessageIndex.slice(0, rebuildStartMessageIndex),
+          ...incrementalRowsState.rebuildStartByMessageIndex.map(
+            (index) => rebuildStartMessageIndex + index,
+          ),
+        ],
+        latestRebuildStartMessageIndex:
+          rebuildStartMessageIndex + incrementalRowsState.latestRebuildStartMessageIndex,
+        turns: nextTurns,
+        hasAttachmentMessages:
+          cachedRows.hasAttachmentMessages || incrementalRowsState.hasAttachmentMessages,
+        lastUserMessageId: incrementalRowsState.lastUserMessageId ?? cachedRows.lastUserMessageId,
+        activeStreamingAssistantMessageId:
+          incrementalRowsState.activeStreamingAssistantMessageId ??
+          cachedRows.activeStreamingAssistantMessageId,
+      };
+      touchAgentChatWindowRowsCacheEntry(cache, cacheKey, nextCacheEntry);
+      return {
+        rows: nextRows,
+        turns: nextTurns,
+        hasAttachmentMessages: nextCacheEntry.hasAttachmentMessages,
+        lastUserMessageId: nextCacheEntry.lastUserMessageId,
+        activeStreamingAssistantMessageId: nextCacheEntry.activeStreamingAssistantMessageId,
+      };
+    }
+  }
+
+  const nextRowsState = buildAgentChatWindowRowsState(session, { showThinkingMessages });
+  touchAgentChatWindowRowsCacheEntry(cache, cacheKey, {
+    messages: session.messages,
+    rows: nextRowsState.rows,
+    rowStartByMessageIndex: nextRowsState.rowStartByMessageIndex,
+    rebuildStartByMessageIndex: nextRowsState.rebuildStartByMessageIndex,
+    latestRebuildStartMessageIndex: nextRowsState.latestRebuildStartMessageIndex,
+    turns: nextRowsState.turns,
+    hasAttachmentMessages: nextRowsState.hasAttachmentMessages,
+    lastUserMessageId: nextRowsState.lastUserMessageId,
+    activeStreamingAssistantMessageId: nextRowsState.activeStreamingAssistantMessageId,
+  });
+  return {
+    rows: nextRowsState.rows,
+    turns: nextRowsState.turns,
+    hasAttachmentMessages: nextRowsState.hasAttachmentMessages,
+    lastUserMessageId: nextRowsState.lastUserMessageId,
+    activeStreamingAssistantMessageId: nextRowsState.activeStreamingAssistantMessageId,
   };
 }
 
@@ -174,7 +435,6 @@ export function buildAgentChatWindowTurns(rows: AgentChatWindowRow[]): AgentChat
     key: rows[start]?.key ?? `turn-${index}`,
     start,
     end: (turnStartIndices[index + 1] ?? rows.length) - 1,
-    rows: rows.slice(start, turnStartIndices[index + 1] ?? rows.length),
   }));
 }
 
