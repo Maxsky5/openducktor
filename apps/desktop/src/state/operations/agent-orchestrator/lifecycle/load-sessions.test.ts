@@ -423,7 +423,7 @@ describe("agent-orchestrator-load-sessions", () => {
         repoPath: "/tmp/repo",
         taskId: null,
         role: "workspace",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         runtimeRoute: {
           type: "local_http",
           endpoint: "http://127.0.0.1:4444",
@@ -897,7 +897,7 @@ describe("agent-orchestrator-load-sessions", () => {
             repoPath: "/tmp/repo",
             taskId: null,
             role: "workspace",
-            workingDirectory: "/tmp/repo",
+            workingDirectory: "/tmp/repo/worktree",
             runtimeRoute: {
               type: "local_http",
               endpoint: "http://127.0.0.1:4444",
@@ -1015,7 +1015,7 @@ describe("agent-orchestrator-load-sessions", () => {
               title: "PLANNER task-1",
               role: "planner",
               scenario: "planner_initial",
-              workingDirectory: "/tmp/repo",
+              workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
               pendingPermissions: [
@@ -1431,7 +1431,7 @@ describe("agent-orchestrator-load-sessions", () => {
               repoPath: "/tmp/repo",
               taskId: null,
               role: "workspace",
-              workingDirectory: "/tmp/repo",
+              workingDirectory: "/tmp/repo/worktree",
               runtimeRoute: {
                 type: "local_http",
                 endpoint: "http://127.0.0.1:4444",
@@ -2728,7 +2728,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
   });
 
-  test("rehydrates qa sessions through the shared workspace runtime when no persisted build session exists", async () => {
+  test("fails fast for qa sessions when only a shared workspace runtime exists", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     let observedRuntimeEndpoint: string | null = null;
@@ -2811,24 +2811,21 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", {
-        mode: "requested_history",
-        targetSessionId: "session-qa-1",
-        historyPolicy: "requested_only",
-      });
+      await expect(
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-qa-1",
+          historyPolicy: "requested_only",
+        }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktree.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
     }
 
-    if (observedRuntimeEndpoint === null) {
-      throw new Error("Expected QA hydration to resolve a live runtime endpoint");
-    }
-    expect(String(observedRuntimeEndpoint)).toBe("http://127.0.0.1:4444");
-    expect(state["session-qa-1"]?.runtimeId).toBe("runtime-1");
-    expect(sessionMessageAt(getSession(state, "session-qa-1"), 0)?.id).toBe(
-      "history:session-start:session-qa-1",
-    );
+    expect(observedRuntimeEndpoint).toBeNull();
+    expect(state["session-qa-1"]?.runtimeId).toBeNull();
+    expect(state["session-qa-1"]?.messages ?? []).toEqual([]);
   });
 
   test("does not ensure a workspace runtime for qa sessions when repo root paths only differ by trailing slash", async () => {

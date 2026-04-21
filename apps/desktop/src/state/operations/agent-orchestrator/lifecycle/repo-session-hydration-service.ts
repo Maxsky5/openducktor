@@ -19,6 +19,7 @@ import {
   isSessionRuntimeMetadataError,
   readPersistedRuntimeKind,
 } from "../support/session-runtime-metadata";
+import { canUseRepoRootWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
@@ -45,6 +46,15 @@ type ReconcilePreloadPlan = {
   skippedTaskErrors: Map<string, unknown>;
 };
 
+type ReconcilePreloadMetadata = {
+  persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
+  persistedTaskIdsByLiveSessionKey: Map<string, Set<string>>;
+  runtimeKinds: Set<RuntimeKind>;
+  desiredDirectoriesByRuntimeKind: Map<RuntimeKind, Set<string>>;
+  runtimeKindsAllowedToEnsureRepoRoot: Set<RuntimeKind>;
+  skippedTaskErrors: Map<string, unknown>;
+};
+
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
 const invalidateRuntimeList = async (runtimeKind: RuntimeKind, repoPath: string): Promise<void> => {
@@ -66,6 +76,101 @@ const getOrCreateRepoTaskSet = (
   const created = new Set<string>();
   store[repoPath] = created;
   return created;
+};
+
+const getOrCreateMapSet = <K>(map: Map<K, Set<string>>, key: K): Set<string> => {
+  const existing = map.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Set<string>();
+  map.set(key, created);
+  return created;
+};
+
+const collectReconcilePreloadMetadata = ({
+  tasks,
+  repoPath,
+}: {
+  tasks: TaskCard[];
+  repoPath: string;
+}): ReconcilePreloadMetadata => {
+  const persistedByTask = tasks.map((task) => ({
+    taskId: task.id,
+    records: task.agentSessions ?? [],
+  }));
+
+  const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
+  const runtimeKinds = new Set<RuntimeKind>();
+  const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+  const runtimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
+  const skippedTaskErrors = new Map<string, unknown>();
+
+  for (const { taskId, records } of persistedByTask) {
+    const taskRuntimeKinds = new Set<RuntimeKind>();
+    const taskLiveSessionKeys = new Set<string>();
+    const taskDesiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+    const taskRuntimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
+
+    try {
+      for (const record of records) {
+        const runtimeKind = readPersistedRuntimeKind(record);
+        const externalSessionId = record.externalSessionId ?? record.sessionId;
+        if (!externalSessionId) {
+          continue;
+        }
+
+        taskRuntimeKinds.add(runtimeKind);
+        taskLiveSessionKeys.add(`${runtimeKind}::${externalSessionId}`);
+        getOrCreateMapSet(taskDesiredDirectoriesByRuntimeKind, runtimeKind).add(
+          normalizeWorkingDirectory(record.workingDirectory),
+        );
+        if (canUseRepoRootWorkspaceRuntimeForHydration(record, repoPath)) {
+          taskRuntimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
+        }
+      }
+    } catch (error) {
+      if (!isSessionRuntimeMetadataError(error)) {
+        throw error;
+      }
+
+      console.error(
+        `Skipping reconcile preload for task '${taskId}' in repo '${repoPath}' because persisted session runtime metadata is invalid.`,
+        error,
+      );
+      skippedTaskErrors.set(taskId, error);
+      continue;
+    }
+
+    for (const runtimeKind of taskRuntimeKinds) {
+      runtimeKinds.add(runtimeKind);
+    }
+
+    for (const liveSessionKey of taskLiveSessionKeys) {
+      getOrCreateMapSet(persistedTaskIdsByLiveSessionKey, liveSessionKey).add(taskId);
+    }
+
+    for (const [runtimeKind, workingDirectories] of taskDesiredDirectoriesByRuntimeKind) {
+      const desiredDirectories = getOrCreateMapSet(desiredDirectoriesByRuntimeKind, runtimeKind);
+      for (const workingDirectory of workingDirectories) {
+        desiredDirectories.add(workingDirectory);
+      }
+    }
+
+    for (const runtimeKind of taskRuntimeKindsAllowedToEnsureRepoRoot) {
+      runtimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
+    }
+  }
+
+  return {
+    persistedByTask,
+    persistedTaskIdsByLiveSessionKey,
+    runtimeKinds,
+    desiredDirectoriesByRuntimeKind,
+    runtimeKindsAllowedToEnsureRepoRoot,
+    skippedTaskErrors,
+  };
 };
 
 export const createRepoSessionHydrationService = ({
@@ -129,47 +234,14 @@ export const createRepoSessionHydrationService = ({
     tasks: TaskCard[];
     isCancelled: () => boolean;
   }): Promise<ReconcilePreloadPlan> => {
-    const persistedByTask = tasks.map((task) => ({
-      taskId: task.id,
-      records: task.agentSessions ?? [],
-    }));
-
-    const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
-    const runtimeKinds = new Set<RuntimeKind>();
-    const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
-    const skippedTaskErrors = new Map<string, unknown>();
-
-    for (const { taskId, records } of persistedByTask) {
-      try {
-        for (const record of records) {
-          const runtimeKind = readPersistedRuntimeKind(record);
-          const externalSessionId = record.externalSessionId ?? record.sessionId;
-          if (!externalSessionId) {
-            continue;
-          }
-          runtimeKinds.add(runtimeKind);
-          const liveSessionKey = `${runtimeKind}::${externalSessionId}`;
-          const taskIds = persistedTaskIdsByLiveSessionKey.get(liveSessionKey) ?? new Set<string>();
-          taskIds.add(taskId);
-          persistedTaskIdsByLiveSessionKey.set(liveSessionKey, taskIds);
-
-          const desiredDirectories =
-            desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
-          desiredDirectories.add(record.workingDirectory);
-          desiredDirectoriesByRuntimeKind.set(runtimeKind, desiredDirectories);
-        }
-      } catch (error) {
-        if (!isSessionRuntimeMetadataError(error)) {
-          throw error;
-        }
-
-        console.error(
-          `Skipping reconcile preload for task '${taskId}' in repo '${repoPath}' because persisted session runtime metadata is invalid.`,
-          error,
-        );
-        skippedTaskErrors.set(taskId, error);
-      }
-    }
+    const {
+      persistedByTask,
+      persistedTaskIdsByLiveSessionKey,
+      runtimeKinds,
+      desiredDirectoriesByRuntimeKind,
+      runtimeKindsAllowedToEnsureRepoRoot,
+      skippedTaskErrors,
+    } = collectReconcilePreloadMetadata({ tasks, repoPath });
 
     const runtimeConnections = new Map<string, RuntimeConnectionScan>();
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
@@ -188,11 +260,10 @@ export const createRepoSessionHydrationService = ({
       }
 
       const runtimeEntries = [...runtimes];
-      let ensuredRuntimeForKind: RuntimeInstanceSummary | null = null;
       const desiredDirectories = desiredDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set();
       const repoPathKey = normalizeWorkingDirectory(repoPath);
       const needsRepoRootRuntime =
-        desiredDirectories.has(repoPath) &&
+        runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind) &&
         !runtimeEntries.some(
           (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
         );
@@ -214,14 +285,10 @@ export const createRepoSessionHydrationService = ({
             skippedTaskErrors,
           };
         }
-        ensuredRuntimeForKind = ensuredRuntime;
         runtimeEntries.push(ensuredRuntime);
       }
 
       preloadedRuntimeLists.set(runtimeKind, runtimeEntries);
-      const coveredDirectories = new Set(
-        runtimeEntries.map((runtime) => normalizeWorkingDirectory(runtime.workingDirectory)),
-      );
 
       for (const runtime of runtimeEntries) {
         const { runtimeConnection } = resolveRuntimeRouteConnection(
@@ -232,7 +299,7 @@ export const createRepoSessionHydrationService = ({
           runtimeWorkingDirectoryKey(runtimeKind, runtime.workingDirectory),
           runtimeConnection,
         );
-        if (!desiredDirectories.has(runtime.workingDirectory)) {
+        if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
           continue;
         }
 
@@ -245,62 +312,6 @@ export const createRepoSessionHydrationService = ({
           });
         }
         runtimeConnections.get(scanKey)?.directories.add(runtime.workingDirectory);
-      }
-
-      const missingDesiredDirectories = Array.from(desiredDirectories).filter(
-        (workingDirectory) => !coveredDirectories.has(normalizeWorkingDirectory(workingDirectory)),
-      );
-      if (missingDesiredDirectories.length === 0) {
-        continue;
-      }
-
-      const routeSourceRuntime =
-        ensuredRuntimeForKind ??
-        runtimeEntries.find(
-          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
-        ) ??
-        runtimeEntries[0] ??
-        (await ensureRuntimeAndInvalidateReadinessQueries({
-          repoPath,
-          runtimeKind,
-          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-        }));
-      if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
-        await invalidateRuntimeList(runtimeKind, repoPath);
-      }
-      if (!ensuredRuntimeForKind && !runtimeEntries.includes(routeSourceRuntime)) {
-        if (isCancelled()) {
-          return {
-            persistedByTask,
-            taskIdsToReconcile: new Set<string>(),
-            preloadedRuntimeLists,
-            preloadedRuntimeConnectionsByKey,
-            preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
-            skippedTaskErrors,
-          };
-        }
-        ensuredRuntimeForKind = routeSourceRuntime;
-        runtimeEntries.push(routeSourceRuntime);
-      }
-      for (const workingDirectory of missingDesiredDirectories) {
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          routeSourceRuntime.runtimeRoute,
-          workingDirectory,
-        );
-        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
-        if (!runtimeConnections.has(scanKey)) {
-          runtimeConnections.set(scanKey, {
-            runtimeKind,
-            runtimeConnection,
-            directories: new Set<string>(),
-          });
-        }
-        preloadedRuntimeConnectionsByKey.set(
-          runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
-          runtimeConnection,
-        );
-        runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
       }
     }
 

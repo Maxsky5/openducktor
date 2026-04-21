@@ -373,7 +373,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.agentSessionsList = async () => [
         {
           ...persistedSessionFixture,
-          workingDirectory: "/tmp/repo/worktree",
+          workingDirectory: "/tmp/repo",
         },
       ];
       host.agentSessionUpsert = async () => {};
@@ -510,7 +510,7 @@ describe("use-agent-orchestrator-operations", () => {
         {
           externalSessionId: "external-1",
           title: "PLANNER task-1",
-          workingDirectory: "/tmp/repo",
+          workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
           pendingPermissions: [],
@@ -2081,7 +2081,7 @@ describe("use-agent-orchestrator-operations", () => {
           repoPath: "/tmp/repo",
           taskId: null,
           role: "workspace",
-          workingDirectory: "/tmp/repo",
+          workingDirectory: "/tmp/repo/worktree",
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           startedAt: "2026-02-22T08:00:00.000Z",
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2144,7 +2144,7 @@ describe("use-agent-orchestrator-operations", () => {
         repoPath: "/tmp/repo",
         taskId: null,
         role: "workspace",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2244,7 +2244,7 @@ describe("use-agent-orchestrator-operations", () => {
         repoPath: "/tmp/repo",
         taskId: null,
         role: "workspace",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2353,7 +2353,7 @@ describe("use-agent-orchestrator-operations", () => {
         repoPath: "/tmp/repo",
         taskId: null,
         role: "workspace",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -2441,7 +2441,7 @@ describe("use-agent-orchestrator-operations", () => {
         repoPath: "/tmp/repo",
         taskId: null,
         role: "workspace",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         startedAt: "2026-02-22T08:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
