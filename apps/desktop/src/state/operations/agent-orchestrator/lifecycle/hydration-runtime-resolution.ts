@@ -8,7 +8,7 @@ import type { AgentRuntimeConnection } from "@openducktor/core";
 import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
-import { canUseRepoRootWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
+import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
@@ -36,6 +36,8 @@ export const createHydrationRuntimeResolver = ({
   preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
   ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+
   const findRuntimeByWorkingDirectory = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
@@ -49,11 +51,26 @@ export const createHydrationRuntimeResolver = ({
     );
   };
 
+  const findWorkspaceRuntime = (runtimeKind: RuntimeKind): RuntimeInstanceSummary | null => {
+    const runtimes = runtimesByKind.get(runtimeKind) ?? [];
+    return (
+      runtimes.find(
+        (runtime) =>
+          runtime.role === "workspace" &&
+          normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath,
+      ) ?? null
+    );
+  };
+
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
 
-    const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
+    const runtime =
+      findRuntimeByWorkingDirectory(runtimeKind, workingDirectory) ??
+      (canUseWorkspaceRuntimeForHydration(record, repoPath)
+        ? findWorkspaceRuntime(runtimeKind)
+        : null);
     if (runtime) {
       const { runtimeConnection } = resolveRuntimeRouteConnection(
         runtime.runtimeRoute,
@@ -81,7 +98,7 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
-    if (!canUseRepoRootWorkspaceRuntimeForHydration(record, repoPath)) {
+    if (!canUseWorkspaceRuntimeForHydration(record, repoPath)) {
       return {
         ok: false,
         runtimeKind,

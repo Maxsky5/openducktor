@@ -101,6 +101,21 @@ const plannerTaskWithSessionAt = (
   return task;
 };
 
+const qaTaskWithSessionAt = (
+  taskId: string,
+  externalSessionId: string,
+  workingDirectory: string,
+): TaskCard => {
+  const task = taskWithSessionAt(taskId, externalSessionId, workingDirectory);
+  const session = task.agentSessions?.[0];
+  if (!session) {
+    throw new Error("Expected seeded task session");
+  }
+
+  task.agentSessions = [{ ...session, role: "qa", scenario: "qa_review" }];
+  return task;
+};
+
 const createRuntimeInstance = ({
   runtimeId = "runtime-1",
   workingDirectory = worktreePath,
@@ -683,6 +698,48 @@ describe("repo-session-hydration-service", () => {
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([
       {
         directories: [repoPath],
+      },
+    ]);
+    expect(reconcileCalls).toEqual(["task-1"]);
+    service.dispose();
+  });
+
+  test("reconcile still hydrates worktree sessions when the runtime is resolvable but no live snapshots remain", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
+    const reconcileCalls: string[] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [createRuntimeInstance({ workingDirectory: repoPath })];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push(
+            input.directories ? { directories: [...input.directories].sort() } : {},
+          );
+          return [];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [qaTaskWithSessionAt("task-1", "external-1", worktreePath)],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        directories: [worktreePath],
       },
     ]);
     expect(reconcileCalls).toEqual(["task-1"]);
