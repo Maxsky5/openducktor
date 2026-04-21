@@ -375,163 +375,53 @@ fn wait_for_local_server_with_process_honors_cancellation_epoch() {
 
 #[test]
 fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
-    let root = unique_temp_path("build-start-stdio-runtime-route");
-    let repo_path = root.join("repo");
-    let worktree_base = root.join("worktrees");
-    crate::app_service::test_support::init_git_repo(&repo_path)?;
-
-    let runtime_registry = AppRuntimeRegistry::new(
-        vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::default(),
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition_with_provisioning(
-                    "test-runtime",
-                    "Test Runtime",
-                    RuntimeProvisioningMode::External,
-                ),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::ReturnRoute(
-                    host_domain::RuntimeRoute::Stdio,
-                ),
-            }),
-        ],
-        AgentRuntimeKind::opencode(),
+    let harness = build_external_runtime_build_start_harness(
+        "build-start-stdio-runtime-route",
+        ExternalStartBehavior::ReturnRoute(host_domain::RuntimeRoute::Stdio),
     )?;
-    let (service, task_state, _git_state) = build_service_with_runtime_registry(
-        vec![make_task("task-1", "task", TaskStatus::Open)],
-        runtime_registry,
+
+    let bootstrap =
+        harness
+            .service
+            .build_start(harness.repo_path_string.as_str(), "task-1", "test-runtime")?;
+
+    assert_eq!(
+        bootstrap.runtime_kind,
+        AgentRuntimeKind::from("test-runtime")
     );
-    let repo_path_string = repo_path.to_string_lossy().to_string();
-    service.workspace_add(repo_path_string.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path_string.as_str(),
-        host_infra_system::RepoConfig {
-            default_runtime_kind: "test-runtime".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: None,
-                branch: "main".to_string(),
-            },
-            trusted_hooks: true,
-            ..Default::default()
-        },
-    )?;
-
-    let bootstrap = service.build_start(repo_path_string.as_str(), "task-1", "test-runtime")?;
-
-    assert_eq!(bootstrap.runtime_kind, AgentRuntimeKind::from("test-runtime"));
     assert_eq!(bootstrap.runtime_route, host_domain::RuntimeRoute::Stdio);
     assert_eq!(
         bootstrap.working_directory,
-        worktree_base.join("task-1").to_string_lossy().to_string()
+        harness.expected_worktree_dir("task-1")
     );
-    assert!(task_state
+    assert!(harness
+        .task_state
         .lock()
         .expect("task store lock poisoned")
         .updated_patches
         .iter()
         .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
-    let runtimes = service.runtime_list("test-runtime", Some(repo_path_string.as_str()))?;
-    assert_eq!(runtimes.len(), 1);
-    let runtime = runtimes.first().expect("runtime should be registered");
-    let expected_repo_path = std::fs::canonicalize(&repo_path)?;
-    assert_eq!(runtime.kind, AgentRuntimeKind::from("test-runtime"));
-    assert_eq!(std::fs::canonicalize(&runtime.repo_path)?, expected_repo_path);
-    assert_eq!(runtime.task_id, None);
-    assert_eq!(runtime.role, RuntimeRole::Workspace);
-    assert_eq!(
-        std::fs::canonicalize(&runtime.working_directory)?,
-        expected_repo_path
-    );
-    assert_eq!(runtime.runtime_route, host_domain::RuntimeRoute::Stdio);
-    assert!(!runtime.runtime_id.is_empty());
-    assert!(!runtime.started_at.is_empty());
+    assert_registered_workspace_runtime(
+        &harness.service,
+        "test-runtime",
+        harness.repo_path_string.as_str(),
+        harness.repo_path.as_path(),
+        host_domain::RuntimeRoute::Stdio,
+    )?;
 
     Ok(())
 }
 
 #[test]
 fn build_start_preserves_task_state_when_runtime_adapter_rejects_external_startup() -> Result<()> {
-    let root = unique_temp_path("build-start-runtime-startup-failure");
-    let repo_path = root.join("repo");
-    let worktree_base = root.join("worktrees");
-    crate::app_service::test_support::init_git_repo(&repo_path)?;
-
-    let runtime_registry = AppRuntimeRegistry::new(
-        vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::default(),
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition_with_provisioning(
-                    "test-runtime",
-                    "Test Runtime",
-                    RuntimeProvisioningMode::External,
-                ),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::ReturnError(
-                    "runtime-owned external startup rejected route",
-                ),
-            }),
-        ],
-        AgentRuntimeKind::opencode(),
-    )?;
-    let (service, task_state, _git_state) = build_service_with_runtime_registry(
-        vec![make_task("task-1", "task", TaskStatus::Open)],
-        runtime_registry,
-    );
-    let repo_path_string = repo_path.to_string_lossy().to_string();
-    service.workspace_add(repo_path_string.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path_string.as_str(),
-        host_infra_system::RepoConfig {
-            default_runtime_kind: "test-runtime".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: None,
-                branch: "main".to_string(),
-            },
-            trusted_hooks: true,
-            ..Default::default()
-        },
+    let harness = build_external_runtime_build_start_harness(
+        "build-start-runtime-startup-failure",
+        ExternalStartBehavior::ReturnError("runtime-owned external startup rejected route"),
     )?;
 
-    let error = service
-        .build_start(repo_path_string.as_str(), "task-1", "test-runtime")
+    let error = harness
+        .service
+        .build_start(harness.repo_path_string.as_str(), "task-1", "test-runtime")
         .expect_err("runtime-owned startup failures should surface from build_start");
     let message = format!("{error:#}");
 
@@ -543,13 +433,15 @@ fn build_start_preserves_task_state_when_runtime_adapter_rejects_external_startu
         message.contains("runtime-owned external startup rejected route"),
         "unexpected runtime startup error chain: {message}"
     );
-    assert!(task_state
+    assert!(harness
+        .task_state
         .lock()
         .expect("task store lock poisoned")
         .updated_patches
         .is_empty());
-    assert!(service
-        .runtime_list("test-runtime", Some(repo_path_string.as_str()))?
+    assert!(harness
+        .service
+        .runtime_list("test-runtime", Some(harness.repo_path_string.as_str()))?
         .is_empty());
 
     Ok(())

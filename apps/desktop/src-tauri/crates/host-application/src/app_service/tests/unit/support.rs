@@ -27,7 +27,7 @@ pub(super) use crate::app_service::runtime_registry::{
 pub(super) use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_runtime_registry,
     builtin_opencode_runtime_definition, builtin_opencode_runtime_descriptor,
-    builtin_opencode_runtime_route, make_task, repo_config_for_workspace,
+    builtin_opencode_runtime_route, init_git_repo, make_task, repo_config_for_workspace,
     spawn_opencode_session_status_server, spawn_sleep_process, spawn_sleep_process_group,
     unique_temp_path, wait_for_process_exit, workspace_update_repo_config_by_repo_path,
     write_private_file, FakeTaskStore, TaskStoreState,
@@ -44,21 +44,6 @@ pub(super) use crate::app_service::{
     RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
     RuntimeStartupFailureReason, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
 };
-
-pub(super) fn init_git_repo(path: &std::path::Path) -> Result<()> {
-    let status = Command::new("git")
-        .args(["init", "--quiet"])
-        .arg(path)
-        .status()?;
-    if status.success() {
-        return Ok(());
-    }
-
-    Err(anyhow::anyhow!(
-        "failed to initialize git repo for test at {}",
-        path.display()
-    ))
-}
 
 pub(super) fn insert_workspace_runtime(
     service: &AppService,
@@ -166,6 +151,124 @@ impl Default for ExternalStartBehavior {
             endpoint: "http://127.0.0.1:43123".to_string(),
         })
     }
+}
+
+pub(super) struct ExternalRuntimeBuildStartHarness {
+    pub(super) service: AppService,
+    pub(super) task_state: Arc<Mutex<TaskStoreState>>,
+    pub(super) repo_path: std::path::PathBuf,
+    pub(super) repo_path_string: String,
+    pub(super) worktree_base: std::path::PathBuf,
+}
+
+impl ExternalRuntimeBuildStartHarness {
+    pub(super) fn expected_worktree_dir(&self, task_id: &str) -> String {
+        self.worktree_base
+            .join(task_id)
+            .to_string_lossy()
+            .to_string()
+    }
+}
+
+pub(super) fn build_external_runtime_build_start_harness(
+    test_name: &str,
+    external_start_behavior: ExternalStartBehavior,
+) -> Result<ExternalRuntimeBuildStartHarness> {
+    let root = unique_temp_path(test_name);
+    let repo_path = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    init_git_repo(&repo_path)?;
+
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter {
+                definition: builtin_opencode_runtime_definition(),
+                health: RuntimeHealth {
+                    kind: "opencode".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
+            }),
+            Arc::new(TestRuntimeAdapter {
+                definition: test_runtime_definition_with_provisioning(
+                    "test-runtime",
+                    "Test Runtime",
+                    RuntimeProvisioningMode::External,
+                ),
+                health: RuntimeHealth {
+                    kind: "test-runtime".to_string(),
+                    ok: true,
+                    version: None,
+                    error: None,
+                },
+                session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior,
+            }),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, task_state, _git_state) = build_service_with_runtime_registry(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        runtime_registry,
+    );
+    let repo_path_string = repo_path.to_string_lossy().to_string();
+    service.workspace_add(repo_path_string.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path_string.as_str(),
+        host_infra_system::RepoConfig {
+            default_runtime_kind: "test-runtime".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: None,
+                branch: "main".to_string(),
+            },
+            trusted_hooks: true,
+            ..Default::default()
+        },
+    )?;
+
+    Ok(ExternalRuntimeBuildStartHarness {
+        service,
+        task_state,
+        repo_path,
+        repo_path_string,
+        worktree_base,
+    })
+}
+
+pub(super) fn assert_registered_workspace_runtime(
+    service: &AppService,
+    runtime_kind: &str,
+    repo_path: &str,
+    expected_repo_path: &std::path::Path,
+    expected_route: host_domain::RuntimeRoute,
+) -> Result<()> {
+    let runtimes = service.runtime_list(runtime_kind, Some(repo_path))?;
+    assert_eq!(runtimes.len(), 1);
+    let runtime = runtimes.first().expect("runtime should be registered");
+    let expected_repo_path = fs::canonicalize(expected_repo_path)?;
+
+    assert_eq!(runtime.kind, AgentRuntimeKind::from(runtime_kind));
+    assert_eq!(
+        std::fs::canonicalize(&runtime.repo_path)?,
+        expected_repo_path
+    );
+    assert_eq!(runtime.task_id, None);
+    assert_eq!(runtime.role, RuntimeRole::Workspace);
+    assert_eq!(
+        std::fs::canonicalize(&runtime.working_directory)?,
+        expected_repo_path
+    );
+    assert_eq!(runtime.runtime_route, expected_route);
+    assert!(!runtime.runtime_id.is_empty());
+    assert!(!runtime.started_at.is_empty());
+
+    Ok(())
 }
 
 impl AppRuntime for TestRuntimeAdapter {
