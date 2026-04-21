@@ -25,9 +25,37 @@ export type EventStreamState = {
   subagentCorrelationKeyByPartId: Map<string, string>;
   subagentCorrelationKeyBySessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
+  pendingSubagentCorrelationKeys: string[];
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
+
+export const removePendingSubagentCorrelationKey = (
+  state: Pick<
+    EventStreamState,
+    "pendingSubagentCorrelationKeys" | "pendingSubagentCorrelationKeysBySignature"
+  >,
+  correlationKey: string,
+): void => {
+  const pendingIndex = state.pendingSubagentCorrelationKeys.indexOf(correlationKey);
+  if (pendingIndex >= 0) {
+    state.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
+  }
+
+  for (const [signature, pending] of state.pendingSubagentCorrelationKeysBySignature) {
+    if (!pending.includes(correlationKey)) {
+      continue;
+    }
+
+    const nextPending = pending.filter((entry) => entry !== correlationKey);
+    if (nextPending.length === 0) {
+      state.pendingSubagentCorrelationKeysBySignature.delete(signature);
+      continue;
+    }
+
+    state.pendingSubagentCorrelationKeysBySignature.set(signature, nextPending);
+  }
+};
 
 export const setSessionActive = (session: SessionRecord | undefined): void => {
   if (!session) {

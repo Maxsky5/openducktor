@@ -38,6 +38,7 @@ import {
   emitSessionIdle,
   isReasoningDeltaField,
   markSessionActive,
+  removePendingSubagentCorrelationKey,
 } from "./shared";
 
 type MappedAssistantPart = NonNullable<ReturnType<typeof mapPartToAgentStreamPart>>;
@@ -128,6 +129,9 @@ const normalizeLiveSubagentCorrelation = (
   if (rawPart.type === "subtask") {
     const correlationKey = buildPartScopedSubagentCorrelationKey(part, rawPart.id);
     runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
+    if (!runtime.pendingSubagentCorrelationKeys.includes(correlationKey)) {
+      runtime.pendingSubagentCorrelationKeys.push(correlationKey);
+    }
     if (signature) {
       enqueuePendingSubagentCorrelationKey(runtime, signature, correlationKey);
     }
@@ -161,6 +165,7 @@ const normalizeLiveSubagentCorrelation = (
   runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
   if (part.sessionId) {
     runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+    removePendingSubagentCorrelationKey(runtime, correlationKey);
   }
 
   return {
@@ -1054,7 +1059,16 @@ const handleMessagePartRemovedEvent = (event: Event, runtime: EventStreamRuntime
 
   runtime.partsById.delete(removedPartId);
   runtime.pendingDeltasByPartId.delete(removedPartId);
+  const removedCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(removedPartId);
   runtime.subagentCorrelationKeyByPartId.delete(removedPartId);
+  if (removedCorrelationKey) {
+    removePendingSubagentCorrelationKey(runtime, removedCorrelationKey);
+    for (const [sessionId, correlationKey] of runtime.subagentCorrelationKeyBySessionId) {
+      if (correlationKey === removedCorrelationKey) {
+        runtime.subagentCorrelationKeyBySessionId.delete(sessionId);
+      }
+    }
+  }
   return true;
 };
 

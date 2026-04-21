@@ -141,6 +141,7 @@ export const registerSession = (input: {
     subagentCorrelationKeyByPartId: new Map(),
     subagentCorrelationKeyBySessionId: new Map(),
     pendingSubagentCorrelationKeysBySignature: new Map(),
+    pendingSubagentCorrelationKeys: [],
   });
 
   input.emit(input.sessionId, {

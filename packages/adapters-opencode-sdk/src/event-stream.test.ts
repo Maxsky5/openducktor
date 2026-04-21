@@ -91,6 +91,7 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   subagentCorrelationKeyByPartId: new Map(),
   subagentCorrelationKeyBySessionId: new Map(),
   pendingSubagentCorrelationKeysBySignature: new Map(),
+  pendingSubagentCorrelationKeys: [],
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -269,6 +270,30 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
         agent: input.agent,
         prompt: input.prompt,
         description: input.description,
+      },
+    },
+  }) as unknown as Event;
+
+const makeChildSessionCreatedEvent = (input: {
+  childSessionId: string;
+  parentSessionId: string;
+}): Event =>
+  ({
+    type: "session.created",
+    properties: {
+      sessionID: input.childSessionId,
+      info: {
+        id: input.childSessionId,
+        slug: input.childSessionId,
+        projectID: "project-1",
+        directory: "/repo",
+        title: input.childSessionId,
+        version: "1",
+        parentID: input.parentSessionId,
+        time: {
+          created: Date.parse("2026-02-22T12:00:10.000Z"),
+          updated: Date.parse("2026-02-22T12:00:10.000Z"),
+        },
       },
     },
   }) as unknown as Event;
@@ -1593,7 +1618,7 @@ describe("event-stream", () => {
     expect(partEvents[0].part.text).toBe("Late role text");
   });
 
-  test("keeps same-turn subagents with identical agent and prompt distinct until session ids arrive", async () => {
+  test("binds same-turn sibling subagents to child sessions without fragmenting their cards", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-subagent-collision"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -1609,6 +1634,14 @@ describe("event-stream", () => {
         agent: "build",
         prompt: "Inspect repo",
         description: "Starting B",
+      }),
+      makeChildSessionCreatedEvent({
+        childSessionId: "child-a",
+        parentSessionId: "external-session-1",
+      }),
+      makeChildSessionCreatedEvent({
+        childSessionId: "child-b",
+        parentSessionId: "external-session-1",
       }),
       {
         type: "message.part.updated",
@@ -1665,7 +1698,7 @@ describe("event-stream", () => {
         event.type === "assistant_part",
     );
     const subagentParts = assistantPartEvents
-      .map((event) => event.part)
+      .map((event): Extract<AgentEvent, { type: "assistant_part" }>["part"] => event.part)
       .filter(
         (
           part,
@@ -1691,14 +1724,14 @@ describe("event-stream", () => {
     ]);
 
     expect(completedParts.map((part) => part.correlationKey)).toEqual([
-      "session:assistant-subagent-collision:child-a",
-      "session:assistant-subagent-collision:child-b",
+      "part:assistant-subagent-collision:subtask-a",
+      "part:assistant-subagent-collision:subtask-b",
     ]);
     expect(completedParts.map((part) => part.sessionId)).toEqual(["child-a", "child-b"]);
     expect(completedParts.map((part) => part.description)).toEqual(["Finished A", "Finished B"]);
   });
 
-  test("does not guess when same-signature sibling completions arrive out of order", async () => {
+  test("keeps ambiguous sibling completions bound to their original cards even when they finish out of order", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-out-of-order"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -1714,6 +1747,14 @@ describe("event-stream", () => {
         agent: "build",
         prompt: "Inspect repo",
         description: "Starting B",
+      }),
+      makeChildSessionCreatedEvent({
+        childSessionId: "child-a",
+        parentSessionId: "external-session-1",
+      }),
+      makeChildSessionCreatedEvent({
+        childSessionId: "child-b",
+        parentSessionId: "external-session-1",
       }),
       {
         type: "message.part.updated",
@@ -1770,7 +1811,7 @@ describe("event-stream", () => {
         event.type === "assistant_part",
     );
     const subagentParts = assistantPartEvents
-      .map((event) => event.part)
+      .map((event): Extract<AgentEvent, { type: "assistant_part" }>["part"] => event.part)
       .filter(
         (
           part,
@@ -1790,8 +1831,8 @@ describe("event-stream", () => {
       "part:assistant-subagent-out-of-order:subtask-b",
     ]);
     expect(completedParts.map((part) => part.correlationKey)).toEqual([
-      "session:assistant-subagent-out-of-order:child-b",
-      "session:assistant-subagent-out-of-order:child-a",
+      "part:assistant-subagent-out-of-order:subtask-b",
+      "part:assistant-subagent-out-of-order:subtask-a",
     ]);
     expect(completedParts.map((part) => part.sessionId)).toEqual(["child-b", "child-a"]);
     expect(completedParts.map((part) => part.description)).toEqual(["Finished B", "Finished A"]);

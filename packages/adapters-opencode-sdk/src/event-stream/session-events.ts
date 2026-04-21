@@ -5,12 +5,18 @@ import {
   parsePermissionAsked,
   parseQuestionAsked,
   parseSessionStatus,
+  readEventInfo,
   readEventProperties,
   readSessionErrorMessage,
   readTodoPayload,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { emitSessionIdle, markSessionActive, markSessionIdle } from "./shared";
+import {
+  emitSessionIdle,
+  markSessionActive,
+  markSessionIdle,
+  removePendingSubagentCorrelationKey,
+} from "./shared";
 
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.status") {
@@ -146,8 +152,60 @@ const handleTodoUpdatedEvent = (event: Event, runtime: EventStreamRuntime): bool
   return true;
 };
 
+const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime): boolean => {
+  if (event.type !== "session.created" && event.type !== "session.updated") {
+    return false;
+  }
+
+  const properties = readEventProperties(event);
+  const info = readEventInfo(properties);
+  const childSessionId =
+    (properties &&
+    typeof properties === "object" &&
+    properties !== null &&
+    "sessionID" in properties
+      ? (properties as { sessionID?: unknown }).sessionID
+      : undefined) ?? undefined;
+  const parentSessionId =
+    info && typeof info === "object" && info !== null
+      ? (["parentID", "parentId", "parent_id"] as const).reduce<string | undefined>(
+          (found, key) => {
+            if (found) {
+              return found;
+            }
+            const value = (info as Record<string, unknown>)[key];
+            return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+          },
+          undefined,
+        )
+      : undefined;
+
+  if (
+    typeof childSessionId !== "string" ||
+    childSessionId.trim().length === 0 ||
+    parentSessionId !== runtime.externalSessionId
+  ) {
+    return true;
+  }
+
+  const normalizedChildSessionId = childSessionId.trim();
+  if (runtime.subagentCorrelationKeyBySessionId.has(normalizedChildSessionId)) {
+    return true;
+  }
+
+  const nextCorrelationKey = runtime.pendingSubagentCorrelationKeys.shift();
+  if (!nextCorrelationKey) {
+    return true;
+  }
+
+  runtime.subagentCorrelationKeyBySessionId.set(normalizedChildSessionId, nextCorrelationKey);
+  removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
+  return true;
+};
+
 export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   return (
+    bindChildSessionCorrelation(event, runtime) ||
     handleSessionStatusEvent(event, runtime) ||
     handlePermissionAskedEvent(event, runtime) ||
     handleQuestionAskedEvent(event, runtime) ||

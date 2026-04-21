@@ -115,6 +115,7 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
     subagentCorrelationKeyBySessionId: session.subagentCorrelationKeyBySessionId,
     pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
+    pendingSubagentCorrelationKeys: session.pendingSubagentCorrelationKeys,
   };
 
   if (handleMessageEvent(input.event, runtime)) {
@@ -157,7 +158,31 @@ export const isRelevantSubscriberEvent = (
     return true;
   }
 
-  if (readEventSessionId(event)) {
+  const eventSessionId = readEventSessionId(event);
+  if (eventSessionId) {
+    const properties = "properties" in event ? event.properties : undefined;
+    const info =
+      properties && typeof properties === "object" && properties !== null && "info" in properties
+        ? (properties as { info?: unknown }).info
+        : undefined;
+    const parentSessionId =
+      info && typeof info === "object" && info !== null
+        ? (["parentID", "parentId", "parent_id"] as const).reduce<string | undefined>(
+            (found, key) => {
+              if (found) {
+                return found;
+              }
+              const value = (info as Record<string, unknown>)[key];
+              return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+            },
+            undefined,
+          )
+        : undefined;
+
+    if (parentSessionId === subscriber.externalSessionId) {
+      return true;
+    }
+
     return false;
   }
 
