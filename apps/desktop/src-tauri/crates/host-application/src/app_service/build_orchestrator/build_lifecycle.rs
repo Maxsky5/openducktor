@@ -92,16 +92,6 @@ impl AppService {
             runtime_summary,
             task_id,
         } = input;
-        runtime_summary
-            .runtime_route
-            .local_http_port()
-            .ok_or_else(|| {
-                anyhow!("Build sessions require a local_http runtime route with a port")
-            })?;
-        self.task_transition_to_in_progress_without_related_tasks(
-            prerequisites.repo_path.as_str(),
-            task_id,
-        )?;
 
         let working_directory = prepared_worktree
             .worktree_dir
@@ -109,11 +99,18 @@ impl AppService {
             .ok_or_else(|| anyhow!("Invalid worktree path"))?
             .to_string();
 
-        Ok(BuildSessionBootstrap {
+        let bootstrap = BuildSessionBootstrap {
             runtime_kind,
             runtime_route: runtime_summary.runtime_route,
             working_directory,
-        })
+        };
+
+        self.task_transition_to_in_progress_without_related_tasks(
+            prerequisites.repo_path.as_str(),
+            task_id,
+        )?;
+
+        Ok(bootstrap)
     }
 }
 
@@ -154,11 +151,11 @@ mod tests {
     }
 
     #[test]
-    fn initiate_build_mode_rejects_stdio_routes_before_transitioning_task() {
+    fn initiate_build_mode_allows_stdio_routes_and_transitions_task() {
         let (service, task_state, _git_state) =
             build_service_with_state(vec![make_task("task-1", "task", TaskStatus::Open)]);
 
-        let error = service
+        let bootstrap = service
             .initiate_build_mode(BuildModeStartInput {
                 runtime_kind: AgentRuntimeKind::opencode(),
                 prerequisites: make_build_prerequisites(),
@@ -168,15 +165,18 @@ mod tests {
                 runtime_summary: make_stdio_runtime_summary(),
                 task_id: "task-1",
             })
-            .expect_err("stdio build routes should fail fast");
+            .expect("stdio build routes should be accepted");
 
-        assert!(error
-            .to_string()
-            .contains("local_http runtime route with a port"));
+        assert_eq!(bootstrap.runtime_route, RuntimeRoute::Stdio);
+        assert_eq!(
+            bootstrap.working_directory,
+            "/tmp/worktrees/task-1".to_string()
+        );
         assert!(task_state
             .lock()
             .expect("task store lock poisoned")
             .updated_patches
-            .is_empty());
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
     }
 }

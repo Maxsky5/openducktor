@@ -372,3 +372,77 @@ fn wait_for_local_server_with_process_honors_cancellation_epoch() {
     terminate_child_process(&mut child);
     assert_eq!(error.reason(), RuntimeStartupFailureReason::Cancelled);
 }
+
+#[test]
+fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
+    let harness = build_external_runtime_build_start_harness(
+        "build-start-stdio-runtime-route",
+        ExternalStartBehavior::ReturnRoute(host_domain::RuntimeRoute::Stdio),
+    )?;
+
+    let bootstrap =
+        harness
+            .service
+            .build_start(harness.repo_path_string.as_str(), "task-1", "test-runtime")?;
+
+    assert_eq!(
+        bootstrap.runtime_kind,
+        AgentRuntimeKind::from("test-runtime")
+    );
+    assert_eq!(bootstrap.runtime_route, host_domain::RuntimeRoute::Stdio);
+    assert_eq!(
+        bootstrap.working_directory,
+        harness.expected_worktree_dir("task-1")
+    );
+    assert!(harness
+        .task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
+    assert_registered_workspace_runtime(
+        &harness.service,
+        "test-runtime",
+        harness.repo_path_string.as_str(),
+        harness.repo_path.as_path(),
+        host_domain::RuntimeRoute::Stdio,
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn build_start_preserves_task_state_when_runtime_adapter_rejects_external_startup() -> Result<()> {
+    let harness = build_external_runtime_build_start_harness(
+        "build-start-runtime-startup-failure",
+        ExternalStartBehavior::ReturnError("runtime-owned external startup rejected route"),
+    )?;
+
+    let error = harness
+        .service
+        .build_start(harness.repo_path_string.as_str(), "task-1", "test-runtime")
+        .expect_err("runtime-owned startup failures should surface from build_start");
+    let message = format!("{error:#}");
+
+    assert!(
+        message.contains("test-runtime build runtime failed to start for task task-1"),
+        "unexpected build_start error chain: {message}"
+    );
+    assert!(
+        message.contains("runtime-owned external startup rejected route"),
+        "unexpected runtime startup error chain: {message}"
+    );
+    assert!(harness
+        .task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .updated_patches
+        .is_empty());
+    assert!(harness
+        .service
+        .runtime_list("test-runtime", Some(harness.repo_path_string.as_str()))?
+        .is_empty());
+
+    Ok(())
+}
