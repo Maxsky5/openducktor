@@ -1691,11 +1691,110 @@ describe("event-stream", () => {
     ]);
 
     expect(completedParts.map((part) => part.correlationKey)).toEqual([
-      "part:assistant-subagent-collision:subtask-a",
-      "part:assistant-subagent-collision:subtask-b",
+      "session:assistant-subagent-collision:child-a",
+      "session:assistant-subagent-collision:child-b",
     ]);
     expect(completedParts.map((part) => part.sessionId)).toEqual(["child-a", "child-b"]);
     expect(completedParts.map((part) => part.description)).toEqual(["Finished A", "Finished B"]);
+  });
+
+  test("does not guess when same-signature sibling completions arrive out of order", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-out-of-order"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-out-of-order",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-out-of-order",
+        partId: "subtask-b",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting B",
+      }),
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-b",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-out-of-order",
+            callID: "call-b",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished B",
+                sessionId: "child-b",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-out-of-order",
+            callID: "call-a",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished A",
+                sessionId: "child-a",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const assistantPartEvents = emitted.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part",
+    );
+    const subagentParts = assistantPartEvents
+      .map((event) => event.part)
+      .filter(
+        (
+          part,
+        ): part is Extract<
+          Extract<AgentEvent, { type: "assistant_part" }>["part"],
+          { kind: "subagent" }
+        > => part.kind === "subagent",
+      );
+
+    expect(subagentParts).toHaveLength(4);
+
+    const runningParts = subagentParts.filter((part) => part.status === "running");
+    const completedParts = subagentParts.filter((part) => part.status === "completed");
+
+    expect(runningParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-subagent-out-of-order:subtask-a",
+      "part:assistant-subagent-out-of-order:subtask-b",
+    ]);
+    expect(completedParts.map((part) => part.correlationKey)).toEqual([
+      "session:assistant-subagent-out-of-order:child-b",
+      "session:assistant-subagent-out-of-order:child-a",
+    ]);
+    expect(completedParts.map((part) => part.sessionId)).toEqual(["child-b", "child-a"]);
+    expect(completedParts.map((part) => part.description)).toEqual(["Finished B", "Finished A"]);
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {

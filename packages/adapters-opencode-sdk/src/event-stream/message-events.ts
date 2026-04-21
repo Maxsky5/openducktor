@@ -100,6 +100,13 @@ const dequeuePendingSubagentCorrelationKey = (
   return next;
 };
 
+const peekPendingSubagentCorrelationKeys = (
+  runtime: EventStreamRuntime,
+  signature: string,
+): string[] => {
+  return runtime.pendingSubagentCorrelationKeysBySignature.get(signature) ?? [];
+};
+
 const normalizeLiveSubagentCorrelation = (
   runtime: EventStreamRuntime,
   rawPart: Part,
@@ -137,9 +144,13 @@ const normalizeLiveSubagentCorrelation = (
   const sessionCorrelationKey = part.sessionId
     ? runtime.subagentCorrelationKeyBySessionId.get(part.sessionId)
     : undefined;
-  const queuedCorrelationKey = signature
-    ? dequeuePendingSubagentCorrelationKey(runtime, signature)
-    : undefined;
+  const pendingCorrelationKeys = signature
+    ? peekPendingSubagentCorrelationKeys(runtime, signature)
+    : [];
+  const queuedCorrelationKey =
+    pendingCorrelationKeys.length === 1 && signature
+      ? dequeuePendingSubagentCorrelationKey(runtime, signature)
+      : undefined;
   const correlationKey =
     sessionCorrelationKey ??
     queuedCorrelationKey ??
