@@ -4,11 +4,9 @@ import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 import { useAgentChatRowStaging } from "./use-agent-chat-row-staging";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+const reactActGlobal = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
 
 const buildRows = (count: number, sessionId = "session-1"): AgentChatWindowRow[] =>
   Array.from({ length: count }, (_, index) => ({
@@ -32,8 +30,11 @@ describe("useAgentChatRowStaging", () => {
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
   let nextAnimationFrameId = 1;
+  let originalIsReactActEnvironment: boolean | undefined;
 
   beforeEach(() => {
+    originalIsReactActEnvironment = reactActGlobal.IS_REACT_ACT_ENVIRONMENT;
+    reactActGlobal.IS_REACT_ACT_ENVIRONMENT = true;
     animationFrameCallbacks.clear();
     nextAnimationFrameId = 1;
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
@@ -48,6 +49,11 @@ describe("useAgentChatRowStaging", () => {
   });
 
   afterEach(() => {
+    if (typeof originalIsReactActEnvironment === "undefined") {
+      delete reactActGlobal.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      reactActGlobal.IS_REACT_ACT_ENVIRONMENT = originalIsReactActEnvironment;
+    }
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   });

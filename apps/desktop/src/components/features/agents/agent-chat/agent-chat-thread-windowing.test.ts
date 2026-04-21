@@ -138,6 +138,35 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(revisitedState.turns).toBe(firstState.turns);
   });
 
+  test("resolveAgentChatWindowRowsState invalidates cached rows when a raw message array is mutated in place", () => {
+    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
+    const session = buildSession({
+      sessionId: "session-mutable-array",
+      messages,
+    });
+    const cache = new Map();
+
+    const firstState = resolveAgentChatWindowRowsState({
+      session,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    messages[0] = buildMessage("assistant", "Message 1 updated", { id: "message-1" });
+
+    const nextState = resolveAgentChatWindowRowsState({
+      session,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(nextState.rows).not.toBe(firstState.rows);
+    expect(nextState.rows.some((row) => row.kind === "message")).toBe(true);
+    expect(nextState.rows.find((row) => row.kind === "message")?.message.content).toBe(
+      "Message 1 updated",
+    );
+  });
+
   test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {
     const firstSession = buildSession({
       runtimeKind: "opencode",
@@ -450,5 +479,64 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(nextState.hasAttachmentMessages).toBe(false);
     expect(nextState.lastUserMessageId).toBe("user-1");
     expect(nextState.activeStreamingAssistantMessageId).toBeNull();
+  });
+
+  test("resolveAgentChatWindowRowsState rebases cached suffix metadata arrays with prefix state", () => {
+    const initialSession = buildSession({
+      sessionId: "session-rebased-metadata",
+      role: "build",
+      status: "running",
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+        buildMessage("user", "Question 1", {
+          id: "user-1",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-1",
+                  path: "/tmp/spec.md",
+                  name: "spec.md",
+                  kind: "pdf",
+                },
+              },
+            ],
+          },
+        }),
+        buildMessage("assistant", "Answer 1", { id: "assistant-1" }),
+        buildMessage("user", "Question 2", { id: "user-2" }),
+        buildMessage("assistant", "Answer 2", { id: "assistant-2" }),
+      ],
+    });
+    const updatedSession = buildSession({
+      ...initialSession,
+      messages: [
+        ...(Array.isArray(initialSession.messages) ? initialSession.messages.slice(0, 4) : []),
+        buildMessage("assistant", "Answer 2 updated", { id: "assistant-2" }),
+      ],
+    });
+    const cache = new Map();
+
+    resolveAgentChatWindowRowsState({
+      session: initialSession,
+      showThinkingMessages: true,
+      cache,
+    });
+    resolveAgentChatWindowRowsState({
+      session: updatedSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    const cacheEntry = Array.from(cache.values())[0];
+    if (!cacheEntry) {
+      throw new Error("Expected cached transcript state");
+    }
+
+    expect(cacheEntry.hasAttachmentMessagesByMessageIndex[3]).toBe(true);
+    expect(cacheEntry.lastUserMessageIdByMessageIndex[3]).toBe("user-2");
   });
 });

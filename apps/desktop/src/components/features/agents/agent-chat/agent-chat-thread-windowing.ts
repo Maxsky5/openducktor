@@ -37,6 +37,7 @@ export type AgentChatWindowTurn = {
 
 export type AgentChatWindowRowsCacheEntry = {
   messages: AgentSessionState["messages"];
+  messageSignatures: string[] | null;
   rows: AgentChatWindowRow[];
   rowStartByMessageIndex: number[];
   rebuildStartByMessageIndex: number[];
@@ -104,16 +105,34 @@ const isSessionMessagesState = (
   );
 };
 
+const buildAgentChatMessageSignature = (message: AgentChatMessage): string => {
+  return JSON.stringify([
+    message.id,
+    message.role,
+    message.content,
+    message.timestamp,
+    message.meta ?? null,
+  ]);
+};
+
+const buildAgentChatMessageSignatures = (messages: AgentSessionMessages): string[] | null => {
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+
+  return messages.map(buildAgentChatMessageSignature);
+};
+
 const areSessionMessageContainersEquivalent = (
   previousMessages: AgentSessionMessages,
   nextMessages: AgentSessionMessages,
   sessionId: string,
 ): boolean => {
-  if (previousMessages === nextMessages) {
-    return true;
-  }
-
   if (isSessionMessagesState(previousMessages) && isSessionMessagesState(nextMessages)) {
+    if (previousMessages === nextMessages) {
+      return true;
+    }
+
     return (
       previousMessages.sessionId === sessionId &&
       nextMessages.sessionId === sessionId &&
@@ -123,6 +142,50 @@ const areSessionMessageContainersEquivalent = (
   }
 
   return false;
+};
+
+const findFirstChangedCachedMessageIndex = (
+  cachedRows: AgentChatWindowRowsCacheEntry,
+  session: AgentSessionState,
+): number => {
+  if (Array.isArray(cachedRows.messages) && Array.isArray(session.messages)) {
+    const previousSignatures = cachedRows.messageSignatures;
+    if (!previousSignatures) {
+      return 0;
+    }
+
+    const nextSignatures = buildAgentChatMessageSignatures(session.messages);
+    if (!nextSignatures) {
+      return 0;
+    }
+
+    if (nextSignatures.length < previousSignatures.length) {
+      return 0;
+    }
+
+    const sharedLength = Math.min(previousSignatures.length, nextSignatures.length);
+    let changedTailIndex = sharedLength - 1;
+    while (changedTailIndex >= 0) {
+      if (previousSignatures[changedTailIndex] !== nextSignatures[changedTailIndex]) {
+        break;
+      }
+      changedTailIndex -= 1;
+    }
+
+    if (changedTailIndex >= 0) {
+      while (changedTailIndex > 0) {
+        if (previousSignatures[changedTailIndex - 1] === nextSignatures[changedTailIndex - 1]) {
+          break;
+        }
+        changedTailIndex -= 1;
+      }
+      return changedTailIndex;
+    }
+
+    return nextSignatures.length > previousSignatures.length ? previousSignatures.length : -1;
+  }
+
+  return findFirstChangedChatMessageIndex(cachedRows.messages, session);
 };
 
 const appendMessageRows = (
@@ -186,6 +249,37 @@ const getPrefixMetadata = (
     lastUserMessageId: cacheEntry.lastUserMessageIdByMessageIndex[previousMessageIndex] ?? null,
     activeStreamingAssistantMessageId:
       cacheEntry.activeStreamingAssistantMessageIdByMessageIndex[previousMessageIndex] ?? null,
+  };
+};
+
+const rebaseIncrementalMetadata = ({
+  incrementalRowsState,
+  prefixMetadata,
+  sessionStatus,
+}: {
+  incrementalRowsState: AgentChatWindowRowsState;
+  prefixMetadata: ReturnType<typeof getPrefixMetadata>;
+  sessionStatus: AgentSessionState["status"];
+}): Pick<
+  AgentChatWindowRowsState,
+  | "hasAttachmentMessagesByMessageIndex"
+  | "lastUserMessageIdByMessageIndex"
+  | "activeStreamingAssistantMessageIdByMessageIndex"
+> => {
+  return {
+    hasAttachmentMessagesByMessageIndex:
+      incrementalRowsState.hasAttachmentMessagesByMessageIndex.map(
+        (value) => prefixMetadata.hasAttachmentMessages || value,
+      ),
+    lastUserMessageIdByMessageIndex: incrementalRowsState.lastUserMessageIdByMessageIndex.map(
+      (value) => value ?? prefixMetadata.lastUserMessageId,
+    ),
+    activeStreamingAssistantMessageIdByMessageIndex:
+      incrementalRowsState.activeStreamingAssistantMessageIdByMessageIndex.map((value) =>
+        sessionStatus === "running"
+          ? (value ?? prefixMetadata.activeStreamingAssistantMessageId)
+          : null,
+      ),
   };
 };
 
@@ -326,7 +420,7 @@ export function resolveAgentChatWindowRowsState({
       };
     }
 
-    const firstChangedMessageIndex = findFirstChangedChatMessageIndex(cachedRows.messages, session);
+    const firstChangedMessageIndex = findFirstChangedCachedMessageIndex(cachedRows, session);
     if (firstChangedMessageIndex < 0) {
       touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cachedRows);
       return {
@@ -369,6 +463,11 @@ export function resolveAgentChatWindowRowsState({
         },
         { showThinkingMessages },
       );
+      const rebasedIncrementalMetadata = rebaseIncrementalMetadata({
+        incrementalRowsState,
+        prefixMetadata,
+        sessionStatus: session.status,
+      });
 
       for (let index = 0; index < incrementalRowsState.rowStartByMessageIndex.length; index += 1) {
         const rowStart = incrementalRowsState.rowStartByMessageIndex[index];
@@ -397,6 +496,7 @@ export function resolveAgentChatWindowRowsState({
 
       const nextCacheEntry: AgentChatWindowRowsCacheEntry = {
         messages: session.messages,
+        messageSignatures: buildAgentChatMessageSignatures(session.messages),
         rows: nextRows,
         rowStartByMessageIndex: nextRowStartByMessageIndex,
         rebuildStartByMessageIndex: [
@@ -407,18 +507,18 @@ export function resolveAgentChatWindowRowsState({
         ],
         hasAttachmentMessagesByMessageIndex: [
           ...cachedRows.hasAttachmentMessagesByMessageIndex.slice(0, rebuildStartMessageIndex),
-          ...incrementalRowsState.hasAttachmentMessagesByMessageIndex,
+          ...rebasedIncrementalMetadata.hasAttachmentMessagesByMessageIndex,
         ],
         lastUserMessageIdByMessageIndex: [
           ...cachedRows.lastUserMessageIdByMessageIndex.slice(0, rebuildStartMessageIndex),
-          ...incrementalRowsState.lastUserMessageIdByMessageIndex,
+          ...rebasedIncrementalMetadata.lastUserMessageIdByMessageIndex,
         ],
         activeStreamingAssistantMessageIdByMessageIndex: [
           ...cachedRows.activeStreamingAssistantMessageIdByMessageIndex.slice(
             0,
             rebuildStartMessageIndex,
           ),
-          ...incrementalRowsState.activeStreamingAssistantMessageIdByMessageIndex,
+          ...rebasedIncrementalMetadata.activeStreamingAssistantMessageIdByMessageIndex,
         ],
         latestRebuildStartMessageIndex:
           rebuildStartMessageIndex + incrementalRowsState.latestRebuildStartMessageIndex,
@@ -447,6 +547,7 @@ export function resolveAgentChatWindowRowsState({
   const nextRowsState = buildAgentChatWindowRowsState(session, { showThinkingMessages });
   touchAgentChatWindowRowsCacheEntry(cache, cacheKey, {
     messages: session.messages,
+    messageSignatures: buildAgentChatMessageSignatures(session.messages),
     rows: nextRowsState.rows,
     rowStartByMessageIndex: nextRowsState.rowStartByMessageIndex,
     rebuildStartByMessageIndex: nextRowsState.rebuildStartByMessageIndex,
