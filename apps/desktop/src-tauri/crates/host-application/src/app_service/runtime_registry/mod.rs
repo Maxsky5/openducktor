@@ -43,7 +43,9 @@ pub(crate) trait AppRuntime: Send + Sync {
         _runtime_id: &str,
         _startup_policy: RuntimeStartupReadinessPolicy,
     ) -> Result<HostManagedRuntimeStart> {
-        Err(anyhow!("Runtime does not support host-managed provisioning"))
+        Err(anyhow!(
+            "Runtime does not support host-managed provisioning"
+        ))
     }
 
     fn runtime_health(&self) -> RuntimeHealth;
@@ -185,26 +187,19 @@ impl AppRuntimeRegistry {
     }
 
     pub(crate) fn builtin_for_service() -> Self {
+        let opencode_runtime = Arc::new(OpenCodeRuntime::default());
+        let registry =
+            AppRuntimeRegistry::new(vec![opencode_runtime.clone()], AgentRuntimeKind::opencode())
+                .expect("builtin app runtime registry should be valid");
+
         #[cfg(test)]
-        {
-            let opencode_runtime = Arc::new(OpenCodeRuntime::default());
-            let mut registry = AppRuntimeRegistry::new(
-                vec![opencode_runtime.clone()],
-                AgentRuntimeKind::opencode(),
-            )
-            .expect("builtin app runtime registry should be valid");
+        let registry = {
+            let mut registry = registry;
             registry.opencode_runtime = Some(opencode_runtime);
             registry
-        }
+        };
 
-        #[cfg(not(test))]
-        {
-            AppRuntimeRegistry::new(
-                vec![Arc::new(OpenCodeRuntime::default())],
-                AgentRuntimeKind::opencode(),
-            )
-            .expect("builtin app runtime registry should be valid")
-        }
+        registry
     }
 
     pub(crate) fn definitions(&self) -> Vec<RuntimeDefinition> {
@@ -239,6 +234,8 @@ impl AppRuntimeRegistry {
         dead_code,
         reason = "used only by shutdown integration tests to seed pending OpenCode process tracking"
     )]
+    // This helper only works for registries built via `builtin_for_service()`, which
+    // stores the concrete OpenCode runtime needed to seed pending-process tracking.
     pub(crate) fn track_pending_opencode_process_for_test(
         &self,
         service: &AppService,
@@ -246,7 +243,11 @@ impl AppRuntimeRegistry {
     ) -> Result<RuntimeProcessGuard> {
         self.opencode_runtime
             .as_ref()
-            .ok_or_else(|| anyhow!("Builtin OpenCode runtime is not available in this registry"))?
+            .ok_or_else(|| {
+                anyhow!(
+                    "Builtin OpenCode runtime is not available in this registry; use AppRuntimeRegistry::builtin_for_service() for tests that seed pending OpenCode processes"
+                )
+            })?
             .track_pending_process(service, child_id)
     }
 }

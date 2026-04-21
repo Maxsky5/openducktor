@@ -36,15 +36,7 @@ impl AppService {
         Self::cleanup_runtime_worktree_if_needed(runtime.cleanup_target.as_ref())
     }
 
-    pub(in crate::app_service::runtime_orchestrator) fn append_cleanup_error(
-        base_error: anyhow::Error,
-        cleanup_error: anyhow::Error,
-    ) -> anyhow::Error {
-        Self::append_runtime_cleanup_error(base_error, cleanup_error)
-    }
-
     pub(crate) fn cleanup_failed_host_managed_start(
-        &self,
         child: Option<&mut Child>,
         cleanup_target: Option<&RuntimeCleanupTarget>,
     ) -> Result<()> {

@@ -76,7 +76,10 @@ impl AppService {
             Err(_) => {
                 let lock_error = anyhow!("Agent runtime state lock poisoned");
                 if let Err(cleanup_error) = Self::cleanup_started_runtime(child, cleanup_target) {
-                    return Err(Self::append_cleanup_error(lock_error, cleanup_error));
+                    return Err(Self::append_runtime_cleanup_error(
+                        lock_error,
+                        cleanup_error,
+                    ));
                 }
                 Err(lock_error)
             }
@@ -98,7 +101,10 @@ impl AppService {
         if let Err(error) = self.prune_stale_runtimes(runtimes) {
             let prune_error = error.context(post_start_policy.prune_error_context);
             if let Err(cleanup_error) = Self::cleanup_started_runtime(child, cleanup_target) {
-                return Err(Self::append_cleanup_error(prune_error, cleanup_error));
+                return Err(Self::append_runtime_cleanup_error(
+                    prune_error,
+                    cleanup_error,
+                ));
             }
             return Err(prune_error);
         }
@@ -107,7 +113,7 @@ impl AppService {
             Self::find_existing_runtime(runtimes, post_start_policy.existing_lookup)
         {
             if let Err(cleanup_error) = Self::cleanup_started_runtime(child, cleanup_target) {
-                return Err(Self::append_cleanup_error(
+                return Err(Self::append_runtime_cleanup_error(
                     anyhow!(
                         "Found existing runtime {} while finalizing {startup_scope} startup",
                         existing.runtime_id

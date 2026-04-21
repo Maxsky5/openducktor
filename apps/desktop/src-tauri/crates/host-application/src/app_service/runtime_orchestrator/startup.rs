@@ -25,13 +25,13 @@ impl AppService {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
                     StartupEventContext::new(
                         startup_scope,
-                    repo_path,
-                    Some(task_id),
-                    role.as_str(),
-                    None,
-                    None,
-                    None,
-                ),
+                        repo_path,
+                        Some(task_id),
+                        role.as_str(),
+                        None,
+                        None,
+                        None,
+                    ),
                     RuntimeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));
