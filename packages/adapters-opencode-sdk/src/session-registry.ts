@@ -138,6 +138,9 @@ export const registerSession = (input: {
     messageRoleById: new Map(),
     messageMetadataById: new Map(),
     pendingDeltasByPartId: new Map(),
+    subagentCorrelationKeyByPartId: new Map(),
+    subagentCorrelationKeyBySessionId: new Map(),
+    pendingSubagentCorrelationKeysBySignature: new Map(),
   });
 
   input.emit(input.sessionId, {

@@ -50,6 +50,9 @@ export type SessionRecord = {
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<string, SessionMessageMetadata>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
+  subagentCorrelationKeyByPartId: Map<string, string>;
+  subagentCorrelationKeyBySessionId: Map<string, string>;
+  pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */

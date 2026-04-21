@@ -22,6 +22,9 @@ export type EventStreamState = {
   partsById: Map<string, Part>;
   messageRoleById: Map<string, string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
+  subagentCorrelationKeyByPartId: Map<string, string>;
+  subagentCorrelationKeyBySessionId: Map<string, string>;
+  pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;

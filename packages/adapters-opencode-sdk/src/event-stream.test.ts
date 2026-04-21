@@ -88,6 +88,9 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   messageRoleById: new Map(),
   messageMetadataById: new Map(),
   pendingDeltasByPartId: new Map(),
+  subagentCorrelationKeyByPartId: new Map(),
+  subagentCorrelationKeyBySessionId: new Map(),
+  pendingSubagentCorrelationKeysBySignature: new Map(),
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -244,6 +247,28 @@ const makeAssistantStepFinishPartUpdatedEvent = (input: {
         messageID: input.messageId,
         type: "step-finish",
         reason: input.reason ?? "stop",
+      },
+    },
+  }) as unknown as Event;
+
+const makeAssistantSubtaskPartUpdatedEvent = (input: {
+  messageId: string;
+  partId: string;
+  agent: string;
+  prompt: string;
+  description: string;
+}): Event =>
+  ({
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "subtask",
+        agent: input.agent,
+        prompt: input.prompt,
+        description: input.description,
       },
     },
   }) as unknown as Event;
@@ -1566,6 +1591,111 @@ describe("event-stream", () => {
       throw new Error("Expected assistant text part event");
     }
     expect(partEvents[0].part.text).toBe("Late role text");
+  });
+
+  test("keeps same-turn subagents with identical agent and prompt distinct until session ids arrive", async () => {
+    const emitted = await runEventStream([
+      assistantRoleEvent("assistant-subagent-collision"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-collision",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-collision",
+        partId: "subtask-b",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting B",
+      }),
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-collision",
+            callID: "call-a",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished A",
+                sessionId: "child-a",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-b",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-collision",
+            callID: "call-b",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished B",
+                sessionId: "child-b",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const assistantPartEvents = emitted.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part",
+    );
+    const subagentParts = assistantPartEvents
+      .map((event) => event.part)
+      .filter(
+        (
+          part,
+        ): part is Extract<
+          Extract<AgentEvent, { type: "assistant_part" }>["part"],
+          { kind: "subagent" }
+        > => part.kind === "subagent",
+      );
+
+    expect(subagentParts).toHaveLength(4);
+
+    const runningParts = subagentParts.filter((part) => part.status === "running");
+    const completedParts = subagentParts.filter((part) => part.status === "completed");
+
+    expect(runningParts).toHaveLength(2);
+    expect(completedParts).toHaveLength(2);
+
+    const runningKeys = runningParts.map((part) => part.correlationKey);
+    expect(new Set(runningKeys).size).toBe(2);
+    expect(runningKeys).toEqual([
+      "part:assistant-subagent-collision:subtask-a",
+      "part:assistant-subagent-collision:subtask-b",
+    ]);
+
+    expect(completedParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-subagent-collision:subtask-a",
+      "part:assistant-subagent-collision:subtask-b",
+    ]);
+    expect(completedParts.map((part) => part.sessionId)).toEqual(["child-a", "child-b"]);
+    expect(completedParts.map((part) => part.description)).toEqual(["Finished A", "Finished B"]);
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {

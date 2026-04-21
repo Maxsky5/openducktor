@@ -112,6 +112,9 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     partsById: session.partsById,
     messageRoleById: session.messageRoleById,
     pendingDeltasByPartId: session.pendingDeltasByPartId,
+    subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
+    subagentCorrelationKeyBySessionId: session.subagentCorrelationKeyBySessionId,
+    pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
   };
 
   if (handleMessageEvent(input.event, runtime)) {

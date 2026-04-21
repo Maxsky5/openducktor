@@ -40,12 +40,122 @@ import {
   markSessionActive,
 } from "./shared";
 
+type MappedAssistantPart = NonNullable<ReturnType<typeof mapPartToAgentStreamPart>>;
+type MappedSubagentPart = Extract<MappedAssistantPart, { kind: "subagent" }>;
+
 const isAssistantMessage = (
   runtime: EventStreamRuntime,
   messageId: string,
   roleHint?: string,
 ): boolean => {
   return (roleHint ?? runtime.messageRoleById.get(messageId)) === "assistant";
+};
+
+const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
+  const agent = part.agent?.trim() ?? "";
+  const prompt = part.prompt?.trim() ?? "";
+  if (!agent && !prompt) {
+    return undefined;
+  }
+
+  return [part.messageId, agent, prompt].join(":");
+};
+
+const buildPartScopedSubagentCorrelationKey = (
+  part: MappedSubagentPart,
+  rawPartId: string,
+): string => {
+  return ["part", part.messageId, rawPartId].join(":");
+};
+
+const enqueuePendingSubagentCorrelationKey = (
+  runtime: EventStreamRuntime,
+  signature: string,
+  correlationKey: string,
+): void => {
+  const pending = runtime.pendingSubagentCorrelationKeysBySignature.get(signature) ?? [];
+  if (pending.includes(correlationKey)) {
+    return;
+  }
+
+  runtime.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending, correlationKey]);
+};
+
+const dequeuePendingSubagentCorrelationKey = (
+  runtime: EventStreamRuntime,
+  signature: string,
+): string | undefined => {
+  const pending = runtime.pendingSubagentCorrelationKeysBySignature.get(signature);
+  if (!pending || pending.length === 0) {
+    return undefined;
+  }
+
+  const [next, ...rest] = pending;
+  if (rest.length === 0) {
+    runtime.pendingSubagentCorrelationKeysBySignature.delete(signature);
+  } else {
+    runtime.pendingSubagentCorrelationKeysBySignature.set(signature, rest);
+  }
+
+  return next;
+};
+
+const normalizeLiveSubagentCorrelation = (
+  runtime: EventStreamRuntime,
+  rawPart: Part,
+  part: MappedSubagentPart,
+): MappedSubagentPart => {
+  const existingCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(rawPart.id);
+  if (existingCorrelationKey) {
+    if (part.sessionId) {
+      runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, existingCorrelationKey);
+    }
+    return {
+      ...part,
+      correlationKey: existingCorrelationKey,
+    };
+  }
+
+  const signature = buildSubagentSignature(part);
+
+  if (rawPart.type === "subtask") {
+    const correlationKey = buildPartScopedSubagentCorrelationKey(part, rawPart.id);
+    runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
+    if (signature) {
+      enqueuePendingSubagentCorrelationKey(runtime, signature, correlationKey);
+    }
+    if (part.sessionId) {
+      runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+    }
+
+    return {
+      ...part,
+      correlationKey,
+    };
+  }
+
+  const sessionCorrelationKey = part.sessionId
+    ? runtime.subagentCorrelationKeyBySessionId.get(part.sessionId)
+    : undefined;
+  const queuedCorrelationKey = signature
+    ? dequeuePendingSubagentCorrelationKey(runtime, signature)
+    : undefined;
+  const correlationKey =
+    sessionCorrelationKey ??
+    queuedCorrelationKey ??
+    (part.sessionId
+      ? ["session", part.messageId, part.sessionId].join(":")
+      : buildPartScopedSubagentCorrelationKey(part, rawPart.id));
+
+  runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
+  if (part.sessionId) {
+    runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+  }
+
+  return {
+    ...part,
+    correlationKey,
+  };
 };
 
 const shouldSuppressAssistantStreamingAfterIdle = (
@@ -72,11 +182,14 @@ const emitAssistantPart = (
     return false;
   }
 
-  if (!isAssistantMessage(runtime, mapped.messageId, roleHint)) {
+  const nextMapped =
+    mapped.kind === "subagent" ? normalizeLiveSubagentCorrelation(runtime, part, mapped) : mapped;
+
+  if (!isAssistantMessage(runtime, nextMapped.messageId, roleHint)) {
     return false;
   }
 
-  if (shouldSuppressAssistantStreamingAfterIdle(runtime, mapped.messageId, roleHint)) {
+  if (shouldSuppressAssistantStreamingAfterIdle(runtime, nextMapped.messageId, roleHint)) {
     return false;
   }
 
@@ -88,7 +201,7 @@ const emitAssistantPart = (
     type: "assistant_part",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
-    part: mapped,
+    part: nextMapped,
   });
   return true;
 };
@@ -930,6 +1043,7 @@ const handleMessagePartRemovedEvent = (event: Event, runtime: EventStreamRuntime
 
   runtime.partsById.delete(removedPartId);
   runtime.pendingDeltasByPartId.delete(removedPartId);
+  runtime.subagentCorrelationKeyByPartId.delete(removedPartId);
   return true;
 };
 
