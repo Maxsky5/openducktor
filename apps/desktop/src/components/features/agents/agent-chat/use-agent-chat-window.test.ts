@@ -7,6 +7,7 @@ import {
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
 } from "./agent-chat-thread-windowing";
+import { resolveAgentChatEffectiveTurnStart } from "./use-agent-chat-history-window";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 (
@@ -79,11 +80,11 @@ const triggerResizeObservers = (): void => {
   }
 };
 
-const createTurnRows = (turnCount: number): AgentChatWindowRow[] =>
+const createTurnRows = (turnCount: number, sessionId = "session-1"): AgentChatWindowRow[] =>
   Array.from({ length: turnCount }, (_, turnIndex) => [
     {
       kind: "message" as const,
-      key: `session-1:user-${turnIndex}`,
+      key: `${sessionId}:user-${turnIndex}`,
       message: {
         id: `user-${turnIndex}`,
         role: "user" as const,
@@ -93,7 +94,7 @@ const createTurnRows = (turnCount: number): AgentChatWindowRow[] =>
     },
     {
       kind: "message" as const,
-      key: `session-1:assistant-${turnIndex}`,
+      key: `${sessionId}:assistant-${turnIndex}`,
       message: {
         id: `assistant-${turnIndex}`,
         role: "assistant" as const,
@@ -502,6 +503,52 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(
       buildAgentChatWindowTurns(rows)[2]?.start ?? 0,
+    );
+
+    await harness.unmount();
+  });
+
+  test("resolves the latest turn window immediately when the active session changes", () => {
+    expect(
+      resolveAgentChatEffectiveTurnStart({
+        activeSessionId: "session-2",
+        previousSessionId: "session-1",
+        turnStart: 0,
+        latestTurnStart: 12,
+        rowsLength: 40,
+        pendingLatestReset: false,
+      }),
+    ).toBe(12);
+  });
+
+  test("switching sessions after revealing all history resets the next session to its latest turns", async () => {
+    const firstSessionRows = createTurnRows(12, "session-1");
+    const secondSessionRows = createTurnRows(12, "session-2");
+    const harness = await mountHarness(
+      {
+        rows: firstSessionRows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true },
+    );
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+
+    await harness.update({
+      rows: secondSessionRows,
+      activeSessionId: "session-2",
+      isSessionViewLoading: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(
+      buildAgentChatWindowTurns(secondSessionRows)[2]?.start ?? 0,
     );
 
     await harness.unmount();

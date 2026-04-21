@@ -73,7 +73,7 @@ describe("createHydrationRuntimeResolver", () => {
     });
   });
 
-  test("fails build session hydration when only a shared workspace runtime exists", async () => {
+  test("hydrates build sessions through a shared workspace runtime", async () => {
     let ensureCalls = 0;
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
@@ -86,13 +86,73 @@ describe("createHydrationRuntimeResolver", () => {
       },
     });
 
-    const result = await resolveHydrationRuntime(createRecord("build", "/tmp/repo/worktree"));
+    const result = await resolveHydrationRuntime(
+      createRecord("build", "/tmp/openducktor-worktrees/task-1"),
+    );
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-1");
+    expect(result.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+    });
+    expect(result.runtimeConnection).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+      workingDirectory: "/tmp/openducktor-worktrees/task-1",
+    });
+    expect(ensureCalls).toBe(0);
+  });
+
+  test("fails fast for repo-root build sessions when no live runtime exists", async () => {
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return createRuntime("/tmp/repo");
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", "/tmp/repo"));
+
     expect(result).toEqual({
       ok: false,
       runtimeKind: "opencode",
-      reason: "No live runtime found for working directory /tmp/repo/worktree.",
+      reason: "No live runtime found for working directory /tmp/repo.",
     });
     expect(ensureCalls).toBe(0);
+  });
+
+  test("ensures a shared workspace runtime for build sessions on non-root directories", async () => {
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return createRuntime("/tmp/repo");
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", "/tmp/other"));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+    });
+    expect(result.runtimeConnection).toEqual({
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4555",
+      workingDirectory: "/tmp/other",
+    });
+    expect(ensureCalls).toBe(1);
   });
 
   test("falls back to preloaded runtime connection when no run or runtime exists", async () => {

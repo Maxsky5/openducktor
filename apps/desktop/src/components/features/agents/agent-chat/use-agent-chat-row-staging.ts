@@ -1,33 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AgentChatWindowTurn } from "./agent-chat-thread-windowing";
+import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 
-const STAGE_INIT = 1;
-const STAGE_BATCH = 3;
+const ROW_STAGE_INIT = 24;
+const ROW_STAGE_BATCH = 32;
 
-type UseAgentChatTurnStagingArgs = {
+type UseAgentChatRowStagingArgs = {
   activeSessionId: string | null;
-  windowStart: number;
+  rows: AgentChatWindowRow[];
   turns: AgentChatWindowTurn[];
   disabled?: boolean;
 };
 
-export function useAgentChatTurnStaging({
+type UseAgentChatRowStagingResult = {
+  rows: AgentChatWindowRow[];
+  turns: AgentChatWindowTurn[];
+};
+
+export function useAgentChatRowStaging({
   activeSessionId,
-  windowStart,
+  rows,
   turns,
   disabled = false,
-}: UseAgentChatTurnStagingArgs): AgentChatWindowTurn[] {
-  const [count, setCount] = useState(turns.length);
-  const countRef = useRef(count);
+}: UseAgentChatRowStagingArgs): UseAgentChatRowStagingResult {
+  const [rowCount, setRowCount] = useState(rows.length);
+  const rowCountRef = useRef(rowCount);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
 
   useEffect(() => {
-    const updateCount = (nextCount: number): void => {
-      countRef.current = nextCount;
-      setCount((current) => (current === nextCount ? current : nextCount));
+    const updateRowCount = (nextRowCount: number): void => {
+      rowCountRef.current = nextRowCount;
+      setRowCount((current) => (current === nextRowCount ? current : nextRowCount));
     };
 
     if (frameRef.current !== null) {
@@ -49,26 +54,25 @@ export function useAgentChatTurnStaging({
     const shouldStage =
       !disabled &&
       activeSessionId !== null &&
-      windowStart > 0 &&
-      turns.length > STAGE_INIT &&
+      rows.length > ROW_STAGE_INIT &&
       !completedSessionIdsRef.current.has(activeSessionId);
 
     if (!shouldStage) {
       activeSessionRef.current = null;
-      updateCount(turns.length);
+      updateRowCount(rows.length);
       return;
     }
 
     const sessionId = activeSessionId;
     const isContinuingActiveSession = activeSessionRef.current === activeSessionId;
     activeSessionRef.current = sessionId;
-    let nextCount = Math.min(
-      turns.length,
-      isContinuingActiveSession ? countRef.current : STAGE_INIT,
+    let nextRowCount = Math.min(
+      rows.length,
+      isContinuingActiveSession ? rowCountRef.current : ROW_STAGE_INIT,
     );
-    updateCount(nextCount);
+    updateRowCount(nextRowCount);
 
-    if (nextCount >= turns.length) {
+    if (nextRowCount >= rows.length) {
       activeSessionRef.current = null;
       completedSessionIdsRef.current.add(sessionId);
       return;
@@ -80,10 +84,10 @@ export function useAgentChatTurnStaging({
         return;
       }
 
-      nextCount = Math.min(turns.length, nextCount + STAGE_BATCH);
-      updateCount(nextCount);
+      nextRowCount = Math.min(rows.length, nextRowCount + ROW_STAGE_BATCH);
+      updateRowCount(nextRowCount);
 
-      if (nextCount >= turns.length) {
+      if (nextRowCount >= rows.length) {
         frameRef.current = null;
         activeSessionRef.current = null;
         completedSessionIdsRef.current.add(sessionId);
@@ -100,13 +104,23 @@ export function useAgentChatTurnStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, turns.length, windowStart]);
+  }, [activeSessionId, disabled, rows.length]);
 
   return useMemo(() => {
-    if (count >= turns.length) {
-      return turns;
+    if (rowCount >= rows.length) {
+      return { rows, turns };
     }
 
-    return turns.slice(Math.max(0, turns.length - count));
-  }, [count, turns]);
+    const rowStart = Math.max(0, rows.length - rowCount);
+    return {
+      rows: rows.slice(rowStart),
+      turns: turns
+        .filter((turn) => turn.end >= rowStart)
+        .map((turn) => ({
+          key: turn.key,
+          start: Math.max(turn.start, rowStart) - rowStart,
+          end: turn.end - rowStart,
+        })),
+    };
+  }, [rowCount, rows, turns]);
 }

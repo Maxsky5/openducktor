@@ -15,7 +15,6 @@ const buildTurns = (count: number): AgentChatWindowTurn[] =>
     key: `turn-${index}`,
     start: index * 2,
     end: index * 2 + 1,
-    rows: [],
   }));
 
 const flush = async (): Promise<void> => {
@@ -131,7 +130,7 @@ describe("useAgentChatTurnStaging", () => {
     await harness.unmount();
   });
 
-  test("does not stage turns when switching to another session", async () => {
+  test("stages turns again when switching back to another session", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(
       ({ activeSessionId, windowStart, nextTurns }) =>
@@ -168,10 +167,64 @@ describe("useAgentChatTurnStaging", () => {
       nextTurns: builderTurns,
     });
 
-    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(
-      builderTurns.map((turn) => turn.key),
+    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(["turn-7"]);
+    expect(animationFrameCallbacks.size).toBeGreaterThan(0);
+
+    await harness.unmount();
+  });
+
+  test("resumes staging when turns grow for the active session", async () => {
+    const harness = createHookHarness(
+      ({ activeSessionId, windowStart, nextTurns }) =>
+        useAgentChatTurnStaging({
+          activeSessionId,
+          windowStart,
+          turns: nextTurns,
+          disabled: false,
+        }),
+      {
+        activeSessionId: "session-1",
+        windowStart: 10,
+        nextTurns: buildTurns(6),
+      },
     );
-    expect(animationFrameCallbacks.size).toBe(0);
+
+    await harness.mount();
+
+    await act(async () => {
+      const callback = animationFrameCallbacks.values().next().value;
+      animationFrameCallbacks.clear();
+      callback?.(16);
+      await flush();
+    });
+
+    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual([
+      "turn-2",
+      "turn-3",
+      "turn-4",
+      "turn-5",
+    ]);
+
+    await harness.update({
+      activeSessionId: "session-1",
+      windowStart: 12,
+      nextTurns: buildTurns(8),
+    });
+
+    await act(async () => {
+      while (animationFrameCallbacks.size > 0) {
+        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+        animationFrameCallbacks.clear();
+        for (const callback of queuedCallbacks) {
+          callback(16);
+        }
+        await flush();
+      }
+    });
+
+    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(
+      buildTurns(8).map((turn) => turn.key),
+    );
 
     await harness.unmount();
   });
