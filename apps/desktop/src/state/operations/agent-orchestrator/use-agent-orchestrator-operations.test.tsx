@@ -2072,7 +2072,7 @@ describe("use-agent-orchestrator-operations", () => {
 
       expect(
         harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
-      ).toBe("idle");
+      ).toBe("waiting_for_runtime");
 
       host.runtimeList = async () => [
         {

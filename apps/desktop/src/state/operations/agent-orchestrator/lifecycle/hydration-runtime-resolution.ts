@@ -8,7 +8,10 @@ import type { AgentRuntimeConnection } from "@openducktor/core";
 import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
-import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
+import {
+  canEnsureWorkspaceRuntimeForHydration,
+  canUseWorkspaceRuntimeForHydration,
+} from "./hydration-runtime-policy";
 import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
@@ -98,7 +101,10 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
-    if (!canUseWorkspaceRuntimeForHydration(record, repoPath)) {
+    if (
+      !canUseWorkspaceRuntimeForHydration(record, repoPath) ||
+      !canEnsureWorkspaceRuntimeForHydration(record)
+    ) {
       return {
         ok: false,
         runtimeKind,

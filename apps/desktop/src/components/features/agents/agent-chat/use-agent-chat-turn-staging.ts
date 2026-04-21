@@ -18,12 +18,18 @@ export function useAgentChatTurnStaging({
   disabled = false,
 }: UseAgentChatTurnStagingArgs): AgentChatWindowTurn[] {
   const [count, setCount] = useState(turns.length);
+  const countRef = useRef(count);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
 
   useEffect(() => {
+    const updateCount = (nextCount: number): void => {
+      countRef.current = nextCount;
+      setCount((current) => (current === nextCount ? current : nextCount));
+    };
+
     if (frameRef.current !== null) {
       globalThis.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
@@ -49,18 +55,24 @@ export function useAgentChatTurnStaging({
 
     if (!shouldStage) {
       activeSessionRef.current = null;
-      setCount((current) => (current === turns.length ? current : turns.length));
-      return;
-    }
-
-    if (activeSessionRef.current === activeSessionId) {
+      updateCount(turns.length);
       return;
     }
 
     const sessionId = activeSessionId;
+    const isContinuingActiveSession = activeSessionRef.current === activeSessionId;
     activeSessionRef.current = sessionId;
-    let nextCount = Math.min(turns.length, STAGE_INIT);
-    setCount((current) => (current === nextCount ? current : nextCount));
+    let nextCount = Math.min(
+      turns.length,
+      isContinuingActiveSession ? countRef.current : STAGE_INIT,
+    );
+    updateCount(nextCount);
+
+    if (nextCount >= turns.length) {
+      activeSessionRef.current = null;
+      completedSessionIdsRef.current.add(sessionId);
+      return;
+    }
 
     const step = () => {
       if (activeSessionRef.current !== sessionId) {
@@ -69,7 +81,7 @@ export function useAgentChatTurnStaging({
       }
 
       nextCount = Math.min(turns.length, nextCount + STAGE_BATCH);
-      setCount((current) => (current === nextCount ? current : nextCount));
+      updateCount(nextCount);
 
       if (nextCount >= turns.length) {
         frameRef.current = null;

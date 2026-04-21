@@ -322,4 +322,133 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
     expect(rows[0]?.key).toBe("session-1:assistant-live");
   });
+
+  test("resolveAgentChatWindowRowsState clears cached streaming state when only session status changes", () => {
+    const sharedMessages = [
+      buildMessage("assistant", "Working", {
+        id: "assistant-live",
+        meta: {
+          kind: "assistant",
+          agentRole: "build",
+          isFinal: false,
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ];
+    const runningSession = buildSession({
+      sessionId: "session-status",
+      role: "build",
+      status: "running",
+      messages: sharedMessages,
+    });
+    const idleSession = buildSession({
+      ...runningSession,
+      status: "idle",
+      messages: [...sharedMessages],
+    });
+    const cache = new Map();
+
+    const runningState = resolveAgentChatWindowRowsState({
+      session: runningSession,
+      showThinkingMessages: true,
+      cache,
+    });
+    const idleState = resolveAgentChatWindowRowsState({
+      session: idleSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(runningState.activeStreamingAssistantMessageId).toBe("assistant-live");
+    expect(idleState.activeStreamingAssistantMessageId).toBeNull();
+    expect(idleState.rows).toBe(runningState.rows);
+  });
+
+  test("resolveAgentChatWindowRowsState does not retain suffix metadata during incremental rebuilds", () => {
+    const baseMessages = [
+      buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+      buildMessage("user", "Question 1", { id: "user-1" }),
+      buildMessage("assistant", "Answer 1", { id: "assistant-1" }),
+      buildMessage("user", "Question 2", {
+        id: "user-2",
+        meta: {
+          kind: "user",
+          state: "read",
+          parts: [
+            {
+              kind: "attachment",
+              attachment: {
+                id: "attachment-1",
+                path: "/tmp/spec.md",
+                name: "spec.md",
+                kind: "pdf",
+              },
+            },
+          ],
+        },
+      }),
+      buildMessage("assistant", "Working", {
+        id: "assistant-live",
+        meta: {
+          kind: "assistant",
+          agentRole: "build",
+          isFinal: false,
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ];
+    const [assistantPrelude, firstUser, firstAnswer] = baseMessages;
+    if (!assistantPrelude || !firstUser || !firstAnswer) {
+      throw new Error("Expected prefix messages to exist");
+    }
+    const initialSession = buildSession({
+      sessionId: "session-incremental",
+      role: "build",
+      status: "running",
+      messages: baseMessages,
+    });
+    const updatedSession = buildSession({
+      ...initialSession,
+      status: "idle",
+      messages: [
+        assistantPrelude,
+        firstUser,
+        firstAnswer,
+        buildMessage("assistant", "Answer 2", {
+          id: "user-2",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            profileId: "Hephaestus (Deep Agent)",
+          },
+        }),
+        buildMessage("assistant", "Done", {
+          id: "assistant-live",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            profileId: "Hephaestus (Deep Agent)",
+          },
+        }),
+      ],
+    });
+    const cache = new Map();
+
+    resolveAgentChatWindowRowsState({
+      session: initialSession,
+      showThinkingMessages: true,
+      cache,
+    });
+    const nextState = resolveAgentChatWindowRowsState({
+      session: updatedSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(nextState.hasAttachmentMessages).toBe(false);
+    expect(nextState.lastUserMessageId).toBe("user-1");
+    expect(nextState.activeStreamingAssistantMessageId).toBeNull();
+  });
 });

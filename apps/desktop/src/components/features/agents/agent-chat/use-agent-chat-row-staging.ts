@@ -23,12 +23,18 @@ export function useAgentChatRowStaging({
   disabled = false,
 }: UseAgentChatRowStagingArgs): UseAgentChatRowStagingResult {
   const [rowCount, setRowCount] = useState(rows.length);
+  const rowCountRef = useRef(rowCount);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
 
   useEffect(() => {
+    const updateRowCount = (nextRowCount: number): void => {
+      rowCountRef.current = nextRowCount;
+      setRowCount((current) => (current === nextRowCount ? current : nextRowCount));
+    };
+
     if (frameRef.current !== null) {
       globalThis.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
@@ -53,18 +59,24 @@ export function useAgentChatRowStaging({
 
     if (!shouldStage) {
       activeSessionRef.current = null;
-      setRowCount((current) => (current === rows.length ? current : rows.length));
-      return;
-    }
-
-    if (activeSessionRef.current === activeSessionId) {
+      updateRowCount(rows.length);
       return;
     }
 
     const sessionId = activeSessionId;
+    const isContinuingActiveSession = activeSessionRef.current === activeSessionId;
     activeSessionRef.current = sessionId;
-    let nextRowCount = Math.min(rows.length, ROW_STAGE_INIT);
-    setRowCount((current) => (current === nextRowCount ? current : nextRowCount));
+    let nextRowCount = Math.min(
+      rows.length,
+      isContinuingActiveSession ? rowCountRef.current : ROW_STAGE_INIT,
+    );
+    updateRowCount(nextRowCount);
+
+    if (nextRowCount >= rows.length) {
+      activeSessionRef.current = null;
+      completedSessionIdsRef.current.add(sessionId);
+      return;
+    }
 
     const step = () => {
       if (activeSessionRef.current !== sessionId) {
@@ -73,7 +85,7 @@ export function useAgentChatRowStaging({
       }
 
       nextRowCount = Math.min(rows.length, nextRowCount + ROW_STAGE_BATCH);
-      setRowCount((current) => (current === nextRowCount ? current : nextRowCount));
+      updateRowCount(nextRowCount);
 
       if (nextRowCount >= rows.length) {
         frameRef.current = null;

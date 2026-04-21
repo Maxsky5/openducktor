@@ -126,4 +126,54 @@ describe("useAgentChatRowStaging", () => {
 
     await harness.unmount();
   });
+
+  test("resumes staging when rows grow for the active session", async () => {
+    const harness = createHookHarness(
+      ({ activeSessionId, nextRows, nextTurns }) =>
+        useAgentChatRowStaging({
+          activeSessionId,
+          rows: nextRows,
+          turns: nextTurns,
+          disabled: false,
+        }),
+      {
+        activeSessionId: "session-1",
+        nextRows: buildRows(80),
+        nextTurns: [{ key: "turn-0", start: 0, end: 79 }],
+      },
+    );
+
+    await harness.mount();
+
+    await act(async () => {
+      const callback = animationFrameCallbacks.values().next().value;
+      animationFrameCallbacks.clear();
+      callback?.(16);
+      await flush();
+    });
+
+    expect(harness.getLatest().rows).toHaveLength(56);
+
+    await harness.update({
+      activeSessionId: "session-1",
+      nextRows: buildRows(96),
+      nextTurns: [{ key: "turn-0", start: 0, end: 95 }],
+    });
+
+    await act(async () => {
+      while (animationFrameCallbacks.size > 0) {
+        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+        animationFrameCallbacks.clear();
+        for (const callback of queuedCallbacks) {
+          callback(16);
+        }
+        await flush();
+      }
+    });
+
+    expect(harness.getLatest().rows).toHaveLength(96);
+    expect(harness.getLatest().turns).toEqual([{ key: "turn-0", start: 0, end: 95 }]);
+
+    await harness.unmount();
+  });
 });
