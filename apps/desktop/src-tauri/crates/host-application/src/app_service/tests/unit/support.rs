@@ -260,6 +260,8 @@ pub(super) fn assert_registered_workspace_runtime(
     );
     assert_eq!(runtime.task_id, None);
     assert_eq!(runtime.role, RuntimeRole::Workspace);
+    // The registered workspace runtime stays rooted at the repo while the
+    // build bootstrap points at the per-task worktree created for the session.
     assert_eq!(
         std::fs::canonicalize(&runtime.working_directory)?,
         expected_repo_path
