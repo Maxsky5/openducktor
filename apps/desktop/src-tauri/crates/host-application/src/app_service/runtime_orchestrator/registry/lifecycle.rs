@@ -107,9 +107,12 @@ impl AppService {
             Self::find_existing_runtime(runtimes, post_start_policy.existing_lookup)
         {
             if let Err(cleanup_error) = Self::cleanup_started_runtime(child, cleanup_target) {
-                return Err(anyhow!(
-                    "Found existing runtime {} while finalizing {startup_scope} startup\nAlso failed to remove QA worktree: {cleanup_error}",
-                    existing.runtime_id
+                return Err(Self::append_cleanup_error(
+                    anyhow!(
+                        "Found existing runtime {} while finalizing {startup_scope} startup",
+                        existing.runtime_id
+                    ),
+                    cleanup_error,
                 ));
             }
             return Ok(Some(existing));

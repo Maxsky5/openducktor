@@ -362,8 +362,9 @@ impl AppRuntime for OpenCodeRuntime {
                 if let Err(cleanup_error) = service
                     .cleanup_failed_host_managed_start(Some(&mut child), input.cleanup_target.as_ref())
                 {
-                    return Err(anyhow!(
-                        "{tracking_error}\nAlso failed to remove QA worktree: {cleanup_error}"
+                    return Err(AppService::append_runtime_cleanup_error(
+                        tracking_error,
+                        cleanup_error,
                     ));
                 }
                 return Err(tracking_error);
@@ -438,19 +439,18 @@ impl AppRuntime for OpenCodeRuntime {
                     error.reason(),
                 ));
                 let startup_error = anyhow!(error).context(input.startup_error_context.clone());
-                service.cleanup_failed_host_managed_start(Some(&mut child), input.cleanup_target.as_ref())?;
+                if let Err(cleanup_error) = service.cleanup_failed_host_managed_start(
+                    Some(&mut child),
+                    input.cleanup_target.as_ref(),
+                ) {
+                    return Err(AppService::append_runtime_cleanup_error(
+                        startup_error,
+                        cleanup_error,
+                    ));
+                }
                 Err(startup_error)
             }
         }
-    }
-
-    #[cfg(test)]
-    fn track_pending_process(
-        &self,
-        service: &AppService,
-        child_id: u32,
-    ) -> Result<RuntimeProcessGuard> {
-        self.track_pending_process(service, child_id)
     }
 
     fn runtime_health(&self) -> RuntimeHealth {

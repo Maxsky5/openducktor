@@ -196,8 +196,7 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let pending_pid = pending_child.id();
     let _pending_process_guard = service
         .runtime_registry
-        .runtime(&AgentRuntimeKind::opencode())?
-        .track_pending_process(&service, pending_pid)?;
+        .track_pending_opencode_process_for_test(&service, pending_pid)?;
 
     service.shutdown()?;
 
@@ -258,8 +257,7 @@ fn shutdown_keeps_other_service_pending_opencode_processes_running() -> Result<(
     let service_two_pid = service_two_child.id();
     let service_two_guard = service_two
         .runtime_registry
-        .runtime(&AgentRuntimeKind::opencode())?
-        .track_pending_process(&service_two, service_two_pid)?;
+        .track_pending_opencode_process_for_test(&service_two, service_two_pid)?;
 
     service_one.shutdown()?;
 

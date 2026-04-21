@@ -46,16 +46,6 @@ pub(crate) trait AppRuntime: Send + Sync {
         Err(anyhow!("Runtime does not support host-managed provisioning"))
     }
 
-    #[cfg(test)]
-    #[expect(dead_code, reason = "used only by shutdown tests to seed pending OpenCode process tracking")]
-    fn track_pending_process(
-        &self,
-        _service: &AppService,
-        _child_id: u32,
-    ) -> Result<RuntimeProcessGuard> {
-        Err(anyhow!("Runtime does not support pending-process tracking"))
-    }
-
     fn runtime_health(&self) -> RuntimeHealth;
 
     fn reconcile_on_startup(&self, _service: &AppService) -> Result<()> {
@@ -166,6 +156,8 @@ pub(crate) struct HostManagedRuntimeStart {
 pub(crate) struct AppRuntimeRegistry {
     definitions: RuntimeRegistry,
     runtimes_by_kind: Arc<BTreeMap<String, Arc<dyn AppRuntime>>>,
+    #[cfg(test)]
+    opencode_runtime: Option<Arc<OpenCodeRuntime>>,
 }
 
 impl AppRuntimeRegistry {
@@ -187,15 +179,32 @@ impl AppRuntimeRegistry {
         Ok(Self {
             definitions,
             runtimes_by_kind: Arc::new(runtimes_by_kind),
+            #[cfg(test)]
+            opencode_runtime: None,
         })
     }
 
     pub(crate) fn builtin_for_service() -> Self {
-        AppRuntimeRegistry::new(
-            vec![Arc::new(OpenCodeRuntime::default())],
-            AgentRuntimeKind::opencode(),
-        )
-        .expect("builtin app runtime registry should be valid")
+        #[cfg(test)]
+        {
+            let opencode_runtime = Arc::new(OpenCodeRuntime::default());
+            let mut registry = AppRuntimeRegistry::new(
+                vec![opencode_runtime.clone()],
+                AgentRuntimeKind::opencode(),
+            )
+            .expect("builtin app runtime registry should be valid");
+            registry.opencode_runtime = Some(opencode_runtime);
+            registry
+        }
+
+        #[cfg(not(test))]
+        {
+            AppRuntimeRegistry::new(
+                vec![Arc::new(OpenCodeRuntime::default())],
+                AgentRuntimeKind::opencode(),
+            )
+            .expect("builtin app runtime registry should be valid")
+        }
     }
 
     pub(crate) fn definitions(&self) -> Vec<RuntimeDefinition> {
@@ -223,6 +232,22 @@ impl AppRuntimeRegistry {
 
     pub(crate) fn runtime_definitions(&self) -> &RuntimeRegistry {
         &self.definitions
+    }
+
+    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "used only by shutdown integration tests to seed pending OpenCode process tracking"
+    )]
+    pub(crate) fn track_pending_opencode_process_for_test(
+        &self,
+        service: &AppService,
+        child_id: u32,
+    ) -> Result<RuntimeProcessGuard> {
+        self.opencode_runtime
+            .as_ref()
+            .ok_or_else(|| anyhow!("Builtin OpenCode runtime is not available in this registry"))?
+            .track_pending_process(service, child_id)
     }
 }
 
