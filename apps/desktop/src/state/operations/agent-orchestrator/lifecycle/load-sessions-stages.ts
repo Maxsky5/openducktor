@@ -202,6 +202,15 @@ export const mergeHydratedMessages = (
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
   const currentOwner = { sessionId, messages: currentMessages };
+  const isFinalAssistantMessage = (
+    message: import("@/types/agent-orchestrator").AgentChatMessage,
+  ): boolean => {
+    return (
+      message.role === "assistant" &&
+      message.meta?.kind === "assistant" &&
+      message.meta.isFinal === true
+    );
+  };
   const mergeSameMessageId = (
     hydratedMessage: import("@/types/agent-orchestrator").AgentChatMessage,
     currentMessage: import("@/types/agent-orchestrator").AgentChatMessage | undefined,
@@ -220,6 +229,18 @@ export const mergeHydratedMessages = (
       currentMessage.meta.state === "queued";
 
     if (currentIsQueuedUser && !hydratedIsQueuedUser) {
+      const mergedMeta =
+        currentMessage.meta && hydratedMessage.meta
+          ? { ...currentMessage.meta, ...hydratedMessage.meta }
+          : (hydratedMessage.meta ?? currentMessage.meta);
+      return {
+        ...currentMessage,
+        ...hydratedMessage,
+        ...(mergedMeta ? { meta: mergedMeta } : {}),
+      };
+    }
+
+    if (isFinalAssistantMessage(hydratedMessage) && !isFinalAssistantMessage(currentMessage)) {
       const mergedMeta =
         currentMessage.meta && hydratedMessage.meta
           ? { ...currentMessage.meta, ...hydratedMessage.meta }

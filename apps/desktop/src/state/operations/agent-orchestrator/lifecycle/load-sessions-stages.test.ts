@@ -14,6 +14,7 @@ import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
   hydrateSessionRecordsStage,
+  mergeHydratedMessages,
   preparePersistedSessionMergeStage,
   type SessionLoadIntent,
 } from "./load-sessions-stages";
@@ -149,6 +150,51 @@ const createRuntime = (
 });
 
 describe("load-sessions-stages", () => {
+  test("prefers hydrated final assistant messages over stale local streamed rows with the same id", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Final complete response",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        },
+      ],
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Partial streamed response",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)?.content).toBe(
+      "Final complete response",
+    );
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)?.meta).toMatchObject({
+      kind: "assistant",
+      isFinal: true,
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+  });
+
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
     const existingSession = createSession({
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },

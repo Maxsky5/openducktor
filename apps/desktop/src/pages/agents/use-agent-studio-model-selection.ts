@@ -17,6 +17,7 @@ import {
 } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
 import {
@@ -51,6 +52,7 @@ import {
 type UseAgentStudioModelSelectionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   activeSession: AgentSessionState | null;
+  activeSessionSummary: AgentSessionSummary | null;
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
@@ -98,6 +100,44 @@ type AgentStudioModelSelectionState = {
   handleSelectVariant: (variant: string) => void;
 };
 
+type ActiveSessionSelectionState = {
+  sessionId: string | null;
+  status: AgentSessionState["status"] | null;
+  selectedModel: AgentModelSelection | null;
+  modelCatalog: AgentSessionState["modelCatalog"] | null;
+  runtimeKind: AgentSessionState["runtimeKind"] | null;
+  runtimeRoute: AgentSessionState["runtimeRoute"] | null;
+  workingDirectory: string;
+  isLoadingModelCatalog: boolean;
+  liveContextUsage: AgentSessionState["contextUsage"] | null;
+  messages: AgentSessionState["messages"] | null;
+  hasSelection: boolean;
+};
+
+export const resolveActiveSessionSelectionState = (
+  activeSession: AgentSessionState | null,
+  activeSessionSummary: AgentSessionSummary | null,
+): ActiveSessionSelectionState => {
+  const sessionId = activeSession?.sessionId ?? activeSessionSummary?.sessionId ?? null;
+  const selectedModel = activeSession?.selectedModel ?? activeSessionSummary?.selectedModel ?? null;
+
+  return {
+    sessionId,
+    status: activeSession?.status ?? activeSessionSummary?.status ?? null,
+    selectedModel,
+    modelCatalog: activeSession?.modelCatalog ?? null,
+    runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
+    runtimeRoute: activeSession?.runtimeRoute ?? null,
+    workingDirectory: activeSession?.workingDirectory?.trim() ?? "",
+    isLoadingModelCatalog:
+      activeSession?.isLoadingModelCatalog === true ||
+      (activeSession == null && activeSessionSummary != null),
+    liveContextUsage: activeSession?.contextUsage ?? null,
+    messages: activeSession?.messages ?? null,
+    hasSelection: sessionId !== null,
+  };
+};
+
 const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   spec: false,
   planner: false,
@@ -108,6 +148,7 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
 export function useAgentStudioModelSelection({
   activeWorkspace,
   activeSession,
+  activeSessionSummary,
   role,
   repoSettings,
   updateAgentSessionModel,
@@ -148,17 +189,21 @@ export function useAgentStudioModelSelection({
   const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
     Record<AgentRole, boolean>
   >(emptyDraftSelectionTouchedByRole);
-  const activeSessionId = activeSession?.sessionId ?? null;
-  const activeSessionStatus = activeSession?.status ?? null;
-  const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
-  const activeSessionModelCatalog = activeSession?.modelCatalog ?? null;
-  const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
-  const activeSessionRuntimeRoute = activeSession?.runtimeRoute ?? null;
-  const activeSessionWorkingDirectory = activeSession?.workingDirectory?.trim() ?? "";
-  const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
-  const activeSessionLiveContextUsage = activeSession?.contextUsage ?? null;
-  const activeSessionMessages = activeSession?.messages ?? null;
-  const hasActiveSession = activeSessionId !== null;
+  const activeSessionSelection = useMemo(
+    () => resolveActiveSessionSelectionState(activeSession, activeSessionSummary),
+    [activeSession, activeSessionSummary],
+  );
+  const activeSessionId = activeSessionSelection.sessionId;
+  const activeSessionStatus = activeSessionSelection.status;
+  const activeSessionSelectedModel = activeSessionSelection.selectedModel;
+  const activeSessionModelCatalog = activeSessionSelection.modelCatalog;
+  const activeSessionRuntimeKind = activeSessionSelection.runtimeKind;
+  const activeSessionRuntimeRoute = activeSessionSelection.runtimeRoute;
+  const activeSessionWorkingDirectory = activeSessionSelection.workingDirectory;
+  const activeSessionIsLoadingModelCatalog = activeSessionSelection.isLoadingModelCatalog;
+  const activeSessionLiveContextUsage = activeSessionSelection.liveContextUsage ?? null;
+  const activeSessionMessages = activeSessionSelection.messages;
+  const hasActiveSession = activeSessionSelection.hasSelection;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
   }, [repoSettings?.agentDefaults, role]);
@@ -250,7 +295,7 @@ export function useAgentStudioModelSelection({
       composerRuntimeKind,
       loadCatalogForRepo,
     ),
-    enabled: workspaceRepoPath !== null && activeSession == null,
+    enabled: workspaceRepoPath !== null && activeSessionId === null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
@@ -287,7 +332,7 @@ export function useAgentStudioModelSelection({
       composerRuntimeKind,
       loadSlashCommandsForRepo,
     ),
-    enabled: supportsSlashCommands && workspaceRepoPath !== null && activeSession == null,
+    enabled: supportsSlashCommands && workspaceRepoPath !== null && activeSessionId === null,
   });
   const hasDraftSelectionForWorkspaceRepoPath =
     previousWorkspaceRepoPathRef.current === workspaceRepoPath;
@@ -360,7 +405,7 @@ export function useAgentStudioModelSelection({
 
   const draftSelection = hasDraftSelectionForWorkspaceRepoPath ? draftSelectionByRole[role] : null;
   const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
-    if (activeSession) {
+    if (hasActiveSession) {
       return roleDefaultSelection;
     }
     if (!composerCatalog) {
@@ -368,18 +413,18 @@ export function useAgentStudioModelSelection({
     }
     return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
   }, [
-    activeSession,
+    hasActiveSession,
     composerCatalog,
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     roleDefaultSelection,
   ]);
   const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
-  const slashCommandCatalog = activeSession
+  const slashCommandCatalog = hasActiveSession
     ? (activeSessionSlashCommandsQuery.data ?? null)
     : (repoSlashCommandsQuery.data ?? null);
   const slashCommands = slashCommandCatalog?.commands ?? [];
   const slashCommandsError = supportsSlashCommands
-    ? activeSession
+    ? hasActiveSession
       ? activeSessionSlashCommandsQuery.error instanceof Error
         ? activeSessionSlashCommandsQuery.error.message
         : null
@@ -388,7 +433,7 @@ export function useAgentStudioModelSelection({
         : null
     : null;
   const isSlashCommandsLoading = supportsSlashCommands
-    ? activeSession
+    ? hasActiveSession
       ? activeSessionSlashCommandsQuery.isLoading
       : repoSlashCommandsQuery.isLoading
     : false;

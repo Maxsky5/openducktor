@@ -466,12 +466,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   const { startSessionRequest } = orchestration;
-  const activeSessionSummary = selection.activeSession
-    ? toAgentSessionSummary(selection.activeSession)
-    : null;
-  const viewActiveSessionSummary = selection.viewActiveSession
-    ? toAgentSessionSummary(selection.viewActiveSession)
-    : null;
+  const activeSessionSummary =
+    selection.activeSessionSummary ??
+    (selection.activeSession ? toAgentSessionSummary(selection.activeSession) : null);
+  const viewActiveSessionSummary =
+    selection.viewActiveSessionSummary ??
+    (selection.viewActiveSession ? toAgentSessionSummary(selection.viewActiveSession) : null);
 
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
     activeWorkspace,

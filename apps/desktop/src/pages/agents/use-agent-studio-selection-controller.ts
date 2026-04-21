@@ -74,6 +74,7 @@ export type AgentStudioSelectionControllerResult = {
   taskId: string;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
+  activeSessionSummary: AgentSessionSummary | null;
   activeSession: AgentSessionState | null;
   activeSessionRuntimeDataError?: string | null;
   isLoadingTasks: boolean;
@@ -91,6 +92,7 @@ export type AgentStudioSelectionControllerResult = {
   viewTaskId: string;
   viewSelectedTask: TaskCard | null;
   viewSessionsForTask: AgentSessionSummary[];
+  viewActiveSessionSummary: AgentSessionSummary | null;
   viewActiveSession: AgentSessionState | null;
   viewSessionRuntimeDataError?: string | null;
   viewRole: AgentRole;
@@ -427,6 +429,7 @@ export function useAgentStudioSelectionController({
     taskId,
     selectedTask,
     sessionsForTask,
+    activeSessionSummary,
     activeSession: activeSessionRuntimeData.session,
     activeSessionRuntimeDataError: activeSessionRuntimeData.runtimeDataError,
     isLoadingTasks,
@@ -440,6 +443,7 @@ export function useAgentStudioSelectionController({
     viewTaskId,
     viewSelectedTask,
     viewSessionsForTask,
+    viewActiveSessionSummary: viewSelection.activeSession,
     viewActiveSession: viewSessionRuntimeData.session,
     viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
     viewRole,

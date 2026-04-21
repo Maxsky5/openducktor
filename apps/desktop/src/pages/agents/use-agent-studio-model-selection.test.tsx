@@ -13,7 +13,10 @@ import {
   createDeferred,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
+import {
+  resolveActiveSessionSelectionState,
+  useAgentStudioModelSelection,
+} from "./use-agent-studio-model-selection";
 
 enableReactActEnvironment();
 
@@ -202,6 +205,7 @@ const createAssistantMessage = (
 const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArgs => ({
   activeWorkspace: createActiveWorkspace("/repo"),
   activeSession: null,
+  activeSessionSummary: null,
   role: "spec",
   repoSettings: null,
   updateAgentSessionModel: () => {},
@@ -210,6 +214,75 @@ const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArg
 });
 
 describe("useAgentStudioModelSelection", () => {
+  test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
+    const hydratedSession = createActiveSession({
+      runtimeKind: "opencode",
+      runtimeRoute: { type: "local_http", endpoint: "http://localhost:3000" },
+      workingDirectory: "/repo/session-worktree",
+    });
+    const summary = {
+      sessionId: "session-1",
+      taskId: "task-1",
+      role: "spec" as const,
+      scenario: "spec_initial" as const,
+      status: "idle" as const,
+      startedAt: "2026-02-20T10:00:00.000Z",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode" as const,
+      selectedModel: {
+        runtimeKind: "opencode" as const,
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        profileId: "build-agent",
+      },
+      pendingPermissions: [],
+      pendingQuestions: [],
+    };
+
+    const state = resolveActiveSessionSelectionState(hydratedSession, summary);
+
+    expect(state.sessionId).toBe("session-1");
+    expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
+    expect(state.runtimeKind).toBe("opencode");
+    expect(state.runtimeRoute).toEqual({
+      type: "local_http",
+      endpoint: "http://localhost:3000",
+    });
+    expect(state.workingDirectory).toBe("/repo/session-worktree");
+    expect(state.isLoadingModelCatalog).toBe(false);
+    expect(state.hasSelection).toBe(true);
+  });
+
+  test("keeps summary selection available while the hydrated session is missing", () => {
+    const summary = {
+      sessionId: "session-1",
+      taskId: "task-1",
+      role: "spec" as const,
+      scenario: "spec_initial" as const,
+      status: "idle" as const,
+      startedAt: "2026-02-20T10:00:00.000Z",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode" as const,
+      selectedModel: {
+        runtimeKind: "opencode" as const,
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        profileId: "build-agent",
+      },
+      pendingPermissions: [],
+      pendingQuestions: [],
+    };
+
+    const state = resolveActiveSessionSelectionState(null, summary);
+
+    expect(state.sessionId).toBe("session-1");
+    expect(state.selectedModel).toEqual(summary.selectedModel);
+    expect(state.runtimeKind).toBe("opencode");
+    expect(state.runtimeRoute).toBeNull();
+    expect(state.isLoadingModelCatalog).toBe(true);
+    expect(state.hasSelection).toBe(true);
+  });
+
   test("uses repo role defaults when available", async () => {
     const harness = createHookHarness(
       createBaseProps({
@@ -317,6 +390,46 @@ describe("useAgentStudioModelSelection", () => {
     });
 
     await harness.unmount();
+  });
+
+  test("keeps the selected session model while the full session object is still hydrating", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: null,
+        activeSessionSummary: {
+          sessionId: "session-1",
+          taskId: "task-1",
+          role: "spec",
+          scenario: "spec_initial",
+          status: "idle",
+          startedAt: "2026-02-20T10:00:00.000Z",
+          workingDirectory: "/repo",
+          runtimeKind: "opencode",
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "anthropic",
+            modelId: "claude-sonnet",
+            profileId: "build-agent",
+          },
+          pendingPermissions: [],
+          pendingQuestions: [],
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        profileId: "build-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("does not query session slash commands until the active session exposes its runtime kind", async () => {
