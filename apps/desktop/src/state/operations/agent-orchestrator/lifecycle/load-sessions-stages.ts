@@ -10,6 +10,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type {
+  AgentChatMessage,
   AgentSessionHistoryHydrationPolicy,
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadMode,
@@ -26,6 +27,7 @@ import {
   findSessionMessageById,
   forEachSessionMessage,
   getSessionMessagesSlice,
+  isFinalAssistantChatMessage,
 } from "../support/messages";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
@@ -203,8 +205,8 @@ export const mergeHydratedMessages = (
 ): AgentSessionState["messages"] => {
   const currentOwner = { sessionId, messages: currentMessages };
   const mergeSameMessageId = (
-    hydratedMessage: import("@/types/agent-orchestrator").AgentChatMessage,
-    currentMessage: import("@/types/agent-orchestrator").AgentChatMessage | undefined,
+    hydratedMessage: AgentChatMessage,
+    currentMessage: AgentChatMessage | undefined,
   ) => {
     if (!currentMessage) {
       return hydratedMessage;
@@ -220,6 +222,22 @@ export const mergeHydratedMessages = (
       currentMessage.meta.state === "queued";
 
     if (currentIsQueuedUser && !hydratedIsQueuedUser) {
+      const mergedMeta =
+        currentMessage.meta && hydratedMessage.meta
+          ? { ...currentMessage.meta, ...hydratedMessage.meta }
+          : (hydratedMessage.meta ?? currentMessage.meta);
+      return {
+        ...currentMessage,
+        ...hydratedMessage,
+        ...(mergedMeta ? { meta: mergedMeta } : {}),
+      };
+    }
+
+    if (
+      isFinalAssistantChatMessage(hydratedMessage) &&
+      currentMessage.role === "assistant" &&
+      !isFinalAssistantChatMessage(currentMessage)
+    ) {
       const mergedMeta =
         currentMessage.meta && hydratedMessage.meta
           ? { ...currentMessage.meta, ...hydratedMessage.meta }

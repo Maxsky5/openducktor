@@ -237,6 +237,7 @@ export function useAgentStudioOrchestrationController({
     viewScenario,
     viewSelectedTask,
     viewSessionsForTask,
+    viewActiveSessionSummary,
     viewActiveSession,
     viewSessionRuntimeDataError = null,
     activeTaskTabId,
@@ -306,6 +307,7 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioModelSelection({
     activeWorkspace,
     activeSession: viewActiveSession,
+    activeSessionSummary: viewActiveSessionSummary,
     role: viewRole,
     repoSettings,
     updateAgentSessionModel,

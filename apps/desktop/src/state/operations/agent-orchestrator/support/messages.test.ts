@@ -7,6 +7,7 @@ import {
   findLastToolSessionMessage,
   findLastUserSessionMessage,
   getSessionMessageCount,
+  isFinalAssistantChatMessage,
   updateLastSessionMessage,
   updateLastToolSessionMessage,
   upsertSessionMessage,
@@ -119,5 +120,35 @@ describe("agent-orchestrator/support/messages", () => {
 
   test("matches Array.every semantics for empty collections", () => {
     expect(everySessionMessage(createSession([]), () => false)).toBe(true);
+  });
+
+  test("detects final assistant chat messages", () => {
+    expect(
+      isFinalAssistantChatMessage({
+        id: "assistant-final",
+        role: "assistant",
+        content: "done",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        meta: {
+          kind: "assistant",
+          agentRole: "build",
+          isFinal: true,
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      isFinalAssistantChatMessage({
+        id: "assistant-streaming",
+        role: "assistant",
+        content: "still going",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        meta: {
+          kind: "assistant",
+          agentRole: "build",
+          isFinal: false,
+        },
+      }),
+    ).toBe(false);
   });
 });
