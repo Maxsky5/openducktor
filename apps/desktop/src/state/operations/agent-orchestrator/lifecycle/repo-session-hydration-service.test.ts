@@ -849,6 +849,71 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile skips tasks atomically when a later persisted session has invalid runtime metadata", async () => {
+    const reconcileCalls: string[] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    host.runtimeList = async () => [createRuntimeInstance()];
+
+    const partiallyInvalidTask = taskWithSession("task-invalid", "external-partial");
+    const partiallyInvalidSession = partiallyInvalidTask.agentSessions?.[0];
+    if (!partiallyInvalidSession) {
+      throw new Error("Expected partially invalid task session fixture");
+    }
+    partiallyInvalidTask.agentSessions = [
+      partiallyInvalidSession,
+      {
+        ...partiallyInvalidSession,
+        sessionId: "session-task-invalid-broken",
+        externalSessionId: "external-broken",
+        runtimeKind: undefined as unknown as typeof partiallyInvalidSession.runtimeKind,
+      },
+    ];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => [
+          {
+            externalSessionId: "external-valid",
+            title: "Valid task",
+            workingDirectory: worktreePath,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+          {
+            externalSessionId: "external-partial",
+            title: "Partially invalid task",
+            workingDirectory: worktreePath,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+        ],
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskWithSession("task-valid", "external-valid"), partiallyInvalidTask],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(reconcileCalls).toEqual(["task-valid"]);
+    service.dispose();
+  });
+
   afterEach(() => {
     host.runtimeList = originalRuntimeList;
     host.runtimeEnsure = originalRuntimeEnsure;

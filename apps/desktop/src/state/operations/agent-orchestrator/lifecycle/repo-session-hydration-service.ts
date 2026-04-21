@@ -108,6 +108,11 @@ const collectReconcilePreloadMetadata = ({
   const skippedTaskErrors = new Map<string, unknown>();
 
   for (const { taskId, records } of persistedByTask) {
+    const taskRuntimeKinds = new Set<RuntimeKind>();
+    const taskLiveSessionKeys = new Set<string>();
+    const taskDesiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
+    const taskRuntimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
+
     try {
       for (const record of records) {
         const runtimeKind = readPersistedRuntimeKind(record);
@@ -116,16 +121,13 @@ const collectReconcilePreloadMetadata = ({
           continue;
         }
 
-        runtimeKinds.add(runtimeKind);
-        getOrCreateMapSet(
-          persistedTaskIdsByLiveSessionKey,
-          `${runtimeKind}::${externalSessionId}`,
-        ).add(taskId);
-        getOrCreateMapSet(desiredDirectoriesByRuntimeKind, runtimeKind).add(
+        taskRuntimeKinds.add(runtimeKind);
+        taskLiveSessionKeys.add(`${runtimeKind}::${externalSessionId}`);
+        getOrCreateMapSet(taskDesiredDirectoriesByRuntimeKind, runtimeKind).add(
           normalizeWorkingDirectory(record.workingDirectory),
         );
         if (canUseRepoRootWorkspaceRuntimeForHydration(record, repoPath)) {
-          runtimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
+          taskRuntimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
         }
       }
     } catch (error) {
@@ -138,6 +140,26 @@ const collectReconcilePreloadMetadata = ({
         error,
       );
       skippedTaskErrors.set(taskId, error);
+      continue;
+    }
+
+    for (const runtimeKind of taskRuntimeKinds) {
+      runtimeKinds.add(runtimeKind);
+    }
+
+    for (const liveSessionKey of taskLiveSessionKeys) {
+      getOrCreateMapSet(persistedTaskIdsByLiveSessionKey, liveSessionKey).add(taskId);
+    }
+
+    for (const [runtimeKind, workingDirectories] of taskDesiredDirectoriesByRuntimeKind) {
+      const desiredDirectories = getOrCreateMapSet(desiredDirectoriesByRuntimeKind, runtimeKind);
+      for (const workingDirectory of workingDirectories) {
+        desiredDirectories.add(workingDirectory);
+      }
+    }
+
+    for (const runtimeKind of taskRuntimeKindsAllowedToEnsureRepoRoot) {
+      runtimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
     }
   }
 
