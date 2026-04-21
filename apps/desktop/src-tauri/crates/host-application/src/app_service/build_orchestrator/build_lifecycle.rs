@@ -1,7 +1,6 @@
 use super::super::{
-    require_local_http_endpoint, AppService, RuntimeInstanceSummary,
-    RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload,
+    require_local_http_endpoint, AppService, RuntimeInstanceSummary, RuntimeStartupReadinessPolicy,
+    RuntimeStartupWaitReport, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
     STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
@@ -66,13 +65,13 @@ impl AppService {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
                     StartupEventContext::new(
                         "build_runtime",
-                    repo_path,
-                    Some(task_id),
-                    "build",
-                    None,
-                    Some(StartupEventCorrelation::new("task_id", task_id)),
-                    None,
-                ),
+                        repo_path,
+                        Some(task_id),
+                        "build",
+                        None,
+                        Some(StartupEventCorrelation::new("task_id", task_id)),
+                        None,
+                    ),
                     RuntimeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));

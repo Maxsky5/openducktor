@@ -203,7 +203,10 @@ pub struct RuntimeDefinition {
 }
 
 impl RuntimeDefinition {
-    pub fn new(descriptor: RuntimeDescriptor, default_startup_config: RuntimeStartupReadinessConfig) -> Self {
+    pub fn new(
+        descriptor: RuntimeDescriptor,
+        default_startup_config: RuntimeStartupReadinessConfig,
+    ) -> Self {
         Self {
             descriptor,
             default_startup_config,
@@ -519,8 +522,8 @@ mod tests {
             RuntimeProvisioningMode::HostManaged
         ));
         assert_eq!(
-            definition.route_for_port(43123),
-            super::local_http_route_for_port(43123)
+            definition.default_startup_config().timeout_ms,
+            RuntimeStartupReadinessConfig::default().timeout_ms
         );
     }
 

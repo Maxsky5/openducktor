@@ -297,15 +297,6 @@ impl AppRuntime for TestRuntimeAdapter {
         }
     }
 
-    #[cfg(test)]
-    fn track_pending_process(
-        &self,
-        _service: &AppService,
-        _child_id: u32,
-    ) -> Result<RuntimeProcessGuard> {
-        Err(anyhow::anyhow!("pending-process tracking should not be used in this test"))
-    }
-
     fn start_host_managed(
         &self,
         _service: &AppService,
@@ -313,7 +304,9 @@ impl AppRuntime for TestRuntimeAdapter {
         _runtime_id: &str,
         _startup_policy: crate::app_service::RuntimeStartupReadinessPolicy,
     ) -> Result<HostManagedRuntimeStart> {
-        Err(anyhow::anyhow!("host-managed start should not be used in this test"))
+        Err(anyhow::anyhow!(
+            "host-managed start should not be used in this test"
+        ))
     }
 
     fn runtime_health(&self) -> RuntimeHealth {

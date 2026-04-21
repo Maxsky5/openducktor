@@ -37,7 +37,6 @@ impl AppService {
             port,
         )
     }
-
 }
 
 #[cfg(test)]
