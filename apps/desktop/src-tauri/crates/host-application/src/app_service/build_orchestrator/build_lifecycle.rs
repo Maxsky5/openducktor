@@ -1,6 +1,7 @@
 use super::super::{
-    AppService, RuntimeInstanceSummary, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    require_local_http_endpoint, AppService, RuntimeInstanceSummary,
+    RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload,
     STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
@@ -92,6 +93,11 @@ impl AppService {
             runtime_summary,
             task_id,
         } = input;
+
+        if runtime_kind == AgentRuntimeKind::opencode() {
+            require_local_http_endpoint(&runtime_summary.runtime_route, "build session startup")?;
+        }
+
         self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
             task_id,
@@ -119,7 +125,7 @@ mod tests {
     };
     use host_domain::{GitTargetBranch, RuntimeRole, RuntimeRoute, TaskStatus};
 
-    fn make_stdio_runtime_summary() -> RuntimeInstanceSummary {
+    fn make_runtime_summary(runtime_route: RuntimeRoute) -> RuntimeInstanceSummary {
         RuntimeInstanceSummary {
             kind: AgentRuntimeKind::opencode(),
             runtime_id: "runtime-1".to_string(),
@@ -127,7 +133,7 @@ mod tests {
             task_id: None,
             role: RuntimeRole::Workspace,
             working_directory: "/tmp/repo".to_string(),
-            runtime_route: RuntimeRoute::Stdio,
+            runtime_route,
             started_at: "2026-04-13T00:00:00Z".to_string(),
             descriptor: builtin_opencode_runtime_descriptor(),
         }
@@ -148,7 +154,35 @@ mod tests {
     }
 
     #[test]
-    fn initiate_build_mode_accepts_stdio_routes_before_transitioning_task() {
+    fn initiate_build_mode_rejects_stdio_routes_before_transitioning_task() {
+        let (service, task_state, _git_state) =
+            build_service_with_state(vec![make_task("task-1", "task", TaskStatus::Open)]);
+
+        let error = service
+            .initiate_build_mode(BuildModeStartInput {
+                runtime_kind: AgentRuntimeKind::opencode(),
+                prerequisites: make_build_prerequisites(),
+                prepared_worktree: PreparedBuildWorktree {
+                    worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
+                },
+                runtime_summary: make_runtime_summary(RuntimeRoute::Stdio),
+                task_id: "task-1",
+            })
+            .expect_err("opencode build startup should reject stdio routes before task transition");
+
+        assert_eq!(
+            error.to_string(),
+            "Runtime build session startup requires a local_http runtime route"
+        );
+        let updated_patches = &task_state
+            .lock()
+            .expect("task store lock poisoned")
+            .updated_patches;
+        assert!(updated_patches.is_empty());
+    }
+
+    #[test]
+    fn initiate_build_mode_accepts_local_http_routes_without_explicit_ports() {
         let (service, task_state, _git_state) =
             build_service_with_state(vec![make_task("task-1", "task", TaskStatus::Open)]);
 
@@ -159,12 +193,17 @@ mod tests {
                 prepared_worktree: PreparedBuildWorktree {
                     worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
                 },
-                runtime_summary: make_stdio_runtime_summary(),
+                runtime_summary: make_runtime_summary(RuntimeRoute::LocalHttp {
+                    endpoint: "http://127.0.0.1".to_string(),
+                }),
                 task_id: "task-1",
             })
-            .expect("stdio build routes should remain bootstrap-compatible");
+            .expect("local_http routes should remain bootstrap-compatible without explicit ports");
 
-        assert!(matches!(bootstrap.runtime_route, RuntimeRoute::Stdio));
+        assert!(matches!(
+            bootstrap.runtime_route,
+            RuntimeRoute::LocalHttp { ref endpoint } if endpoint == "http://127.0.0.1"
+        ));
         assert_eq!(bootstrap.working_directory, "/tmp/worktrees/task-1");
         let updated_patches = &task_state
             .lock()
