@@ -194,6 +194,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
+        isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-1",
         persistedRecords,
@@ -229,6 +230,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
+        isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-subagent-1",
         fallbackSession: {
@@ -249,7 +251,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         taskId: "TASK-1",
         sessionId: "session-subagent-1",
         historyPreludeMode: "none",
-        allowLiveSessionResume: false,
         persistedRecords: [
           {
             sessionId: "session-subagent-1",
@@ -287,6 +288,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
+        isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-1",
         persistedRecords,
@@ -305,6 +307,68 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(consoleWarn).toHaveBeenCalled();
     } finally {
       console.warn = originalConsoleWarn;
+      await harness.unmount();
+    }
+  });
+
+  test("rehydrates the transcript when the dialog is reopened", async () => {
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      await harness.update({
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: false,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      });
+
+      await harness.update({
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      });
+
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 2);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenNthCalledWith(2, {
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+      });
+    } finally {
       await harness.unmount();
     }
   });

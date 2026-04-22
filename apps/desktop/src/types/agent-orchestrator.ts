@@ -152,6 +152,7 @@ export type AgentSessionRuntimeRecoveryState =
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
+  includeInActivity?: boolean;
   title?: string;
   taskId: string;
   repoPath: string;

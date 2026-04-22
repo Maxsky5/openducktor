@@ -30,6 +30,108 @@ export const requireSession = (
   return session;
 };
 
+const ensureRuntimeEventTransport = (input: {
+  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+  createClient: ClientFactory;
+  runtimeEndpoint: string;
+  sessions: Map<string, SessionRecord>;
+  now: () => string;
+  emit: (sessionId: string, event: AgentEvent) => void;
+  logEvent?: OpencodeEventLogger;
+}): RuntimeEventTransportRecord => {
+  const eventTransportKey = input.runtimeEndpoint;
+  const existingTransport = input.runtimeEventTransports.get(eventTransportKey);
+  if (existingTransport) {
+    return existingTransport;
+  }
+
+  const streamClient = input.createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+  });
+  assertGlobalEventSupport(streamClient);
+  const controller = new AbortController();
+  const streamRecord: RuntimeEventTransportRecord = {
+    key: eventTransportKey,
+    runtimeEndpoint: input.runtimeEndpoint,
+    controller,
+    streamDone: Promise.resolve(),
+    subscribers: new Map(),
+  };
+  streamRecord.streamDone = subscribeGlobalEvents({
+    client: streamClient,
+    controller,
+    onEvent: (event) => {
+      for (const subscriber of streamRecord.subscribers.values()) {
+        const relevant = isRelevantSubscriberEvent(subscriber, event);
+        logStreamEvent({
+          subscriber,
+          event,
+          relevant,
+          ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+        });
+        if (!relevant) {
+          continue;
+        }
+        processOpencodeEvent({
+          context: {
+            sessionId: subscriber.sessionId,
+            externalSessionId: subscriber.externalSessionId,
+            input: subscriber.input,
+          },
+          event,
+          now: input.now,
+          emit: input.emit,
+          getSession: (sessionId) => input.sessions.get(sessionId),
+        });
+      }
+    },
+  })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Event stream failed";
+      for (const subscriber of streamRecord.subscribers.values()) {
+        input.emit(subscriber.sessionId, {
+          type: "session_error",
+          sessionId: subscriber.sessionId,
+          timestamp: input.now(),
+          message,
+        });
+      }
+    })
+    .finally(() => {
+      input.runtimeEventTransports.delete(eventTransportKey);
+    });
+  input.runtimeEventTransports.set(eventTransportKey, streamRecord);
+  return streamRecord;
+};
+
+export const attachSessionToRuntimeEvents = (input: {
+  sessions: Map<string, SessionRecord>;
+  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
+  createClient: ClientFactory;
+  runtimeEndpoint: string;
+  sessionId: string;
+  externalSessionId: string;
+  sessionInput: SessionInput;
+  now: () => string;
+  emit: (sessionId: string, event: AgentEvent) => void;
+  logEvent?: OpencodeEventLogger;
+}): void => {
+  const eventTransport = ensureRuntimeEventTransport({
+    runtimeEventTransports: input.runtimeEventTransports,
+    createClient: input.createClient,
+    runtimeEndpoint: input.runtimeEndpoint,
+    sessions: input.sessions,
+    now: input.now,
+    emit: input.emit,
+    ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+  });
+  eventTransport.subscribers.set(input.sessionId, {
+    sessionId: input.sessionId,
+    externalSessionId: input.externalSessionId,
+    input: input.sessionInput,
+  });
+};
+
 export const registerSession = (input: {
   sessions: Map<string, SessionRecord>;
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
@@ -41,6 +143,8 @@ export const registerSession = (input: {
   client: OpencodeClient;
   startedAt: string;
   startedMessage: string;
+  emitStartedEvent?: boolean;
+  subscribeToEvents?: boolean;
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
@@ -55,71 +159,6 @@ export const registerSession = (input: {
   };
 
   const eventTransportKey = input.runtimeEndpoint;
-  let eventTransport = input.runtimeEventTransports.get(eventTransportKey);
-  if (!eventTransport) {
-    const streamClient = input.createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-    });
-    assertGlobalEventSupport(streamClient);
-    const controller = new AbortController();
-    const streamRecord: RuntimeEventTransportRecord = {
-      key: eventTransportKey,
-      runtimeEndpoint: input.runtimeEndpoint,
-      controller,
-      streamDone: Promise.resolve(),
-      subscribers: new Map(),
-    };
-    streamRecord.streamDone = subscribeGlobalEvents({
-      client: streamClient,
-      controller,
-      onEvent: (event) => {
-        for (const subscriber of streamRecord.subscribers.values()) {
-          const relevant = isRelevantSubscriberEvent(subscriber, event);
-          logStreamEvent({
-            subscriber,
-            event,
-            relevant,
-            ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-          });
-          if (!relevant) {
-            continue;
-          }
-          processOpencodeEvent({
-            context: {
-              sessionId: subscriber.sessionId,
-              externalSessionId: subscriber.externalSessionId,
-              input: subscriber.input,
-            },
-            event,
-            now: input.now,
-            emit: input.emit,
-            getSession: (sessionId) => input.sessions.get(sessionId),
-          });
-        }
-      },
-    })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Event stream failed";
-        for (const subscriber of streamRecord.subscribers.values()) {
-          input.emit(subscriber.sessionId, {
-            type: "session_error",
-            sessionId: subscriber.sessionId,
-            timestamp: input.now(),
-            message,
-          });
-        }
-      })
-      .finally(() => {
-        input.runtimeEventTransports.delete(eventTransportKey);
-      });
-    input.runtimeEventTransports.set(eventTransportKey, streamRecord);
-    eventTransport = streamRecord;
-  }
-  eventTransport.subscribers.set(input.sessionId, {
-    sessionId: input.sessionId,
-    externalSessionId: input.externalSessionId,
-    input: input.sessionInput,
-  });
 
   input.sessions.set(input.sessionId, {
     summary,
@@ -144,12 +183,29 @@ export const registerSession = (input: {
     pendingSubagentCorrelationKeys: [],
   });
 
-  input.emit(input.sessionId, {
-    type: "session_started",
-    sessionId: input.sessionId,
-    timestamp: input.now(),
-    message: input.startedMessage,
-  });
+  if (input.subscribeToEvents !== false) {
+    attachSessionToRuntimeEvents({
+      sessions: input.sessions,
+      runtimeEventTransports: input.runtimeEventTransports,
+      createClient: input.createClient,
+      runtimeEndpoint: input.runtimeEndpoint,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      sessionInput: input.sessionInput,
+      now: input.now,
+      emit: input.emit,
+      ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+    });
+  }
+
+  if (input.emitStartedEvent !== false) {
+    input.emit(input.sessionId, {
+      type: "session_started",
+      sessionId: input.sessionId,
+      timestamp: input.now(),
+      message: input.startedMessage,
+    });
+  }
 
   return summary;
 };

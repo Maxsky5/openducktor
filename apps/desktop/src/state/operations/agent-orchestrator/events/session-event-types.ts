@@ -19,6 +19,8 @@ export type ResolveTurnDuration = (
   messages?: AgentSessionState["messages"],
 ) => number | undefined;
 
+export type RecordTurnTimestamp = (sessionId: string, timestamp: string | number) => void;
+
 export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyPermission">;
 
 export type SessionEvent = Parameters<Parameters<SessionEventAdapter["subscribeEvents"]>[1]>[0];
@@ -41,8 +43,10 @@ export type AttachAgentSessionListenerParams = {
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
+  recordTurnActivityTimestamp?: RecordTurnTimestamp;
+  recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
-  clearTurnDuration: (sessionId: string) => void;
+  clearTurnDuration: (sessionId: string, completedTimestamp?: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   resolveRuntimeDefinition?: (runtimeKind: RuntimeKind) => RuntimeDescriptor | null;
 };
@@ -67,6 +71,8 @@ export type SessionTurnContext = Pick<
   | "turnStartedAtBySessionRef"
   | "turnModelBySessionRef"
   | "contextUsageMessageIdBySessionRef"
+  | "recordTurnActivityTimestamp"
+  | "recordTurnUserMessageTimestamp"
   | "resolveTurnDurationMs"
   | "clearTurnDuration"
 >;
@@ -127,6 +133,12 @@ export const createSessionEventHandlerContext = (
         : {}),
       ...(context.contextUsageMessageIdBySessionRef
         ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
+        : {}),
+      ...(context.recordTurnActivityTimestamp
+        ? { recordTurnActivityTimestamp: context.recordTurnActivityTimestamp }
+        : {}),
+      ...(context.recordTurnUserMessageTimestamp
+        ? { recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp }
         : {}),
       resolveTurnDurationMs: context.resolveTurnDurationMs,
       clearTurnDuration: context.clearTurnDuration,

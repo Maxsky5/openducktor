@@ -121,7 +121,7 @@ const toArticleClassName = (
                 : "rounded-md border border-pending-border bg-pending-surface px-3 py-2 my-2 text-pending-surface-foreground"
         : "border-none bg-transparent px-0 py-0 text-foreground"
       : isSubagentMessage
-        ? "rounded-md border border-border bg-card px-3 py-2 text-foreground shadow-sm"
+        ? "rounded-md border border-border bg-card px-3 py-2 text-foreground shadow-sm my-2"
         : isSystemPromptMessage
           ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
           : message.role === "assistant"

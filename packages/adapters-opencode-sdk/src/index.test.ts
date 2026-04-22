@@ -690,6 +690,63 @@ describe("OpencodeSdkAdapter", () => {
     expect((events[0] as { type: string }).type).toBe("session_started");
   });
 
+  test("resumeSession can seed history without emitting a started event", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:01Z") },
+            finish: "stop",
+          },
+          parts: [
+            {
+              id: "tool-part-1",
+              type: "tool",
+              messageID: "assistant-1",
+              sessionID: "session-opencode-1",
+              callID: "call-1",
+              tool: "bash",
+              state: {
+                status: "completed",
+                input: { command: "pwd" },
+                output: "output",
+              },
+            } as unknown as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    const summary = await adapter.resumeSession({
+      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      scenario: "build_implementation_start",
+      systemPrompt: "system",
+      emitStartedEvent: false,
+      seedHistoryOnResume: true,
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(summary.sessionId).toBe("session-1");
+    expect(mock.session.getCalls).toHaveLength(1);
+    expect(mock.session.messagesCalls).toHaveLength(1);
+    expect(events).toEqual([]);
+  });
+
   test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

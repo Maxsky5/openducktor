@@ -37,7 +37,10 @@ import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "./lifecycle/session-view-lifecycle";
-import { findLastUserSessionMessage } from "./support/messages";
+import {
+  readAssistantActivityStartedAtMsFromMessages,
+  resolveAssistantTurnDurationMs,
+} from "./support/assistant-turn-duration";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
@@ -94,8 +97,49 @@ export function useAgentOrchestratorOperations({
     activeWorkspace,
     tasks,
   });
-  const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
+  const {
+    sessionsRef,
+    turnStartedAtBySessionRef,
+    turnUserAnchorAtBySessionRef,
+    previousAssistantCompletedAtBySessionRef,
+    unsubscribersRef,
+  } = refBridges;
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
+
+  const toTimestampMs = useCallback((timestamp: string | number): number | undefined => {
+    if (typeof timestamp === "number") {
+      return Number.isFinite(timestamp) ? timestamp : undefined;
+    }
+
+    const parsed = Date.parse(timestamp);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, []);
+
+  const recordTurnActivityTimestamp = useCallback(
+    (sessionId: string, timestamp: string | number): void => {
+      const timestampMs = toTimestampMs(timestamp);
+      if (timestampMs === undefined) {
+        return;
+      }
+      const current = turnStartedAtBySessionRef.current[sessionId];
+      turnStartedAtBySessionRef.current[sessionId] =
+        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+    },
+    [toTimestampMs, turnStartedAtBySessionRef],
+  );
+
+  const recordTurnUserMessageTimestamp = useCallback(
+    (sessionId: string, timestamp: string | number): void => {
+      const timestampMs = toTimestampMs(timestamp);
+      if (timestampMs === undefined) {
+        return;
+      }
+      const current = turnUserAnchorAtBySessionRef.current[sessionId];
+      turnUserAnchorAtBySessionRef.current[sessionId] =
+        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+    },
+    [toTimestampMs, turnUserAnchorAtBySessionRef],
+  );
 
   const persistSessionRecord = useCallback(
     async (taskId: string, record: AgentSessionRecord): Promise<void> => {
@@ -167,32 +211,50 @@ export function useAgentOrchestratorOperations({
       timestamp: string,
       messages: AgentSessionState["messages"] = [],
     ): number | undefined => {
-      const parsedTimestamp = Date.parse(timestamp);
-      const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
-
-      const startedAt = turnStartedAtBySessionRef.current[sessionId];
-      if (typeof startedAt === "number" && endedAt >= startedAt) {
-        return Math.max(0, endedAt - startedAt);
-      }
-
-      const latestUserMessage = findLastUserSessionMessage({ sessionId, messages });
-      if (latestUserMessage) {
-        const userTimestamp = Date.parse(latestUserMessage.timestamp);
-        if (!Number.isNaN(userTimestamp) && endedAt >= userTimestamp) {
-          return Math.max(0, endedAt - userTimestamp);
-        }
-      }
-
-      return undefined;
+      const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
+      const previousAssistantCompletedAtMs =
+        previousAssistantCompletedAtBySessionRef.current[sessionId];
+      const activityStartedAtMs =
+        turnStartedAtBySessionRef.current[sessionId] ??
+        readAssistantActivityStartedAtMsFromMessages({
+          messages: Array.isArray(messages) ? messages : [],
+          previousAssistantCompletedAtMs,
+          completedAtMs,
+        });
+      const userAnchorAtMs = turnUserAnchorAtBySessionRef.current[sessionId];
+      return resolveAssistantTurnDurationMs({
+        completedAtMs,
+        ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
+        ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
+        ...(typeof previousAssistantCompletedAtMs === "number"
+          ? { previousAssistantCompletedAtMs }
+          : {}),
+      });
     },
-    [turnStartedAtBySessionRef],
+    [
+      previousAssistantCompletedAtBySessionRef,
+      toTimestampMs,
+      turnStartedAtBySessionRef,
+      turnUserAnchorAtBySessionRef,
+    ],
   );
 
   const clearTurnDuration = useCallback(
-    (sessionId: string): void => {
+    (sessionId: string, completedTimestamp?: string): void => {
+      const completedAtMs =
+        completedTimestamp === undefined ? undefined : toTimestampMs(completedTimestamp);
       delete turnStartedAtBySessionRef.current[sessionId];
+      delete turnUserAnchorAtBySessionRef.current[sessionId];
+      if (typeof completedAtMs === "number") {
+        previousAssistantCompletedAtBySessionRef.current[sessionId] = completedAtMs;
+      }
     },
-    [turnStartedAtBySessionRef],
+    [
+      previousAssistantCompletedAtBySessionRef,
+      toTimestampMs,
+      turnStartedAtBySessionRef,
+      turnUserAnchorAtBySessionRef,
+    ],
   );
 
   const readSessionModelCatalog = useCallback(
@@ -237,16 +299,8 @@ export function useAgentOrchestratorOperations({
     [agentEngine],
   );
 
-  const removeAgentSessions = useCallback(
-    ({ taskId, roles }: { taskId: string; roles?: AgentSessionState["role"][] }): void => {
-      const matchingRoles = roles ? new Set(roles) : null;
-      const sessionIds = Object.values(sessionsRef.current)
-        .filter(
-          (session) =>
-            session.taskId === taskId &&
-            (matchingRoles === null || matchingRoles.has(session.role)),
-        )
-        .map((session) => session.sessionId);
+  const removeSessionIds = useCallback(
+    (sessionIds: string[]): void => {
       if (sessionIds.length === 0) {
         return;
       }
@@ -280,7 +334,29 @@ export function useAgentOrchestratorOperations({
         return hasChanges ? next : current;
       });
     },
-    [commitSessions, refBridges, sessionsRef, unsubscribersRef],
+    [commitSessions, refBridges, unsubscribersRef],
+  );
+
+  const removeAgentSession = useCallback(
+    (sessionId: string): void => {
+      removeSessionIds([sessionId]);
+    },
+    [removeSessionIds],
+  );
+
+  const removeAgentSessions = useCallback(
+    ({ taskId, roles }: { taskId: string; roles?: AgentSessionState["role"][] }): void => {
+      const matchingRoles = roles ? new Set(roles) : null;
+      const sessionIds = Object.values(sessionsRef.current)
+        .filter(
+          (session) =>
+            session.taskId === taskId &&
+            (matchingRoles === null || matchingRoles.has(session.role)),
+        )
+        .map((session) => session.sessionId);
+      removeSessionIds(sessionIds);
+    },
+    [removeSessionIds, sessionsRef],
   );
 
   const liveAgentSessionStore = useMemo(() => new LiveAgentSessionStore(), []);
@@ -302,6 +378,8 @@ export function useAgentOrchestratorOperations({
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
+        recordTurnActivityTimestamp,
+        recordTurnUserMessageTimestamp,
         resolveTurnDurationMs,
         clearTurnDuration,
         refreshTaskData,
@@ -316,6 +394,8 @@ export function useAgentOrchestratorOperations({
       clearTurnDuration,
       refBridges,
       refreshTaskData,
+      recordTurnActivityTimestamp,
+      recordTurnUserMessageTimestamp,
       resolveTurnDurationMs,
       unsubscribersRef,
       updateSession,
@@ -603,6 +683,7 @@ export function useAgentOrchestratorOperations({
         inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
         unsubscribersRef: refBridges.unsubscribersRef,
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
+        turnUserAnchorAtBySessionRef: refBridges.turnUserAnchorAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
         attachSessionListener,
@@ -647,6 +728,7 @@ export function useAgentOrchestratorOperations({
       readSessionTodos,
       readSessionSlashCommands,
       readSessionFileSearch,
+      removeAgentSession,
       removeAgentSessions,
       sessionActions,
     });
@@ -673,6 +755,7 @@ export function useAgentOrchestratorOperations({
     readSessionSlashCommands,
     readSessionFileSearch,
     removeAgentSessions,
+    removeAgentSession,
     sessionActions,
   ]);
 }

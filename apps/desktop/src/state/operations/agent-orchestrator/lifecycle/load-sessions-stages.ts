@@ -182,6 +182,7 @@ const mergePersistedSessionRecord = (
 
   return {
     ...current,
+    includeInActivity: current.includeInActivity ?? persisted.includeInActivity ?? true,
     repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
@@ -562,6 +563,9 @@ export const preparePersistedSessionMergeStage = async ({
         }
         next[record.sessionId] = {
           ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
+          includeInActivity: !(
+            intent.shouldHydrateRequestedSession && record.sessionId === intent.requestedSessionId
+          ),
           pendingPermissions: [],
           pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,
@@ -889,6 +893,12 @@ export const reconcileLiveSessionsStage = async ({
         role: record.role,
         scenario: resolvedScenario,
         systemPrompt,
+        ...(intent.mode === "requested_history"
+          ? {
+              emitStartedEvent: false,
+              seedHistoryOnResume: true,
+            }
+          : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
       });
     },

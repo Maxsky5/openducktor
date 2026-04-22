@@ -751,4 +751,173 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(assistant.meta.isFinal).toBe(true);
     expect(assistant.meta.totalTokens).toBe(999);
   });
+
+  test("uses assistant-owned activity timing for final history turns without a user anchor", () => {
+    const startedAtMs = Date.parse("2026-02-22T08:00:01.000Z");
+    const completedAt = "2026-02-22T08:00:28.000Z";
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant-final",
+          role: "assistant",
+          timestamp: completedAt,
+          text: "Reviewed the changes",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant-final",
+              partId: "p-subagent",
+              correlationKey: "spawn:m-assistant-final:build:review",
+              status: "completed",
+              agent: "build",
+              prompt: "review changes",
+              description: "review changes [commit|branch|pr]",
+              startedAtMs,
+              endedAtMs: Date.parse(completedAt),
+            },
+            {
+              kind: "step",
+              messageId: "m-assistant-final",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const assistant = sessionMessageAt({ sessionId: "session-1", messages }, 1);
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(true);
+    expect(assistant.meta.durationMs).toBe(27_000);
+  });
+
+  test("uses earlier same-turn tool rows when the final assistant message has no timed parts", () => {
+    const startedAt = Date.parse("2026-02-22T08:00:01.000Z");
+    const toolCompletedAt = "2026-02-22T08:00:27.000Z";
+    const finalCompletedAt = "2026-02-22T08:00:28.000Z";
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-tool",
+          role: "assistant",
+          timestamp: toolCompletedAt,
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "m-tool",
+              partId: "p-tool",
+              callId: "call-1",
+              tool: "bash",
+              status: "completed",
+              input: { command: "pwd" },
+              output: "/tmp/repo",
+              startedAtMs: startedAt,
+              endedAtMs: Date.parse(toolCompletedAt),
+            },
+          ],
+        },
+        {
+          messageId: "m-assistant-final",
+          role: "assistant",
+          timestamp: finalCompletedAt,
+          text: "Reviewed the changes",
+          parts: [
+            {
+              kind: "step",
+              messageId: "m-assistant-final",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const assistant = messages.find(
+      (entry) => entry.role === "assistant" && entry.content === "Reviewed the changes",
+    );
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(true);
+    expect(assistant.meta.durationMs).toBe(27_000);
+  });
+
+  test("does not reuse a previous-turn user anchor for a later assistant completion", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-user-1",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Run the review",
+          displayParts: [],
+          parts: [],
+        },
+        {
+          messageId: "m-assistant-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:10.000Z",
+          text: "First review complete",
+          parts: [
+            {
+              kind: "step",
+              messageId: "m-assistant-1",
+              partId: "p-step-finish-1",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+        {
+          messageId: "m-assistant-2",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:20.000Z",
+          text: "Second review complete",
+          parts: [
+            {
+              kind: "step",
+              messageId: "m-assistant-2",
+              partId: "p-step-finish-2",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const firstAssistant = sessionMessageAt({ sessionId: "session-1", messages }, 1);
+    const secondAssistant = sessionMessageAt({ sessionId: "session-1", messages }, 2);
+    if (!firstAssistant || firstAssistant.meta?.kind !== "assistant") {
+      throw new Error("Expected first assistant message with assistant meta");
+    }
+    if (!secondAssistant || secondAssistant.meta?.kind !== "assistant") {
+      throw new Error("Expected second assistant message with assistant meta");
+    }
+
+    expect(firstAssistant.meta.durationMs).toBe(10_000);
+    expect(secondAssistant.meta.durationMs).toBeUndefined();
+  });
 });

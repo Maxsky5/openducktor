@@ -4,7 +4,7 @@ import {
   type AgentUserMessageDisplayPart,
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
-import { Brain, Cpu, Hammer } from "lucide-react";
+import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
   Fragment,
   lazy,
@@ -498,14 +498,17 @@ const SubagentMessage = ({
   timeLabel,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
+  const isRunning = meta.status === "running";
   const durationMs =
-    typeof meta.startedAtMs === "number"
-      ? Math.max(0, (meta.endedAtMs ?? Date.now()) - meta.startedAtMs)
+    meta.status === "completed" &&
+    typeof meta.startedAtMs === "number" &&
+    typeof meta.endedAtMs === "number"
+      ? Math.max(0, meta.endedAtMs - meta.startedAtMs)
       : null;
 
   return (
     <div className="space-y-2">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <div className="rounded-md border border-border bg-muted p-2 text-muted-foreground">
           <Cpu className="size-4" />
         </div>
@@ -528,6 +531,7 @@ const SubagentMessage = ({
               </span>
             ) : null}
             <div className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
+              {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
               {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
               {timeLabel ? <span>{timeLabel}</span> : null}
               <SubagentTranscriptButton

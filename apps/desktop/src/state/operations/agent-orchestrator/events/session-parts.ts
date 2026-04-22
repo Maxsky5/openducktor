@@ -190,6 +190,7 @@ export const handleAssistantDelta = (
   context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
+  context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
   if (event.channel === "text") {
     if (!event.messageId || event.delta.length === 0) {
       return;
@@ -530,6 +531,9 @@ export const handleAssistantPart = (
   event: SessionPartEvent,
 ): void => {
   const part = event.part;
+  if (part.kind !== "step") {
+    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
+  }
   const streamMessageKey = toPartStreamKey(part);
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 

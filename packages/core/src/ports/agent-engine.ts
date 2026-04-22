@@ -26,6 +26,8 @@ export type StartAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
 export type ResumeAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   sessionId: string;
   externalSessionId: string;
+  emitStartedEvent?: boolean;
+  seedHistoryOnResume?: boolean;
 };
 
 export type ForkAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {

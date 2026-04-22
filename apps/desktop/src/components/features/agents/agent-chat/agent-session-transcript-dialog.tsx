@@ -43,6 +43,7 @@ export function AgentSessionTranscriptDialog({
   description,
 }: AgentSessionTranscriptDialogProps): ReactElement {
   const { model } = useReadonlySessionTranscriptSurfaceModel({
+    isOpen: open,
     activeWorkspace,
     taskId,
     sessionId,

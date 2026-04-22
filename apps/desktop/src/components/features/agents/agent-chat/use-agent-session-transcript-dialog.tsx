@@ -10,7 +10,12 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useActiveWorkspace, useTasksState } from "@/state/app-state-provider";
+import {
+  useActiveWorkspace,
+  useAgentOperations,
+  useAgentSession,
+  useTasksState,
+} from "@/state/app-state-provider";
 import { host } from "@/state/operations/host";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 
@@ -39,11 +44,13 @@ const DEFAULT_DESCRIPTION = "Read-only conversation.";
 
 function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
   const activeWorkspace = useActiveWorkspace();
+  const { removeAgentSession } = useAgentOperations();
   const { tasks } = useTasksState();
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
   const repoPath = activeWorkspace?.repoPath ?? null;
   const requestedTaskId = request?.taskId?.trim() ?? "";
   const sessionId = request?.sessionId ?? null;
+  const activeTranscriptSession = useAgentSession(sessionId);
   const open = request !== null;
   const requestedTask = useMemo(
     () => (requestedTaskId ? (tasks.find((task) => task.id === requestedTaskId) ?? null) : null),
@@ -196,8 +203,11 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
   }, []);
 
   const closeSessionTranscript = useCallback(() => {
+    if (sessionId && activeTranscriptSession?.includeInActivity === false) {
+      removeAgentSession(sessionId);
+    }
     setRequest(null);
-  }, []);
+  }, [activeTranscriptSession?.includeInActivity, removeAgentSession, sessionId]);
 
   const contextValue = useMemo(
     () => ({

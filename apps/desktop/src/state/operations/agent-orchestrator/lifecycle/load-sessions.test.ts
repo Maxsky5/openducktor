@@ -1152,8 +1152,8 @@ describe("agent-orchestrator-load-sessions", () => {
       "Requested history",
     ]);
     expect(historyLoads).toBe(1);
-    expect(resumeCalls).toBe(0);
-    expect(attachedListeners).toBe(0);
+    expect(resumeCalls).toBe(1);
+    expect(attachedListeners).toBe(1);
 
     const hydratedMessageIds = hydratedSession
       ? sessionMessagesToArray(hydratedSession).map((message) => message.id)
@@ -1168,8 +1168,8 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(historyLoads).toBe(1);
     expect(resumeCalls).toBe(1);
-    expect(attachedListeners).toBe(1);
-    expect(liveSnapshotLoads).toBe(2);
+    expect(attachedListeners).toBe(2);
+    expect(liveSnapshotLoads).toBe(3);
     expect(
       sessionMessagesToArray(getSession(state, "session-1")).map((message) => message.id),
     ).toEqual(hydratedMessageIds);
@@ -1182,7 +1182,7 @@ describe("agent-orchestrator-load-sessions", () => {
       ],
     });
     expect(state["session-1"]?.pendingQuestions).toHaveLength(1);
-    expect(promptOverrideLoads).toBe(2);
+    expect(promptOverrideLoads).toBe(1);
   });
 
   test("hydrates transcript history after live reattach when reconcile uses live_if_empty", async () => {
@@ -1867,6 +1867,125 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(historyLoads).toBe(1);
+  });
+
+  test("reattaches requested-history live sessions so transcript views keep streaming", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const attachedSessions: Array<{ repoPath: string; sessionId: string }> = [];
+    const resumeCalls: Array<{
+      sessionId: string;
+      emitStartedEvent?: boolean;
+      seedHistoryOnResume?: boolean;
+    }> = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        resumeSession: async (input) => {
+          resumeCalls.push({
+            sessionId: input.sessionId,
+            ...(typeof input.emitStartedEvent === "boolean"
+              ? { emitStartedEvent: input.emitStartedEvent }
+              : {}),
+            ...(typeof input.seedHistoryOnResume === "boolean"
+              ? { seedHistoryOnResume: input.seedHistoryOnResume }
+              : {}),
+          });
+          return {
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
+        listLiveAgentSessionSnapshots: async () => [
+          {
+            externalSessionId: "external-child-1",
+            title: "Child live session",
+            workingDirectory: "/tmp/repo/worktree",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingPermissions: [],
+            pendingQuestions: [],
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      attachSessionListener: (repoPath, sessionId) => {
+        attachedSessions.push({ repoPath, sessionId });
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetSessionId: "session-child-1",
+      historyPolicy: "requested_only",
+      persistedRecords: [
+        persistedSessionRecord({
+          runtimeKind: "opencode",
+          sessionId: "session-child-1",
+          externalSessionId: "external-child-1",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+      ],
+    });
+
+    expect(attachedSessions).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        sessionId: "session-child-1",
+      },
+    ]);
+    expect(resumeCalls).toEqual([
+      {
+        sessionId: "session-child-1",
+        emitStartedEvent: false,
+        seedHistoryOnResume: true,
+      },
+    ]);
+    expect(state["session-child-1"]?.status).toBe("running");
   });
 
   test("uses the resolved working directory for requested-history live lookups and state updates", async () => {

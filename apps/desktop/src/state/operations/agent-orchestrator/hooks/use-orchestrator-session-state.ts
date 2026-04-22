@@ -25,6 +25,8 @@ type OrchestratorMutableState = {
   draftMessageIdBySession: Record<string, DraftChannelValueMap<string>>;
   draftFlushTimeoutBySession: Record<string, ReturnType<typeof setTimeout> | undefined>;
   turnStartedAtBySession: Record<string, number>;
+  turnUserAnchorAtBySession: Record<string, number>;
+  previousAssistantCompletedAtBySession: Record<string, number>;
   turnModelBySession: Record<string, AgentSessionState["selectedModel"]>;
 };
 
@@ -43,6 +45,8 @@ type OrchestratorRefBridges = {
     Record<string, ReturnType<typeof setTimeout> | undefined>
   >;
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
+  turnUserAnchorAtBySessionRef: MutableRefObject<Record<string, number>>;
+  previousAssistantCompletedAtBySessionRef: MutableRefObject<Record<string, number>>;
   turnModelBySessionRef: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
 };
 
@@ -98,6 +102,8 @@ export const useOrchestratorSessionState = ({
     draftMessageIdBySession: {},
     draftFlushTimeoutBySession: {},
     turnStartedAtBySession: {},
+    turnUserAnchorAtBySession: {},
+    previousAssistantCompletedAtBySession: {},
     turnModelBySession: {},
   });
   const refBridges = useMemo<OrchestratorRefBridges>(
@@ -120,6 +126,14 @@ export const useOrchestratorSessionState = ({
         "draftFlushTimeoutBySession",
       ),
       turnStartedAtBySessionRef: createMutableBridge(mutableStateRef, "turnStartedAtBySession"),
+      turnUserAnchorAtBySessionRef: createMutableBridge(
+        mutableStateRef,
+        "turnUserAnchorAtBySession",
+      ),
+      previousAssistantCompletedAtBySessionRef: createMutableBridge(
+        mutableStateRef,
+        "previousAssistantCompletedAtBySession",
+      ),
       turnModelBySessionRef: createMutableBridge(mutableStateRef, "turnModelBySession"),
     }),
     [],
@@ -159,6 +173,8 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.draftMessageIdBySession = {};
     mutableStateRef.current.draftFlushTimeoutBySession = {};
     mutableStateRef.current.turnStartedAtBySession = {};
+    mutableStateRef.current.turnUserAnchorAtBySession = {};
+    mutableStateRef.current.previousAssistantCompletedAtBySession = {};
     mutableStateRef.current.turnModelBySession = {};
     mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
     commitSessions({});

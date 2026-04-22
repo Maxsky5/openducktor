@@ -523,6 +523,36 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("review changes [commit|branch|pr], defaults to uncommitted");
   });
 
+  test("renders a loader instead of duration for running subagent cards", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): review changes", {
+          id: "subagent-running-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-running-1",
+            correlationKey: "part:assistant-task-tool-running:subtask-b",
+            status: "running",
+            agent: "build",
+            description: "review changes [commit|branch|pr], defaults to uncommitted",
+            sessionId: "session-child-2",
+            startedAtMs: 1_000,
+          },
+        }),
+        sessionRole: "build",
+        sessionTaskId: "task-1",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Running");
+    expect(html).toContain("lucide-loader-circle");
+    expect(html).not.toContain("1m");
+    expect(html).not.toContain("59s");
+  });
+
   test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
     const html = await renderToHtml(
       createElement(AgentChatMessageCard, {

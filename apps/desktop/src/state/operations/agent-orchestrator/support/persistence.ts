@@ -16,6 +16,12 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
+import {
+  mergeTurnActivityTimestamp,
+  readAssistantActivityStartedAtMsFromMessages,
+  readAssistantActivityStartedAtMsFromParts,
+  resolveAssistantTurnDurationMs,
+} from "./assistant-turn-duration";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import {
   readPersistedRuntimeKind,
@@ -136,43 +142,6 @@ export const fromPersistedSessionRecord = (
     },
     repoPath,
   );
-};
-
-const assistantDurationFromHistory = (
-  message: AgentSessionHistoryMessage,
-  previousUserTimestampMs: number | null,
-): number | undefined => {
-  if (message.role !== "assistant") {
-    return undefined;
-  }
-
-  let startedAtMs: number | null = null;
-  let endedAtMs: number | null = null;
-  for (const part of message.parts) {
-    if (part.kind !== "tool") {
-      continue;
-    }
-    if (typeof part.startedAtMs === "number") {
-      startedAtMs =
-        startedAtMs === null ? part.startedAtMs : Math.min(startedAtMs, part.startedAtMs);
-    }
-    if (typeof part.endedAtMs === "number") {
-      endedAtMs = endedAtMs === null ? part.endedAtMs : Math.max(endedAtMs, part.endedAtMs);
-    }
-  }
-
-  if (startedAtMs !== null && endedAtMs !== null && endedAtMs >= startedAtMs) {
-    return endedAtMs - startedAtMs;
-  }
-
-  const assistantTimestampMs = Date.parse(message.timestamp);
-  if (previousUserTimestampMs !== null && !Number.isNaN(assistantTimestampMs)) {
-    if (assistantTimestampMs >= previousUserTimestampMs) {
-      return assistantTimestampMs - previousUserTimestampMs;
-    }
-  }
-
-  return undefined;
 };
 
 const assistantMessageMeta = (
@@ -475,7 +444,8 @@ export const historyToChatMessages = (
   },
 ): AgentChatMessage[] => {
   const next: AgentChatMessage[] = [];
-  let previousUserTimestampMs: number | null = null;
+  let userAnchorAtMs: number | undefined;
+  let previousAssistantCompletedAtMs: number | undefined;
   const findLastMatchingHydratedSubagentIndex = (
     incomingMessage: HydratedSubagentMessage,
   ): number => {
@@ -516,7 +486,29 @@ export const historyToChatMessages = (
     const shouldRenderPrimaryMessage = content.length > 0 || userDisplayParts.length > 0;
     if (shouldRenderPrimaryMessage) {
       const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
-      const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
+      const completedAtMs = Date.parse(message.timestamp);
+      const activityStartedAtMs =
+        message.role === "assistant" && isFinalAssistantMessage && !Number.isNaN(completedAtMs)
+          ? mergeTurnActivityTimestamp(
+              readAssistantActivityStartedAtMsFromMessages({
+                messages: next,
+                previousAssistantCompletedAtMs,
+                completedAtMs,
+              }),
+              readAssistantActivityStartedAtMsFromParts(message.parts, completedAtMs),
+            )
+          : undefined;
+      const assistantDurationMs =
+        message.role === "assistant" && isFinalAssistantMessage && !Number.isNaN(completedAtMs)
+          ? resolveAssistantTurnDurationMs({
+              completedAtMs,
+              ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
+              ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
+              ...(typeof previousAssistantCompletedAtMs === "number"
+                ? { previousAssistantCompletedAtMs }
+                : {}),
+            })
+          : undefined;
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {
         meta = assistantMessageMeta(
@@ -542,7 +534,14 @@ export const historyToChatMessages = (
 
     if (message.role === "user" && (content.length > 0 || userDisplayParts.length > 0)) {
       const parsed = Date.parse(message.timestamp);
-      previousUserTimestampMs = Number.isNaN(parsed) ? previousUserTimestampMs : parsed;
+      userAnchorAtMs = Number.isNaN(parsed) ? userAnchorAtMs : parsed;
+    }
+
+    if (message.role === "assistant" && isFinalAssistantHistoryMessage(message)) {
+      const parsed = Date.parse(message.timestamp);
+      if (!Number.isNaN(parsed)) {
+        previousAssistantCompletedAtMs = parsed;
+      }
     }
   }
 

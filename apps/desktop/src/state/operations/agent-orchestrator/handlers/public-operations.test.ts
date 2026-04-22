@@ -50,6 +50,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      removeAgentSession: () => {},
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
     });
@@ -85,6 +86,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      removeAgentSession: () => {},
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         startAgentSession: async () => {
@@ -129,6 +131,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      removeAgentSession: () => {},
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
@@ -170,6 +173,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      removeAgentSession: () => {},
       removeAgentSessions: () => {},
       sessionActions: createSessionActions({
         stopAgentSession: async () => {
@@ -211,6 +215,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      removeAgentSession: () => {},
       removeAgentSessions: () => {},
       sessionActions: createSessionActions(),
     });
@@ -231,6 +236,34 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
+  test("forwards explicit single-session removal without toast wrapping", () => {
+    const removeAgentSession = mock(() => {});
+    const operations = createOrchestratorPublicOperations({
+      bootstrapTaskSessions: async () => {},
+      hydrateRequestedTaskSessionHistory: async () => {},
+      ensureSessionReadyForView,
+      reconcileLiveTaskSessions: async () => {},
+      loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
+      readSessionTodos: async () => [],
+      removeAgentSession,
+      removeAgentSessions: () => {},
+      sessionActions: createSessionActions(),
+    });
+
+    operations.removeAgentSession("session-1");
+
+    expect(removeAgentSession).toHaveBeenCalledWith("session-1");
+  });
+
   test("forwards explicit session removals without toast wrapping", () => {
     const removeAgentSessions = mock(() => {});
     const operations = createOrchestratorPublicOperations({
@@ -249,6 +282,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      removeAgentSession: () => {},
       removeAgentSessions,
       sessionActions: createSessionActions(),
     });

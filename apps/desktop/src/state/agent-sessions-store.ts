@@ -190,12 +190,15 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
           ? previousSummary
           : nextSummary;
       });
-      const nextActivitySessionSummaries = nextSessions.map((session) => {
+      const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
+        if (session.includeInActivity === false) {
+          return [];
+        }
         const nextSummary = toAgentActivitySessionSummary(session);
         const previousSummary = previousActivitySummaryById.get(session.sessionId);
         return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? previousSummary
-          : nextSummary;
+          ? [previousSummary]
+          : [nextSummary];
       });
 
       sessionsById = nextSessionsById;

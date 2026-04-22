@@ -88,7 +88,12 @@ export const createLoadAgentSessions = ({
       mode === "requested_history" && requestedSessionId !== null;
     const shouldRecoverRuntimeAttachment =
       mode === "recover_runtime_attachment" && requestedSessionId !== null;
-    const shouldReconcileLiveSessions = mode === "reconcile_live" || shouldRecoverRuntimeAttachment;
+    const shouldReconcileRequestedLiveSession =
+      shouldHydrateRequestedSession && options?.allowLiveSessionResume !== false;
+    const shouldReconcileLiveSessions =
+      mode === "reconcile_live" ||
+      shouldRecoverRuntimeAttachment ||
+      shouldReconcileRequestedLiveSession;
     return {
       repoPath,
       workspaceId: activeWorkspace?.workspaceId ?? "",
