@@ -225,6 +225,32 @@ export const clearWorkflowToolCacheForDirectory = (
   }
 };
 
+const releaseSessionRuntimeAttachment = async (
+  session: SessionRecord,
+  sessions: Map<string, SessionRecord>,
+  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
+): Promise<void> => {
+  sessions.delete(session.summary.sessionId);
+  const eventTransport = runtimeEventTransports.get(session.eventTransportKey);
+  if (!eventTransport) {
+    return;
+  }
+  eventTransport.subscribers.delete(session.summary.sessionId);
+  if (eventTransport.subscribers.size > 0) {
+    return;
+  }
+  eventTransport.controller.abort();
+  await eventTransport.streamDone.catch(() => undefined);
+};
+
+export const detachSessionRuntime = async (
+  session: SessionRecord,
+  sessions: Map<string, SessionRecord>,
+  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
+): Promise<void> => {
+  await releaseSessionRuntimeAttachment(session, sessions, runtimeEventTransports);
+};
+
 export const stopSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
@@ -239,15 +265,5 @@ export const stopSessionRuntime = async (
     void abortError;
   }
 
-  sessions.delete(session.summary.sessionId);
-  const eventTransport = runtimeEventTransports.get(session.eventTransportKey);
-  if (!eventTransport) {
-    return;
-  }
-  eventTransport.subscribers.delete(session.summary.sessionId);
-  if (eventTransport.subscribers.size > 0) {
-    return;
-  }
-  eventTransport.controller.abort();
-  await eventTransport.streamDone.catch(() => undefined);
+  await releaseSessionRuntimeAttachment(session, sessions, runtimeEventTransports);
 };

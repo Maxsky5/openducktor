@@ -8,6 +8,18 @@ export const resolveAgentSessionPurpose = (
   return purpose ?? DEFAULT_AGENT_SESSION_PURPOSE;
 };
 
+export const resolveAgentSessionPurposeForLoad = (input: {
+  requestedSessionId?: string | null;
+  sessionId: string;
+  shouldHydrateRequestedSession: boolean;
+}): AgentSessionPurpose => {
+  if (input.shouldHydrateRequestedSession && input.requestedSessionId === input.sessionId) {
+    return "transcript";
+  }
+
+  return DEFAULT_AGENT_SESSION_PURPOSE;
+};
+
 export const isTranscriptAgentSession = (
   session: Pick<AgentSessionState, "purpose"> | null | undefined,
 ): boolean => {

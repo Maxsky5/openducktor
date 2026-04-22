@@ -532,7 +532,11 @@ export const handleAssistantPart = (
 ): void => {
   const part = event.part;
   if (part.kind !== "step") {
-    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
+    const activityTimestamp =
+      (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
+        ? part.startedAtMs
+        : event.timestamp;
+    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, activityTimestamp);
   }
   const streamMessageKey = toPartStreamKey(part);
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);

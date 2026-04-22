@@ -104,6 +104,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     };
   }
 
+  async detachSession(sessionId: string): Promise<void> {
+    const runtimeKind = this.requireSessionRuntimeKind(sessionId);
+    await this.getAdapter(runtimeKind).detachSession(sessionId);
+    this.runtimeKindsBySessionId.delete(sessionId);
+  }
+
   async forkSession(input: Parameters<AgentEnginePort["forkSession"]>[0]) {
     const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
     const summary = await this.getAdapter(runtimeKind).forkSession(input);

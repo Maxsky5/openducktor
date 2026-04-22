@@ -431,6 +431,25 @@ describe("load-sessions-stages", () => {
     expect(nextSession?.pendingQuestions).toEqual(existingSession.pendingQuestions);
   });
 
+  test("promotes transcript-purpose sessions back to primary on non-requested loads", async () => {
+    const existingSession = createSession({ purpose: "transcript" });
+    const stateHarness = createStateHarness({ "session-1": existingSession });
+
+    await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        mode: "bootstrap",
+        shouldHydrateRequestedSession: false,
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [createRecord()],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["session-1"]?.purpose).toBe("primary");
+  });
+
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
     const stateHarness = createStateHarness({ "session-1": createSession() });
     let promptLoads = 0;

@@ -204,10 +204,10 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
   }, []);
 
   const closeSessionTranscript = useCallback(() => {
-    if (sessionId && isTranscriptAgentSession(activeTranscriptSession)) {
-      removeAgentSession(sessionId);
-    }
     setRequest(null);
+    if (sessionId && isTranscriptAgentSession(activeTranscriptSession)) {
+      void removeAgentSession(sessionId);
+    }
   }, [activeTranscriptSession, removeAgentSession, sessionId]);
 
   const contextValue = useMemo(

@@ -6,8 +6,9 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionEventBatcher } from "./session-event-batching";
-import type { SessionEvent } from "./session-event-types";
+import type { SessionEvent, SessionPartEventContext } from "./session-event-types";
 import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
+import { handleAssistantPart } from "./session-parts";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
@@ -2438,6 +2439,68 @@ describe("agent-orchestrator-session-events", () => {
     expect(assistantMessages?.[0]?.id).toBe("assistant-live-1");
     expect(assistantMessages?.[0]?.content).toBe("First pass refined");
     expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
+  });
+
+  test("records explicit tool start timing for live assistant turns", () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build" }),
+      },
+    };
+    const recordTurnActivityTimestamp = mock(() => {});
+
+    const context: SessionPartEventContext = {
+      store: {
+        sessionId: "session-1",
+        sessionsRef,
+        updateSession: (sessionId, updater) => {
+          const current = sessionsRef.current[sessionId];
+          if (!current) {
+            return;
+          }
+          sessionsRef.current = {
+            ...sessionsRef.current,
+            [sessionId]: updater(current),
+          };
+        },
+      },
+      drafts: {
+        sessionId: "session-1",
+        draftRawBySessionRef: { current: {} },
+        draftSourceBySessionRef: { current: {} },
+        draftMessageIdBySessionRef: { current: {} },
+        draftFlushTimeoutBySessionRef: { current: {} },
+      },
+      turn: {
+        sessionId: "session-1",
+        turnStartedAtBySessionRef: { current: {} },
+        recordTurnActivityTimestamp,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+      },
+      refresh: {
+        repoPath: "/tmp/repo",
+        refreshTaskData: async () => {},
+      },
+    };
+
+    handleAssistantPart(context, {
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "tool",
+        messageId: "assistant-live-1",
+        partId: "tool-part-1",
+        callId: "call-1",
+        tool: "bash",
+        status: "completed",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+
+    expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
   });
 
   test("reuses the spawned subagent row when a later update adds sessionId", () => {

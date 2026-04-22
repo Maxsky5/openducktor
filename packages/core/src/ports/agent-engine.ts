@@ -197,6 +197,7 @@ export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary>;
+  detachSession(sessionId: string): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
   listLiveAgentSessionSnapshots(

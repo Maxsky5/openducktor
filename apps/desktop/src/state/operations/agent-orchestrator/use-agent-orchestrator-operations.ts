@@ -41,6 +41,7 @@ import {
   readAssistantActivityStartedAtMsFromMessages,
   resolveAssistantTurnDurationMs,
 } from "./support/assistant-turn-duration";
+import { isTranscriptAgentSession } from "./support/session-purpose";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
@@ -333,10 +334,14 @@ export function useAgentOrchestratorOperations({
   );
 
   const removeAgentSession = useCallback(
-    (sessionId: string): void => {
+    async (sessionId: string): Promise<void> => {
+      const session = sessionsRef.current[sessionId];
+      if (session && isTranscriptAgentSession(session) && agentEngine.hasSession(sessionId)) {
+        await agentEngine.detachSession(sessionId);
+      }
       removeSessionIds([sessionId]);
     },
-    [removeSessionIds],
+    [agentEngine, removeSessionIds, sessionsRef],
   );
 
   const removeAgentSessions = useCallback(

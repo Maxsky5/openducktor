@@ -20,6 +20,7 @@ import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadMode,
   AgentSessionLoadOptions,
+  AgentSessionPurpose,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
@@ -42,7 +43,7 @@ import {
   historyToSessionContextUsage,
 } from "../support/persistence";
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
-import { resolveAgentSessionPurpose } from "../support/session-purpose";
+import { resolveAgentSessionPurposeForLoad } from "../support/session-purpose";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import {
   createHydrationRuntimeResolver,
@@ -177,13 +178,14 @@ const mergePersistedSessionRecord = (
   taskId: string,
   repoPath: string,
   promptOverrides: RepoPromptOverrides,
+  purpose: AgentSessionPurpose,
 ): AgentSessionState => {
   const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
   const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
 
   return {
     ...current,
-    purpose: resolveAgentSessionPurpose(current.purpose ?? persisted.purpose),
+    purpose,
     repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
@@ -551,6 +553,11 @@ export const preparePersistedSessionMergeStage = async ({
       }
       const next = { ...current };
       for (const record of persistedRecords) {
+        const nextPurpose = resolveAgentSessionPurposeForLoad({
+          requestedSessionId: intent.requestedSessionId,
+          sessionId: record.sessionId,
+          shouldHydrateRequestedSession: intent.shouldHydrateRequestedSession,
+        });
         const existingSession = next[record.sessionId];
         if (existingSession) {
           next[record.sessionId] = mergePersistedSessionRecord(
@@ -559,15 +566,13 @@ export const preparePersistedSessionMergeStage = async ({
             intent.taskId,
             intent.repoPath,
             existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
+            nextPurpose,
           );
           continue;
         }
         next[record.sessionId] = {
           ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
-          purpose:
-            intent.shouldHydrateRequestedSession && record.sessionId === intent.requestedSessionId
-              ? "transcript"
-              : "primary",
+          purpose: nextPurpose,
           pendingPermissions: [],
           pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,

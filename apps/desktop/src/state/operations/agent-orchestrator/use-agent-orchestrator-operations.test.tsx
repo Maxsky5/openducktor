@@ -1787,6 +1787,76 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
+  test("removeAgentSession detaches transcript-purpose attached sessions before local cleanup", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+      const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
+      const detachCalls: string[] = [];
+
+      OpencodeSdkAdapter.prototype.hasSession = (sessionId) => sessionId === "session-transcript";
+      OpencodeSdkAdapter.prototype.detachSession = async (sessionId) => {
+        detachCalls.push(sessionId);
+      };
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.run(async () => {
+          harness.getLatest().commitSessions({
+            "session-transcript": {
+              sessionId: "session-transcript",
+              externalSessionId: "external-transcript",
+              taskId: "task-1",
+              repoPath: "/tmp/repo",
+              runtimeKind: "opencode",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "idle",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              runtimeId: null,
+              runtimeRoute: null,
+              workingDirectory: "/tmp/repo/worktree",
+              historyHydrationState: "hydrated",
+              runtimeRecoveryState: "idle",
+              purpose: "transcript",
+              messages: createSessionMessagesState("session-transcript", []),
+              draftAssistantText: "",
+              draftAssistantMessageId: null,
+              draftReasoningText: "",
+              draftReasoningMessageId: null,
+              contextUsage: null,
+              pendingPermissions: [],
+              pendingQuestions: [],
+              todos: [],
+              modelCatalog: null,
+              selectedModel: null,
+              isLoadingModelCatalog: false,
+              promptOverrides: {},
+            },
+          });
+        });
+
+        await harness.run(async () => {
+          await harness.getLatest().removeAgentSession("session-transcript");
+        });
+
+        expect(detachCalls).toEqual(["session-transcript"]);
+        expect(
+          harness.getLatest().sessionStore.getSessionSnapshot("session-transcript"),
+        ).toBeNull();
+      } finally {
+        await harness.unmount();
+        OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+        OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
+      }
+    });
+  });
+
   test("revisit to the same repo bootstraps task sessions again", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;

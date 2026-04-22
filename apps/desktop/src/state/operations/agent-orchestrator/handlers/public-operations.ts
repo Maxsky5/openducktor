@@ -83,7 +83,7 @@ type CreatePublicOperationsArgs = {
     runtimeConnection: AgentRuntimeConnection,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (sessionId: string) => void;
+  removeAgentSession: (sessionId: string) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
   sessionActions: SessionActions;
 };

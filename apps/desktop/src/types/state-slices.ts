@@ -217,7 +217,7 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (sessionId: string) => void;
+  removeAgentSession: (sessionId: string) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
   startAgentSession: (
     input:

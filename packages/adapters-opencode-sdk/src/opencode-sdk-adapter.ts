@@ -62,6 +62,7 @@ import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import {
   attachSessionToRuntimeEvents,
   clearWorkflowToolCacheForDirectory,
+  detachSessionRuntime,
   hasSession,
   registerSession,
   requireSession,
@@ -346,6 +347,17 @@ export class OpencodeSdkAdapter
     });
 
     return summary;
+  }
+
+  async detachSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      clearSessionListeners(this.listeners, sessionId);
+      return;
+    }
+
+    await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
+    clearSessionListeners(this.listeners, sessionId);
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {

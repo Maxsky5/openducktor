@@ -11,7 +11,7 @@ let actualOperationsHost: Awaited<typeof import("@/state/operations/host")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 let tasks: TaskCard[] = [];
-const removeAgentSession = mock(() => {});
+const removeAgentSession = mock(async () => {});
 let agentSessionState: { purpose?: "primary" | "transcript" } | null = null;
 let latestDialogProps: {
   taskId: string;
@@ -308,7 +308,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(removeAgentSession).toHaveBeenCalledWith("session-child-1");
+    await waitFor(() => expect(removeAgentSession).toHaveBeenCalledWith("session-child-1"));
   });
 
   test("keeps regular sessions when the dialog closes", async () => {
@@ -352,6 +352,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(removeAgentSession).not.toHaveBeenCalled();
+    await waitFor(() => expect(removeAgentSession).not.toHaveBeenCalled());
   });
 });
