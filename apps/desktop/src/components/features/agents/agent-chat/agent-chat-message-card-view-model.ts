@@ -167,7 +167,8 @@ export const buildAgentChatMessageCardViewModel = ({
     !isRegularToolMessage &&
     !isReasoningMessage &&
     !isAssistantMessage &&
-    !isSessionNoticeMessage;
+    !isSessionNoticeMessage &&
+    !isSubagentMessage;
 
   return {
     timeLabel,

@@ -10,7 +10,7 @@ pub use events::{
 pub use registry::{
     builtin_runtime_registry, default_runtime_kind, AgentRuntimeKind, RuntimeCapabilities,
     RuntimeDefinition, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRegistry,
-    RuntimeStartupReadinessConfig, RuntimeSupportedScope,
+    RuntimeStartupReadinessConfig, RuntimeSubagentExecutionMode, RuntimeSupportedScope,
 };
 pub use route::RuntimeRoute;
 pub use state::{

@@ -13,7 +13,6 @@ import {
   getAgentSessionHistoryHydrationState,
   requiresHydratedAgentSessionHistory,
 } from "../support/history-hydration";
-import { getSessionMessageCount } from "../support/messages";
 import { hasAttachedSessionRuntime } from "../support/session-runtime-attachment";
 
 type LoadAgentSessions = (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
@@ -97,10 +96,6 @@ export const createSessionHydrationOperations = ({
       allowLiveSessionResume,
       persistedRecords,
     }) => {
-      const sessionBeforeRecovery = getSessionSnapshot(sessionId);
-      const hadLocalTranscriptBeforeRecovery =
-        sessionBeforeRecovery !== undefined && getSessionMessageCount(sessionBeforeRecovery) > 0;
-
       await loadAgentSessions(
         taskId,
         withPersistedRecords(
@@ -123,9 +118,7 @@ export const createSessionHydrationOperations = ({
         recoveredSession !== undefined &&
         attached &&
         requiresHydratedAgentSessionHistory(recoveredSession) &&
-        historyHydrationState !== "hydrating" &&
-        !hadLocalTranscriptBeforeRecovery &&
-        getSessionMessageCount(recoveredSession) === 0;
+        historyHydrationState !== "hydrating";
 
       if (!shouldHydrateAfterRecovery) {
         return attached;

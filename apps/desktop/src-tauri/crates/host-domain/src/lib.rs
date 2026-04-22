@@ -33,6 +33,7 @@ pub use runtime::{
     RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities,
     RuntimeDefinition, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode,
     RuntimeRegistry, RuntimeRole, RuntimeRoute, RuntimeStartupReadinessConfig,
+    RuntimeSubagentExecutionMode,
     RuntimeSupportedScope, TaskWorktreeSummary,
 };
 pub use store::TaskStore;

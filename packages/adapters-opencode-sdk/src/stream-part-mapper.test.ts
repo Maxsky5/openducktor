@@ -134,6 +134,43 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps task tool parts with metadata session ids to canonical subagent parts", () => {
+    const part = createToolPart({
+      id: "tool-task-1",
+      tool: "task",
+      status: "running",
+      input: {
+        subagent_type: "build",
+        prompt: "Inspect the repo",
+        description: "Starting subagent",
+      },
+      metadata: {
+        sessionId: "session-child-task-1",
+      },
+      time: {
+        start: 25,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-tool-task-1",
+      partId: "tool-task-1",
+      correlationKey: "spawn:assistant-tool-task-1:build:Inspect the repo",
+      status: "running",
+      agent: "build",
+      prompt: "Inspect the repo",
+      description: "Starting subagent",
+      sessionId: "session-child-task-1",
+      metadata: {
+        sessionId: "session-child-task-1",
+      },
+      startedAtMs: 25,
+    });
+  });
+
   test("keeps the same correlation key when tool completion changes the description", () => {
     const spawnPart = {
       id: "subtask-identity-1",

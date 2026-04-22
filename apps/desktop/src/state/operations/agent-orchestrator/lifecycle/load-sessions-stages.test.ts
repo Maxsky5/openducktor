@@ -241,6 +241,128 @@ describe("load-sessions-stages", () => {
     });
   });
 
+  test("absorbs current subagent fallback rows when hydrated history has the canonical row", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Finished A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-completed",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-200:child-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-running",
+            correlationKey: "session:msg-200:child-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      role: "system",
+      content: "Subagent (build): Finished A",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "completed",
+        sessionId: "child-a",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+  });
+
+  test("absorbs current completed session fallback rows when hydrated history still has the unresolved part row", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (build): Finished A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-completed",
+            correlationKey: "session:msg-201:child-a",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      role: "system",
+      content: "Subagent (build): Finished A",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "completed",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Finished A",
+        sessionId: "child-a",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+  });
+
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
     const existingSession = createSession({
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },

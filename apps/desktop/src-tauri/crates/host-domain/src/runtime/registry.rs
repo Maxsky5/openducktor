@@ -71,6 +71,13 @@ impl fmt::Display for RuntimeSupportedScope {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeSubagentExecutionMode {
+    Foreground,
+    Background,
+}
+
 pub const REQUIRED_RUNTIME_SUPPORTED_SCOPES: [RuntimeSupportedScope; 3] = [
     RuntimeSupportedScope::Workspace,
     RuntimeSupportedScope::Task,
@@ -93,6 +100,8 @@ pub struct RuntimeCapabilities {
     pub supports_diff: bool,
     pub supports_file_status: bool,
     pub supports_mcp_status: bool,
+    pub supports_subagents: bool,
+    pub supported_subagent_execution_modes: Vec<RuntimeSubagentExecutionMode>,
     pub supported_scopes: Vec<RuntimeSupportedScope>,
     pub provisioning_mode: RuntimeProvisioningMode,
 }
@@ -391,6 +400,11 @@ fn opencode_runtime_definition() -> RuntimeDefinition {
                 supports_diff: true,
                 supports_file_status: true,
                 supports_mcp_status: true,
+                supports_subagents: true,
+                supported_subagent_execution_modes: vec![
+                    RuntimeSubagentExecutionMode::Foreground,
+                    RuntimeSubagentExecutionMode::Background,
+                ],
                 supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
                 provisioning_mode: RuntimeProvisioningMode::HostManaged,
             },
@@ -420,7 +434,7 @@ mod tests {
     use super::{
         AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
         RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
-        RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
+        RuntimeSubagentExecutionMode, RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
     use anyhow::Result;
     use std::collections::BTreeMap;
@@ -440,6 +454,11 @@ mod tests {
             supports_diff: true,
             supports_file_status: true,
             supports_mcp_status: true,
+            supports_subagents: true,
+            supported_subagent_execution_modes: vec![
+                RuntimeSubagentExecutionMode::Foreground,
+                RuntimeSubagentExecutionMode::Background,
+            ],
             supported_scopes: scopes,
             provisioning_mode: RuntimeProvisioningMode::HostManaged,
         }
@@ -492,6 +511,14 @@ mod tests {
         );
         assert!(descriptor.capabilities.supports_slash_commands);
         assert!(descriptor.capabilities.supports_file_search);
+        assert!(descriptor.capabilities.supports_subagents);
+        assert_eq!(
+            descriptor.capabilities.supported_subagent_execution_modes,
+            vec![
+                RuntimeSubagentExecutionMode::Foreground,
+                RuntimeSubagentExecutionMode::Background,
+            ]
+        );
         assert!(descriptor
             .read_only_role_blocked_tools
             .contains(&"apply_patch".to_string()));
@@ -549,6 +576,8 @@ mod tests {
                 supports_diff: true,
                 supports_file_status: true,
                 supports_mcp_status: true,
+                supports_subagents: false,
+                supported_subagent_execution_modes: vec![],
                 supported_scopes: vec![RuntimeSupportedScope::Workspace],
                 provisioning_mode: RuntimeProvisioningMode::HostManaged,
             },

@@ -2425,7 +2425,7 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
-  test("does not request history after recovery when the session already has local transcript", async () => {
+  test("requests history after recovery when the session already has a local transcript tail", async () => {
     const originalRuntimeList = host.runtimeList;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
@@ -2469,7 +2469,23 @@ describe("use-agent-orchestrator-operations", () => {
     });
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
       loadSessionHistoryCalls += 1;
-      throw new Error("history unavailable");
+      return [
+        {
+          messageId: "history-tail-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:04.000Z",
+          text: "Recovered history tail",
+          parts: [
+            {
+              kind: "text",
+              messageId: "history-tail-1",
+              partId: "part-1",
+              text: "Recovered history tail",
+              completed: true,
+            },
+          ],
+        },
+      ];
     };
 
     const harness = createHookHarness({
@@ -2518,14 +2534,21 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
 
-      expect(loadSessionHistoryCalls).toBe(0);
+      expect(loadSessionHistoryCalls).toBe(1);
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
-      expect(
-        recoveredSession
-          ? sessionMessagesToArray(recoveredSession).map((message) => message.content)
-          : [],
-      ).toEqual(["Local transcript still present"]);
+      expect(recoveredSession?.historyHydrationState).toBe("hydrated");
+      const recoveredContents = recoveredSession
+        ? sessionMessagesToArray(recoveredSession).map((message) => message.content)
+        : [];
+      expect(recoveredContents).toEqual(
+        expect.arrayContaining([
+          "Recovered history tail",
+          "Local transcript still present",
+          expect.stringContaining("Session started (build - build_implementation_start)"),
+          expect.stringContaining("System prompt:"),
+        ]),
+      );
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;

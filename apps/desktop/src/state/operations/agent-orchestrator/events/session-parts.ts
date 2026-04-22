@@ -4,6 +4,7 @@ import { sanitizeStreamingText } from "../support/core";
 import {
   findLastSessionMessageByRole,
   findSessionMessageById,
+  removeSessionMessageById,
   upsertSessionMessage,
 } from "../support/messages";
 import type {
@@ -346,11 +347,11 @@ const handleSubtaskPart = (
   context: SessionPartEventContext,
   event: SessionPartEvent,
   part: Extract<SessionPart, { kind: "subagent" }>,
-  streamMessageKey: string,
   prepareCurrent: PrepareCurrent,
 ): void => {
   type SubagentMessageMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
   const eventTimestamp = eventTimestampMs(event.timestamp);
+  const correlationKeyKind = part.correlationKey.split(":", 1)[0] ?? "";
 
   const resolveNextStatus = (
     existingStatus: Extract<SessionPart, { kind: "subagent" }>["status"] | undefined,
@@ -394,22 +395,33 @@ const handleSubtaskPart = (
     context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
-      const existingMessage =
-        (part.sessionId
-          ? findLastSessionMessageByRole(
+      const correlationMessage = findLastSessionMessageByRole(
+        prepared,
+        "system",
+        (message) =>
+          message.meta?.kind === "subagent" && message.meta.correlationKey === part.correlationKey,
+      );
+      const sessionMessage = part.sessionId
+        ? findLastSessionMessageByRole(
+            prepared,
+            "system",
+            (message) =>
+              message.meta?.kind === "subagent" && message.meta.sessionId === part.sessionId,
+          )
+        : undefined;
+      const semanticFallbackMessage =
+        correlationMessage || correlationKeyKind !== "session" || !part.agent || !part.prompt
+          ? undefined
+          : findLastSessionMessageByRole(
               prepared,
               "system",
               (message) =>
-                message.meta?.kind === "subagent" && message.meta.sessionId === part.sessionId,
-            )
-          : undefined) ??
-        findLastSessionMessageByRole(
-          prepared,
-          "system",
-          (message) =>
-            message.meta?.kind === "subagent" &&
-            message.meta.correlationKey === part.correlationKey,
-        );
+                message.meta?.kind === "subagent" &&
+                !message.meta.sessionId &&
+                message.meta.agent === part.agent &&
+                message.meta.prompt === part.prompt,
+            );
+      const existingMessage = correlationMessage ?? sessionMessage ?? semanticFallbackMessage;
       const existingMeta = existingMessage?.meta?.kind === "subagent" ? existingMessage.meta : null;
       const status = resolveNextStatus(existingMeta?.status, part.status);
       const metadata =
@@ -445,15 +457,27 @@ const handleSubtaskPart = (
         ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
         ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
       };
+      const duplicateMessageId =
+        correlationMessage &&
+        sessionMessage &&
+        correlationMessage.id !== sessionMessage.id &&
+        existingMessage?.id === correlationMessage.id
+          ? sessionMessage.id
+          : null;
+      const nextPrepared =
+        duplicateMessageId === null
+          ? prepared
+          : { ...prepared, messages: removeSessionMessageById(prepared, duplicateMessageId) };
+      const nextMessageId = existingMessage?.id ?? `subagent:${part.correlationKey}`;
 
       return {
-        ...prepared,
+        ...nextPrepared,
         status: "running",
-        messages: upsertSessionMessage(prepared, {
-          id: existingMessage?.id ?? `subagent:${part.sessionId ?? streamMessageKey}`,
+        messages: upsertSessionMessage(nextPrepared, {
+          id: nextMessageId,
           role: "system",
           content: formatSubagentContent(nextMeta),
-          timestamp: event.timestamp,
+          timestamp: existingMessage?.timestamp ?? event.timestamp,
           meta: nextMeta,
         }),
       };
@@ -520,7 +544,7 @@ export const handleAssistantPart = (
       handleToolPart(context, event, part, streamMessageKey, prepareCurrent);
       return;
     case "subagent":
-      handleSubtaskPart(context, event, part, streamMessageKey, prepareCurrent);
+      handleSubtaskPart(context, event, part, prepareCurrent);
       return;
     case "step":
       handleStepPart(context, part, prepareCurrent);

@@ -59,7 +59,7 @@ const buildSubagentSignature = (part: MappedSubagentPart): string | undefined =>
     return undefined;
   }
 
-  return [part.messageId, agent, prompt].join(":");
+  return [agent, prompt].join(":");
 };
 
 const buildPartScopedSubagentCorrelationKey = (

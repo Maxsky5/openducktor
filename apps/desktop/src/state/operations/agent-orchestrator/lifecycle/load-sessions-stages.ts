@@ -5,7 +5,12 @@ import type {
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
-import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentSubagentExecutionMode,
+  AgentSubagentStatus,
+  LiveAgentSessionSnapshot,
+} from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
@@ -203,7 +208,184 @@ export const mergeHydratedMessages = (
   hydratedMessages: AgentSessionState["messages"],
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
+  type SubagentMessageMeta = {
+    kind: "subagent";
+    partId: string;
+    correlationKey: string;
+    status: AgentSubagentStatus;
+    agent?: string;
+    prompt?: string;
+    description?: string;
+    sessionId?: string;
+    executionMode?: AgentSubagentExecutionMode;
+    metadata?: Record<string, unknown>;
+    startedAtMs?: number;
+    endedAtMs?: number;
+  };
+  type SubagentChatMessage = AgentChatMessage & {
+    role: "system";
+    meta: SubagentMessageMeta;
+  };
   const currentOwner = { sessionId, messages: currentMessages };
+  const isSubagentMessage = (
+    message: AgentChatMessage | undefined,
+  ): message is SubagentChatMessage => {
+    return message?.role === "system" && message.meta?.kind === "subagent";
+  };
+  const resolveMergedSubagentStatus = (
+    existingStatus: SubagentMessageMeta["status"],
+    incomingStatus: SubagentMessageMeta["status"],
+  ): SubagentMessageMeta["status"] => {
+    if (existingStatus === "error") {
+      return "error";
+    }
+    if (incomingStatus === "error") {
+      return "error";
+    }
+    if (existingStatus === "completed") {
+      return "completed";
+    }
+    if (incomingStatus === "completed") {
+      return "completed";
+    }
+    if (existingStatus === "running" && incomingStatus === "pending") {
+      return "running";
+    }
+
+    return incomingStatus;
+  };
+  const formatMergedSubagentContent = (meta: {
+    agent?: string;
+    prompt?: string;
+    description?: string;
+    sessionId?: string;
+  }): string => {
+    const agentLabel = meta.agent?.trim() || "subagent";
+    const summary =
+      meta.description?.trim() ||
+      meta.prompt?.trim() ||
+      (meta.sessionId ? `Session ${meta.sessionId.slice(0, 8)}` : "Subagent activity");
+
+    return `Subagent (${agentLabel}): ${summary}`;
+  };
+  const mergeSubagentMessages = (
+    hydratedMessage: SubagentChatMessage,
+    currentMessage: SubagentChatMessage,
+  ): AgentChatMessage => {
+    const hydratedMeta = hydratedMessage.meta;
+    const currentMeta = currentMessage.meta;
+    const status = resolveMergedSubagentStatus(hydratedMeta.status, currentMeta.status);
+    const prefersCurrentTerminalState =
+      (currentMeta.status === "completed" || currentMeta.status === "error") &&
+      hydratedMeta.status !== "completed" &&
+      hydratedMeta.status !== "error";
+    const metadata =
+      hydratedMeta.metadata && currentMeta.metadata
+        ? { ...hydratedMeta.metadata, ...currentMeta.metadata }
+        : (currentMeta.metadata ?? hydratedMeta.metadata);
+    const startedAtMs =
+      typeof hydratedMeta.startedAtMs === "number" && typeof currentMeta.startedAtMs === "number"
+        ? Math.min(hydratedMeta.startedAtMs, currentMeta.startedAtMs)
+        : (currentMeta.startedAtMs ?? hydratedMeta.startedAtMs);
+    const endedAtMs =
+      typeof hydratedMeta.endedAtMs === "number" && typeof currentMeta.endedAtMs === "number"
+        ? Math.max(hydratedMeta.endedAtMs, currentMeta.endedAtMs)
+        : status === "completed" || status === "error"
+          ? (currentMeta.endedAtMs ?? hydratedMeta.endedAtMs)
+          : undefined;
+    const agent = currentMeta.agent ?? hydratedMeta.agent;
+    const prompt = currentMeta.prompt ?? hydratedMeta.prompt;
+    const description = prefersCurrentTerminalState
+      ? (currentMeta.description ?? hydratedMeta.description)
+      : (hydratedMeta.description ?? currentMeta.description);
+    const sessionId = currentMeta.sessionId ?? hydratedMeta.sessionId;
+    const executionMode = currentMeta.executionMode ?? hydratedMeta.executionMode;
+    const nextMeta: typeof hydratedMeta = {
+      kind: "subagent",
+      partId: hydratedMeta.partId,
+      correlationKey: hydratedMeta.correlationKey,
+      status,
+      ...(typeof agent === "string" ? { agent } : {}),
+      ...(typeof prompt === "string" ? { prompt } : {}),
+      ...(typeof description === "string" ? { description } : {}),
+      ...(typeof sessionId === "string" ? { sessionId } : {}),
+      ...(executionMode ? { executionMode } : {}),
+      ...(metadata ? { metadata } : {}),
+      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+      ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    };
+
+    return {
+      ...hydratedMessage,
+      content: formatMergedSubagentContent(nextMeta),
+      meta: nextMeta,
+    };
+  };
+  const matchesHydratedSubagent = (
+    hydratedMessage: AgentChatMessage,
+    candidate: AgentChatMessage,
+  ): boolean => {
+    if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
+      return false;
+    }
+    if (candidate.id === hydratedMessage.id) {
+      return false;
+    }
+
+    const hydratedSessionId = hydratedMessage.meta.sessionId;
+    if (hydratedSessionId) {
+      return candidate.meta.sessionId === hydratedSessionId;
+    }
+
+    const hydratedCorrelationKey = hydratedMessage.meta.correlationKey;
+    if (!hydratedCorrelationKey.startsWith("part:")) {
+      return false;
+    }
+    if (!candidate.meta.correlationKey.startsWith("session:")) {
+      return false;
+    }
+    if (!candidate.meta.sessionId) {
+      return false;
+    }
+    if (!hydratedMessage.meta.agent || !hydratedMessage.meta.prompt) {
+      return false;
+    }
+
+    return (
+      candidate.meta.agent === hydratedMessage.meta.agent &&
+      candidate.meta.prompt === hydratedMessage.meta.prompt
+    );
+  };
+  const findMatchingCurrentSubagents = (
+    hydratedMessage: AgentChatMessage,
+    sameIdCurrentMessage: AgentChatMessage | undefined,
+  ): AgentChatMessage[] => {
+    if (!isSubagentMessage(hydratedMessage)) {
+      return sameIdCurrentMessage ? [sameIdCurrentMessage] : [];
+    }
+
+    const matches: AgentChatMessage[] = [];
+    const seenIds = new Set<string>();
+    if (sameIdCurrentMessage) {
+      matches.push(sameIdCurrentMessage);
+      seenIds.add(sameIdCurrentMessage.id);
+    }
+
+    const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+    for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
+      const candidate = currentSlice[index];
+      if (!candidate || seenIds.has(candidate.id)) {
+        continue;
+      }
+      if (!matchesHydratedSubagent(hydratedMessage, candidate)) {
+        continue;
+      }
+      matches.push(candidate);
+      seenIds.add(candidate.id);
+    }
+
+    return matches;
+  };
   const mergeSameMessageId = (
     hydratedMessage: AgentChatMessage,
     currentMessage: AgentChatMessage | undefined,
@@ -249,22 +431,34 @@ export const mergeHydratedMessages = (
       };
     }
 
+    if (isSubagentMessage(hydratedMessage) && isSubagentMessage(currentMessage)) {
+      return mergeSubagentMessages(hydratedMessage, currentMessage);
+    }
+
     return currentMessage;
   };
   const hydratedOwner = { sessionId, messages: hydratedMessages };
   const hydratedMessageIds = new Set<string>();
+  const absorbedCurrentMessageIds = new Set<string>();
   let mergedMessages = createSessionMessagesState(sessionId);
 
   forEachSessionMessage(hydratedOwner, (message) => {
+    const sameIdCurrentMessage = findSessionMessageById(currentOwner, message.id);
+    const matchingCurrentMessages = findMatchingCurrentSubagents(message, sameIdCurrentMessage);
     hydratedMessageIds.add(message.id);
-    mergedMessages = appendSessionMessage(
-      { sessionId, messages: mergedMessages },
-      mergeSameMessageId(message, findSessionMessageById(currentOwner, message.id)),
+    for (const matchingCurrentMessage of matchingCurrentMessages) {
+      absorbedCurrentMessageIds.add(matchingCurrentMessage.id);
+    }
+    const mergedMessage = matchingCurrentMessages.reduce<AgentChatMessage>(
+      (currentMerged, matchingCurrentMessage) =>
+        mergeSameMessageId(currentMerged, matchingCurrentMessage),
+      message,
     );
+    mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, mergedMessage);
   });
 
   forEachSessionMessage(currentOwner, (message) => {
-    if (hydratedMessageIds.has(message.id)) {
+    if (hydratedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
       return;
     }
     mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, message);

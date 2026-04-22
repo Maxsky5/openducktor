@@ -4,6 +4,8 @@ import {
   type AgentRole,
   type AgentScenario,
   type AgentSessionHistoryMessage,
+  type AgentSubagentExecutionMode,
+  type AgentSubagentStatus,
   type AgentUserMessageDisplayPart,
   defaultAgentScenarioForRole,
 } from "@openducktor/core";
@@ -24,6 +26,24 @@ import {
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
+type SubagentMessageMeta = {
+  kind: "subagent";
+  partId: string;
+  correlationKey: string;
+  status: AgentSubagentStatus;
+  agent?: string;
+  prompt?: string;
+  description?: string;
+  sessionId?: string;
+  executionMode?: AgentSubagentExecutionMode;
+  metadata?: Record<string, unknown>;
+  startedAtMs?: number;
+  endedAtMs?: number;
+};
+type SubagentChatMessage = AgentChatMessage & {
+  role: "system";
+  meta: SubagentMessageMeta;
+};
 type LegacySubtaskHistoryPart = {
   kind: "subtask";
   partId: string;
@@ -32,6 +52,8 @@ type LegacySubtaskHistoryPart = {
   description: string;
 };
 type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
+
+type HydratedSubagentMessage = SubagentChatMessage;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   const runtimeKind = requireSessionRuntimeKindForPersistence(session);
@@ -251,7 +273,7 @@ const historyPartToChatMessage = (
     }
     case "subagent": {
       return {
-        id: `history:subagent:${message.messageId}:${part.partId}`,
+        id: `subagent:${part.correlationKey}`,
         role: "system",
         content: `Subagent (${part.agent ?? "subagent"}): ${
           part.description ?? part.prompt ?? "Subagent activity"
@@ -274,15 +296,16 @@ const historyPartToChatMessage = (
       };
     }
     case "subtask": {
+      const correlationKey = `legacy:${message.messageId}:${part.partId}`;
       return {
-        id: `history:subagent:${message.messageId}:${part.partId}`,
+        id: `subagent:${correlationKey}`,
         role: "system",
         content: `Subagent (${part.agent}): ${part.description}`,
         timestamp: message.timestamp,
         meta: {
           kind: "subagent",
           partId: part.partId,
-          correlationKey: `legacy:${message.messageId}:${part.partId}`,
+          correlationKey,
           status: "completed",
           agent: part.agent,
           prompt: part.prompt,
@@ -296,6 +319,154 @@ const historyPartToChatMessage = (
   }
 };
 
+const isHydratedSubagentMessage = (
+  message: AgentChatMessage | null | undefined,
+): message is HydratedSubagentMessage => {
+  return message?.role === "system" && message.meta?.kind === "subagent";
+};
+
+const resolveHydratedSubagentStatus = (
+  existingStatus: HydratedSubagentMessage["meta"]["status"] | undefined,
+  incomingStatus: HydratedSubagentMessage["meta"]["status"],
+): HydratedSubagentMessage["meta"]["status"] => {
+  if (existingStatus === "error") {
+    return "error";
+  }
+  if (incomingStatus === "error") {
+    return "error";
+  }
+  if (existingStatus === "completed") {
+    return "completed";
+  }
+  if (incomingStatus === "completed") {
+    return "completed";
+  }
+  if (existingStatus === "running" && incomingStatus === "pending") {
+    return "running";
+  }
+
+  return incomingStatus;
+};
+
+const formatHydratedSubagentContent = (meta: {
+  agent?: string;
+  prompt?: string;
+  description?: string;
+  sessionId?: string;
+}): string => {
+  const agentLabel = meta.agent?.trim() || "subagent";
+  const summary =
+    meta.description?.trim() ||
+    meta.prompt?.trim() ||
+    (meta.sessionId ? `Session ${meta.sessionId.slice(0, 8)}` : "Subagent activity");
+
+  return `Subagent (${agentLabel}): ${summary}`;
+};
+
+const resolvePreferredHydratedCorrelationKey = (
+  existingMeta: HydratedSubagentMessage["meta"],
+  incomingMeta: HydratedSubagentMessage["meta"],
+): string => {
+  if (existingMeta.correlationKey.startsWith("part:")) {
+    return existingMeta.correlationKey;
+  }
+  if (incomingMeta.correlationKey.startsWith("part:")) {
+    return incomingMeta.correlationKey;
+  }
+  if (existingMeta.correlationKey.startsWith("spawn:")) {
+    return existingMeta.correlationKey;
+  }
+  if (incomingMeta.correlationKey.startsWith("spawn:")) {
+    return incomingMeta.correlationKey;
+  }
+
+  return existingMeta.correlationKey;
+};
+
+const matchesHydratedSubagentMessage = (
+  existingMessage: HydratedSubagentMessage,
+  incomingMessage: HydratedSubagentMessage,
+): boolean => {
+  if (existingMessage.meta.correlationKey === incomingMessage.meta.correlationKey) {
+    return true;
+  }
+
+  const existingSessionId = existingMessage.meta.sessionId;
+  const incomingSessionId = incomingMessage.meta.sessionId;
+  if (existingSessionId && incomingSessionId) {
+    return existingSessionId === incomingSessionId;
+  }
+
+  const existingIsPart = existingMessage.meta.correlationKey.startsWith("part:");
+  const incomingIsPart = incomingMessage.meta.correlationKey.startsWith("part:");
+  const existingIsSession = existingMessage.meta.correlationKey.startsWith("session:");
+  const incomingIsSession = incomingMessage.meta.correlationKey.startsWith("session:");
+  if (!(existingIsPart && incomingIsSession) && !(existingIsSession && incomingIsPart)) {
+    return false;
+  }
+
+  const partMeta = existingIsPart ? existingMessage.meta : incomingMessage.meta;
+  const sessionMeta = existingIsSession ? existingMessage.meta : incomingMessage.meta;
+  if (!sessionMeta.sessionId) {
+    return false;
+  }
+  if (!partMeta.agent || !partMeta.prompt) {
+    return false;
+  }
+
+  return sessionMeta.agent === partMeta.agent && sessionMeta.prompt === partMeta.prompt;
+};
+
+const mergeHydratedSubagentMessages = (
+  existingMessage: HydratedSubagentMessage,
+  incomingMessage: HydratedSubagentMessage,
+): HydratedSubagentMessage => {
+  const existingMeta = existingMessage.meta;
+  const incomingMeta = incomingMessage.meta;
+  const status = resolveHydratedSubagentStatus(existingMeta.status, incomingMeta.status);
+  const metadata =
+    existingMeta.metadata && incomingMeta.metadata
+      ? { ...existingMeta.metadata, ...incomingMeta.metadata }
+      : (incomingMeta.metadata ?? existingMeta.metadata);
+  const startedAtMs =
+    typeof existingMeta.startedAtMs === "number" && typeof incomingMeta.startedAtMs === "number"
+      ? Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs)
+      : (incomingMeta.startedAtMs ?? existingMeta.startedAtMs);
+  const endedAtMs =
+    typeof existingMeta.endedAtMs === "number" && typeof incomingMeta.endedAtMs === "number"
+      ? Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs)
+      : status === "completed" || status === "error"
+        ? (incomingMeta.endedAtMs ?? existingMeta.endedAtMs)
+        : undefined;
+  const agent = incomingMeta.agent ?? existingMeta.agent;
+  const prompt = incomingMeta.prompt ?? existingMeta.prompt;
+  const description = incomingMeta.description ?? existingMeta.description;
+  const sessionId = incomingMeta.sessionId ?? existingMeta.sessionId;
+  const executionMode = incomingMeta.executionMode ?? existingMeta.executionMode;
+  const correlationKey = resolvePreferredHydratedCorrelationKey(existingMeta, incomingMeta);
+  const nextMeta: HydratedSubagentMessage["meta"] = {
+    kind: "subagent",
+    partId: incomingMeta.partId,
+    correlationKey,
+    status,
+    ...(typeof agent === "string" ? { agent } : {}),
+    ...(typeof prompt === "string" ? { prompt } : {}),
+    ...(typeof description === "string" ? { description } : {}),
+    ...(typeof sessionId === "string" ? { sessionId } : {}),
+    ...(executionMode ? { executionMode } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+  };
+
+  return {
+    ...existingMessage,
+    id: `subagent:${correlationKey}`,
+    content: formatHydratedSubagentContent(nextMeta),
+    meta: nextMeta,
+  };
+};
+
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
@@ -305,6 +476,21 @@ export const historyToChatMessages = (
 ): AgentChatMessage[] => {
   const next: AgentChatMessage[] = [];
   let previousUserTimestampMs: number | null = null;
+  const findLastMatchingHydratedSubagentIndex = (
+    incomingMessage: HydratedSubagentMessage,
+  ): number => {
+    for (let index = next.length - 1; index >= 0; index -= 1) {
+      const entry = next[index];
+      if (!isHydratedSubagentMessage(entry)) {
+        continue;
+      }
+      if (matchesHydratedSubagentMessage(entry, incomingMessage)) {
+        return index;
+      }
+    }
+
+    return -1;
+  };
 
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
@@ -312,6 +498,16 @@ export const historyToChatMessages = (
     for (const part of message.parts as HydrationHistoryPart[]) {
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
+        if (isHydratedSubagentMessage(partMessage)) {
+          const existingIndex = findLastMatchingHydratedSubagentIndex(partMessage);
+          if (existingIndex >= 0) {
+            const existingMessage = next[existingIndex];
+            if (isHydratedSubagentMessage(existingMessage)) {
+              next[existingIndex] = mergeHydratedSubagentMessages(existingMessage, partMessage);
+              continue;
+            }
+          }
+        }
         next.push(partMessage);
       }
     }

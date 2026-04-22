@@ -139,6 +139,19 @@ export const deriveAgentSessionViewLifecycle = ({
     };
   }
 
+  if (historyHydrationState === "failed" && hasTranscript) {
+    return {
+      phase: "needs_history",
+      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
+      canRenderHistory: true,
+      isWaitingForRuntimeReadiness: false,
+      isHydratingHistory: false,
+      isHistoryHydrationFailed: false,
+      shouldEnsureReadyForView: repoReadinessState === "ready",
+      shouldWaitForRuntimeAttachment: false,
+    };
+  }
+
   const shouldShowBlockingHistoryFailure = !hasTranscript && historyHydrationState === "failed";
   if (shouldShowBlockingHistoryFailure) {
     return {

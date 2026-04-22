@@ -278,7 +278,7 @@ const buildSubagentStreamPart = (input: {
 
 const resolveSubagentAgent = (...sources: unknown[]): string | undefined => {
   for (const source of sources) {
-    const agent = readTrimmedString(source, ["agent", "name"]);
+    const agent = readTrimmedString(source, ["agent", "name", "subagent_type", "subagentType"]);
     if (agent) {
       return agent;
     }

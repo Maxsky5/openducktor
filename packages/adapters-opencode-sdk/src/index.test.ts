@@ -1358,6 +1358,434 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("loadSessionHistory normalizes subagent correlation keys like the live stream", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "subtask-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "subtask",
+              agent: "build",
+              prompt: "Inspect repo",
+              description: "Starting A",
+            } as Part,
+            {
+              id: "tool-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-a",
+              type: "tool",
+              tool: "task",
+              state: {
+                status: "completed",
+                input: {
+                  subagent_type: "build",
+                  prompt: "Inspect repo",
+                  description: "Starting A",
+                },
+                output: {
+                  result: "Finished A",
+                },
+                metadata: {
+                  sessionId: "child-a",
+                },
+                time: {
+                  start: Date.parse("2026-02-17T12:00:00Z"),
+                  end: Date.parse("2026-02-17T12:02:00Z"),
+                },
+                title: "Task",
+              },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(1);
+    if (history[0]?.role !== "assistant") {
+      throw new Error("Expected assistant history entry");
+    }
+
+    expect(history[0].parts).toHaveLength(2);
+    expect(history[0].parts[0]).toMatchObject({
+      kind: "subagent",
+      status: "running",
+      correlationKey: "part:msg-200:subtask-a",
+    });
+    expect(history[0].parts[1]).toMatchObject({
+      kind: "subagent",
+      status: "completed",
+      sessionId: "child-a",
+      correlationKey: "part:msg-200:subtask-a",
+    });
+  });
+
+  test("loadSessionHistory seeds live subagent correlation for later task-tool updates", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            time: {
+              created: Date.parse("2026-02-17T12:00:00Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "session-opencode-1",
+            messageID: "msg-200",
+            callID: "call-a",
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "running",
+              input: {
+                subagent_type: "build",
+                prompt: "Inspect repo",
+                description: "Starting A",
+              },
+              metadata: {
+                sessionId: "child-a",
+              },
+              time: {
+                start: Date.parse("2026-02-17T12:00:01Z"),
+              },
+              title: "Task",
+            },
+          },
+        },
+      } as unknown as Event,
+    ];
+    const mock = makeMockClient({
+      streamEvents,
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "subtask-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "subtask",
+              agent: "build",
+              prompt: "Inspect repo",
+              description: "Starting A",
+            } as Part,
+          ],
+        },
+      ],
+    });
+
+    let releaseStream: (() => void) | null = null;
+    (
+      mock.client.global as unknown as {
+        event: (options?: {
+          signal?: AbortSignal;
+        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
+      }
+    ).event = async (options?: { signal?: AbortSignal }) => {
+      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+        await new Promise<void>((resolve) => {
+          releaseStream = resolve;
+          options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+        if (options?.signal?.aborted) {
+          return;
+        }
+        for (const event of streamEvents) {
+          yield { directory: defaultRuntimeConnection.workingDirectory, payload: event };
+        }
+      }
+
+      return { stream: iterator() };
+    };
+
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+    releaseStream?.();
+    await flushAsync();
+
+    expect(history).toHaveLength(1);
+    const subagentEvents = events.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part" && event.part.kind === "subagent",
+    );
+    expect(subagentEvents).toHaveLength(1);
+    expect(subagentEvents[0]?.part).toMatchObject({
+      kind: "subagent",
+      status: "running",
+      sessionId: "child-a",
+      correlationKey: "part:msg-200:subtask-a",
+    });
+  });
+
+  test("loadSessionHistory seeds live subagent correlation across assistant message boundaries", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg-201",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            time: {
+              created: Date.parse("2026-02-17T12:00:02Z"),
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "session-opencode-1",
+            messageID: "msg-201",
+            callID: "call-a",
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "completed",
+              input: {
+                subagent_type: "build",
+                prompt: "Inspect repo",
+                description: "Starting A",
+              },
+              output: {
+                result: "Finished A",
+              },
+              metadata: {
+                sessionId: "child-a",
+              },
+              time: {
+                start: Date.parse("2026-02-17T12:00:01Z"),
+                end: Date.parse("2026-02-17T12:02:00Z"),
+              },
+              title: "Task",
+            },
+          },
+        },
+      } as unknown as Event,
+    ];
+    const mock = makeMockClient({
+      streamEvents,
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "subtask-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "subtask",
+              agent: "build",
+              prompt: "Inspect repo",
+              description: "Starting A",
+            } as Part,
+          ],
+        },
+      ],
+    });
+
+    let releaseStream: (() => void) | null = null;
+    (
+      mock.client.global as unknown as {
+        event: (options?: {
+          signal?: AbortSignal;
+        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
+      }
+    ).event = async (options?: { signal?: AbortSignal }) => {
+      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+        await new Promise<void>((resolve) => {
+          releaseStream = resolve;
+          options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+        if (options?.signal?.aborted) {
+          return;
+        }
+        for (const event of streamEvents) {
+          yield { directory: defaultRuntimeConnection.workingDirectory, payload: event };
+        }
+      }
+
+      return { stream: iterator() };
+    };
+
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "build");
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+    releaseStream?.();
+    await flushAsync();
+
+    expect(history).toHaveLength(1);
+    const subagentEvents = events.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part" && event.part.kind === "subagent",
+    );
+    expect(subagentEvents).toHaveLength(1);
+    expect(subagentEvents[0]?.part).toMatchObject({
+      kind: "subagent",
+      status: "completed",
+      sessionId: "child-a",
+      correlationKey: "part:msg-200:subtask-a",
+    });
+  });
+
+  test("loadSessionHistory normalizes split-message subagent history to one canonical correlation", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "subtask-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "subtask",
+              agent: "build",
+              prompt: "Inspect repo",
+              description: "Starting A",
+            } as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-201",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:02Z") },
+          },
+          parts: [
+            {
+              id: "tool-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              callID: "call-a",
+              type: "tool",
+              tool: "task",
+              state: {
+                status: "completed",
+                input: {
+                  subagent_type: "build",
+                  prompt: "Inspect repo",
+                  description: "Starting A",
+                },
+                output: {
+                  result: "Finished A",
+                },
+                metadata: {
+                  sessionId: "child-a",
+                },
+                time: {
+                  start: Date.parse("2026-02-17T12:00:01Z"),
+                  end: Date.parse("2026-02-17T12:02:00Z"),
+                },
+                title: "Task",
+              },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      runtimeKind: "opencode",
+      runtimeConnection: defaultRuntimeConnection,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(2);
+    if (history[0]?.role !== "assistant" || history[1]?.role !== "assistant") {
+      throw new Error("Expected assistant history entries");
+    }
+
+    expect(history[0].parts).toHaveLength(1);
+    expect(history[0].parts[0]).toMatchObject({
+      kind: "subagent",
+      status: "running",
+      correlationKey: "part:msg-200:subtask-a",
+    });
+    expect(history[1].parts).toHaveLength(1);
+    expect(history[1].parts[0]).toMatchObject({
+      kind: "subagent",
+      status: "completed",
+      sessionId: "child-a",
+      correlationKey: "part:msg-200:subtask-a",
+    });
+  });
+
   test("loadSessionHistory marks queued user messages using the last unfinished assistant boundary", async () => {
     const mock = makeMockClient({
       messagesResponse: [

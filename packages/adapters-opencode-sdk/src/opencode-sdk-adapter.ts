@@ -51,6 +51,7 @@ import { setSessionIdle } from "./event-stream/shared";
 import { sendUserMessage } from "./message-execution";
 import {
   listLiveAgentSessionPendingInput,
+  loadAndSeedSessionHistory,
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
@@ -415,12 +416,51 @@ export class OpencodeSdkAdapter
         ),
     );
 
-    return loadSessionHistory(this.createClient, this.now, {
+    const matchingSessions = [...this.sessions.values()].filter(
+      (session) =>
+        session.externalSessionId === input.externalSessionId &&
+        session.eventTransportKey === runtimeClientInput.runtimeEndpoint,
+    );
+    const historyInput = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
       ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
       ...(preservedDisplayPartsByMessageId.size > 0 ? { preservedDisplayPartsByMessageId } : {}),
+    };
+
+    if (matchingSessions.length === 0) {
+      return loadSessionHistory(this.createClient, this.now, historyInput);
+    }
+
+    const [primarySession, ...otherSessions] = matchingSessions;
+    if (!primarySession) {
+      return loadSessionHistory(this.createClient, this.now, historyInput);
+    }
+
+    const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
+      ...historyInput,
+      session: primarySession,
     });
+
+    for (const session of otherSessions) {
+      for (const [partId, correlationKey] of primarySession.subagentCorrelationKeyByPartId) {
+        session.subagentCorrelationKeyByPartId.set(partId, correlationKey);
+      }
+      for (const [sessionId, correlationKey] of primarySession.subagentCorrelationKeyBySessionId) {
+        session.subagentCorrelationKeyBySessionId.set(sessionId, correlationKey);
+      }
+      session.pendingSubagentCorrelationKeys.splice(
+        0,
+        session.pendingSubagentCorrelationKeys.length,
+        ...primarySession.pendingSubagentCorrelationKeys,
+      );
+      session.pendingSubagentCorrelationKeysBySignature.clear();
+      for (const [signature, pending] of primarySession.pendingSubagentCorrelationKeysBySignature) {
+        session.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending]);
+      }
+    }
+
+    return history;
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {

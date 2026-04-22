@@ -1838,6 +1838,66 @@ describe("event-stream", () => {
     expect(completedParts.map((part) => part.description)).toEqual(["Finished B", "Finished A"]);
   });
 
+  test("binds running task tool updates with metadata session ids back to their spawned card", async () => {
+    const emitted = await runEventStream([
+      assistantRoleEvent("assistant-task-tool-running"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-task-tool-running",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-task-tool-running",
+            callID: "call-a",
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "running",
+              input: {
+                subagent_type: "build",
+                prompt: "Inspect repo",
+                description: "Starting A",
+              },
+              metadata: {
+                sessionId: "child-a",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const assistantPartEvents = emitted.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part",
+    );
+    const subagentParts = assistantPartEvents
+      .map((event): Extract<AgentEvent, { type: "assistant_part" }>["part"] => event.part)
+      .filter(
+        (
+          part,
+        ): part is Extract<
+          Extract<AgentEvent, { type: "assistant_part" }>["part"],
+          { kind: "subagent" }
+        > => part.kind === "subagent",
+      );
+
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-task-tool-running:subtask-a",
+      "part:assistant-task-tool-running:subtask-a",
+    ]);
+    expect(subagentParts.map((part) => part.sessionId)).toEqual([undefined, "child-a"]);
+    expect(subagentParts.map((part) => part.agent)).toEqual(["build", "build"]);
+  });
+
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
     const { emitted } = await runEventStreamWithSession([
       {

@@ -1,7 +1,8 @@
 use super::{OpencodeStartupReadinessConfig, RuntimeConfig, TestRuntimeStoreHarness};
 use host_domain::{
     AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
-    RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig, RuntimeSupportedScope,
+    RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
+    RuntimeSubagentExecutionMode, RuntimeSupportedScope,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -36,6 +37,11 @@ fn runtime_registry_with_test_runtime() -> RuntimeRegistry {
                         supports_diff: true,
                         supports_file_status: true,
                         supports_mcp_status: true,
+                        supports_subagents: true,
+                        supported_subagent_execution_modes: vec![
+                            RuntimeSubagentExecutionMode::Foreground,
+                            RuntimeSubagentExecutionMode::Background,
+                        ],
                         supported_scopes: vec![
                             RuntimeSupportedScope::Workspace,
                             RuntimeSupportedScope::Task,

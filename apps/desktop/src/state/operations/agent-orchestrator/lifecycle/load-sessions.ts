@@ -221,7 +221,11 @@ export const createLoadAgentSessions = ({
       if (intent.historyPolicy === "live_if_empty") {
         for (const sessionId of reattachedSessionIds) {
           const currentSession = sessionsRef.current[sessionId];
-          if (!currentSession || getSessionMessageCount(currentSession) > 0) {
+          if (!currentSession) {
+            continue;
+          }
+          const hasHydratedHistory = currentSession.historyHydrationState === "hydrated";
+          if (hasHydratedHistory && getSessionMessageCount(currentSession) > 0) {
             continue;
           }
           effectiveHistoryHydrationSessionIds.add(sessionId);
