@@ -2130,6 +2130,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("starts requested history hydration inside the recovery operation once runtime recovery succeeds", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2162,6 +2163,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2221,6 +2231,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2230,6 +2241,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("retries requested history hydration after recovery when the prior hydration state failed", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2262,6 +2274,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2332,6 +2353,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2341,6 +2363,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("keeps runtime recovery idle when history hydration fails after runtime recovery succeeds", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2371,6 +2394,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2418,6 +2450,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2427,6 +2460,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("requests history after recovery when the session already has a local transcript tail", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2459,6 +2493,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2552,6 +2595,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;

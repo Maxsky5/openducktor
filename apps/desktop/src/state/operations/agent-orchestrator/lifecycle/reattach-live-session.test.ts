@@ -76,7 +76,7 @@ describe("reattach-live-session", () => {
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
-      resumeMissingLiveSession: async () => {
+      attachMissingLiveSession: async () => {
         resumed = true;
       },
       listLiveAgentSessions: async () => [
@@ -125,7 +125,7 @@ describe("reattach-live-session", () => {
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
-      resumeMissingLiveSession: async () => {
+      attachMissingLiveSession: async () => {
         resumed = true;
       },
       listLiveAgentSessions: async () => [
@@ -176,10 +176,10 @@ describe("reattach-live-session", () => {
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
-      resumeMissingLiveSession: async () => {
+      attachMissingLiveSession: async () => {
         resumed = true;
       },
-      allowResumeMissingSession: false,
+      allowAttachMissingSession: false,
       listLiveAgentSessions: async () => [
         {
           externalSessionId: "external-1",
@@ -222,7 +222,7 @@ describe("reattach-live-session", () => {
       attachSessionListener: () => {},
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
-      resumeMissingLiveSession: async () => {},
+      attachMissingLiveSession: async () => {},
       listLiveAgentSessions: async () => [],
       isStaleRepoOperation: () => false,
       toLiveSessionState: () => "idle",
@@ -256,7 +256,7 @@ describe("reattach-live-session", () => {
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
-      resumeMissingLiveSession: async () => {
+      attachMissingLiveSession: async () => {
         resumeCalls += 1;
         stale = true;
       },
@@ -302,7 +302,7 @@ describe("reattach-live-session", () => {
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
-      resumeMissingLiveSession: async () => {
+      attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
       listLiveAgentSessions: async () => {
@@ -357,7 +357,7 @@ describe("reattach-live-session", () => {
           workingDirectory: "/tmp/repo/worktree",
         },
       }),
-      resumeMissingLiveSession: async () => {
+      attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
       listLiveAgentSessions: async () => {

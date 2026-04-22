@@ -86,6 +86,15 @@ const createAdapter = (
     status: "idle",
     runtimeKind: input.runtimeKind,
   }),
+  attachSession: async (input) => ({
+    sessionId: input.sessionId,
+    externalSessionId: input.externalSessionId,
+    role: input.role,
+    scenario: input.scenario,
+    startedAt: "2026-02-22T08:00:00.000Z",
+    status: "idle",
+    runtimeKind: input.runtimeKind,
+  }),
   ...overrides,
 });
 
@@ -953,6 +962,7 @@ describe("agent-orchestrator-load-sessions", () => {
     let liveSnapshotLoads = 0;
     let historyLoads = 0;
     let resumeCalls = 0;
+    let attachCalls = 0;
     let attachedListeners = 0;
     let promptOverrideLoads = 0;
 
@@ -1084,6 +1094,19 @@ describe("agent-orchestrator-load-sessions", () => {
             runtimeKind: input.runtimeKind,
           };
         },
+        attachSession: async (input) => {
+          attachCalls += 1;
+          attachedToAdapter = true;
+          return {
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
       }),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -1121,6 +1144,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
     expect(historyLoads).toBe(0);
     expect(resumeCalls).toBe(0);
+    expect(attachCalls).toBe(0);
     expect(attachedListeners).toBe(0);
     expect(promptOverrideLoads).toBe(0);
 
@@ -1152,7 +1176,8 @@ describe("agent-orchestrator-load-sessions", () => {
       "Requested history",
     ]);
     expect(historyLoads).toBe(1);
-    expect(resumeCalls).toBe(1);
+    expect(resumeCalls).toBe(0);
+    expect(attachCalls).toBe(1);
     expect(attachedListeners).toBe(1);
 
     const hydratedMessageIds = hydratedSession
@@ -1167,7 +1192,8 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(historyLoads).toBe(1);
-    expect(resumeCalls).toBe(1);
+    expect(resumeCalls).toBe(0);
+    expect(attachCalls).toBe(1);
     expect(attachedListeners).toBe(2);
     expect(liveSnapshotLoads).toBe(3);
     expect(
@@ -1873,11 +1899,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const attachedSessions: Array<{ repoPath: string; sessionId: string }> = [];
-    const resumeCalls: Array<{
-      sessionId: string;
-      emitStartedEvent?: boolean;
-      seedHistoryOnResume?: boolean;
-    }> = [];
+    const attachCalls: Array<{ sessionId: string }> = [];
 
     const setSessionsById = (
       updater:
@@ -1910,16 +1932,8 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        resumeSession: async (input) => {
-          resumeCalls.push({
-            sessionId: input.sessionId,
-            ...(typeof input.emitStartedEvent === "boolean"
-              ? { emitStartedEvent: input.emitStartedEvent }
-              : {}),
-            ...(typeof input.seedHistoryOnResume === "boolean"
-              ? { seedHistoryOnResume: input.seedHistoryOnResume }
-              : {}),
-          });
+        attachSession: async (input) => {
+          attachCalls.push({ sessionId: input.sessionId });
           return {
             sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
@@ -1978,13 +1992,7 @@ describe("agent-orchestrator-load-sessions", () => {
         sessionId: "session-child-1",
       },
     ]);
-    expect(resumeCalls).toEqual([
-      {
-        sessionId: "session-child-1",
-        emitStartedEvent: false,
-        seedHistoryOnResume: true,
-      },
-    ]);
+    expect(attachCalls).toEqual([{ sessionId: "session-child-1" }]);
     expect(state["session-child-1"]?.status).toBe("running");
   });
 

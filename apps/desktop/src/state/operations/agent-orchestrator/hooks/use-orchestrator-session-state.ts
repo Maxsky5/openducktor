@@ -9,6 +9,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
+import type { AssistantTurnTimingState } from "../support/assistant-turn-duration";
 
 type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => AgentSessionsById);
 
@@ -24,9 +25,7 @@ type OrchestratorMutableState = {
   draftSourceBySession: Record<string, DraftChannelValueMap<DraftSource>>;
   draftMessageIdBySession: Record<string, DraftChannelValueMap<string>>;
   draftFlushTimeoutBySession: Record<string, ReturnType<typeof setTimeout> | undefined>;
-  turnStartedAtBySession: Record<string, number>;
-  turnUserAnchorAtBySession: Record<string, number>;
-  previousAssistantCompletedAtBySession: Record<string, number>;
+  assistantTurnTimingBySession: Record<string, AssistantTurnTimingState>;
   turnModelBySession: Record<string, AgentSessionState["selectedModel"]>;
 };
 
@@ -47,6 +46,7 @@ type OrchestratorRefBridges = {
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
   turnUserAnchorAtBySessionRef: MutableRefObject<Record<string, number>>;
   previousAssistantCompletedAtBySessionRef: MutableRefObject<Record<string, number>>;
+  assistantTurnTimingBySessionRef: MutableRefObject<Record<string, AssistantTurnTimingState>>;
   turnModelBySessionRef: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
 };
 
@@ -75,6 +75,43 @@ const createMutableBridge = <K extends keyof OrchestratorMutableState>(
     },
   }) as MutableRefObject<OrchestratorMutableState[K]>;
 
+const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimingState>(
+  stateRef: MutableRefObject<OrchestratorMutableState>,
+  field: K,
+): MutableRefObject<Record<string, NonNullable<AssistantTurnTimingState[K]>>> =>
+  ({
+    get current() {
+      const values: Record<string, NonNullable<AssistantTurnTimingState[K]>> = {};
+      for (const [sessionId, timing] of Object.entries(
+        stateRef.current.assistantTurnTimingBySession,
+      )) {
+        const value = timing[field];
+        if (value !== undefined) {
+          values[sessionId] = value as NonNullable<AssistantTurnTimingState[K]>;
+        }
+      }
+      return values;
+    },
+    set current(value) {
+      const nextTimingBySession: Record<string, AssistantTurnTimingState> = {};
+      for (const [sessionId, timing] of Object.entries(
+        stateRef.current.assistantTurnTimingBySession,
+      )) {
+        nextTimingBySession[sessionId] = { ...timing };
+      }
+      for (const timing of Object.values(nextTimingBySession)) {
+        delete timing[field];
+      }
+      for (const [sessionId, fieldValue] of Object.entries(value)) {
+        nextTimingBySession[sessionId] = {
+          ...(nextTimingBySession[sessionId] ?? {}),
+          [field]: fieldValue,
+        };
+      }
+      stateRef.current.assistantTurnTimingBySession = nextTimingBySession;
+    },
+  }) as MutableRefObject<Record<string, NonNullable<AssistantTurnTimingState[K]>>>;
+
 const clearUnsubscribers = (unsubscribers: Map<string, () => void>): void => {
   const unsubscribeCallbacks = [...unsubscribers.values()];
   for (const unsubscribe of unsubscribeCallbacks) {
@@ -101,9 +138,7 @@ export const useOrchestratorSessionState = ({
     draftSourceBySession: {},
     draftMessageIdBySession: {},
     draftFlushTimeoutBySession: {},
-    turnStartedAtBySession: {},
-    turnUserAnchorAtBySession: {},
-    previousAssistantCompletedAtBySession: {},
+    assistantTurnTimingBySession: {},
     turnModelBySession: {},
   });
   const refBridges = useMemo<OrchestratorRefBridges>(
@@ -125,14 +160,21 @@ export const useOrchestratorSessionState = ({
         mutableStateRef,
         "draftFlushTimeoutBySession",
       ),
-      turnStartedAtBySessionRef: createMutableBridge(mutableStateRef, "turnStartedAtBySession"),
-      turnUserAnchorAtBySessionRef: createMutableBridge(
+      turnStartedAtBySessionRef: createAssistantTurnTimingFieldBridge(
         mutableStateRef,
-        "turnUserAnchorAtBySession",
+        "activityStartedAtMs",
       ),
-      previousAssistantCompletedAtBySessionRef: createMutableBridge(
+      turnUserAnchorAtBySessionRef: createAssistantTurnTimingFieldBridge(
         mutableStateRef,
-        "previousAssistantCompletedAtBySession",
+        "userAnchorAtMs",
+      ),
+      previousAssistantCompletedAtBySessionRef: createAssistantTurnTimingFieldBridge(
+        mutableStateRef,
+        "previousAssistantCompletedAtMs",
+      ),
+      assistantTurnTimingBySessionRef: createMutableBridge(
+        mutableStateRef,
+        "assistantTurnTimingBySession",
       ),
       turnModelBySessionRef: createMutableBridge(mutableStateRef, "turnModelBySession"),
     }),
@@ -172,9 +214,7 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.draftSourceBySession = {};
     mutableStateRef.current.draftMessageIdBySession = {};
     mutableStateRef.current.draftFlushTimeoutBySession = {};
-    mutableStateRef.current.turnStartedAtBySession = {};
-    mutableStateRef.current.turnUserAnchorAtBySession = {};
-    mutableStateRef.current.previousAssistantCompletedAtBySession = {};
+    mutableStateRef.current.assistantTurnTimingBySession = {};
     mutableStateRef.current.turnModelBySession = {};
     mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
     commitSessions({});

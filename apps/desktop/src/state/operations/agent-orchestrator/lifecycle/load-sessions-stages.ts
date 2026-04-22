@@ -42,6 +42,7 @@ import {
   historyToSessionContextUsage,
 } from "../support/persistence";
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
+import { resolveAgentSessionPurpose } from "../support/session-purpose";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import {
   createHydrationRuntimeResolver,
@@ -59,7 +60,7 @@ export type UpdateSession = (
 
 export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
-  "hasSession" | "loadSessionHistory" | "resumeSession"
+  "hasSession" | "loadSessionHistory" | "resumeSession" | "attachSession"
 > & {
   listLiveAgentSessionSnapshots?: AgentEnginePort["listLiveAgentSessionSnapshots"];
 };
@@ -182,7 +183,7 @@ const mergePersistedSessionRecord = (
 
   return {
     ...current,
-    includeInActivity: current.includeInActivity ?? persisted.includeInActivity ?? true,
+    purpose: resolveAgentSessionPurpose(current.purpose ?? persisted.purpose),
     repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
@@ -563,9 +564,10 @@ export const preparePersistedSessionMergeStage = async ({
         }
         next[record.sessionId] = {
           ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
-          includeInActivity: !(
+          purpose:
             intent.shouldHydrateRequestedSession && record.sessionId === intent.requestedSessionId
-          ),
+              ? "transcript"
+              : "primary",
           pendingPermissions: [],
           pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,
@@ -861,7 +863,7 @@ export const reconcileLiveSessionsStage = async ({
         runtimeConnection,
         directories,
       }),
-    resumeMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
+    attachMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
       const supportedRuntimeConnection = requireRuntimeConnectionSupport(
         runtimeKind,
         runtimeConnection,
@@ -882,7 +884,7 @@ export const reconcileLiveSessionsStage = async ({
         return;
       }
 
-      await adapter.resumeSession({
+      const attachInput = {
         sessionId: record.sessionId,
         externalSessionId: record.externalSessionId ?? record.sessionId,
         repoPath: intent.repoPath,
@@ -893,16 +895,17 @@ export const reconcileLiveSessionsStage = async ({
         role: record.role,
         scenario: resolvedScenario,
         systemPrompt,
-        ...(intent.mode === "requested_history"
-          ? {
-              emitStartedEvent: false,
-              seedHistoryOnResume: true,
-            }
-          : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
-      });
+      };
+
+      if (intent.mode === "requested_history") {
+        await adapter.attachSession(attachInput);
+        return;
+      }
+
+      await adapter.resumeSession(attachInput);
     },
-    allowResumeMissingSession: options?.allowLiveSessionResume !== false,
+    allowAttachMissingSession: options?.allowLiveSessionResume !== false,
     isStaleRepoOperation,
     toLiveSessionState,
   });

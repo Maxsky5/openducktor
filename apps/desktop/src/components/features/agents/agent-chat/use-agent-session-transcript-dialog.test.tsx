@@ -12,7 +12,7 @@ let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-di
 
 let tasks: TaskCard[] = [];
 const removeAgentSession = mock(() => {});
-let agentSessionState: { includeInActivity?: boolean } | null = null;
+let agentSessionState: { purpose?: "primary" | "transcript" } | null = null;
 let latestDialogProps: {
   taskId: string;
   sessionId: string | null;
@@ -268,7 +268,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("removes transcript-only sessions when the dialog closes", async () => {
-    agentSessionState = { includeInActivity: false };
+    agentSessionState = { purpose: "transcript" };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
       "./use-agent-session-transcript-dialog"
@@ -312,7 +312,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("keeps regular sessions when the dialog closes", async () => {
-    agentSessionState = { includeInActivity: true };
+    agentSessionState = { purpose: "primary" };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
       "./use-agent-session-transcript-dialog"

@@ -1,6 +1,12 @@
 import type { AgentStreamPart } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
+export type AssistantTurnTimingState = {
+  activityStartedAtMs?: number;
+  userAnchorAtMs?: number;
+  previousAssistantCompletedAtMs?: number;
+};
+
 export type AssistantTurnDurationWindow = {
   activityStartedAtMs?: number;
   userAnchorAtMs?: number;

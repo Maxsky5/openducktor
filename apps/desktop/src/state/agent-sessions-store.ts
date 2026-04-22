@@ -1,4 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/session-purpose";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<
@@ -191,7 +192,7 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
           : nextSummary;
       });
       const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
-        if (session.includeInActivity === false) {
+        if (!shouldIncludeAgentSessionInActivity(session)) {
           return [];
         }
         const nextSummary = toAgentActivitySessionSummary(session);

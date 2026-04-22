@@ -8,6 +8,7 @@ import type {
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentWorkspaceInspectionPort,
+  AttachAgentSessionInput,
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
@@ -263,59 +264,6 @@ export class OpencodeSdkAdapter
       sessionId: input.sessionId,
     });
 
-    const emitStartedEvent = input.emitStartedEvent !== false;
-    const seedHistoryOnResume = input.seedHistoryOnResume === true;
-
-    if (seedHistoryOnResume || !emitStartedEvent) {
-      const summary = registerSession({
-        sessions: this.sessions,
-        runtimeEventTransports: this.runtimeEventTransports,
-        createClient: this.createClient,
-        runtimeEndpoint,
-        sessionId: input.sessionId,
-        externalSessionId: input.externalSessionId,
-        sessionInput,
-        client,
-        startedAt,
-        startedMessage: `Resumed ${input.role} session (${input.scenario})`,
-        emitStartedEvent: false,
-        subscribeToEvents: false,
-        now: this.now,
-        emit: this.emit.bind(this),
-        ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-      });
-      const session = requireSession(this.sessions, input.sessionId);
-      if (seedHistoryOnResume) {
-        await loadAndSeedSessionHistory(this.createClient, this.now, {
-          runtimeEndpoint,
-          workingDirectory: input.workingDirectory,
-          externalSessionId: input.externalSessionId,
-          session,
-        });
-      }
-      attachSessionToRuntimeEvents({
-        sessions: this.sessions,
-        runtimeEventTransports: this.runtimeEventTransports,
-        createClient: this.createClient,
-        runtimeEndpoint,
-        sessionId: input.sessionId,
-        externalSessionId: input.externalSessionId,
-        sessionInput,
-        now: this.now,
-        emit: this.emit.bind(this),
-        ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-      });
-      if (emitStartedEvent) {
-        this.emit(input.sessionId, {
-          type: "session_started",
-          sessionId: input.sessionId,
-          timestamp: this.now(),
-          message: `Resumed ${input.role} session (${input.scenario})`,
-        });
-      }
-      return summary;
-    }
-
     return registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
@@ -331,6 +279,73 @@ export class OpencodeSdkAdapter
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     });
+  }
+
+  async attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary> {
+    const existing = this.sessions.get(input.sessionId);
+    if (existing) {
+      return existing.summary;
+    }
+
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "attach session",
+    );
+    const client = this.createClient(runtimeClientInput);
+    const detail = await client.session.get({
+      directory: input.workingDirectory,
+      sessionID: input.externalSessionId,
+    });
+    const detailData = unwrapData(detail, "get session");
+    const startedAt = toIsoFromEpoch(
+      (detailData as { time?: { created?: unknown } }).time?.created,
+      this.now,
+    );
+    const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
+    const sessionInput = toSessionInput({
+      ...input,
+      sessionId: input.sessionId,
+    });
+
+    const summary = registerSession({
+      sessions: this.sessions,
+      runtimeEventTransports: this.runtimeEventTransports,
+      createClient: this.createClient,
+      runtimeEndpoint,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      sessionInput,
+      client,
+      startedAt,
+      startedMessage: `Attached ${input.role} session (${input.scenario})`,
+      emitStartedEvent: false,
+      subscribeToEvents: false,
+      now: this.now,
+      emit: this.emit.bind(this),
+      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+    });
+
+    const session = requireSession(this.sessions, input.sessionId);
+    await loadAndSeedSessionHistory(this.createClient, this.now, {
+      runtimeEndpoint,
+      workingDirectory: input.workingDirectory,
+      externalSessionId: input.externalSessionId,
+      session,
+    });
+    attachSessionToRuntimeEvents({
+      sessions: this.sessions,
+      runtimeEventTransports: this.runtimeEventTransports,
+      createClient: this.createClient,
+      runtimeEndpoint,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      sessionInput,
+      now: this.now,
+      emit: this.emit.bind(this),
+      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+    });
+
+    return summary;
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {

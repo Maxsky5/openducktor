@@ -105,6 +105,7 @@ export const fromPersistedSessionRecord = (
     {
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId ?? session.sessionId,
+      purpose: "primary",
       taskId: fallbackTaskId,
       role: session.role,
       scenario: session.scenario,

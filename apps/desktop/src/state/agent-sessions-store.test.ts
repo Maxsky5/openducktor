@@ -82,7 +82,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       sessionId: "session-1",
       taskId: "task-1",
       status: "running",
-      includeInActivity: false,
+      purpose: "transcript",
     });
 
     store.setSessionsById({ [session.sessionId]: session });

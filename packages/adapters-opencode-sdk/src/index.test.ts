@@ -690,7 +690,7 @@ describe("OpencodeSdkAdapter", () => {
     expect((events[0] as { type: string }).type).toBe("session_started");
   });
 
-  test("resumeSession can seed history without emitting a started event", async () => {
+  test("attachSession seeds history without emitting a started event", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -726,7 +726,7 @@ describe("OpencodeSdkAdapter", () => {
     const events: AgentEvent[] = [];
     adapter.subscribeEvents("session-1", (event) => events.push(event));
 
-    const summary = await adapter.resumeSession({
+    const summary = await adapter.attachSession({
       sessionId: "session-1",
       externalSessionId: "session-opencode-1",
       repoPath: "/repo",
@@ -736,8 +736,6 @@ describe("OpencodeSdkAdapter", () => {
       role: "build",
       scenario: "build_implementation_start",
       systemPrompt: "system",
-      emitStartedEvent: false,
-      seedHistoryOnResume: true,
       runtimeConnection: defaultRuntimeConnection,
     });
 

@@ -94,6 +94,16 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     };
   }
 
+  async attachSession(input: Parameters<AgentEnginePort["attachSession"]>[0]) {
+    const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model, input.sessionId);
+    const summary = await this.getAdapter(runtimeKind).attachSession(input);
+    this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
+    return {
+      ...summary,
+      runtimeKind,
+    };
+  }
+
   async forkSession(input: Parameters<AgentEnginePort["forkSession"]>[0]) {
     const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
     const summary = await this.getAdapter(runtimeKind).forkSession(input);

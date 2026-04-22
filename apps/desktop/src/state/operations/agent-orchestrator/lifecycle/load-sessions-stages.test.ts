@@ -441,6 +441,15 @@ describe("load-sessions-stages", () => {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
           loadSessionHistory: async () => [],
+          attachSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
           resumeSession: async (input) => ({
             sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
@@ -493,6 +502,15 @@ describe("load-sessions-stages", () => {
             historyLoads += 1;
             return [];
           },
+          attachSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
           resumeSession: async (input) => ({
             sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
@@ -546,6 +564,15 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
@@ -593,6 +620,15 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
@@ -649,6 +685,15 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
@@ -755,6 +800,15 @@ describe("load-sessions-stages", () => {
       adapter: {
         hasSession: () => false,
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,

@@ -16,6 +16,7 @@ import {
   useAgentSession,
   useTasksState,
 } from "@/state/app-state-provider";
+import { isTranscriptAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import { host } from "@/state/operations/host";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 
@@ -203,11 +204,11 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
   }, []);
 
   const closeSessionTranscript = useCallback(() => {
-    if (sessionId && activeTranscriptSession?.includeInActivity === false) {
+    if (sessionId && isTranscriptAgentSession(activeTranscriptSession)) {
       removeAgentSession(sessionId);
     }
     setRequest(null);
-  }, [activeTranscriptSession?.includeInActivity, removeAgentSession, sessionId]);
+  }, [activeTranscriptSession, removeAgentSession, sessionId]);
 
   const contextValue = useMemo(
     () => ({

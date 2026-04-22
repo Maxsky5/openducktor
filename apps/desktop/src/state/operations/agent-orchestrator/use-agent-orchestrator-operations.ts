@@ -97,13 +97,7 @@ export function useAgentOrchestratorOperations({
     activeWorkspace,
     tasks,
   });
-  const {
-    sessionsRef,
-    turnStartedAtBySessionRef,
-    turnUserAnchorAtBySessionRef,
-    previousAssistantCompletedAtBySessionRef,
-    unsubscribersRef,
-  } = refBridges;
+  const { sessionsRef, assistantTurnTimingBySessionRef, unsubscribersRef } = refBridges;
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
 
   const toTimestampMs = useCallback((timestamp: string | number): number | undefined => {
@@ -121,11 +115,14 @@ export function useAgentOrchestratorOperations({
       if (timestampMs === undefined) {
         return;
       }
-      const current = turnStartedAtBySessionRef.current[sessionId];
-      turnStartedAtBySessionRef.current[sessionId] =
-        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+      const current = assistantTurnTimingBySessionRef.current[sessionId]?.activityStartedAtMs;
+      assistantTurnTimingBySessionRef.current[sessionId] = {
+        ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}),
+        activityStartedAtMs:
+          typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+      };
     },
-    [toTimestampMs, turnStartedAtBySessionRef],
+    [assistantTurnTimingBySessionRef, toTimestampMs],
   );
 
   const recordTurnUserMessageTimestamp = useCallback(
@@ -134,11 +131,13 @@ export function useAgentOrchestratorOperations({
       if (timestampMs === undefined) {
         return;
       }
-      const current = turnUserAnchorAtBySessionRef.current[sessionId];
-      turnUserAnchorAtBySessionRef.current[sessionId] =
-        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+      const current = assistantTurnTimingBySessionRef.current[sessionId]?.userAnchorAtMs;
+      assistantTurnTimingBySessionRef.current[sessionId] = {
+        ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}),
+        userAnchorAtMs: typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+      };
     },
-    [toTimestampMs, turnUserAnchorAtBySessionRef],
+    [assistantTurnTimingBySessionRef, toTimestampMs],
   );
 
   const persistSessionRecord = useCallback(
@@ -212,16 +211,16 @@ export function useAgentOrchestratorOperations({
       messages: AgentSessionState["messages"] = [],
     ): number | undefined => {
       const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
-      const previousAssistantCompletedAtMs =
-        previousAssistantCompletedAtBySessionRef.current[sessionId];
+      const currentTiming = assistantTurnTimingBySessionRef.current[sessionId] ?? {};
+      const previousAssistantCompletedAtMs = currentTiming.previousAssistantCompletedAtMs;
       const activityStartedAtMs =
-        turnStartedAtBySessionRef.current[sessionId] ??
+        currentTiming.activityStartedAtMs ??
         readAssistantActivityStartedAtMsFromMessages({
           messages: Array.isArray(messages) ? messages : [],
           previousAssistantCompletedAtMs,
           completedAtMs,
         });
-      const userAnchorAtMs = turnUserAnchorAtBySessionRef.current[sessionId];
+      const userAnchorAtMs = currentTiming.userAnchorAtMs;
       return resolveAssistantTurnDurationMs({
         completedAtMs,
         ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
@@ -231,30 +230,26 @@ export function useAgentOrchestratorOperations({
           : {}),
       });
     },
-    [
-      previousAssistantCompletedAtBySessionRef,
-      toTimestampMs,
-      turnStartedAtBySessionRef,
-      turnUserAnchorAtBySessionRef,
-    ],
+    [assistantTurnTimingBySessionRef, toTimestampMs],
   );
 
   const clearTurnDuration = useCallback(
     (sessionId: string, completedTimestamp?: string): void => {
       const completedAtMs =
         completedTimestamp === undefined ? undefined : toTimestampMs(completedTimestamp);
-      delete turnStartedAtBySessionRef.current[sessionId];
-      delete turnUserAnchorAtBySessionRef.current[sessionId];
+      const nextTiming = { ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}) };
+      delete nextTiming.activityStartedAtMs;
+      delete nextTiming.userAnchorAtMs;
       if (typeof completedAtMs === "number") {
-        previousAssistantCompletedAtBySessionRef.current[sessionId] = completedAtMs;
+        nextTiming.previousAssistantCompletedAtMs = completedAtMs;
       }
+      if (Object.keys(nextTiming).length === 0) {
+        delete assistantTurnTimingBySessionRef.current[sessionId];
+        return;
+      }
+      assistantTurnTimingBySessionRef.current[sessionId] = nextTiming;
     },
-    [
-      previousAssistantCompletedAtBySessionRef,
-      toTimestampMs,
-      turnStartedAtBySessionRef,
-      turnUserAnchorAtBySessionRef,
-    ],
+    [assistantTurnTimingBySessionRef, toTimestampMs],
   );
 
   const readSessionModelCatalog = useCallback(
@@ -318,7 +313,7 @@ export function useAgentOrchestratorOperations({
         delete refBridges.draftRawBySessionRef.current[sessionId];
         delete refBridges.draftSourceBySessionRef.current[sessionId];
         delete refBridges.draftMessageIdBySessionRef.current[sessionId];
-        delete refBridges.turnStartedAtBySessionRef.current[sessionId];
+        delete refBridges.assistantTurnTimingBySessionRef.current[sessionId];
         delete refBridges.turnModelBySessionRef.current[sessionId];
       }
 

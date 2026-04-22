@@ -149,10 +149,12 @@ export type AgentSessionRuntimeRecoveryState =
   | "recovering_runtime"
   | "failed";
 
+export type AgentSessionPurpose = "primary" | "transcript";
+
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
-  includeInActivity?: boolean;
+  purpose?: AgentSessionPurpose;
   title?: string;
   taskId: string;
   repoPath: string;
