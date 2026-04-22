@@ -468,6 +468,66 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(subagent.content).toContain("Finished work");
   });
 
+  test("preserves cancelled hydrated subagent history parts", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant",
+              partId: "p-subagent-running",
+              correlationKey: "spawn:m-assistant:build:Do work",
+              status: "running",
+              agent: "build",
+              prompt: "Do work",
+              description: "Starting work",
+              startedAtMs: 100,
+            },
+            {
+              kind: "subagent",
+              messageId: "m-assistant",
+              partId: "p-subagent-cancelled",
+              correlationKey: "spawn:m-assistant:build:Do work",
+              status: "cancelled",
+              agent: "build",
+              prompt: "Do work",
+              description: "Cancelled by user",
+              sessionId: "session-child-1",
+              startedAtMs: 120,
+              endedAtMs: 300,
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const subagentMessages = messages.filter(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(1);
+
+    const subagent = subagentMessages[0];
+    if (!subagent || subagent.meta?.kind !== "subagent") {
+      throw new Error("Expected merged subagent message with subagent meta");
+    }
+
+    expect(subagent.id).toBe("subagent:spawn:m-assistant:build:Do work");
+    expect(subagent.meta.status).toBe("cancelled");
+    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.startedAtMs).toBe(100);
+    expect(subagent.meta.endedAtMs).toBe(300);
+    expect(subagent.content).toContain("Cancelled by user");
+  });
+
   test("merges hydrated subagent history parts across part and session correlation keys", () => {
     const messages = historyToChatMessages(
       [

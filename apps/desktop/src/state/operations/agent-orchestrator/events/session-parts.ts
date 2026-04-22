@@ -364,6 +364,12 @@ const handleSubtaskPart = (
     if (incomingStatus === "error") {
       return "error";
     }
+    if (existingStatus === "cancelled") {
+      return "cancelled";
+    }
+    if (incomingStatus === "cancelled") {
+      return "cancelled";
+    }
     if (existingStatus === "completed") {
       return "completed";
     }
@@ -436,7 +442,7 @@ const handleSubtaskPart = (
       const endedAtMs =
         typeof existingMeta?.endedAtMs === "number" && typeof part.endedAtMs === "number"
           ? Math.max(existingMeta.endedAtMs, part.endedAtMs)
-          : status === "completed" || status === "error"
+          : status === "completed" || status === "cancelled" || status === "error"
             ? (part.endedAtMs ?? existingMeta?.endedAtMs ?? eventTimestamp)
             : undefined;
       const agent = part.agent ?? existingMeta?.agent;

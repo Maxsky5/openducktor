@@ -553,6 +553,36 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("59s");
   });
 
+  test("renders cancelled subagent cards with terminal duration", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): review changes", {
+          id: "subagent-cancelled-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-cancelled-1",
+            correlationKey: "part:assistant-task-tool-cancelled:subtask-c",
+            status: "cancelled",
+            agent: "build",
+            description: "review changes [commit|branch|pr], cancelled by user",
+            sessionId: "session-child-3",
+            startedAtMs: 1_000,
+            endedAtMs: 120_000,
+          },
+        }),
+        sessionRole: "build",
+        sessionTaskId: "task-1",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Cancelled");
+    expect(html).toContain("review changes [commit|branch|pr], cancelled by user");
+    expect(html).toContain("1m59s");
+  });
+
   test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
     const html = await renderToHtml(
       createElement(AgentChatMessageCard, {

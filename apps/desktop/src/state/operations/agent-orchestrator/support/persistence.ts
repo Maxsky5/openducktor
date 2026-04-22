@@ -305,6 +305,12 @@ const resolveHydratedSubagentStatus = (
   if (incomingStatus === "error") {
     return "error";
   }
+  if (existingStatus === "cancelled") {
+    return "cancelled";
+  }
+  if (incomingStatus === "cancelled") {
+    return "cancelled";
+  }
   if (existingStatus === "completed") {
     return "completed";
   }
@@ -405,7 +411,7 @@ const mergeHydratedSubagentMessages = (
   const endedAtMs =
     typeof existingMeta.endedAtMs === "number" && typeof incomingMeta.endedAtMs === "number"
       ? Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs)
-      : status === "completed" || status === "error"
+      : status === "completed" || status === "cancelled" || status === "error"
         ? (incomingMeta.endedAtMs ?? existingMeta.endedAtMs)
         : undefined;
   const agent = incomingMeta.agent ?? existingMeta.agent;

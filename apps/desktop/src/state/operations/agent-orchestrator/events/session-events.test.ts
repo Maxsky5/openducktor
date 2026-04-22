@@ -2605,6 +2605,110 @@ describe("agent-orchestrator-session-events", () => {
     expect(subagentMessages[0].meta.status).toBe("completed");
   });
 
+  test("preserves cancelled subagent updates on the existing live row", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build" }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionsRef,
+      sessionId: "session-1",
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      contextUsageMessageIdBySessionRef: { current: {} },
+      turnModelBySessionRef: { current: {} },
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.300Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-spawn",
+        correlationKey: "spawn:m1:build:Do work",
+        status: "running",
+        agent: "build",
+        prompt: "Do work",
+        description: "Starting subagent",
+        startedAtMs: 100,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.350Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-cancelled",
+        correlationKey: "spawn:m1:build:Do work",
+        status: "cancelled",
+        agent: "build",
+        prompt: "Do work",
+        description: "Cancelled by user",
+        sessionId: "session-child-1",
+        startedAtMs: 100,
+        endedAtMs: 250,
+      },
+    });
+
+    const subagentMessages = getSessionMessages(sessionsRef).filter(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(1);
+    expect(subagentMessages[0]?.id).toBe("subagent:spawn:m1:build:Do work");
+    if (subagentMessages[0]?.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent meta");
+    }
+    expect(subagentMessages[0].meta.status).toBe("cancelled");
+    expect(subagentMessages[0].meta.sessionId).toBe("session-child-1");
+    expect(subagentMessages[0].meta.startedAtMs).toBe(100);
+    expect(subagentMessages[0].meta.endedAtMs).toBe(250);
+  });
+
   test("reuses an earlier part-scoped subagent row when a later fallback session correlation arrives", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

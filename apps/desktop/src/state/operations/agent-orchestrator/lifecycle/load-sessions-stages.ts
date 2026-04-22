@@ -246,6 +246,12 @@ export const mergeHydratedMessages = (
     if (incomingStatus === "error") {
       return "error";
     }
+    if (existingStatus === "cancelled") {
+      return "cancelled";
+    }
+    if (incomingStatus === "cancelled") {
+      return "cancelled";
+    }
     if (existingStatus === "completed") {
       return "completed";
     }
@@ -280,8 +286,11 @@ export const mergeHydratedMessages = (
     const currentMeta = currentMessage.meta;
     const status = resolveMergedSubagentStatus(hydratedMeta.status, currentMeta.status);
     const prefersCurrentTerminalState =
-      (currentMeta.status === "completed" || currentMeta.status === "error") &&
+      (currentMeta.status === "completed" ||
+        currentMeta.status === "cancelled" ||
+        currentMeta.status === "error") &&
       hydratedMeta.status !== "completed" &&
+      hydratedMeta.status !== "cancelled" &&
       hydratedMeta.status !== "error";
     const metadata =
       hydratedMeta.metadata && currentMeta.metadata
@@ -294,7 +303,7 @@ export const mergeHydratedMessages = (
     const endedAtMs =
       typeof hydratedMeta.endedAtMs === "number" && typeof currentMeta.endedAtMs === "number"
         ? Math.max(hydratedMeta.endedAtMs, currentMeta.endedAtMs)
-        : status === "completed" || status === "error"
+        : status === "completed" || status === "cancelled" || status === "error"
           ? (currentMeta.endedAtMs ?? hydratedMeta.endedAtMs)
           : undefined;
     const agent = currentMeta.agent ?? hydratedMeta.agent;

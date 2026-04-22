@@ -455,6 +455,9 @@ const subagentStatusLabel = (status: SubagentMeta["status"]): string => {
   if (status === "completed") {
     return "Completed";
   }
+  if (status === "cancelled") {
+    return "Cancelled";
+  }
   if (status === "error") {
     return "Failed";
   }
@@ -468,6 +471,9 @@ const subagentStatusClassName = (status: SubagentMeta["status"]): string => {
   }
   if (status === "completed") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300";
+  }
+  if (status === "cancelled") {
+    return "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground";
   }
   if (status === "error") {
     return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300";
@@ -500,7 +506,8 @@ const SubagentMessage = ({
   const summary = readSubagentSummary(meta);
   const isRunning = meta.status === "running";
   const durationMs =
-    meta.status === "completed" &&
+    meta.status !== "pending" &&
+    meta.status !== "running" &&
     typeof meta.startedAtMs === "number" &&
     typeof meta.endedAtMs === "number"
       ? Math.max(0, meta.endedAtMs - meta.startedAtMs)
@@ -509,8 +516,8 @@ const SubagentMessage = ({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
-        <div className="rounded-md border border-border bg-muted p-2 text-muted-foreground">
-          <Cpu className="size-4" />
+        <div className="rounded-md border border-border bg-pending-surface p-2">
+          <Cpu className="size-4 text-pending-accent" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-start gap-2">

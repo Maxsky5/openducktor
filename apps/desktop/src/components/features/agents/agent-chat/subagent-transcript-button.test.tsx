@@ -98,9 +98,8 @@ describe("SubagentTranscriptButton", () => {
     );
 
     const button = screen.getByRole("button", { name: "View subagent session" });
-    expect(button.className).toContain("rounded-md");
-    expect(button.className).toContain("h-6");
-    expect(button.className).toContain("px-2");
+    expect(button.className).toContain("shrink-0");
+    expect(button.getAttribute("title")).toBe("View subagent session");
     expect(button.textContent).toContain("Subagent session");
   });
 });

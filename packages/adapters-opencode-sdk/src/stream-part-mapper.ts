@@ -159,6 +159,10 @@ const readTrimmedString = (source: unknown, keys: string[]): string | undefined 
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const isCancelledStatus = (value: string): boolean => {
+  return value === "cancelled" || value === "canceled";
+};
+
 const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["executionMode"] => {
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
@@ -312,7 +316,7 @@ const resolveSubagentDescription = (...sources: unknown[]): string | undefined =
 const buildSubagentFromToolPart = (
   part: ToolPart,
   toolState: Record<string, unknown>,
-  normalizedStatus: ToolStatus,
+  normalizedStatus: SubagentStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
 ): SubagentStreamPart => {
@@ -350,6 +354,32 @@ const normalizeToolStatus = (rawStatus: string, hasEndedTiming: boolean): ToolSt
   const normalized = rawStatus.trim().toLowerCase();
   if (normalized === "completed") {
     return "completed";
+  }
+  if (isCancelledStatus(normalized)) {
+    return "error";
+  }
+  if (normalized === "error" || normalized === "failed") {
+    return "error";
+  }
+  if (normalized === "pending") {
+    return hasEndedTiming ? "completed" : "pending";
+  }
+  if (normalized === "running" || normalized === "started") {
+    return hasEndedTiming ? "completed" : "running";
+  }
+  return hasEndedTiming ? "completed" : "running";
+};
+
+const normalizeSubagentStatus = (
+  rawStatus: string,
+  hasEndedTiming: boolean,
+): SubagentStreamPart["status"] => {
+  const normalized = rawStatus.trim().toLowerCase();
+  if (normalized === "completed") {
+    return "completed";
+  }
+  if (isCancelledStatus(normalized)) {
+    return "cancelled";
   }
   if (normalized === "error" || normalized === "failed") {
     return "error";
@@ -454,14 +484,23 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
       const toolState = asUnknownRecord(part.state) ?? {};
       const timing = extractPartTiming(part);
       const metadata = normalizeMetadata(readUnknownProp(toolState, "metadata"));
+      if (SUBAGENT_TOOL_NAMES.has(normalizeToolName(part.tool))) {
+        return buildSubagentFromToolPart(
+          part,
+          toolState,
+          normalizeSubagentStatus(
+            readStringProp(toolState, ["status"]) ?? "",
+            typeof timing.endedAtMs === "number",
+          ),
+          timing,
+          metadata,
+        );
+      }
+
       const normalizedStatus = normalizeToolStatus(
         readStringProp(toolState, ["status"]) ?? "",
         typeof timing.endedAtMs === "number",
       );
-
-      if (SUBAGENT_TOOL_NAMES.has(normalizeToolName(part.tool))) {
-        return buildSubagentFromToolPart(part, toolState, normalizedStatus, timing, metadata);
-      }
 
       return buildToolStreamPart(part, toolState, normalizedStatus, timing, metadata);
     }

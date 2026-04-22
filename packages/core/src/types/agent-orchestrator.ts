@@ -90,7 +90,7 @@ export type AgentRuntimeDefinition = RuntimeDescriptor;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
 export type AgentSubagentExecutionMode = ContractsRuntimeSubagentExecutionMode;
-export type AgentSubagentStatus = "pending" | "running" | "completed" | "error";
+export type AgentSubagentStatus = "pending" | "running" | "completed" | "cancelled" | "error";
 
 export type AgentFileSearchResultKind =
   | "directory"

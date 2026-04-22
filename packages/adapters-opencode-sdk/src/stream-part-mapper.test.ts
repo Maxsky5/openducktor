@@ -134,6 +134,42 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("preserves cancelled subagent tool statuses", () => {
+    const part = createToolPart({
+      id: "tool-subagent-cancelled-1",
+      tool: "delegate",
+      status: "cancelled",
+      input: {
+        agent: "planner",
+        prompt: "Inspect the tests",
+      },
+      output: {
+        result: "Cancelled by user",
+        sessionId: "session-child-cancelled-1",
+      },
+      time: {
+        start: 10,
+        end: 25,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-tool-subagent-cancelled-1",
+      partId: "tool-subagent-cancelled-1",
+      correlationKey: "spawn:assistant-tool-subagent-cancelled-1:planner:Inspect the tests",
+      status: "cancelled",
+      agent: "planner",
+      prompt: "Inspect the tests",
+      description: "Cancelled by user",
+      sessionId: "session-child-cancelled-1",
+      startedAtMs: 10,
+      endedAtMs: 25,
+    });
+  });
+
   test("maps task tool parts with metadata session ids to canonical subagent parts", () => {
     const part = createToolPart({
       id: "tool-task-1",
