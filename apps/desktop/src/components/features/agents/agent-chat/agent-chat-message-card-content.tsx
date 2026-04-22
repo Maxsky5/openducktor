@@ -513,7 +513,7 @@ const SubagentMessage = ({
           <Cpu className="size-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <p className="truncate text-sm font-semibold text-foreground">
               {meta.agent?.trim() || "Subagent"}
             </p>
@@ -530,22 +530,28 @@ const SubagentMessage = ({
                 {meta.executionMode}
               </span>
             ) : null}
-            <div className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="ml-auto inline-flex shrink-0 items-center gap-2 pt-0.5 text-[11px] text-muted-foreground">
               {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
               {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
               {timeLabel ? <span>{timeLabel}</span> : null}
-              <SubagentTranscriptButton
-                taskId={taskId}
-                sessionRole={sessionRole}
-                sessionRuntimeKind={sessionRuntimeKind ?? null}
-                sessionWorkingDirectory={sessionWorkingDirectory}
-                meta={meta}
-              />
             </div>
           </div>
-          {summary ? (
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{summary}</p>
-          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            {summary ? (
+              <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                {summary}
+              </p>
+            ) : (
+              <div />
+            )}
+            <SubagentTranscriptButton
+              taskId={taskId}
+              sessionRole={sessionRole}
+              sessionRuntimeKind={sessionRuntimeKind ?? null}
+              sessionWorkingDirectory={sessionWorkingDirectory}
+              meta={meta}
+            />
+          </div>
         </div>
       </div>
     </div>

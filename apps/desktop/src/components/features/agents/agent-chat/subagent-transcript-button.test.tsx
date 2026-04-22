@@ -26,7 +26,11 @@ describe("SubagentTranscriptButton", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "View subagent activity" }));
+    expect(screen.getByRole("button", { name: "View subagent session" }).textContent).toContain(
+      "Subagent session",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
       taskId: "task-1",
@@ -45,7 +49,7 @@ describe("SubagentTranscriptButton", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
 
     const metaWithoutSessionId = createSubagentMeta();
     delete metaWithoutSessionId.sessionId;
@@ -58,7 +62,7 @@ describe("SubagentTranscriptButton", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
   });
 
   test("prevents parent summary clicks when opening the session view", () => {
@@ -75,12 +79,28 @@ describe("SubagentTranscriptButton", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "View subagent activity" }));
+      fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
       expect(onOpenTranscript).toHaveBeenCalledTimes(1);
       expect(onParentClick).not.toHaveBeenCalled();
     } finally {
       document.body.removeEventListener("click", onParentClick);
     }
+  });
+
+  test("renders the transcript action as a labeled outline button", () => {
+    render(
+      <SubagentTranscriptButton
+        taskId="task-1"
+        meta={createSubagentMeta()}
+        onOpenTranscript={() => {}}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "View subagent session" });
+    expect(button.className).toContain("rounded-md");
+    expect(button.className).toContain("h-6");
+    expect(button.className).toContain("px-2");
+    expect(button.textContent).toContain("Subagent session");
   });
 });

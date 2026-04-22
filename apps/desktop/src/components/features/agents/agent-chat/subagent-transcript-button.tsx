@@ -3,6 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import {
   type OpenAgentSessionTranscriptRequest,
@@ -15,6 +16,7 @@ type SubagentTranscriptButtonProps = {
   sessionRuntimeKind?: RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
   meta: SubagentMeta;
+  className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
 };
 
@@ -36,6 +38,7 @@ export function SubagentTranscriptButton({
   sessionRuntimeKind,
   sessionWorkingDirectory,
   meta,
+  className,
   onOpenTranscript,
 }: SubagentTranscriptButtonProps): ReactElement | null {
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
@@ -67,11 +70,11 @@ export function SubagentTranscriptButton({
   return (
     <Button
       type="button"
-      variant="ghost"
-      size="icon"
-      className="size-6 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-      aria-label="View subagent activity"
-      title="View subagent activity"
+      variant="outline"
+      size="xs"
+      className={cn("shrink-0", className)}
+      aria-label="View subagent session"
+      title="View subagent session"
       onPointerDown={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -79,6 +82,7 @@ export function SubagentTranscriptButton({
       onClick={handleOpen}
     >
       <Eye className="size-3.5" />
+      <span>Subagent session</span>
     </Button>
   );
 }
