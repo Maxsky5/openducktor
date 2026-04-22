@@ -77,7 +77,7 @@ It is live runtime-instance metadata only:
 
 `runtimeInstanceSummaryRoleSchema` is currently `workspace` only, so this payload describes shared workspace runtime instances rather than every startup path in the system.
 
-The host returns this payload after listing or ensuring a workspace runtime. It tells the frontend which runtime instance is running, which repo scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`. Build startup returns `BuildSessionBootstrap` instead, because the build path only needs the runtime kind, live route, and working directory needed to bootstrap the Builder session.
+The host returns this payload after listing or ensuring a workspace runtime. It tells the frontend which runtime instance is running, which repo scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`. Build startup returns `BuildSessionBootstrap` instead, because the build path requires `runtimeKind`, `runtimeRoute`, and `workingDirectory` to bootstrap the Builder session.
 
 ### `RuntimeRoute`
 
