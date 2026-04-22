@@ -92,6 +92,8 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   subagentCorrelationKeyBySessionId: new Map(),
   pendingSubagentCorrelationKeysBySignature: new Map(),
   pendingSubagentCorrelationKeys: [],
+  pendingSubagentSessionsById: new Map(),
+  pendingSubagentPartEmissionsBySessionId: new Map(),
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -1896,6 +1898,193 @@ describe("event-stream", () => {
     ]);
     expect(subagentParts.map((part) => part.sessionId)).toEqual([undefined, "child-a"]);
     expect(subagentParts.map((part) => part.agent)).toEqual(["build", "build"]);
+  });
+
+  test("binds sibling child sessions correctly when session.created arrives out of order", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-created-order"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-created-order",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-created-order",
+        partId: "subtask-b",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting B",
+      }),
+      {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-b",
+            parentID: "external-session-1",
+            time: { created: Date.parse("2026-02-22T12:00:12.000Z") },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-a",
+            parentID: "external-session-1",
+            time: { created: Date.parse("2026-02-22T12:00:10.000Z") },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-created-order",
+            callID: "call-a",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished A",
+                sessionId: "child-a",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-b",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-created-order",
+            callID: "call-b",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished B",
+                sessionId: "child-b",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const completedSubagentParts = emitted.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part" &&
+        event.part.kind === "subagent" &&
+        event.part.status === "completed",
+    );
+
+    expect(completedSubagentParts.map((event) => event.part.correlationKey)).toEqual([
+      "part:assistant-subagent-created-order:subtask-a",
+      "part:assistant-subagent-created-order:subtask-b",
+    ]);
+    expect(completedSubagentParts.map((event) => event.part.sessionId)).toEqual([
+      "child-a",
+      "child-b",
+    ]);
+  });
+
+  test("defers ambiguous task tool updates until child sessions bind to spawned cards", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-ambiguous-deferred"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-ambiguous-deferred",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-ambiguous-deferred",
+        partId: "subtask-b",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting B",
+      }),
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-b",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-ambiguous-deferred",
+            callID: "call-b",
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "completed",
+              metadata: {
+                agent: "build",
+                prompt: "Inspect repo",
+                sessionId: "child-b",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-b",
+            parentID: "external-session-1",
+            time: { created: Date.parse("2026-02-22T12:00:12.000Z") },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-a",
+            parentID: "external-session-1",
+            time: { created: Date.parse("2026-02-22T12:00:10.000Z") },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const subagentParts = emitted.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+        event.type === "assistant_part" && event.part.kind === "subagent",
+    );
+
+    expect(subagentParts).toHaveLength(3);
+    expect(subagentParts.map((event) => event.part.correlationKey)).toEqual([
+      "part:assistant-subagent-ambiguous-deferred:subtask-a",
+      "part:assistant-subagent-ambiguous-deferred:subtask-b",
+      "part:assistant-subagent-ambiguous-deferred:subtask-b",
+    ]);
+    expect(subagentParts.map((event) => event.part.status)).toEqual([
+      "running",
+      "running",
+      "completed",
+    ]);
+    expect(subagentParts.map((event) => event.part.sessionId)).toEqual([
+      undefined,
+      undefined,
+      "child-b",
+    ]);
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {

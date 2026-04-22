@@ -116,6 +116,8 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     subagentCorrelationKeyBySessionId: session.subagentCorrelationKeyBySessionId,
     pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
     pendingSubagentCorrelationKeys: session.pendingSubagentCorrelationKeys,
+    pendingSubagentSessionsById: session.pendingSubagentSessionsById,
+    pendingSubagentPartEmissionsBySessionId: session.pendingSubagentPartEmissionsBySessionId,
   };
 
   if (handleMessageEvent(input.event, runtime)) {

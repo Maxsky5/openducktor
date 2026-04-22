@@ -181,6 +181,8 @@ export const registerSession = (input: {
     subagentCorrelationKeyBySessionId: new Map(),
     pendingSubagentCorrelationKeysBySignature: new Map(),
     pendingSubagentCorrelationKeys: [],
+    pendingSubagentSessionsById: new Map(),
+    pendingSubagentPartEmissionsBySessionId: new Map(),
   });
 
   if (input.subscribeToEvents !== false) {

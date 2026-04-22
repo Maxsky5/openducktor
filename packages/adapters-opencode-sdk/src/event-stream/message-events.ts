@@ -108,11 +108,23 @@ const peekPendingSubagentCorrelationKeys = (
   return runtime.pendingSubagentCorrelationKeysBySignature.get(signature) ?? [];
 };
 
+const queuePendingSubagentPartEmission = (
+  runtime: EventStreamRuntime,
+  sessionId: string,
+  part: Part,
+  roleHint?: string,
+): void => {
+  const pending = runtime.pendingSubagentPartEmissionsBySessionId.get(sessionId) ?? [];
+  pending.push({ part, ...(roleHint ? { roleHint } : {}) });
+  runtime.pendingSubagentPartEmissionsBySessionId.set(sessionId, pending);
+};
+
 const normalizeLiveSubagentCorrelation = (
   runtime: EventStreamRuntime,
   rawPart: Part,
   part: MappedSubagentPart,
-): MappedSubagentPart => {
+  roleHint?: string,
+): MappedSubagentPart | null => {
   const existingCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(rawPart.id);
   if (existingCorrelationKey) {
     if (part.sessionId) {
@@ -151,6 +163,16 @@ const normalizeLiveSubagentCorrelation = (
   const pendingCorrelationKeys = signature
     ? peekPendingSubagentCorrelationKeys(runtime, signature)
     : [];
+  const pendingSessionId = part.sessionId;
+  const shouldDeferAmbiguousSessionBinding =
+    typeof pendingSessionId === "string" &&
+    pendingSessionId.length > 0 &&
+    !sessionCorrelationKey &&
+    pendingCorrelationKeys.length > 1;
+  if (shouldDeferAmbiguousSessionBinding) {
+    queuePendingSubagentPartEmission(runtime, pendingSessionId, rawPart, roleHint);
+    return null;
+  }
   const queuedCorrelationKey =
     pendingCorrelationKeys.length === 1 && signature
       ? dequeuePendingSubagentCorrelationKey(runtime, signature)
@@ -199,7 +221,12 @@ const emitAssistantPart = (
   }
 
   const nextMapped =
-    mapped.kind === "subagent" ? normalizeLiveSubagentCorrelation(runtime, part, mapped) : mapped;
+    mapped.kind === "subagent"
+      ? normalizeLiveSubagentCorrelation(runtime, part, mapped, roleHint)
+      : mapped;
+  if (!nextMapped) {
+    return false;
+  }
 
   if (!isAssistantMessage(runtime, nextMapped.messageId, roleHint)) {
     return false;
@@ -220,6 +247,20 @@ const emitAssistantPart = (
     part: nextMapped,
   });
   return true;
+};
+
+export const flushPendingSubagentPartEmissionsForSession = (
+  runtime: EventStreamRuntime,
+  sessionId: string,
+): void => {
+  const pending = runtime.pendingSubagentPartEmissionsBySessionId.get(sessionId);
+  if (!pending || pending.length === 0) {
+    return;
+  }
+  runtime.pendingSubagentPartEmissionsBySessionId.delete(sessionId);
+  for (const emission of pending) {
+    emitAssistantPart(runtime, emission.part, emission.roleHint);
+  }
 };
 
 const emitKnownAssistantPartsForMessage = (

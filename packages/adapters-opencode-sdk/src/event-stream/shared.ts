@@ -9,6 +9,16 @@ export type PendingPartDelta = {
   delta: string;
 };
 
+export type PendingSubagentPartEmission = {
+  part: Part;
+  roleHint?: string;
+};
+
+export type PendingSubagentSessionBinding = {
+  createdAtMs?: number;
+  arrivalOrder: number;
+};
+
 export type EventStreamContext = {
   sessionId: string;
   externalSessionId: string;
@@ -26,6 +36,8 @@ export type EventStreamState = {
   subagentCorrelationKeyBySessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   pendingSubagentCorrelationKeys: string[];
+  pendingSubagentSessionsById: Map<string, PendingSubagentSessionBinding>;
+  pendingSubagentPartEmissionsBySessionId: Map<string, PendingSubagentPartEmission[]>;
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
