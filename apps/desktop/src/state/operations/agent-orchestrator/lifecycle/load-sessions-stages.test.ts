@@ -565,7 +565,7 @@ describe("load-sessions-stages", () => {
     expect(nextSession?.pendingQuestions).toEqual(existingSession.pendingQuestions);
   });
 
-  test("promotes transcript-purpose sessions back to primary on non-requested loads", async () => {
+  test("preserves transcript-purpose sessions on non-requested loads", async () => {
     const existingSession = createSession({ purpose: "transcript" });
     const stateHarness = createStateHarness({ "session-1": existingSession });
 
@@ -581,7 +581,7 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]?.purpose).toBe("primary");
+    expect(stateHarness.getState()["session-1"]?.purpose).toBe("transcript");
   });
 
   test("marks requested-history hydration failed when runtime resolution fails", async () => {

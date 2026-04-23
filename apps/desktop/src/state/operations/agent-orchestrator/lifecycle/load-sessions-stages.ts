@@ -38,7 +38,10 @@ import {
   historyToSessionContextUsage,
 } from "../support/persistence";
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
-import { resolveAgentSessionPurposeForLoad } from "../support/session-purpose";
+import {
+  isTranscriptAgentSession,
+  resolveAgentSessionPurposeForLoad,
+} from "../support/session-purpose";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import {
   formatSubagentContent,
@@ -183,10 +186,13 @@ const mergePersistedSessionRecord = (
 ): AgentSessionState => {
   const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
   const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
+  const nextPurpose: AgentSessionPurpose = isTranscriptAgentSession(current)
+    ? "transcript"
+    : purpose;
 
   return {
     ...current,
-    purpose,
+    purpose: nextPurpose,
     repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
