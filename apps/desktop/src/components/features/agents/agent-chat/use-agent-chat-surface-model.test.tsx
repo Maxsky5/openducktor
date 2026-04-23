@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type { AgentChatSurfaceModel } from "./agent-chat.types";
 import { buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
@@ -103,12 +103,10 @@ describe("useAgentChatSurfaceModel", () => {
         stopReturn = latestModel?.composer?.onStopSession();
       });
       expect(stopReturn).toBeUndefined();
-      await waitFor(() => {
-        expect(stopCalls).toEqual(["session-1"]);
-      });
+      expect(stopCalls).toEqual(["session-1"]);
 
       rejectStop(new Error("stop failed"));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await Promise.resolve();
 
       expect(unhandledReasons).toEqual([]);
     } finally {
