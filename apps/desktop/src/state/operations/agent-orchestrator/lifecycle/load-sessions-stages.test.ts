@@ -241,7 +241,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("absorbs current subagent fallback rows when hydrated history has the canonical row", () => {
+  test("absorbs current subagent rows when hydrated history has the same child session id", () => {
     const merged = mergeHydratedMessages(
       "session-1",
       [
@@ -301,7 +301,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("absorbs current completed session fallback rows when hydrated history still has the unresolved part row", () => {
+  test("absorbs a unique current completed session row when hydrated history still has the unresolved part row", () => {
     const merged = mergeHydratedMessages(
       "session-1",
       [
@@ -363,7 +363,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("preserves current cancelled session fallback rows when hydrated history still has the unresolved part row", () => {
+  test("absorbs a unique current cancelled session row when hydrated history still has the unresolved part row", () => {
     const merged = mergeHydratedMessages(
       "session-1",
       [
@@ -421,6 +421,78 @@ describe("load-sessions-stages", () => {
         sessionId: "child-a",
         startedAtMs: 100,
         endedAtMs: 280,
+      },
+    });
+  });
+
+  test("keeps same-prompt current session rows separate when the hydration fallback is ambiguous", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (build): Finished A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-completed",
+            correlationKey: "session:msg-201:child-a",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+        {
+          id: "subagent:session:msg-202:child-b",
+          role: "system",
+          content: "Subagent (build): Finished B",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-b-completed",
+            correlationKey: "session:msg-202:child-b",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished B",
+            sessionId: "child-b",
+            startedAtMs: 110,
+            endedAtMs: 320,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(3);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "running",
       },
     });
   });

@@ -528,7 +528,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(subagent.content).toContain("Cancelled by user");
   });
 
-  test("merges hydrated subagent history parts across part and session correlation keys", () => {
+  test("surfaces only the identified hydrated subagent history part when part and session correlation keys differ", () => {
     const messages = historyToChatMessages(
       [
         {
@@ -574,22 +574,18 @@ describe("agent-orchestrator/support/persistence", () => {
       (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
     );
     expect(subagentMessages).toHaveLength(1);
-
-    const subagent = subagentMessages[0];
-    if (!subagent || subagent.meta?.kind !== "subagent") {
-      throw new Error("Expected merged subagent message with subagent meta");
-    }
-
-    expect(subagent.id).toBe("subagent:part:m-assistant:p-subagent-running");
-    expect(subagent.meta.correlationKey).toBe("part:m-assistant:p-subagent-running");
-    expect(subagent.meta.status).toBe("completed");
-    expect(subagent.meta.sessionId).toBe("session-child-1");
-    expect(subagent.meta.startedAtMs).toBe(100);
-    expect(subagent.meta.endedAtMs).toBe(300);
-    expect(subagent.content).toContain("Review completed");
+    expect(subagentMessages[0]).toMatchObject({
+      id: "subagent:session:m-assistant:session-child-1",
+      meta: {
+        kind: "subagent",
+        correlationKey: "session:m-assistant:session-child-1",
+        status: "completed",
+        sessionId: "session-child-1",
+      },
+    });
   });
 
-  test("prefers canonical part correlation when session-correlated history arrives first", () => {
+  test("ignores later unidentified hydrated subagent history rows when an identified row already exists", () => {
     const messages = historyToChatMessages(
       [
         {
@@ -635,18 +631,72 @@ describe("agent-orchestrator/support/persistence", () => {
       (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
     );
     expect(subagentMessages).toHaveLength(1);
+    expect(subagentMessages[0]).toMatchObject({
+      id: "subagent:session:m-assistant:session-child-1",
+      meta: {
+        kind: "subagent",
+        correlationKey: "session:m-assistant:session-child-1",
+        status: "completed",
+        sessionId: "session-child-1",
+      },
+    });
+  });
 
-    const subagent = subagentMessages[0];
-    if (!subagent || subagent.meta?.kind !== "subagent") {
-      throw new Error("Expected merged subagent message with subagent meta");
-    }
+  test("ignores ambiguous same-prompt hydrated subagent history rows without session ids", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant",
+              partId: "p-subagent-running",
+              correlationKey: "part:m-assistant:p-subagent-running",
+              status: "running",
+              agent: "build",
+              prompt: "Review changes",
+              description: "Review changes [commit|branch|pr]",
+              startedAtMs: 100,
+            },
+            {
+              kind: "subagent",
+              messageId: "m-assistant",
+              partId: "p-subagent-completed",
+              correlationKey: "session:m-assistant:session-child-1",
+              status: "completed",
+              agent: "build",
+              prompt: "Review changes",
+              description: "Review completed",
+              sessionId: "session-child-1",
+              startedAtMs: 120,
+              endedAtMs: 300,
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
 
-    expect(subagent.id).toBe("subagent:part:m-assistant:p-subagent-running");
-    expect(subagent.meta.correlationKey).toBe("part:m-assistant:p-subagent-running");
-    expect(subagent.meta.status).toBe("completed");
-    expect(subagent.meta.sessionId).toBe("session-child-1");
-    expect(subagent.meta.startedAtMs).toBe(100);
-    expect(subagent.meta.endedAtMs).toBe(300);
+    const subagentMessages = messages.filter(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(1);
+    expect(subagentMessages[0]).toMatchObject({
+      id: "subagent:session:m-assistant:session-child-1",
+      meta: {
+        kind: "subagent",
+        correlationKey: "session:m-assistant:session-child-1",
+        status: "completed",
+        sessionId: "session-child-1",
+      },
+    });
   });
 
   test("preserves session-selected agent when history model metadata is partial", () => {
@@ -851,7 +901,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = sessionMessageAt({ sessionId: "session-1", messages }, 1);
+    const assistant = sessionMessageAt({ sessionId: "session-1", messages }, 0);
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }

@@ -170,6 +170,48 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("preserves structured subagent tool failures as error status", () => {
+    const part = createToolPart({
+      id: "tool-subagent-error-1",
+      tool: "delegate",
+      status: "completed",
+      input: {
+        agent: "planner",
+        prompt: "Inspect the tests",
+      },
+      output: {
+        content: [{ type: "text", text: "Task failed" }],
+        isError: true,
+      },
+      metadata: {
+        sessionId: "session-child-error-1",
+      },
+      time: {
+        start: 10,
+        end: 25,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-tool-subagent-error-1",
+      partId: "tool-subagent-error-1",
+      correlationKey: "spawn:assistant-tool-subagent-error-1:planner:Inspect the tests",
+      status: "error",
+      agent: "planner",
+      prompt: "Inspect the tests",
+      description: "Task failed",
+      sessionId: "session-child-error-1",
+      metadata: {
+        sessionId: "session-child-error-1",
+      },
+      startedAtMs: 10,
+      endedAtMs: 25,
+    });
+  });
+
   test("maps task tool parts with metadata session ids to canonical subagent parts", () => {
     const part = createToolPart({
       id: "tool-task-1",

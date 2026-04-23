@@ -319,6 +319,7 @@ const buildSubagentFromToolPart = (
   normalizedStatus: SubagentStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
+  structuredError: string | undefined,
 ): SubagentStreamPart => {
   const rawInput = readUnknownProp(toolState, "input");
   const rawOutput = readUnknownProp(toolState, "output");
@@ -328,6 +329,7 @@ const buildSubagentFromToolPart = (
   const agent = resolveSubagentAgent(input, metadata, output);
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const description =
+    structuredError ??
     resolveSubagentDescription(input, output, metadata) ??
     deriveToolPreview({
       tool: part.tool,
@@ -373,8 +375,12 @@ const normalizeToolStatus = (rawStatus: string, hasEndedTiming: boolean): ToolSt
 const normalizeSubagentStatus = (
   rawStatus: string,
   hasEndedTiming: boolean,
+  hasStructuredError: boolean,
 ): SubagentStreamPart["status"] => {
   const normalized = rawStatus.trim().toLowerCase();
+  if (hasStructuredError) {
+    return "error";
+  }
   if (normalized === "completed") {
     return "completed";
   }
@@ -485,15 +491,20 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
       const timing = extractPartTiming(part);
       const metadata = normalizeMetadata(readUnknownProp(toolState, "metadata"));
       if (SUBAGENT_TOOL_NAMES.has(normalizeToolName(part.tool))) {
+        const rawOutput = readUnknownProp(toolState, "output");
+        const structuredError =
+          readStructuredToolError(rawOutput) ?? readStructuredToolError(metadata);
         return buildSubagentFromToolPart(
           part,
           toolState,
           normalizeSubagentStatus(
             readStringProp(toolState, ["status"]) ?? "",
             typeof timing.endedAtMs === "number",
+            structuredError !== undefined,
           ),
           timing,
           metadata,
+          structuredError,
         );
       }
 

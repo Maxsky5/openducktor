@@ -2605,6 +2605,134 @@ describe("agent-orchestrator-session-events", () => {
     expect(subagentMessages[0].meta.status).toBe("completed");
   });
 
+  test("keeps same-prompt subagents separate until an exact identity match arrives", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build" }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionsRef,
+      sessionId: "session-1",
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      contextUsageMessageIdBySessionRef: { current: {} },
+      turnModelBySessionRef: { current: {} },
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.300Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-spawn-1",
+        correlationKey: "spawn:m1:build:Do work",
+        status: "running",
+        agent: "build",
+        prompt: "Do work",
+        description: "Starting first subagent",
+        startedAtMs: 100,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.325Z",
+      part: {
+        kind: "subagent",
+        messageId: "m2",
+        partId: "p-subtask-spawn-2",
+        correlationKey: "spawn:m2:build:Do work",
+        status: "running",
+        agent: "build",
+        prompt: "Do work",
+        description: "Starting second subagent",
+        startedAtMs: 125,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.350Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-complete-1",
+        correlationKey: "spawn:m1:build:Do work",
+        status: "completed",
+        agent: "build",
+        prompt: "Do work",
+        description: "First subagent done",
+        sessionId: "session-child-1",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+
+    const subagentMessages = getSessionMessages(sessionsRef).filter(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(2);
+
+    const firstSubagent = subagentMessages.find(
+      (message) => message.id === "subagent:spawn:m1:build:Do work",
+    );
+    const secondSubagent = subagentMessages.find(
+      (message) => message.id === "subagent:spawn:m2:build:Do work",
+    );
+    if (firstSubagent?.meta?.kind !== "subagent" || secondSubagent?.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent meta");
+    }
+
+    expect(firstSubagent.meta.sessionId).toBe("session-child-1");
+    expect(firstSubagent.meta.status).toBe("completed");
+    expect(secondSubagent.meta.sessionId).toBeUndefined();
+    expect(secondSubagent.meta.status).toBe("running");
+  });
+
   test("preserves cancelled subagent updates on the existing live row", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
@@ -2709,7 +2837,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(subagentMessages[0].meta.endedAtMs).toBe(250);
   });
 
-  test("reuses an earlier part-scoped subagent row when a later fallback session correlation arrives", () => {
+  test("absorbs a unique fallback session-correlated subagent row into the existing live row", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
@@ -2803,15 +2931,129 @@ describe("agent-orchestrator-session-events", () => {
       (message) => message.role === "system" && message.meta?.kind === "subagent",
     );
     expect(subagentMessages).toHaveLength(1);
-    expect(subagentMessages[0]?.id).toBe("subagent:part:m1:p-subtask-spawn");
-    if (subagentMessages[0]?.meta?.kind !== "subagent") {
+    const subagent = subagentMessages[0];
+    if (subagent?.meta?.kind !== "subagent") {
       throw new Error("Expected subagent meta");
     }
-    expect(subagentMessages[0].meta.correlationKey).toBe("session:m2:session-child-1");
-    expect(subagentMessages[0].meta.sessionId).toBe("session-child-1");
-    expect(subagentMessages[0].meta.status).toBe("completed");
-    expect(subagentMessages[0].meta.startedAtMs).toBe(100);
-    expect(subagentMessages[0].meta.endedAtMs).toBe(300);
+    expect(subagent.id).toBe("subagent:part:m1:p-subtask-spawn");
+    expect(subagent.meta.correlationKey).toBe("session:m2:session-child-1");
+    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.status).toBe("completed");
+    expect(subagent.meta.startedAtMs).toBe(100);
+    expect(subagent.meta.endedAtMs).toBe(300);
+  });
+
+  test("keeps fallback session-correlated subagent rows separate when multiple same-prompt live rows exist", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build" }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionsRef,
+      sessionId: "session-1",
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      contextUsageMessageIdBySessionRef: { current: {} },
+      turnModelBySessionRef: { current: {} },
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.300Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-spawn-1",
+        correlationKey: "part:m1:p-subtask-spawn-1",
+        status: "running",
+        agent: "build",
+        prompt: "Do work",
+        description: "Starting subagent 1",
+        startedAtMs: 100,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.325Z",
+      part: {
+        kind: "subagent",
+        messageId: "m2",
+        partId: "p-subtask-spawn-2",
+        correlationKey: "part:m2:p-subtask-spawn-2",
+        status: "running",
+        agent: "build",
+        prompt: "Do work",
+        description: "Starting subagent 2",
+        startedAtMs: 120,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.350Z",
+      part: {
+        kind: "subagent",
+        messageId: "m3",
+        partId: "p-subtask-complete",
+        correlationKey: "session:m3:session-child-1",
+        status: "completed",
+        agent: "build",
+        prompt: "Do work",
+        description: "Done subtask",
+        sessionId: "session-child-1",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+
+    const subagentMessages = getSessionMessages(sessionsRef).filter(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(3);
   });
 
   test("matches an older assistant message when the newest same-text message is outside the timestamp window", () => {

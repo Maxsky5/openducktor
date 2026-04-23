@@ -5,12 +5,7 @@ import type {
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentSubagentExecutionMode,
-  AgentSubagentStatus,
-  LiveAgentSessionSnapshot,
-} from "@openducktor/core";
+import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
@@ -45,6 +40,12 @@ import {
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import { resolveAgentSessionPurposeForLoad } from "../support/session-purpose";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
+import {
+  formatSubagentContent,
+  isSubagentMessage,
+  mergeSubagentMeta,
+  type SubagentMessage,
+} from "../support/subagent-messages";
 import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
@@ -212,79 +213,13 @@ export const mergeHydratedMessages = (
   hydratedMessages: AgentSessionState["messages"],
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
-  type SubagentMessageMeta = {
-    kind: "subagent";
-    partId: string;
-    correlationKey: string;
-    status: AgentSubagentStatus;
-    agent?: string;
-    prompt?: string;
-    description?: string;
-    sessionId?: string;
-    executionMode?: AgentSubagentExecutionMode;
-    metadata?: Record<string, unknown>;
-    startedAtMs?: number;
-    endedAtMs?: number;
-  };
-  type SubagentChatMessage = AgentChatMessage & {
-    role: "system";
-    meta: SubagentMessageMeta;
-  };
   const currentOwner = { sessionId, messages: currentMessages };
-  const isSubagentMessage = (
-    message: AgentChatMessage | undefined,
-  ): message is SubagentChatMessage => {
-    return message?.role === "system" && message.meta?.kind === "subagent";
-  };
-  const resolveMergedSubagentStatus = (
-    existingStatus: SubagentMessageMeta["status"],
-    incomingStatus: SubagentMessageMeta["status"],
-  ): SubagentMessageMeta["status"] => {
-    if (existingStatus === "error") {
-      return "error";
-    }
-    if (incomingStatus === "error") {
-      return "error";
-    }
-    if (existingStatus === "cancelled") {
-      return "cancelled";
-    }
-    if (incomingStatus === "cancelled") {
-      return "cancelled";
-    }
-    if (existingStatus === "completed") {
-      return "completed";
-    }
-    if (incomingStatus === "completed") {
-      return "completed";
-    }
-    if (existingStatus === "running" && incomingStatus === "pending") {
-      return "running";
-    }
-
-    return incomingStatus;
-  };
-  const formatMergedSubagentContent = (meta: {
-    agent?: string;
-    prompt?: string;
-    description?: string;
-    sessionId?: string;
-  }): string => {
-    const agentLabel = meta.agent?.trim() || "subagent";
-    const summary =
-      meta.description?.trim() ||
-      meta.prompt?.trim() ||
-      (meta.sessionId ? `Session ${meta.sessionId.slice(0, 8)}` : "Subagent activity");
-
-    return `Subagent (${agentLabel}): ${summary}`;
-  };
   const mergeSubagentMessages = (
-    hydratedMessage: SubagentChatMessage,
-    currentMessage: SubagentChatMessage,
+    hydratedMessage: SubagentMessage,
+    currentMessage: SubagentMessage,
   ): AgentChatMessage => {
     const hydratedMeta = hydratedMessage.meta;
     const currentMeta = currentMessage.meta;
-    const status = resolveMergedSubagentStatus(hydratedMeta.status, currentMeta.status);
     const prefersCurrentTerminalState =
       (currentMeta.status === "completed" ||
         currentMeta.status === "cancelled" ||
@@ -292,45 +227,19 @@ export const mergeHydratedMessages = (
       hydratedMeta.status !== "completed" &&
       hydratedMeta.status !== "cancelled" &&
       hydratedMeta.status !== "error";
-    const metadata =
-      hydratedMeta.metadata && currentMeta.metadata
-        ? { ...hydratedMeta.metadata, ...currentMeta.metadata }
-        : (currentMeta.metadata ?? hydratedMeta.metadata);
-    const startedAtMs =
-      typeof hydratedMeta.startedAtMs === "number" && typeof currentMeta.startedAtMs === "number"
-        ? Math.min(hydratedMeta.startedAtMs, currentMeta.startedAtMs)
-        : (currentMeta.startedAtMs ?? hydratedMeta.startedAtMs);
-    const endedAtMs =
-      typeof hydratedMeta.endedAtMs === "number" && typeof currentMeta.endedAtMs === "number"
-        ? Math.max(hydratedMeta.endedAtMs, currentMeta.endedAtMs)
-        : status === "completed" || status === "cancelled" || status === "error"
-          ? (currentMeta.endedAtMs ?? hydratedMeta.endedAtMs)
-          : undefined;
-    const agent = currentMeta.agent ?? hydratedMeta.agent;
-    const prompt = currentMeta.prompt ?? hydratedMeta.prompt;
     const description = prefersCurrentTerminalState
       ? (currentMeta.description ?? hydratedMeta.description)
       : (hydratedMeta.description ?? currentMeta.description);
-    const sessionId = currentMeta.sessionId ?? hydratedMeta.sessionId;
-    const executionMode = currentMeta.executionMode ?? hydratedMeta.executionMode;
-    const nextMeta: typeof hydratedMeta = {
-      kind: "subagent",
+    const nextMeta = mergeSubagentMeta(hydratedMeta, {
+      ...currentMeta,
       partId: hydratedMeta.partId,
       correlationKey: hydratedMeta.correlationKey,
-      status,
-      ...(typeof agent === "string" ? { agent } : {}),
-      ...(typeof prompt === "string" ? { prompt } : {}),
       ...(typeof description === "string" ? { description } : {}),
-      ...(typeof sessionId === "string" ? { sessionId } : {}),
-      ...(executionMode ? { executionMode } : {}),
-      ...(metadata ? { metadata } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-      ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
-    };
+    });
 
     return {
       ...hydratedMessage,
-      content: formatMergedSubagentContent(nextMeta),
+      content: formatSubagentContent(nextMeta),
       meta: nextMeta,
     };
   };
@@ -350,23 +259,28 @@ export const mergeHydratedMessages = (
       return candidate.meta.sessionId === hydratedSessionId;
     }
 
-    const hydratedCorrelationKey = hydratedMessage.meta.correlationKey;
-    if (!hydratedCorrelationKey.startsWith("part:")) {
+    return false;
+  };
+  const canAbsorbHydratedPartSubagentIntoCurrentSessionRow = (
+    hydratedMessage: AgentChatMessage,
+    candidate: AgentChatMessage,
+  ): boolean => {
+    if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
+      return false;
+    }
+    if (hydratedMessage.meta.sessionId || !candidate.meta.sessionId) {
+      return false;
+    }
+    if (!hydratedMessage.meta.correlationKey.startsWith("part:")) {
       return false;
     }
     if (!candidate.meta.correlationKey.startsWith("session:")) {
       return false;
     }
-    if (!candidate.meta.sessionId) {
-      return false;
-    }
-    if (!hydratedMessage.meta.agent || !hydratedMessage.meta.prompt) {
-      return false;
-    }
 
     return (
-      candidate.meta.agent === hydratedMessage.meta.agent &&
-      candidate.meta.prompt === hydratedMessage.meta.prompt
+      hydratedMessage.meta.agent === candidate.meta.agent &&
+      hydratedMessage.meta.prompt === candidate.meta.prompt
     );
   };
   const findMatchingCurrentSubagents = (
@@ -385,16 +299,27 @@ export const mergeHydratedMessages = (
     }
 
     const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+    const fallbackCandidates: AgentChatMessage[] = [];
     for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
       const candidate = currentSlice[index];
       if (!candidate || seenIds.has(candidate.id)) {
         continue;
       }
-      if (!matchesHydratedSubagent(hydratedMessage, candidate)) {
+      if (matchesHydratedSubagent(hydratedMessage, candidate)) {
+        matches.push(candidate);
+        seenIds.add(candidate.id);
         continue;
       }
-      matches.push(candidate);
-      seenIds.add(candidate.id);
+      if (canAbsorbHydratedPartSubagentIntoCurrentSessionRow(hydratedMessage, candidate)) {
+        fallbackCandidates.push(candidate);
+      }
+    }
+
+    if (matches.length === 0 && fallbackCandidates.length === 1) {
+      const [fallbackCandidate] = fallbackCandidates;
+      if (fallbackCandidate) {
+        matches.push(fallbackCandidate);
+      }
     }
 
     return matches;

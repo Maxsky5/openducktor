@@ -1,12 +1,18 @@
-import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
 import {
   findLastSessionMessageByRole,
   findSessionMessageById,
+  getSessionMessagesSlice,
   removeSessionMessageById,
   upsertSessionMessage,
 } from "../support/messages";
+import {
+  formatSubagentContent,
+  mergeSubagentMeta,
+  type SubagentMeta,
+} from "../support/subagent-messages";
 import type {
   DraftChannel,
   SessionEvent,
@@ -344,64 +350,33 @@ const handleReasoningPart = (
   );
 };
 
-const handleSubtaskPart = (
+const handleSubagentPart = (
   context: SessionPartEventContext,
   event: SessionPartEvent,
   part: Extract<SessionPart, { kind: "subagent" }>,
   prepareCurrent: PrepareCurrent,
 ): void => {
-  type SubagentMessageMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
   const eventTimestamp = eventTimestampMs(event.timestamp);
-  const correlationKeyKind = part.correlationKey.split(":", 1)[0] ?? "";
-
-  const resolveNextStatus = (
-    existingStatus: Extract<SessionPart, { kind: "subagent" }>["status"] | undefined,
-    incomingStatus: Extract<SessionPart, { kind: "subagent" }>["status"],
-  ): Extract<SessionPart, { kind: "subagent" }>["status"] => {
-    if (existingStatus === "error") {
-      return "error";
-    }
-    if (incomingStatus === "error") {
-      return "error";
-    }
-    if (existingStatus === "cancelled") {
-      return "cancelled";
-    }
-    if (incomingStatus === "cancelled") {
-      return "cancelled";
-    }
-    if (existingStatus === "completed") {
-      return "completed";
-    }
-    if (incomingStatus === "completed") {
-      return "completed";
-    }
-    if (existingStatus === "running" && incomingStatus === "pending") {
-      return "running";
-    }
-
-    return incomingStatus;
-  };
-
-  const formatSubagentContent = (meta: {
-    agent?: string;
-    prompt?: string;
-    description?: string;
-    sessionId?: string;
-  }): string => {
-    const agentLabel = meta.agent?.trim() || "subagent";
-    const summary =
-      meta.description?.trim() ||
-      meta.prompt?.trim() ||
-      (meta.sessionId ? `Session ${meta.sessionId.slice(0, 8)}` : "Subagent activity");
-
-    return `Subagent (${agentLabel}): ${summary}`;
-  };
 
   context.store.updateSession(
     context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
+      const fallbackMatches =
+        typeof part.sessionId === "string" &&
+        part.correlationKey.startsWith("session:") &&
+        typeof part.agent === "string" &&
+        typeof part.prompt === "string"
+          ? getSessionMessagesSlice(prepared, 0).filter(
+              (message) =>
+                message.role === "system" &&
+                message.meta?.kind === "subagent" &&
+                !message.meta.sessionId &&
+                message.meta.correlationKey.startsWith("part:") &&
+                message.meta.agent === part.agent &&
+                message.meta.prompt === part.prompt,
+            )
+          : [];
       const correlationMessage = findLastSessionMessageByRole(
         prepared,
         "system",
@@ -416,54 +391,29 @@ const handleSubtaskPart = (
               message.meta?.kind === "subagent" && message.meta.sessionId === part.sessionId,
           )
         : undefined;
-      const semanticFallbackMessage =
-        correlationMessage || correlationKeyKind !== "session" || !part.agent || !part.prompt
+      const fallbackMessage =
+        correlationMessage || sessionMessage || fallbackMatches.length !== 1
           ? undefined
-          : findLastSessionMessageByRole(
-              prepared,
-              "system",
-              (message) =>
-                message.meta?.kind === "subagent" &&
-                !message.meta.sessionId &&
-                message.meta.agent === part.agent &&
-                message.meta.prompt === part.prompt,
-            );
-      const existingMessage = correlationMessage ?? sessionMessage ?? semanticFallbackMessage;
+          : fallbackMatches[0];
+      const existingMessage = correlationMessage ?? sessionMessage ?? fallbackMessage;
       const existingMeta = existingMessage?.meta?.kind === "subagent" ? existingMessage.meta : null;
-      const status = resolveNextStatus(existingMeta?.status, part.status);
-      const metadata =
-        existingMeta?.metadata && part.metadata
-          ? { ...existingMeta.metadata, ...part.metadata }
-          : (part.metadata ?? existingMeta?.metadata);
-      const startedAtMs =
-        typeof existingMeta?.startedAtMs === "number" && typeof part.startedAtMs === "number"
-          ? Math.min(existingMeta.startedAtMs, part.startedAtMs)
-          : (part.startedAtMs ?? existingMeta?.startedAtMs ?? eventTimestamp);
-      const endedAtMs =
-        typeof existingMeta?.endedAtMs === "number" && typeof part.endedAtMs === "number"
-          ? Math.max(existingMeta.endedAtMs, part.endedAtMs)
-          : status === "completed" || status === "cancelled" || status === "error"
-            ? (part.endedAtMs ?? existingMeta?.endedAtMs ?? eventTimestamp)
-            : undefined;
-      const agent = part.agent ?? existingMeta?.agent;
-      const prompt = part.prompt ?? existingMeta?.prompt;
-      const description = part.description ?? existingMeta?.description;
-      const sessionId = part.sessionId ?? existingMeta?.sessionId;
-      const executionMode = part.executionMode ?? existingMeta?.executionMode;
-      const nextMeta: SubagentMessageMeta = {
+      const incomingMeta: SubagentMeta = {
         kind: "subagent",
         partId: part.partId,
         correlationKey: part.correlationKey,
-        status,
-        ...(typeof agent === "string" ? { agent } : {}),
-        ...(typeof prompt === "string" ? { prompt } : {}),
-        ...(typeof description === "string" ? { description } : {}),
-        ...(typeof sessionId === "string" ? { sessionId } : {}),
-        ...(executionMode ? { executionMode } : {}),
-        ...(metadata ? { metadata } : {}),
-        ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-        ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+        status: part.status,
+        ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
+        ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
+        ...(typeof part.description === "string" ? { description: part.description } : {}),
+        ...(typeof part.sessionId === "string" ? { sessionId: part.sessionId } : {}),
+        ...(part.executionMode ? { executionMode: part.executionMode } : {}),
+        ...(part.metadata ? { metadata: part.metadata } : {}),
+        ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+        ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
       };
+      const nextMeta = mergeSubagentMeta(existingMeta, incomingMeta, {
+        startedAtMsFallback: eventTimestamp,
+      });
       const duplicateMessageId =
         correlationMessage &&
         sessionMessage &&
@@ -558,7 +508,7 @@ export const handleAssistantPart = (
       handleToolPart(context, event, part, streamMessageKey, prepareCurrent);
       return;
     case "subagent":
-      handleSubtaskPart(context, event, part, prepareCurrent);
+      handleSubagentPart(context, event, part, prepareCurrent);
       return;
     case "step":
       handleStepPart(context, part, prepareCurrent);
