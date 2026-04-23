@@ -497,6 +497,63 @@ describe("load-sessions-stages", () => {
     });
   });
 
+  test("does not absorb descriptor-less rows through the hydration fallback", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (subagent): Subagent activity",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (subagent): Session child-a",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-completed",
+            correlationKey: "session:msg-201:child-a",
+            status: "completed",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(2);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "running",
+      },
+    });
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 1)).toMatchObject({
+      id: "subagent:session:msg-201:child-a",
+      meta: {
+        kind: "subagent",
+        correlationKey: "session:msg-201:child-a",
+        status: "completed",
+        sessionId: "child-a",
+      },
+    });
+  });
+
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
     const existingSession = createSession({
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },

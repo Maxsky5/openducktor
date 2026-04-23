@@ -284,10 +284,16 @@ export const mergeHydratedMessages = (
       return false;
     }
 
-    return (
-      hydratedMessage.meta.agent === candidate.meta.agent &&
-      hydratedMessage.meta.prompt === candidate.meta.prompt
-    );
+    const hydratedAgent = hydratedMessage.meta.agent?.trim();
+    const candidateAgent = candidate.meta.agent?.trim();
+    const hydratedPrompt = hydratedMessage.meta.prompt?.trim();
+    const candidatePrompt = candidate.meta.prompt?.trim();
+
+    if (!hydratedAgent || !candidateAgent || !hydratedPrompt || !candidatePrompt) {
+      return false;
+    }
+
+    return hydratedAgent === candidateAgent && hydratedPrompt === candidatePrompt;
   };
   const findMatchingCurrentSubagents = (
     hydratedMessage: AgentChatMessage,
