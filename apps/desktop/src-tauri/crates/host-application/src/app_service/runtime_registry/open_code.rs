@@ -27,11 +27,14 @@ use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 use url::form_urlencoded;
 
+const MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES: usize = 64 * 1024;
+
 #[derive(Default)]
 pub(crate) struct OpenCodeRuntime {
     process_tracker: OpenCodeProcessTracker,
 }
 
+#[derive(Debug)]
 struct OpenCodeAbortResponseHeaders {
     lines: Vec<String>,
 }
@@ -47,7 +50,12 @@ impl OpenCodeAbortResponseHeaders {
                     "Failed reading OpenCode abort response headers for session {external_session_id}"
                 )
             })?;
-            if bytes_read == 0 || line == "\r\n" || line == "\n" {
+            if bytes_read == 0 {
+                return Err(anyhow!(
+                    "Unexpected EOF while reading OpenCode abort response headers for session {external_session_id}"
+                ));
+            }
+            if line == "\r\n" || line == "\n" {
                 break;
             }
             lines.push(line.trim_end().to_string());
@@ -294,7 +302,14 @@ impl OpenCodeRuntime {
             }
 
             let start = decoded.len();
-            decoded.resize(start + size, 0);
+            let next_len = start.checked_add(size).ok_or_else(|| {
+                anyhow!(
+                    "OpenCode abort response body for session {external_session_id} exceeds the {} byte limit",
+                    MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES
+                )
+            })?;
+            Self::ensure_abort_response_body_size(next_len, external_session_id)?;
+            decoded.resize(next_len, 0);
             reader
                 .read_exact(&mut decoded[start..])
                 .with_context(|| {
@@ -316,7 +331,7 @@ impl OpenCodeRuntime {
         }
     }
 
-    fn read_http_response_body<R: BufRead + Read>(
+    fn read_http_response_body<R: BufRead>(
         reader: &mut R,
         headers: &OpenCodeAbortResponseHeaders,
         external_session_id: &str,
@@ -326,6 +341,7 @@ impl OpenCodeRuntime {
         }
 
         if let Some(content_length) = headers.content_length(external_session_id)? {
+            Self::ensure_abort_response_body_size(content_length, external_session_id)?;
             let mut body = vec![0_u8; content_length];
             reader.read_exact(&mut body).with_context(|| {
                 format!(
@@ -343,6 +359,17 @@ impl OpenCodeRuntime {
 
         Err(anyhow!(
             "Malformed OpenCode abort error response for session {external_session_id}: missing Content-Length or Transfer-Encoding header"
+        ))
+    }
+
+    fn ensure_abort_response_body_size(size: usize, external_session_id: &str) -> Result<()> {
+        if size <= MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "OpenCode abort response body for session {external_session_id} exceeds the {} byte limit",
+            MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES
         ))
     }
 
@@ -692,7 +719,9 @@ impl AppRuntime for OpenCodeRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::{OpenCodeAbortResponseHeaders, OpenCodeRuntime};
+    use super::{
+        OpenCodeAbortResponseHeaders, OpenCodeRuntime, MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES,
+    };
     use crate::app_service::RuntimeRoute;
     use anyhow::Result;
     use std::io::{BufReader, Cursor, Read, Write};
@@ -741,6 +770,16 @@ mod tests {
             .expect("chunked body should decode");
 
         assert_eq!(body, "{\"a\":1}");
+    }
+
+    #[test]
+    fn abort_response_headers_reject_unexpected_eof() {
+        let mut reader = BufReader::new(Cursor::new("Content-Length: 11\r\n"));
+
+        let error = OpenCodeAbortResponseHeaders::read_from(&mut reader, "session-1")
+            .expect_err("unterminated headers should be rejected");
+
+        assert!(error.to_string().contains("Unexpected EOF"));
     }
 
     #[test]
@@ -803,6 +842,36 @@ mod tests {
 
         assert_eq!(body, "stop failed");
         Ok(())
+    }
+
+    #[test]
+    fn read_http_response_body_rejects_oversized_content_length() {
+        let headers = OpenCodeAbortResponseHeaders {
+            lines: vec![format!(
+                "Content-Length: {}",
+                MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES + 1
+            )],
+        };
+        let mut reader = BufReader::new(Cursor::new(""));
+
+        let error = OpenCodeRuntime::read_http_response_body(&mut reader, &headers, "session-1")
+            .expect_err("oversized content-length should fail before allocation");
+
+        assert!(error.to_string().contains("exceeds the"));
+    }
+
+    #[test]
+    fn read_http_response_body_rejects_oversized_chunked_body() {
+        let headers = OpenCodeAbortResponseHeaders {
+            lines: vec!["Transfer-Encoding: chunked".to_string()],
+        };
+        let response = format!("{:x}\r\n", MAX_OPEN_CODE_ABORT_RESPONSE_BODY_BYTES + 1);
+        let mut reader = BufReader::new(Cursor::new(response));
+
+        let error = OpenCodeRuntime::read_http_response_body(&mut reader, &headers, "session-1")
+            .expect_err("oversized chunk should fail before allocation");
+
+        assert!(error.to_string().contains("exceeds the"));
     }
 
     #[test]
