@@ -100,6 +100,12 @@ const CATALOG_WITHOUT_PROFILES: AgentModelCatalog = {
   profiles: [],
 };
 
+const EMPTY_CATALOG: AgentModelCatalog = {
+  models: [],
+  defaultModelsByProvider: {},
+  profiles: [],
+};
+
 const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
   {
     id: "src/main.ts",
@@ -680,6 +686,34 @@ describe("useAgentStudioModelSelection", () => {
       variant: "high",
       profileId: "spec-agent",
     });
+
+    await harness.unmount();
+  });
+
+  test("preserves active session model when catalog cannot produce a replacement", async () => {
+    const updateAgentSessionModel = mock(() => {});
+    const activeSession = createActiveSession({
+      modelCatalog: EMPTY_CATALOG,
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        updateAgentSessionModel,
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+
+    expect(harness.getLatest().selectedModelSelection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec-agent",
+    });
+    expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
   });

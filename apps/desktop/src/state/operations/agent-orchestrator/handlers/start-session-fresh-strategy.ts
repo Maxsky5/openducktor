@@ -59,7 +59,7 @@ export const executeFreshStart = async ({
     role: ctx.role,
     scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
-    ...(selectedModel ? { model: selectedModel } : {}),
+    model: selectedModel,
   });
 
   const startedCtx = {
