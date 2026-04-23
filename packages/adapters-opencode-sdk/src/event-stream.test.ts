@@ -2617,6 +2617,47 @@ describe("event-stream", () => {
     expect(parts[0].part.text).toBe("fresh");
   });
 
+  test("clears deferred pending subagent emissions when message part is removed", async () => {
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.part.removed",
+          properties: {
+            sessionID: "external-session-1",
+            partID: "subtask-part-1",
+          },
+        } as unknown as Event,
+      ],
+      (record) => {
+        record.pendingSubagentPartEmissionsBySessionId.set("child-session-1", [
+          {
+            part: {
+              id: "subtask-part-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-4",
+              type: "tool",
+              tool: "task",
+              callID: "call-1",
+              state: {
+                status: "running",
+                input: {
+                  subagent_type: "build",
+                  prompt: "Review changes",
+                },
+                metadata: {
+                  sessionId: "child-session-1",
+                },
+              },
+            } as unknown as Event["properties"],
+            roleHint: "assistant",
+          },
+        ]);
+      },
+    );
+
+    expect(sessionRecord.pendingSubagentPartEmissionsBySessionId.size).toBe(0);
+  });
+
   test("normalizes unknown session error payload", async () => {
     const emitted = await runEventStream([
       {

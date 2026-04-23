@@ -1102,6 +1102,17 @@ const handleMessagePartRemovedEvent = (event: Event, runtime: EventStreamRuntime
 
   runtime.partsById.delete(removedPartId);
   runtime.pendingDeltasByPartId.delete(removedPartId);
+  for (const [sessionId, pending] of runtime.pendingSubagentPartEmissionsBySessionId) {
+    const nextPending = pending.filter((emission) => emission.part.id !== removedPartId);
+    if (nextPending.length === pending.length) {
+      continue;
+    }
+    if (nextPending.length === 0) {
+      runtime.pendingSubagentPartEmissionsBySessionId.delete(sessionId);
+      continue;
+    }
+    runtime.pendingSubagentPartEmissionsBySessionId.set(sessionId, nextPending);
+  }
   const removedCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(removedPartId);
   runtime.subagentCorrelationKeyByPartId.delete(removedPartId);
   if (removedCorrelationKey) {

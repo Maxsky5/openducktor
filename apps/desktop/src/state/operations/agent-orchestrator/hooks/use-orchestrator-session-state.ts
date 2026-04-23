@@ -160,6 +160,11 @@ const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimin
       for (const timing of Object.values(nextTimingBySession)) {
         delete timing[field];
       }
+      for (const sessionId of Object.keys(nextTimingBySession)) {
+        if (Object.keys(nextTimingBySession[sessionId] ?? {}).length === 0) {
+          delete nextTimingBySession[sessionId];
+        }
+      }
       for (const [sessionId, fieldValue] of Object.entries(value)) {
         nextTimingBySession[sessionId] = {
           ...(nextTimingBySession[sessionId] ?? {}),
