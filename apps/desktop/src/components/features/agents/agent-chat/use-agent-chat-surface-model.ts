@@ -66,6 +66,18 @@ const missingInteractiveComposerFileSearch = async (): Promise<AgentFileSearchRe
   throw new Error("Interactive composer file search is unavailable.");
 };
 
+type StopAgentSession = (sessionId: string) => Promise<void>;
+
+export const invokeStopAgentSession = (
+  sessionId: string | null,
+  stopAgentSession: StopAgentSession | undefined,
+): void => {
+  if (!sessionId || !stopAgentSession) {
+    return;
+  }
+  void stopAgentSession(sessionId).catch(() => undefined);
+};
+
 type AgentChatRuntimeReadiness = {
   readinessState: "ready" | "checking" | "blocked";
   isReady: boolean;
@@ -370,10 +382,7 @@ export function useAgentChatSurfaceModel({
   const composerSessionId = composer?.activeSession?.sessionId ?? null;
   const stopAgentSession = composer?.stopAgentSession;
   const handleStopSession = useCallback((): void => {
-    if (!composerSessionId || !stopAgentSession) {
-      return;
-    }
-    void stopAgentSession(composerSessionId).catch(() => undefined);
+    invokeStopAgentSession(composerSessionId, stopAgentSession);
   }, [composerSessionId, stopAgentSession]);
 
   const composerModel = useMemo(() => {
