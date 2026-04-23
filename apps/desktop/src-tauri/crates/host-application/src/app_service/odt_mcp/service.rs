@@ -17,7 +17,7 @@ use super::types::{
 use crate::app_service::workflow_rules::normalize_title_key;
 
 pub(super) const ODT_MCP_TOOL_NAMES: [&str; 13] = [
-    "get_workspaces",
+    "odt_get_workspaces",
     "odt_create_task",
     "odt_search_tasks",
     "odt_read_task",

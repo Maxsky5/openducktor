@@ -24,11 +24,13 @@ const summaryPayload = {
 };
 
 describe("OdtTaskStore", () => {
+  const workspacesPayload = { workspaces: [] };
+
   test("delegates workspace-scoped execution using the startup workspace default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => [],
+      getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
         return summaryPayload;
@@ -50,7 +52,7 @@ describe("OdtTaskStore", () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => [],
+      getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
         return summaryPayload;
@@ -79,7 +81,7 @@ describe("OdtTaskStore", () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => [],
+      getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
         return summaryPayload;
@@ -114,7 +116,7 @@ describe("OdtTaskStore", () => {
   test("keeps MCP-side input validation before delegation", async () => {
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => [],
+      getWorkspaces: async () => workspacesPayload,
       call: async () => summaryPayload,
     } as OdtHostBridgeClientPort;
 
@@ -129,7 +131,7 @@ describe("OdtTaskStore", () => {
   test("fails before delegation when no workspace can be resolved", async () => {
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => [],
+      getWorkspaces: async () => workspacesPayload,
       call: async () => summaryPayload,
     } as OdtHostBridgeClientPort;
 
@@ -186,7 +188,7 @@ describe("OdtTaskStore", () => {
   test("accepts document-level decode errors on odt_read_task_documents", async () => {
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => [],
+      getWorkspaces: async () => workspacesPayload,
       call: async () => ({
         documents: {
           spec: {

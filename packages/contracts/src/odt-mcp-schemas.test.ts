@@ -63,7 +63,7 @@ describe("odt mcp public task schemas", () => {
     });
   });
 
-  test("workspace-scoped tool names stay explicit and exclude get_workspaces", () => {
+  test("workspace-scoped tool names stay explicit and exclude odt_get_workspaces", () => {
     expect([...ODT_WORKSPACE_SCOPED_TOOL_NAMES].sort()).toEqual(
       [
         "odt_build_blocked",

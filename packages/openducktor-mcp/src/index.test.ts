@@ -94,7 +94,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       writeJson(response, {
         bridgeVersion: 1,
         toolNames: [
-          "get_workspaces",
+          "odt_get_workspaces",
           "odt_create_task",
           "odt_search_tasks",
           "odt_read_task",
@@ -112,7 +112,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       return;
     }
 
-    if (url === "/invoke/get_workspaces") {
+    if (url === "/invoke/odt_get_workspaces") {
       requests.push({ url, body: await readJsonBody(request) });
       writeJson(response, {
         workspaces: [
@@ -190,14 +190,14 @@ afterEach(async () => {
 });
 
 describe("MCP server tool results", () => {
-  test("get_workspaces keeps structuredContent for workspace discovery payloads", async () => {
+  test("odt_get_workspaces keeps structuredContent for workspace discovery payloads", async () => {
     const bridge = await startMockBridge();
     const transport = createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
       await client.connect(transport);
-      const result = await client.callTool({ name: "get_workspaces", arguments: {} });
+      const result = await client.callTool({ name: "odt_get_workspaces", arguments: {} });
       const contentResult = requireContentToolResult(result);
 
       expect(contentResult.structuredContent).toEqual({
@@ -230,7 +230,7 @@ describe("MCP server tool results", () => {
       });
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
-        { url: "/invoke/get_workspaces", body: {} },
+        { url: "/invoke/odt_get_workspaces", body: {} },
       ]);
     } finally {
       await client.close();

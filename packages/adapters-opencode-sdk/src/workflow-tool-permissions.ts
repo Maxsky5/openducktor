@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import { ODT_TOOL_NAMES, type RuntimeDescriptor } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentRole, ODT_WORKFLOW_TOOL_NAMES } from "@openducktor/core";
 import { isReadOnlyRole } from "./read-only-roles";
 
@@ -11,11 +11,7 @@ export type OpencodePermissionRule = {
 };
 
 const ODT_MCP_PERMISSION_WILDCARDS = ["openducktor_*", "functions.openducktor_*"] as const;
-const TRUSTED_ODT_CANONICAL_DENY_PERMISSIONS = [
-  ...ODT_WORKFLOW_TOOL_NAMES,
-  "odt_create_task",
-  "odt_search_tasks",
-] as const;
+const CANONICAL_ODT_TOOL_DENY_PERMISSIONS = ODT_TOOL_NAMES;
 
 export const buildRoleScopedPermissionRules = (input: {
   role: AgentRole;
@@ -42,7 +38,7 @@ export const buildRoleScopedPermissionRules = (input: {
       action: "deny",
     });
   }
-  for (const permission of TRUSTED_ODT_CANONICAL_DENY_PERMISSIONS) {
+  for (const permission of CANONICAL_ODT_TOOL_DENY_PERMISSIONS) {
     rules.push({
       permission,
       pattern: "*",

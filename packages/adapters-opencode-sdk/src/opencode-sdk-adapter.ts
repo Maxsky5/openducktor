@@ -626,7 +626,7 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = requireSession(this.sessions, input.sessionId);
-    const tools = await this.resolveSessionToolSelection(session, input.model);
+    const tools = await this.resolveSessionToolSelection(session);
     this.emit(input.sessionId, {
       type: "session_status",
       sessionId: input.sessionId,
@@ -661,7 +661,6 @@ export class OpencodeSdkAdapter
     }
     delete session.workflowToolSelectionCache;
     delete session.workflowToolSelectionCachedAt;
-    delete session.workflowToolSelectionCacheModelKey;
   }
 
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
@@ -715,18 +714,12 @@ export class OpencodeSdkAdapter
 
   private async resolveSessionToolSelection(
     session: SessionRecord,
-    model: SendAgentUserMessageInput["model"],
   ): Promise<Record<string, boolean>> {
-    const effectiveModel = model ?? session.input.model;
-    const providerId = effectiveModel?.providerId?.trim() ?? "";
-    const modelId = effectiveModel?.modelId?.trim() ?? "";
-    const modelKey = providerId && modelId ? `${providerId}/${modelId}` : "";
     const nowMs = Date.now();
     if (
       session.workflowToolSelectionCache &&
       typeof session.workflowToolSelectionCachedAt === "number" &&
-      nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS &&
-      (session.workflowToolSelectionCacheModelKey ?? "") === modelKey
+      nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS
     ) {
       return session.workflowToolSelectionCache;
     }
@@ -736,12 +729,10 @@ export class OpencodeSdkAdapter
       role: session.input.role,
       runtimeDescriptor: this.getRuntimeDefinition(),
       workingDirectory: session.input.workingDirectory,
-      ...(providerId && modelId ? { model: { providerId, modelId } } : {}),
     });
 
     session.workflowToolSelectionCache = selection;
     session.workflowToolSelectionCachedAt = nowMs;
-    session.workflowToolSelectionCacheModelKey = modelKey;
     return selection;
   }
 }

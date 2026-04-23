@@ -6,7 +6,6 @@ import {
   lastSessionMessageForTest,
   sessionMessageAt,
   sessionMessagesToArray,
-  someSessionMessageForTest,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { attachAgentSessionListener } from "../events/session-events";
@@ -1910,11 +1909,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
       expect(sessionsRef.current["session-1"]?.status).toBe("error");
-      expect(
-        someSessionMessageForTest(getSession(sessionsRef), (message) =>
-          message.content.includes("Failed to send message:"),
-        ),
-      ).toBe(true);
+      const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
+        message.content.includes("Failed to send message:"),
+      );
+      expect(failureMessage?.content).toContain("Failed to send message:");
+      expect(failureMessage?.meta).toEqual({
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      });
       expect(clearCalls).toBe(1);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -2103,11 +2107,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
       expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
       expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
-      expect(
-        someSessionMessageForTest(getSession(sessionsRef), (message) =>
-          message.content.includes("Failed to send message:"),
-        ),
-      ).toBe(true);
+      const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
+        message.content.includes("Failed to send message:"),
+      );
+      expect(failureMessage?.content).toContain("Failed to send message:");
+      expect(failureMessage?.meta).toEqual({
+        kind: "session_notice",
+        tone: "error",
+        reason: "session_error",
+        title: "Error",
+      });
       expect(clearCalls).toBe(0);
       expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");

@@ -52,7 +52,7 @@ export const executeFreshStart = async ({
 
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
-    runtimeKind: resolved.runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind: resolved.runtime.runtimeKind ?? selectedModel.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     runtimeConnection: resolveRuntimeConnection(resolved.runtime),
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,

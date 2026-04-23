@@ -623,9 +623,10 @@ describe("AgentChatThread", () => {
     expect(bottomStack).not.toBeNull();
     expect(bottomStack?.textContent).toContain("active session runtime data access");
     expect(bottomStack?.className).toContain("pb-3");
-    expect(screen.getByText(/active session runtime data access/).className).toContain(
-      "border-l border-input",
-    );
+    const runtimeError = screen.getByText(/active session runtime data access/);
+    expect(runtimeError.className).toContain("border-destructive-border");
+    expect(runtimeError.className).toContain("bg-destructive-surface");
+    expect(runtimeError.className).toContain("text-destructive-surface-foreground");
 
     rendered.unmount();
   });

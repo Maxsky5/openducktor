@@ -5,6 +5,7 @@ import {
   type OdtHostBridgeReady,
   type OdtToolName,
   odtHostBridgeReadySchema,
+  type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
@@ -13,7 +14,7 @@ type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Nam
 type ToolOutput<Name extends OdtToolName> = z.infer<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
-type WorkspaceScopedToolName = Exclude<OdtToolName, "get_workspaces">;
+type WorkspaceScopedToolName = WorkspaceScopedOdtToolName;
 
 export type OdtHostBridgeClientPort = {
   ready(): Promise<OdtHostBridgeReady>;
@@ -76,8 +77,8 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   }
 
   async getWorkspaces(): Promise<GetWorkspacesResult> {
-    const payload = await this.invokeJson("get_workspaces", {});
-    return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.get_workspaces.parse(payload);
+    const payload = await this.invokeJson("odt_get_workspaces", {});
+    return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_get_workspaces.parse(payload);
   }
 
   async call<Name extends WorkspaceScopedToolName>(

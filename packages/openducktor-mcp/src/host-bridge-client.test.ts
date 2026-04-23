@@ -118,7 +118,7 @@ describe("OdtHostBridgeClient", () => {
 
     expect(requests).toEqual([
       {
-        url: "http://127.0.0.1:14327/invoke/get_workspaces",
+        url: "http://127.0.0.1:14327/invoke/odt_get_workspaces",
         body: {},
       },
     ]);

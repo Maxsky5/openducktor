@@ -79,7 +79,7 @@ The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflo
 
 ## Public Tools
 
-- `get_workspaces`
+- `odt_get_workspaces`
 - `odt_create_task`
 - `odt_search_tasks`
 - `odt_read_task`
@@ -87,7 +87,7 @@ The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflo
 
 The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
-## `get_workspaces`
+## `odt_get_workspaces`
 
 Lists the workspaces currently known to the running OpenDucktor host.
 
@@ -114,7 +114,7 @@ Example response:
 }
 ```
 
-Use `get_workspaces` first when you start the MCP without a default workspace and need to discover the `workspaceId` for later calls.
+Use `odt_get_workspaces` first when you start the MCP without a default workspace and need to discover the `workspaceId` for later calls.
 
 ## `odt_create_task`
 

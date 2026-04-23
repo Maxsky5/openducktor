@@ -53,7 +53,7 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
-      if (url.endsWith("/invoke/get_workspaces")) {
+      if (url.endsWith("/invoke/odt_get_workspaces")) {
         return jsonResponse({
           workspaces: [
             {
@@ -147,7 +147,7 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
-      if (url === "http://127.0.0.1:14327/invoke/get_workspaces") {
+      if (url === "http://127.0.0.1:14327/invoke/odt_get_workspaces") {
         return jsonResponse({
           workspaces: [
             {
@@ -194,7 +194,7 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
-      if (url === "http://127.0.0.1:14328/invoke/get_workspaces") {
+      if (url === "http://127.0.0.1:14328/invoke/odt_get_workspaces") {
         return jsonResponse({
           workspaces: [
             {
@@ -238,7 +238,7 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
-      if (url === "http://127.0.0.1:14327/invoke/get_workspaces") {
+      if (url === "http://127.0.0.1:14327/invoke/odt_get_workspaces") {
         return jsonResponse({
           workspaces: [
             {
@@ -254,7 +254,7 @@ describe("resolveStoreContext", () => {
           ],
         });
       }
-      if (url === "http://127.0.0.1:14328/invoke/get_workspaces") {
+      if (url === "http://127.0.0.1:14328/invoke/odt_get_workspaces") {
         return jsonResponse({
           workspaces: [
             {
@@ -311,7 +311,7 @@ describe("resolveStoreContext", () => {
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
-      if (url.endsWith("/invoke/get_workspaces")) {
+      if (url.endsWith("/invoke/odt_get_workspaces")) {
         return jsonResponse({
           workspaces: [
             {

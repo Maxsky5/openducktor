@@ -394,7 +394,7 @@ export function useAgentStudioModelSelection({
       selectedModel: activeSessionSelectedModel,
       roleDefaultSelection,
     });
-    if (!preferredSelection || isSameSelection(activeSessionSelectedModel, preferredSelection)) {
+    if (isSameSelection(activeSessionSelectedModel, preferredSelection)) {
       return;
     }
     updateAgentSessionModel(activeSessionId, preferredSelection);

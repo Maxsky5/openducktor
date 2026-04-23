@@ -47,7 +47,7 @@ export class OdtTaskStore {
   }
 
   async getWorkspaces(rawInput: unknown) {
-    ODT_TOOL_SCHEMAS.get_workspaces.parse(rawInput);
+    ODT_TOOL_SCHEMAS.odt_get_workspaces.parse(rawInput);
     return this.client.getWorkspaces();
   }
 

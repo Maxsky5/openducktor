@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import { ODT_NON_WORKFLOW_TOOL_NAMES, type RuntimeDescriptor } from "@openducktor/contracts";
 import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
@@ -9,12 +9,7 @@ import { isReadOnlyRole } from "./read-only-roles";
 const TRUSTED_ODT_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_SERVER_STATUSES = new Set(["connected"]);
 const TRUSTED_ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
-const TRUSTED_ODT_MCP_CANONICAL_TOOL_IDS = new Set(["odt_create_task", "odt_search_tasks"]);
-
-type ModelScopedToolInput = {
-  providerId: string;
-  modelId: string;
-};
+const NON_WORKFLOW_ODT_TOOL_IDS = new Set<string>(ODT_NON_WORKFLOW_TOOL_NAMES);
 
 const assertTrustedOdtMcpServerConnected = async (input: {
   client: OpencodeClient;
@@ -61,69 +56,11 @@ const assertTrustedOdtMcpServerConnected = async (input: {
   );
 };
 
-const toModelScopedToolIds = (payload: unknown): string[] => {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
-
-  const toolIds: string[] = [];
-  for (const entry of payload) {
-    const toolId = readStringProp(entry, ["id"]);
-    if (!toolId) {
-      continue;
-    }
-    const trimmedToolId = toolId.trim();
-    if (trimmedToolId.length === 0 || trimmedToolId === "invalid") {
-      continue;
-    }
-    toolIds.push(trimmedToolId);
-  }
-
-  return toolIds;
-};
-
-const listModelScopedToolIds = async (input: {
-  client: OpencodeClient;
-  workingDirectory: string;
-  model?: ModelScopedToolInput;
-}): Promise<string[]> => {
-  const providerId = input.model?.providerId.trim();
-  const modelId = input.model?.modelId.trim();
-  if (!providerId || !modelId) {
-    return [];
-  }
-
-  const toolApi = (input.client as { tool?: { list?: unknown } }).tool;
-  if (!toolApi || typeof toolApi.list !== "function") {
-    return [];
-  }
-
-  const response = await (
-    toolApi.list as (args: {
-      directory: string;
-      provider: string;
-      model: string;
-    }) => Promise<unknown>
-  )({
-    directory: input.workingDirectory,
-    provider: providerId,
-    model: modelId,
-  });
-
-  return toModelScopedToolIds(
-    unwrapData(
-      response as { data?: unknown; error?: { message?: string } | unknown },
-      "list model-scoped tool ids for role policy",
-    ),
-  );
-};
-
 export const resolveWorkflowToolSelection = async (input: {
   client: OpencodeClient;
   role: AgentRole;
   runtimeDescriptor: RuntimeDescriptor;
   workingDirectory: string;
-  model?: ModelScopedToolInput;
 }): Promise<Record<string, boolean>> => {
   await assertTrustedOdtMcpServerConnected({
     client: input.client,
@@ -133,23 +70,17 @@ export const resolveWorkflowToolSelection = async (input: {
   const response = await input.client.tool.ids({
     directory: input.workingDirectory,
   });
-  const runtimeToolIdsFromDiscovery = toToolIdList(
-    unwrapData(response, "list global tool ids for role policy"),
-  );
-  const runtimeToolIdsFromModelScope = await listModelScopedToolIds({
-    client: input.client,
-    workingDirectory: input.workingDirectory,
-    ...(input.model ? { model: input.model } : {}),
-  });
-  const runtimeToolIds = Array.from(
-    new Set([...runtimeToolIdsFromDiscovery, ...runtimeToolIdsFromModelScope]),
-  );
+  const runtimeToolIds = toToolIdList(unwrapData(response, "list global tool ids for role policy"));
 
   const selection = buildRoleScopedOdtToolSelection(input.role, {
     includeCanonicalDefaults: true,
     runtimeToolIds,
     workflowToolAliasesByCanonical: input.runtimeDescriptor.workflowToolAliasesByCanonical,
   });
+
+  for (const toolId of NON_WORKFLOW_ODT_TOOL_IDS) {
+    selection[toolId] = false;
+  }
 
   if (isReadOnlyRole(input.role)) {
     for (const toolId of input.runtimeDescriptor.readOnlyRoleBlockedTools) {
@@ -163,7 +94,7 @@ export const resolveWorkflowToolSelection = async (input: {
       continue;
     }
     if (!TRUSTED_ODT_MCP_TOOL_PREFIXES.some((prefix) => trimmedToolId.startsWith(prefix))) {
-      if (!TRUSTED_ODT_MCP_CANONICAL_TOOL_IDS.has(trimmedToolId)) {
+      if (!NON_WORKFLOW_ODT_TOOL_IDS.has(trimmedToolId)) {
         continue;
       }
     }

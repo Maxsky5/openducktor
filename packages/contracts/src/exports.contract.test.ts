@@ -240,7 +240,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "odtHostBridgeReadySchema",
   "odtPersistedDocumentSchema",
   "ODT_HOST_BRIDGE_RESPONSE_SCHEMAS",
+  "ODT_NON_WORKFLOW_TOOL_NAMES",
   "ODT_TOOL_SCHEMAS",
+  "ODT_TOOL_NAMES",
+  "ODT_WORKFLOW_TOOL_SCHEMAS",
   "ODT_WORKSPACE_SCOPED_TOOL_NAMES",
   "ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS",
   "OPENCODE_RUNTIME_CAPABILITIES",
@@ -519,7 +522,7 @@ describe("contracts exports contract", () => {
     ).toThrow();
   });
 
-  test("keeps get_workspaces workspace-free and workspace-scoped tool inputs overrideable", () => {
+  test("keeps odt_get_workspaces workspace-free and workspace-scoped tool inputs overrideable", () => {
     expect(contracts.GetWorkspacesInputSchema.parse({})).toEqual({});
     expect(contracts.ReadTaskInputSchema.parse({ workspaceId: "repo", taskId: "task-1" })).toEqual({
       workspaceId: "repo",

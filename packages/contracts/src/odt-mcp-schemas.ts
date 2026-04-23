@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentToolNameValues } from "./agent-workflow-schemas";
 import {
   gitTargetBranchSchema,
   knownGitProviderIdSchema,
@@ -257,7 +258,23 @@ export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 export const GetWorkspacesInputSchema = z.object({}).strict();
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesInputSchema>;
 
-const ODT_WORKFLOW_TOOL_SCHEMAS = {
+const pickToolSchemas = <
+  TSchemas extends Record<string, unknown>,
+  const TNames extends readonly (keyof TSchemas)[],
+>(
+  schemas: TSchemas,
+  toolNames: TNames,
+): Pick<TSchemas, TNames[number]> => {
+  return Object.fromEntries(toolNames.map((toolName) => [toolName, schemas[toolName]])) as Pick<
+    TSchemas,
+    TNames[number]
+  >;
+};
+
+export const ODT_TOOL_SCHEMAS = {
+  odt_get_workspaces: GetWorkspacesInputSchema,
+  odt_create_task: CreateTaskInputSchema,
+  odt_search_tasks: SearchTasksInputSchema,
   odt_read_task: ReadTaskInputSchema,
   odt_read_task_documents: ReadTaskDocumentsInputSchema,
   odt_set_spec: SetSpecInputSchema,
@@ -270,23 +287,40 @@ const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_qa_rejected: QaRejectedInputSchema,
 } as const;
 
+export type OdtToolName = keyof typeof ODT_TOOL_SCHEMAS;
+
+export const ODT_WORKFLOW_TOOL_SCHEMAS = pickToolSchemas(ODT_TOOL_SCHEMAS, agentToolNameValues);
+
 export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
 
-export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
-  ...ODT_WORKFLOW_TOOL_SCHEMAS,
-  odt_create_task: CreateTaskInputSchema,
-  odt_search_tasks: SearchTasksInputSchema,
-} as const;
-export type WorkspaceScopedOdtToolName = keyof typeof ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS;
-export const ODT_WORKSPACE_SCOPED_TOOL_NAMES = Object.keys(
-  ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS,
-) as WorkspaceScopedOdtToolName[];
+export const ODT_TOOL_NAMES = Object.keys(ODT_TOOL_SCHEMAS) as OdtToolName[];
 
-export const ODT_TOOL_SCHEMAS = {
-  get_workspaces: GetWorkspacesInputSchema,
-  ...ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS,
-} as const;
-export type OdtToolName = keyof typeof ODT_TOOL_SCHEMAS;
+const ODT_WORKFLOW_TOOL_NAME_SET = new Set<OdtToolName>(
+  Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS) as OdtToolName[],
+);
+
+export type NonWorkflowOdtToolName = Exclude<OdtToolName, OdtWorkflowToolName>;
+
+export const ODT_NON_WORKFLOW_TOOL_NAMES = ODT_TOOL_NAMES.filter(
+  (toolName): toolName is NonWorkflowOdtToolName => !ODT_WORKFLOW_TOOL_NAME_SET.has(toolName),
+);
+
+const ODT_WORKSPACE_DISCOVERY_TOOL_NAME = "odt_get_workspaces" as const;
+
+export type WorkspaceScopedOdtToolName = Exclude<
+  OdtToolName,
+  typeof ODT_WORKSPACE_DISCOVERY_TOOL_NAME
+>;
+
+export const ODT_WORKSPACE_SCOPED_TOOL_NAMES = ODT_TOOL_NAMES.filter(
+  (toolName): toolName is WorkspaceScopedOdtToolName =>
+    toolName !== ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
+);
+
+export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = pickToolSchemas(
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+);
 
 export const odtPersistedDocumentSchema = z
   .object({
@@ -388,7 +422,7 @@ export const odtHostBridgeReadySchema = z
 export type OdtHostBridgeReady = z.infer<typeof odtHostBridgeReadySchema>;
 
 export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
-  get_workspaces: getWorkspacesResultSchema,
+  odt_get_workspaces: getWorkspacesResultSchema,
   odt_create_task: createTaskResultSchema,
   odt_search_tasks: searchTasksResultSchema,
   odt_read_task: taskSummarySchema,

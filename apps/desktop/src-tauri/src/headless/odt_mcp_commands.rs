@@ -97,8 +97,8 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("odt_mcp_ready", |state, args| {
         Box::pin(handle_odt_mcp_ready(state, args))
     })?;
-    registry.register("get_workspaces", |state, args| {
-        Box::pin(handle_get_workspaces(state, args))
+    registry.register("odt_get_workspaces", |state, args| {
+        Box::pin(handle_odt_get_workspaces(state, args))
     })?;
     registry.register("odt_read_task", |state, args| {
         Box::pin(handle_odt_read_task(state, args))
@@ -152,11 +152,11 @@ async fn handle_odt_mcp_ready(state: &HeadlessState, args: Value) -> CommandResu
     )
 }
 
-async fn handle_get_workspaces(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_odt_get_workspaces(state: &HeadlessState, args: Value) -> CommandResult {
     let _: GetWorkspacesArgs = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        super::command_support::run_headless_blocking("get_workspaces", move || {
+        super::command_support::run_headless_blocking("odt_get_workspaces", move || {
             service.odt_get_workspaces()
         })
         .await?,
@@ -426,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn get_workspaces_args_reject_workspace_id() {
+    fn odt_get_workspaces_args_reject_workspace_id() {
         let parsed = serde_json::from_value::<GetWorkspacesArgs>(serde_json::json!({
             "workspaceId": "repo"
         }));
