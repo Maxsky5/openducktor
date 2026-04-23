@@ -186,18 +186,23 @@ export const registerSession = (input: {
   });
 
   if (input.subscribeToEvents !== false) {
-    attachSessionToRuntimeEvents({
-      sessions: input.sessions,
-      runtimeEventTransports: input.runtimeEventTransports,
-      createClient: input.createClient,
-      runtimeEndpoint: input.runtimeEndpoint,
-      sessionId: input.sessionId,
-      externalSessionId: input.externalSessionId,
-      sessionInput: input.sessionInput,
-      now: input.now,
-      emit: input.emit,
-      ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-    });
+    try {
+      attachSessionToRuntimeEvents({
+        sessions: input.sessions,
+        runtimeEventTransports: input.runtimeEventTransports,
+        createClient: input.createClient,
+        runtimeEndpoint: input.runtimeEndpoint,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        sessionInput: input.sessionInput,
+        now: input.now,
+        emit: input.emit,
+        ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+      });
+    } catch (error) {
+      input.sessions.delete(input.sessionId);
+      throw error;
+    }
   }
 
   if (input.emitStartedEvent !== false) {

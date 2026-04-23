@@ -81,16 +81,74 @@ const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimin
 ): MutableRefObject<Record<string, NonNullable<AssistantTurnTimingState[K]>>> =>
   ({
     get current() {
-      const values: Record<string, NonNullable<AssistantTurnTimingState[K]>> = {};
-      for (const [sessionId, timing] of Object.entries(
-        stateRef.current.assistantTurnTimingBySession,
-      )) {
-        const value = timing[field];
-        if (value !== undefined) {
-          values[sessionId] = value as NonNullable<AssistantTurnTimingState[K]>;
-        }
-      }
-      return values;
+      return new Proxy({} as Record<string, NonNullable<AssistantTurnTimingState[K]>>, {
+        get: (_target, property) => {
+          if (typeof property !== "string") {
+            return undefined;
+          }
+
+          const value = stateRef.current.assistantTurnTimingBySession[property]?.[field];
+          return value === undefined
+            ? undefined
+            : (value as NonNullable<AssistantTurnTimingState[K]>);
+        },
+        set: (_target, property, value) => {
+          if (typeof property !== "string") {
+            return true;
+          }
+
+          stateRef.current.assistantTurnTimingBySession = {
+            ...stateRef.current.assistantTurnTimingBySession,
+            [property]: {
+              ...(stateRef.current.assistantTurnTimingBySession[property] ?? {}),
+              [field]: value,
+            },
+          };
+          return true;
+        },
+        deleteProperty: (_target, property) => {
+          if (typeof property !== "string") {
+            return true;
+          }
+
+          const currentTiming = stateRef.current.assistantTurnTimingBySession[property];
+          if (!currentTiming || currentTiming[field] === undefined) {
+            return true;
+          }
+
+          const nextTiming = { ...currentTiming };
+          delete nextTiming[field];
+          const nextTimingBySession = { ...stateRef.current.assistantTurnTimingBySession };
+          if (Object.keys(nextTiming).length === 0) {
+            delete nextTimingBySession[property];
+          } else {
+            nextTimingBySession[property] = nextTiming;
+          }
+          stateRef.current.assistantTurnTimingBySession = nextTimingBySession;
+          return true;
+        },
+        ownKeys: () =>
+          Object.entries(stateRef.current.assistantTurnTimingBySession)
+            .filter(([, timing]) => timing[field] !== undefined)
+            .map(([sessionId]) => sessionId),
+        getOwnPropertyDescriptor: (_target, property) => {
+          if (typeof property !== "string") {
+            return undefined;
+          }
+
+          const value = stateRef.current.assistantTurnTimingBySession[property]?.[field];
+          if (value === undefined) {
+            return undefined;
+          }
+
+          return {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value,
+          };
+        },
+      });
     },
     set current(value) {
       const nextTimingBySession: Record<string, AssistantTurnTimingState> = {};

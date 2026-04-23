@@ -1900,6 +1900,49 @@ describe("event-stream", () => {
     expect(subagentParts.map((part) => part.agent)).toEqual(["build", "build"]);
   });
 
+  test("clears pending subagent queues once a running task tool update gains a session id", async () => {
+    const { sessionRecord } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-task-tool-running"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-task-tool-running",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "tool-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-task-tool-running",
+            callID: "call-a",
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "running",
+              input: {
+                subagent_type: "build",
+                prompt: "Inspect repo",
+                description: "Starting A",
+              },
+              metadata: {
+                sessionId: "child-a",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(sessionRecord.subagentCorrelationKeyBySessionId.get("child-a")).toBe(
+      "part:assistant-task-tool-running:subtask-a",
+    );
+    expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual([]);
+    expect(sessionRecord.pendingSubagentCorrelationKeysBySignature.size).toBe(0);
+  });
+
   test("binds sibling child sessions correctly when session.created arrives out of order", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-created-order"),

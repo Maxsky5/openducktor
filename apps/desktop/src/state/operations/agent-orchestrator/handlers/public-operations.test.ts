@@ -51,7 +51,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSession: async () => {},
-      removeAgentSessions: () => {},
+      removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
 
@@ -87,7 +87,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSession: async () => {},
-      removeAgentSessions: () => {},
+      removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
         startAgentSession: async () => {
           throw new Error("start failed");
@@ -132,7 +132,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSession: async () => {},
-      removeAgentSessions: () => {},
+      removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
         sendAgentMessage: async () => {
           throw new Error("send failed");
@@ -174,7 +174,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSession: async () => {},
-      removeAgentSessions: () => {},
+      removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
         stopAgentSession: async () => {
           throw new Error("stop failed");
@@ -216,7 +216,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSession: async () => {},
-      removeAgentSessions: () => {},
+      removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
 
@@ -255,7 +255,7 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       removeAgentSession,
-      removeAgentSessions: () => {},
+      removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
 
@@ -264,8 +264,8 @@ describe("agent-orchestrator-public-operations", () => {
     expect(removeAgentSession).toHaveBeenCalledWith("session-1");
   });
 
-  test("forwards explicit session removals without toast wrapping", () => {
-    const removeAgentSessions = mock(() => {});
+  test("forwards explicit session removals without toast wrapping", async () => {
+    const removeAgentSessions = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
       bootstrapTaskSessions: async () => {},
       hydrateRequestedTaskSessionHistory: async () => {},
@@ -287,7 +287,7 @@ describe("agent-orchestrator-public-operations", () => {
       sessionActions: createSessionActions(),
     });
 
-    operations.removeAgentSessions({ taskId: "task-1", roles: ["build", "qa"] });
+    await operations.removeAgentSessions({ taskId: "task-1", roles: ["build", "qa"] });
 
     expect(removeAgentSessions).toHaveBeenCalledWith({
       taskId: "task-1",

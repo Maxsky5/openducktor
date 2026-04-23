@@ -91,6 +91,7 @@ import type {
   RuntimeKind,
   RuntimeProvisioningMode,
   RuntimeRef,
+  RuntimeSubagentExecutionMode,
   RuntimeSupportedScope,
   SettingsSnapshot,
   SlashCommandCatalog,
@@ -457,6 +458,7 @@ type ExportedTypeContract = {
   RuntimeKind: RuntimeKind;
   RuntimeProvisioningMode: RuntimeProvisioningMode;
   RuntimeRef: RuntimeRef;
+  RuntimeSubagentExecutionMode: RuntimeSubagentExecutionMode;
   RuntimeSupportedScope: RuntimeSupportedScope;
   SettingsSnapshot: SettingsSnapshot;
   SystemCheck: SystemCheck;

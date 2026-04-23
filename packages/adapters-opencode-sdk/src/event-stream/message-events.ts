@@ -129,6 +129,7 @@ const normalizeLiveSubagentCorrelation = (
   if (existingCorrelationKey) {
     if (part.sessionId) {
       runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, existingCorrelationKey);
+      removePendingSubagentCorrelationKey(runtime, existingCorrelationKey);
     }
     return {
       ...part,
@@ -149,6 +150,7 @@ const normalizeLiveSubagentCorrelation = (
     }
     if (part.sessionId) {
       runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+      removePendingSubagentCorrelationKey(runtime, correlationKey);
     }
 
     return {

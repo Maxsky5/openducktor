@@ -326,25 +326,33 @@ export class OpencodeSdkAdapter
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     });
 
-    const session = requireSession(this.sessions, input.sessionId);
-    await loadAndSeedSessionHistory(this.createClient, this.now, {
-      runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-      externalSessionId: input.externalSessionId,
-      session,
-    });
-    attachSessionToRuntimeEvents({
-      sessions: this.sessions,
-      runtimeEventTransports: this.runtimeEventTransports,
-      createClient: this.createClient,
-      runtimeEndpoint,
-      sessionId: input.sessionId,
-      externalSessionId: input.externalSessionId,
-      sessionInput,
-      now: this.now,
-      emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
-    });
+    try {
+      const session = requireSession(this.sessions, input.sessionId);
+      await loadAndSeedSessionHistory(this.createClient, this.now, {
+        runtimeEndpoint,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
+        session,
+      });
+      attachSessionToRuntimeEvents({
+        sessions: this.sessions,
+        runtimeEventTransports: this.runtimeEventTransports,
+        createClient: this.createClient,
+        runtimeEndpoint,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        sessionInput,
+        now: this.now,
+        emit: this.emit.bind(this),
+        ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      });
+    } catch (error) {
+      const session = this.sessions.get(input.sessionId);
+      if (session) {
+        await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
+      }
+      throw error;
+    }
 
     return summary;
   }

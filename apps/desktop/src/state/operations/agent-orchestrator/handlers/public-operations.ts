@@ -84,7 +84,10 @@ type CreatePublicOperationsArgs = {
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   removeAgentSession: (sessionId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
+  removeAgentSessions: (input: {
+    taskId: string;
+    roles?: AgentSessionState["role"][];
+  }) => Promise<void>;
   sessionActions: SessionActions;
 };
 
@@ -134,7 +137,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionSlashCommands,
   readSessionFileSearch,
   removeAgentSession,
-  removeAgentSessions,
+  removeAgentSessions: (input) => removeAgentSessions(input),
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
     sessionActions.startAgentSession(input),
   sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>

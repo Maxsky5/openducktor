@@ -231,6 +231,7 @@ describe("opencode-sdk-adapter", () => {
         },
       }),
     ).rejects.toThrow("client.global.event()");
+    expect(adapter.hasSession("session-1")).toBe(false);
   });
 
   test("listLiveAgentSessions maps server sessions and statuses", async () => {

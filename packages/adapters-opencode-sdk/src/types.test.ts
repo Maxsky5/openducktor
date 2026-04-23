@@ -60,6 +60,8 @@ describe("types", () => {
       subagentCorrelationKeyBySessionId: new Map(),
       pendingSubagentCorrelationKeysBySignature: new Map(),
       pendingSubagentCorrelationKeys: [],
+      pendingSubagentSessionsById: new Map(),
+      pendingSubagentPartEmissionsBySessionId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };
     const options: OpencodeSdkAdapterOptions = {

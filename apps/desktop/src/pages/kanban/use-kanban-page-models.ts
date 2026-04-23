@@ -176,7 +176,7 @@ export function useKanbanPageModels({
   const onResetTask = useCallback(
     async (taskId: string): Promise<void> => {
       await resetTask(taskId);
-      removeAgentSessions({
+      await removeAgentSessions({
         taskId,
         roles: ["spec", "planner", "build", "qa"],
       });

@@ -2503,6 +2503,82 @@ describe("agent-orchestrator-session-events", () => {
     expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
   });
 
+  test("forwards turn timing callbacks to part handlers through attachAgentSessionListener", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build" }),
+      },
+    };
+    const recordTurnActivityTimestamp = mock(() => {});
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionsRef,
+      sessionId: "session-1",
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      recordTurnActivityTimestamp,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      contextUsageMessageIdBySessionRef: { current: {} },
+      turnModelBySessionRef: { current: {} },
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "assistant-live-1",
+        partId: "subagent-1",
+        correlationKey: "part:assistant-live-1:subagent-1",
+        status: "running",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+        startedAtMs: 100,
+      },
+    });
+
+    expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
+  });
+
   test("reuses the spawned subagent row when a later update adds sessionId", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

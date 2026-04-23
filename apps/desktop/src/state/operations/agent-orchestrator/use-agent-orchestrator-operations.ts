@@ -345,18 +345,34 @@ export function useAgentOrchestratorOperations({
   );
 
   const removeAgentSessions = useCallback(
-    ({ taskId, roles }: { taskId: string; roles?: AgentSessionState["role"][] }): void => {
+    async ({
+      taskId,
+      roles,
+    }: {
+      taskId: string;
+      roles?: AgentSessionState["role"][];
+    }): Promise<void> => {
       const matchingRoles = roles ? new Set(roles) : null;
-      const sessionIds = Object.values(sessionsRef.current)
+      const matchingSessions = Object.values(sessionsRef.current).filter(
+        (session) =>
+          session.taskId === taskId && (matchingRoles === null || matchingRoles.has(session.role)),
+      );
+      await Promise.all(
+        matchingSessions.map(async (session) => {
+          if (isTranscriptAgentSession(session) && agentEngine.hasSession(session.sessionId)) {
+            await agentEngine.detachSession(session.sessionId);
+          }
+        }),
+      );
+      const sessionIds = matchingSessions
         .filter(
-          (session) =>
-            session.taskId === taskId &&
-            (matchingRoles === null || matchingRoles.has(session.role)),
+          (session, index, sessions) =>
+            sessions.findIndex((candidate) => candidate.sessionId === session.sessionId) === index,
         )
         .map((session) => session.sessionId);
       removeSessionIds(sessionIds);
     },
-    [removeSessionIds, sessionsRef],
+    [agentEngine, removeSessionIds, sessionsRef],
   );
 
   const liveAgentSessionStore = useMemo(() => new LiveAgentSessionStore(), []);

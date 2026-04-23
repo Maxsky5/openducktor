@@ -320,6 +320,18 @@ const seedSubagentCorrelationFromHistory = (
     }
 
     if (part.status === "pending" || part.status === "running") {
+      if (part.sessionId) {
+        removePendingSubagentCorrelationKey(
+          session.pendingSubagentCorrelationKeysBySignature,
+          part.correlationKey,
+        );
+        const pendingIndex = session.pendingSubagentCorrelationKeys.indexOf(part.correlationKey);
+        if (pendingIndex >= 0) {
+          session.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
+        }
+        continue;
+      }
+
       if (!session.pendingSubagentCorrelationKeys.includes(part.correlationKey)) {
         session.pendingSubagentCorrelationKeys.push(part.correlationKey);
       }

@@ -192,6 +192,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const [requestedHistoryHydrationFailed, setRequestedHistoryHydrationFailed] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (
       !isOpen ||
       !activeWorkspace ||
@@ -200,7 +202,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
       !hasPersistedSessionRecord ||
       isResolvingRequestedSession
     ) {
-      return;
+      setRequestedHistoryHydrationFailed(false);
+      return () => {
+        cancelled = true;
+      };
     }
 
     setRequestedHistoryHydrationFailed(false);
@@ -210,9 +215,16 @@ export function useReadonlySessionTranscriptSurfaceModel({
       ...(historyPreludeMode ? { historyPreludeMode } : {}),
       ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
     }).catch((error) => {
+      if (cancelled) {
+        return;
+      }
       console.warn("Failed to hydrate read-only session history", error);
       setRequestedHistoryHydrationFailed(true);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     isOpen,
     activeWorkspace,
@@ -234,17 +246,21 @@ export function useReadonlySessionTranscriptSurfaceModel({
       }),
     [runtimeAttachmentSources, runtimeData.session, workspaceRepoPath],
   );
+  const hydrationActiveWorkspace = isOpen ? activeWorkspace : null;
+  const hydrationActiveTaskId = isOpen ? taskId : "";
+  const hydrationActiveSession = isOpen ? runtimeData.session : null;
+  const hydrationRuntimeAttachmentCandidates = isOpen ? runtimeAttachmentCandidates : [];
 
   const hydration = useAgentChatSessionHydration({
-    activeWorkspace,
-    activeTaskId: taskId,
-    activeSession: runtimeData.session,
+    activeWorkspace: hydrationActiveWorkspace,
+    activeTaskId: hydrationActiveTaskId,
+    activeSession: hydrationActiveSession,
     ...(historyPreludeMode ? { historyPreludeMode } : {}),
     ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
     repoReadinessState: runtimeReadiness.readinessState,
     ensureSessionReadyForView,
     refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
-    runtimeAttachmentCandidates,
+    runtimeAttachmentCandidates: hydrationRuntimeAttachmentCandidates,
   });
 
   const isSessionWorking =

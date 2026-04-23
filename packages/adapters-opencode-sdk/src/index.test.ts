@@ -745,6 +745,119 @@ describe("OpencodeSdkAdapter", () => {
     expect(events).toEqual([]);
   });
 
+  test("attachSession rolls back partial registration when runtime event attachment fails", async () => {
+    const mock = makeMockClient({});
+    const unsupportedClient = {
+      ...mock.client,
+      global: {},
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => unsupportedClient,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await expect(
+      adapter.attachSession({
+        sessionId: "session-1",
+        externalSessionId: "session-opencode-1",
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        runtimeKind: "opencode",
+        role: "build",
+        scenario: "build_implementation_start",
+        systemPrompt: "system",
+        runtimeConnection: defaultRuntimeConnection,
+      }),
+    ).rejects.toThrow("client.global.event()");
+
+    expect(adapter.hasSession("session-1")).toBe(false);
+  });
+
+  test("attachSession does not keep session-bound running subagents in pending correlation queues", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "subtask-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              type: "subtask",
+              agent: "build",
+              prompt: "Inspect repo",
+              description: "Starting A",
+            } as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-201",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:02Z") },
+          },
+          parts: [
+            {
+              id: "tool-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-201",
+              callID: "call-a",
+              type: "tool",
+              tool: "task",
+              state: {
+                status: "running",
+                input: {
+                  subagent_type: "build",
+                  prompt: "Inspect repo",
+                  description: "Starting A",
+                },
+                metadata: {
+                  sessionId: "child-a",
+                },
+                time: {
+                  start: Date.parse("2026-02-17T12:00:01Z"),
+                },
+                title: "Task",
+              },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await adapter.attachSession({
+      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      scenario: "build_implementation_start",
+      systemPrompt: "system",
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
+    const session = sessions.get("session-1");
+    if (!session) {
+      throw new Error("Expected adapter session record");
+    }
+
+    expect(session.subagentCorrelationKeyBySessionId.get("child-a")).toBe("part:msg-200:subtask-a");
+    expect(session.pendingSubagentCorrelationKeys).toEqual([]);
+    expect(session.pendingSubagentCorrelationKeysBySignature.size).toBe(0);
+  });
+
   test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

@@ -218,7 +218,7 @@ export type AgentStateContextValue = {
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   removeAgentSession: (sessionId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   startAgentSession: (
     input:
       | {

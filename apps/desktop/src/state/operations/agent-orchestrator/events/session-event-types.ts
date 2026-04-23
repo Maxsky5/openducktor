@@ -173,6 +173,12 @@ export const createSessionEventHandlerContext = (
       ...(context.contextUsageMessageIdBySessionRef
         ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
         : {}),
+      ...(context.recordTurnActivityTimestamp
+        ? { recordTurnActivityTimestamp: context.recordTurnActivityTimestamp }
+        : {}),
+      ...(context.recordTurnUserMessageTimestamp
+        ? { recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp }
+        : {}),
       resolveTurnDurationMs: context.resolveTurnDurationMs,
       clearTurnDuration: context.clearTurnDuration,
     },

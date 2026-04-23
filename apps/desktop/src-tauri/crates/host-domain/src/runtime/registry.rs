@@ -166,6 +166,21 @@ impl RuntimeDescriptor {
             ));
         }
 
+        let has_subagent_execution_modes =
+            !self.capabilities.supported_subagent_execution_modes.is_empty();
+        if self.capabilities.supports_subagents && !has_subagent_execution_modes {
+            errors.push(
+                "supports_subagents requires at least one supported subagent execution mode"
+                    .to_string(),
+            );
+        }
+        if !self.capabilities.supports_subagents && has_subagent_execution_modes {
+            errors.push(
+                "supported subagent execution modes must be empty when supports_subagents is false"
+                    .to_string(),
+            );
+        }
+
         errors
     }
 }
@@ -589,6 +604,34 @@ mod tests {
                 "missing mandatory capabilities: supports_odt_workflow_tools, supports_session_fork"
                     .to_string(),
                 "missing required workflow scopes: task, build".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_requires_execution_modes_when_subagents_are_supported() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.capabilities.supported_subagent_execution_modes.clear();
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "supports_subagents requires at least one supported subagent execution mode"
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_rejects_execution_modes_when_subagents_are_disabled() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.capabilities.supports_subagents = false;
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "supported subagent execution modes must be empty when supports_subagents is false"
+                    .to_string()
             ]
         );
     }
