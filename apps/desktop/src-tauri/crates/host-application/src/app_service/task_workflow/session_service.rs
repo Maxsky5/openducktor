@@ -178,7 +178,8 @@ fn validate_task_agent_session(
     }
 
     if let Some(legacy_worktree_base_path) = legacy_worktree_base_path {
-        if let Ok(canonical_legacy_worktree_base_path) = fs::canonicalize(legacy_worktree_base_path) {
+        if let Ok(canonical_legacy_worktree_base_path) = fs::canonicalize(legacy_worktree_base_path)
+        {
             if canonical_working_directory.starts_with(&canonical_legacy_worktree_base_path) {
                 return Ok(());
             }
