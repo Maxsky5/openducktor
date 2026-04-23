@@ -37,7 +37,11 @@ import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "./lifecycle/session-view-lifecycle";
-import { findLastUserSessionMessage } from "./support/messages";
+import {
+  readAssistantActivityStartedAtMsFromMessages,
+  resolveAssistantTurnDurationMs,
+} from "./support/assistant-turn-duration";
+import { isTranscriptAgentSession } from "./support/session-purpose";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
@@ -94,8 +98,48 @@ export function useAgentOrchestratorOperations({
     activeWorkspace,
     tasks,
   });
-  const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
+  const { sessionsRef, assistantTurnTimingBySessionRef, unsubscribersRef } = refBridges;
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
+
+  const toTimestampMs = useCallback((timestamp: string | number): number | undefined => {
+    if (typeof timestamp === "number") {
+      return Number.isFinite(timestamp) ? timestamp : undefined;
+    }
+
+    const parsed = Date.parse(timestamp);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }, []);
+
+  const recordTurnActivityTimestamp = useCallback(
+    (sessionId: string, timestamp: string | number): void => {
+      const timestampMs = toTimestampMs(timestamp);
+      if (timestampMs === undefined) {
+        return;
+      }
+      const current = assistantTurnTimingBySessionRef.current[sessionId]?.activityStartedAtMs;
+      assistantTurnTimingBySessionRef.current[sessionId] = {
+        ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}),
+        activityStartedAtMs:
+          typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+      };
+    },
+    [assistantTurnTimingBySessionRef, toTimestampMs],
+  );
+
+  const recordTurnUserMessageTimestamp = useCallback(
+    (sessionId: string, timestamp: string | number): void => {
+      const timestampMs = toTimestampMs(timestamp);
+      if (timestampMs === undefined) {
+        return;
+      }
+      const current = assistantTurnTimingBySessionRef.current[sessionId]?.userAnchorAtMs;
+      assistantTurnTimingBySessionRef.current[sessionId] = {
+        ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}),
+        userAnchorAtMs: typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+      };
+    },
+    [assistantTurnTimingBySessionRef, toTimestampMs],
+  );
 
   const persistSessionRecord = useCallback(
     async (taskId: string, record: AgentSessionRecord): Promise<void> => {
@@ -167,32 +211,46 @@ export function useAgentOrchestratorOperations({
       timestamp: string,
       messages: AgentSessionState["messages"] = [],
     ): number | undefined => {
-      const parsedTimestamp = Date.parse(timestamp);
-      const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
-
-      const startedAt = turnStartedAtBySessionRef.current[sessionId];
-      if (typeof startedAt === "number" && endedAt >= startedAt) {
-        return Math.max(0, endedAt - startedAt);
-      }
-
-      const latestUserMessage = findLastUserSessionMessage({ sessionId, messages });
-      if (latestUserMessage) {
-        const userTimestamp = Date.parse(latestUserMessage.timestamp);
-        if (!Number.isNaN(userTimestamp) && endedAt >= userTimestamp) {
-          return Math.max(0, endedAt - userTimestamp);
-        }
-      }
-
-      return undefined;
+      const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
+      const currentTiming = assistantTurnTimingBySessionRef.current[sessionId] ?? {};
+      const previousAssistantCompletedAtMs = currentTiming.previousAssistantCompletedAtMs;
+      const activityStartedAtMs =
+        currentTiming.activityStartedAtMs ??
+        readAssistantActivityStartedAtMsFromMessages({
+          messages: Array.isArray(messages) ? messages : [],
+          previousAssistantCompletedAtMs,
+          completedAtMs,
+        });
+      const userAnchorAtMs = currentTiming.userAnchorAtMs;
+      return resolveAssistantTurnDurationMs({
+        completedAtMs,
+        ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
+        ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
+        ...(typeof previousAssistantCompletedAtMs === "number"
+          ? { previousAssistantCompletedAtMs }
+          : {}),
+      });
     },
-    [turnStartedAtBySessionRef],
+    [assistantTurnTimingBySessionRef, toTimestampMs],
   );
 
   const clearTurnDuration = useCallback(
-    (sessionId: string): void => {
-      delete turnStartedAtBySessionRef.current[sessionId];
+    (sessionId: string, completedTimestamp?: string): void => {
+      const completedAtMs =
+        completedTimestamp === undefined ? undefined : toTimestampMs(completedTimestamp);
+      const nextTiming = { ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}) };
+      delete nextTiming.activityStartedAtMs;
+      delete nextTiming.userAnchorAtMs;
+      if (typeof completedAtMs === "number") {
+        nextTiming.previousAssistantCompletedAtMs = completedAtMs;
+      }
+      if (Object.keys(nextTiming).length === 0) {
+        delete assistantTurnTimingBySessionRef.current[sessionId];
+        return;
+      }
+      assistantTurnTimingBySessionRef.current[sessionId] = nextTiming;
     },
-    [turnStartedAtBySessionRef],
+    [assistantTurnTimingBySessionRef, toTimestampMs],
   );
 
   const readSessionModelCatalog = useCallback(
@@ -237,16 +295,8 @@ export function useAgentOrchestratorOperations({
     [agentEngine],
   );
 
-  const removeAgentSessions = useCallback(
-    ({ taskId, roles }: { taskId: string; roles?: AgentSessionState["role"][] }): void => {
-      const matchingRoles = roles ? new Set(roles) : null;
-      const sessionIds = Object.values(sessionsRef.current)
-        .filter(
-          (session) =>
-            session.taskId === taskId &&
-            (matchingRoles === null || matchingRoles.has(session.role)),
-        )
-        .map((session) => session.sessionId);
+  const removeSessionIds = useCallback(
+    (sessionIds: string[]): void => {
       if (sessionIds.length === 0) {
         return;
       }
@@ -264,7 +314,7 @@ export function useAgentOrchestratorOperations({
         delete refBridges.draftRawBySessionRef.current[sessionId];
         delete refBridges.draftSourceBySessionRef.current[sessionId];
         delete refBridges.draftMessageIdBySessionRef.current[sessionId];
-        delete refBridges.turnStartedAtBySessionRef.current[sessionId];
+        delete refBridges.assistantTurnTimingBySessionRef.current[sessionId];
         delete refBridges.turnModelBySessionRef.current[sessionId];
       }
 
@@ -280,7 +330,49 @@ export function useAgentOrchestratorOperations({
         return hasChanges ? next : current;
       });
     },
-    [commitSessions, refBridges, sessionsRef, unsubscribersRef],
+    [commitSessions, refBridges, unsubscribersRef],
+  );
+
+  const removeAgentSession = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const session = sessionsRef.current[sessionId];
+      if (session && isTranscriptAgentSession(session) && agentEngine.hasSession(sessionId)) {
+        await agentEngine.detachSession(sessionId);
+      }
+      removeSessionIds([sessionId]);
+    },
+    [agentEngine, removeSessionIds, sessionsRef],
+  );
+
+  const removeAgentSessions = useCallback(
+    async ({
+      taskId,
+      roles,
+    }: {
+      taskId: string;
+      roles?: AgentSessionState["role"][];
+    }): Promise<void> => {
+      const matchingRoles = roles ? new Set(roles) : null;
+      const matchingSessions = Object.values(sessionsRef.current).filter(
+        (session) =>
+          session.taskId === taskId && (matchingRoles === null || matchingRoles.has(session.role)),
+      );
+      await Promise.all(
+        matchingSessions.map(async (session) => {
+          if (isTranscriptAgentSession(session) && agentEngine.hasSession(session.sessionId)) {
+            await agentEngine.detachSession(session.sessionId);
+          }
+        }),
+      );
+      const sessionIds = matchingSessions
+        .filter(
+          (session, index, sessions) =>
+            sessions.findIndex((candidate) => candidate.sessionId === session.sessionId) === index,
+        )
+        .map((session) => session.sessionId);
+      removeSessionIds(sessionIds);
+    },
+    [agentEngine, removeSessionIds, sessionsRef],
   );
 
   const liveAgentSessionStore = useMemo(() => new LiveAgentSessionStore(), []);
@@ -302,6 +394,8 @@ export function useAgentOrchestratorOperations({
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
+        recordTurnActivityTimestamp,
+        recordTurnUserMessageTimestamp,
         resolveTurnDurationMs,
         clearTurnDuration,
         refreshTaskData,
@@ -316,6 +410,8 @@ export function useAgentOrchestratorOperations({
       clearTurnDuration,
       refBridges,
       refreshTaskData,
+      recordTurnActivityTimestamp,
+      recordTurnUserMessageTimestamp,
       resolveTurnDurationMs,
       unsubscribersRef,
       updateSession,
@@ -603,6 +699,7 @@ export function useAgentOrchestratorOperations({
         inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
         unsubscribersRef: refBridges.unsubscribersRef,
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
+        turnUserAnchorAtBySessionRef: refBridges.turnUserAnchorAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
         attachSessionListener,
@@ -647,6 +744,7 @@ export function useAgentOrchestratorOperations({
       readSessionTodos,
       readSessionSlashCommands,
       readSessionFileSearch,
+      removeAgentSession,
       removeAgentSessions,
       sessionActions,
     });
@@ -673,6 +771,7 @@ export function useAgentOrchestratorOperations({
     readSessionSlashCommands,
     readSessionFileSearch,
     removeAgentSessions,
+    removeAgentSession,
     sessionActions,
   ]);
 }

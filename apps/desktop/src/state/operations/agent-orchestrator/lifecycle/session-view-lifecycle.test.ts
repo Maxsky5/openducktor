@@ -55,7 +55,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
-  test("blocks on hydration failure only when no transcript is available", () => {
+  test("requests background hydration after a prior history failure when transcript exists", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         historyHydrationState: "failed",
@@ -71,8 +71,9 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("ready");
+    expect(lifecycle.phase).toBe("needs_history");
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.isHistoryHydrationFailed).toBe(false);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 });

@@ -1787,6 +1787,175 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
+  test("removeAgentSession detaches transcript-purpose attached sessions before local cleanup", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+      const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
+      const detachCalls: string[] = [];
+
+      OpencodeSdkAdapter.prototype.hasSession = (sessionId) => sessionId === "session-transcript";
+      OpencodeSdkAdapter.prototype.detachSession = async (sessionId) => {
+        detachCalls.push(sessionId);
+      };
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.run(async () => {
+          harness.getLatest().commitSessions({
+            "session-transcript": {
+              sessionId: "session-transcript",
+              externalSessionId: "external-transcript",
+              taskId: "task-1",
+              repoPath: "/tmp/repo",
+              runtimeKind: "opencode",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "idle",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              runtimeId: null,
+              runtimeRoute: null,
+              workingDirectory: "/tmp/repo/worktree",
+              historyHydrationState: "hydrated",
+              runtimeRecoveryState: "idle",
+              purpose: "transcript",
+              messages: createSessionMessagesState("session-transcript", []),
+              draftAssistantText: "",
+              draftAssistantMessageId: null,
+              draftReasoningText: "",
+              draftReasoningMessageId: null,
+              contextUsage: null,
+              pendingPermissions: [],
+              pendingQuestions: [],
+              todos: [],
+              modelCatalog: null,
+              selectedModel: null,
+              isLoadingModelCatalog: false,
+              promptOverrides: {},
+            },
+          });
+        });
+
+        await harness.run(async () => {
+          await harness.getLatest().removeAgentSession("session-transcript");
+        });
+
+        expect(detachCalls).toEqual(["session-transcript"]);
+        expect(
+          harness.getLatest().sessionStore.getSessionSnapshot("session-transcript"),
+        ).toBeNull();
+      } finally {
+        await harness.unmount();
+        OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+        OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
+      }
+    });
+  });
+
+  test("removeAgentSessions detaches transcript-purpose attached sessions before bulk local cleanup", async () => {
+    await withSuppressedRendererWarning(async () => {
+      const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+      const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
+      const detachCalls: string[] = [];
+
+      OpencodeSdkAdapter.prototype.hasSession = (sessionId) =>
+        sessionId.startsWith("session-transcript");
+      OpencodeSdkAdapter.prototype.detachSession = async (sessionId) => {
+        detachCalls.push(sessionId);
+      };
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [taskFixture],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.run(async () => {
+          harness.getLatest().commitSessions({
+            "session-transcript-a": {
+              sessionId: "session-transcript-a",
+              externalSessionId: "external-transcript-a",
+              taskId: "task-1",
+              repoPath: "/tmp/repo",
+              runtimeKind: "opencode",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "idle",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              runtimeId: null,
+              runtimeRoute: null,
+              workingDirectory: "/tmp/repo/worktree",
+              historyHydrationState: "hydrated",
+              runtimeRecoveryState: "idle",
+              purpose: "transcript",
+              messages: createSessionMessagesState("session-transcript-a", []),
+              draftAssistantText: "",
+              draftAssistantMessageId: null,
+              draftReasoningText: "",
+              draftReasoningMessageId: null,
+              contextUsage: null,
+              pendingPermissions: [],
+              pendingQuestions: [],
+              todos: [],
+              modelCatalog: null,
+              selectedModel: null,
+              isLoadingModelCatalog: false,
+              promptOverrides: {},
+            },
+            "session-transcript-b": {
+              sessionId: "session-transcript-b",
+              externalSessionId: "external-transcript-b",
+              taskId: "task-1",
+              repoPath: "/tmp/repo",
+              runtimeKind: "opencode",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "idle",
+              startedAt: "2026-02-22T08:00:00.000Z",
+              runtimeId: null,
+              runtimeRoute: null,
+              workingDirectory: "/tmp/repo/worktree",
+              historyHydrationState: "hydrated",
+              runtimeRecoveryState: "idle",
+              purpose: "transcript",
+              messages: createSessionMessagesState("session-transcript-b", []),
+              draftAssistantText: "",
+              draftAssistantMessageId: null,
+              draftReasoningText: "",
+              draftReasoningMessageId: null,
+              contextUsage: null,
+              pendingPermissions: [],
+              pendingQuestions: [],
+              todos: [],
+              modelCatalog: null,
+              selectedModel: null,
+              isLoadingModelCatalog: false,
+              promptOverrides: {},
+            },
+          });
+        });
+
+        await harness.run(async () => {
+          await harness.getLatest().removeAgentSessions({ taskId: "task-1", roles: ["build"] });
+        });
+
+        expect(detachCalls.sort()).toEqual(["session-transcript-a", "session-transcript-b"]);
+        expect(harness.getLatest().sessions).toEqual([]);
+      } finally {
+        await harness.unmount();
+        OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+        OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
+      }
+    });
+  });
+
   test("revisit to the same repo bootstraps task sessions again", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
@@ -2130,6 +2299,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("starts requested history hydration inside the recovery operation once runtime recovery succeeds", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2162,6 +2332,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2221,6 +2400,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2230,6 +2410,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("retries requested history hydration after recovery when the prior hydration state failed", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2262,6 +2443,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2332,6 +2522,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2341,6 +2532,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("keeps runtime recovery idle when history hydration fails after runtime recovery succeeds", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2371,6 +2563,15 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
@@ -2418,6 +2619,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2425,8 +2627,9 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
-  test("does not request history after recovery when the session already has local transcript", async () => {
+  test("requests history after recovery when the session already has a local transcript tail", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2467,9 +2670,34 @@ describe("use-agent-orchestrator-operations", () => {
       scenario: input.scenario,
       status: "running",
     });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
       loadSessionHistoryCalls += 1;
-      throw new Error("history unavailable");
+      return [
+        {
+          messageId: "history-tail-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:04.000Z",
+          text: "Recovered history tail",
+          parts: [
+            {
+              kind: "text",
+              messageId: "history-tail-1",
+              partId: "part-1",
+              text: "Recovered history tail",
+              completed: true,
+            },
+          ],
+        },
+      ];
     };
 
     const harness = createHookHarness({
@@ -2518,17 +2746,25 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
 
-      expect(loadSessionHistoryCalls).toBe(0);
+      expect(loadSessionHistoryCalls).toBe(1);
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
-      expect(
-        recoveredSession
-          ? sessionMessagesToArray(recoveredSession).map((message) => message.content)
-          : [],
-      ).toEqual(["Local transcript still present"]);
+      expect(recoveredSession?.historyHydrationState).toBe("hydrated");
+      const recoveredContents = recoveredSession
+        ? sessionMessagesToArray(recoveredSession).map((message) => message.content)
+        : [];
+      expect(recoveredContents).toEqual(
+        expect.arrayContaining([
+          "Recovered history tail",
+          "Local transcript still present",
+          expect.stringContaining("Session started (build - build_implementation_start)"),
+          expect.stringContaining("System prompt:"),
+        ]),
+      );
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;

@@ -15,6 +15,7 @@ import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadMode,
   AgentSessionLoadOptions,
+  AgentSessionPurpose,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
@@ -37,7 +38,17 @@ import {
   historyToSessionContextUsage,
 } from "../support/persistence";
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
+import {
+  isTranscriptAgentSession,
+  resolveAgentSessionPurposeForLoad,
+} from "../support/session-purpose";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
+import {
+  formatSubagentContent,
+  isSubagentMessage,
+  mergeSubagentMeta,
+  type SubagentMessage,
+} from "../support/subagent-messages";
 import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
@@ -54,7 +65,7 @@ export type UpdateSession = (
 
 export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
-  "hasSession" | "loadSessionHistory" | "resumeSession"
+  "hasSession" | "loadSessionHistory" | "resumeSession" | "attachSession"
 > & {
   listLiveAgentSessionSnapshots?: AgentEnginePort["listLiveAgentSessionSnapshots"];
 };
@@ -171,12 +182,17 @@ const mergePersistedSessionRecord = (
   taskId: string,
   repoPath: string,
   promptOverrides: RepoPromptOverrides,
+  purpose: AgentSessionPurpose,
 ): AgentSessionState => {
   const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
   const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
+  const nextPurpose: AgentSessionPurpose = isTranscriptAgentSession(current)
+    ? "transcript"
+    : purpose;
 
   return {
     ...current,
+    purpose: nextPurpose,
     repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
@@ -204,6 +220,122 @@ export const mergeHydratedMessages = (
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
   const currentOwner = { sessionId, messages: currentMessages };
+  const mergeSubagentMessages = (
+    hydratedMessage: SubagentMessage,
+    currentMessage: SubagentMessage,
+  ): AgentChatMessage => {
+    const hydratedMeta = hydratedMessage.meta;
+    const currentMeta = currentMessage.meta;
+    const prefersCurrentTerminalState =
+      (currentMeta.status === "completed" ||
+        currentMeta.status === "cancelled" ||
+        currentMeta.status === "error") &&
+      hydratedMeta.status !== "completed" &&
+      hydratedMeta.status !== "cancelled" &&
+      hydratedMeta.status !== "error";
+    const description = prefersCurrentTerminalState
+      ? (currentMeta.description ?? hydratedMeta.description)
+      : (hydratedMeta.description ?? currentMeta.description);
+    const nextMeta = mergeSubagentMeta(hydratedMeta, {
+      ...currentMeta,
+      partId: hydratedMeta.partId,
+      correlationKey: hydratedMeta.correlationKey,
+      ...(typeof description === "string" ? { description } : {}),
+    });
+
+    return {
+      ...hydratedMessage,
+      content: formatSubagentContent(nextMeta),
+      meta: nextMeta,
+    };
+  };
+  const matchesHydratedSubagent = (
+    hydratedMessage: AgentChatMessage,
+    candidate: AgentChatMessage,
+  ): boolean => {
+    if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
+      return false;
+    }
+    if (candidate.id === hydratedMessage.id) {
+      return false;
+    }
+
+    const hydratedSessionId = hydratedMessage.meta.sessionId;
+    if (hydratedSessionId) {
+      return candidate.meta.sessionId === hydratedSessionId;
+    }
+
+    return false;
+  };
+  const canAbsorbHydratedPartSubagentIntoCurrentSessionRow = (
+    hydratedMessage: AgentChatMessage,
+    candidate: AgentChatMessage,
+  ): boolean => {
+    if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
+      return false;
+    }
+    if (hydratedMessage.meta.sessionId || !candidate.meta.sessionId) {
+      return false;
+    }
+    if (!hydratedMessage.meta.correlationKey.startsWith("part:")) {
+      return false;
+    }
+    if (!candidate.meta.correlationKey.startsWith("session:")) {
+      return false;
+    }
+
+    const hydratedAgent = hydratedMessage.meta.agent?.trim();
+    const candidateAgent = candidate.meta.agent?.trim();
+    const hydratedPrompt = hydratedMessage.meta.prompt?.trim();
+    const candidatePrompt = candidate.meta.prompt?.trim();
+
+    if (!hydratedAgent || !candidateAgent || !hydratedPrompt || !candidatePrompt) {
+      return false;
+    }
+
+    return hydratedAgent === candidateAgent && hydratedPrompt === candidatePrompt;
+  };
+  const findMatchingCurrentSubagents = (
+    hydratedMessage: AgentChatMessage,
+    sameIdCurrentMessage: AgentChatMessage | undefined,
+  ): AgentChatMessage[] => {
+    if (!isSubagentMessage(hydratedMessage)) {
+      return sameIdCurrentMessage ? [sameIdCurrentMessage] : [];
+    }
+
+    const matches: AgentChatMessage[] = [];
+    const seenIds = new Set<string>();
+    if (sameIdCurrentMessage) {
+      matches.push(sameIdCurrentMessage);
+      seenIds.add(sameIdCurrentMessage.id);
+    }
+
+    const currentSlice = getSessionMessagesSlice(currentOwner, 0);
+    const fallbackCandidates: AgentChatMessage[] = [];
+    for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
+      const candidate = currentSlice[index];
+      if (!candidate || seenIds.has(candidate.id)) {
+        continue;
+      }
+      if (matchesHydratedSubagent(hydratedMessage, candidate)) {
+        matches.push(candidate);
+        seenIds.add(candidate.id);
+        continue;
+      }
+      if (canAbsorbHydratedPartSubagentIntoCurrentSessionRow(hydratedMessage, candidate)) {
+        fallbackCandidates.push(candidate);
+      }
+    }
+
+    if (matches.length === 0 && fallbackCandidates.length === 1) {
+      const [fallbackCandidate] = fallbackCandidates;
+      if (fallbackCandidate) {
+        matches.push(fallbackCandidate);
+      }
+    }
+
+    return matches;
+  };
   const mergeSameMessageId = (
     hydratedMessage: AgentChatMessage,
     currentMessage: AgentChatMessage | undefined,
@@ -249,22 +381,34 @@ export const mergeHydratedMessages = (
       };
     }
 
+    if (isSubagentMessage(hydratedMessage) && isSubagentMessage(currentMessage)) {
+      return mergeSubagentMessages(hydratedMessage, currentMessage);
+    }
+
     return currentMessage;
   };
   const hydratedOwner = { sessionId, messages: hydratedMessages };
   const hydratedMessageIds = new Set<string>();
+  const absorbedCurrentMessageIds = new Set<string>();
   let mergedMessages = createSessionMessagesState(sessionId);
 
   forEachSessionMessage(hydratedOwner, (message) => {
+    const sameIdCurrentMessage = findSessionMessageById(currentOwner, message.id);
+    const matchingCurrentMessages = findMatchingCurrentSubagents(message, sameIdCurrentMessage);
     hydratedMessageIds.add(message.id);
-    mergedMessages = appendSessionMessage(
-      { sessionId, messages: mergedMessages },
-      mergeSameMessageId(message, findSessionMessageById(currentOwner, message.id)),
+    for (const matchingCurrentMessage of matchingCurrentMessages) {
+      absorbedCurrentMessageIds.add(matchingCurrentMessage.id);
+    }
+    const mergedMessage = matchingCurrentMessages.reduce<AgentChatMessage>(
+      (currentMerged, matchingCurrentMessage) =>
+        mergeSameMessageId(currentMerged, matchingCurrentMessage),
+      message,
     );
+    mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, mergedMessage);
   });
 
   forEachSessionMessage(currentOwner, (message) => {
-    if (hydratedMessageIds.has(message.id)) {
+    if (hydratedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
       return;
     }
     mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, message);
@@ -355,6 +499,11 @@ export const preparePersistedSessionMergeStage = async ({
       }
       const next = { ...current };
       for (const record of persistedRecords) {
+        const nextPurpose = resolveAgentSessionPurposeForLoad({
+          requestedSessionId: intent.requestedSessionId,
+          sessionId: record.sessionId,
+          shouldHydrateRequestedSession: intent.shouldHydrateRequestedSession,
+        });
         const existingSession = next[record.sessionId];
         if (existingSession) {
           next[record.sessionId] = mergePersistedSessionRecord(
@@ -363,11 +512,13 @@ export const preparePersistedSessionMergeStage = async ({
             intent.taskId,
             intent.repoPath,
             existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
+            nextPurpose,
           );
           continue;
         }
         next[record.sessionId] = {
           ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
+          purpose: nextPurpose,
           pendingPermissions: [],
           pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,
@@ -663,7 +814,7 @@ export const reconcileLiveSessionsStage = async ({
         runtimeConnection,
         directories,
       }),
-    resumeMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
+    attachMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
       const supportedRuntimeConnection = requireRuntimeConnectionSupport(
         runtimeKind,
         runtimeConnection,
@@ -684,7 +835,7 @@ export const reconcileLiveSessionsStage = async ({
         return;
       }
 
-      await adapter.resumeSession({
+      const attachInput = {
         sessionId: record.sessionId,
         externalSessionId: record.externalSessionId ?? record.sessionId,
         repoPath: intent.repoPath,
@@ -696,9 +847,16 @@ export const reconcileLiveSessionsStage = async ({
         scenario: resolvedScenario,
         systemPrompt,
         ...(selectedModel ? { model: selectedModel } : {}),
-      });
+      };
+
+      if (intent.mode === "requested_history") {
+        await adapter.attachSession(attachInput);
+        return;
+      }
+
+      await adapter.resumeSession(attachInput);
     },
-    allowResumeMissingSession: options?.allowLiveSessionResume !== false,
+    allowAttachMissingSession: options?.allowLiveSessionResume !== false,
     isStaleRepoOperation,
     toLiveSessionState,
   });

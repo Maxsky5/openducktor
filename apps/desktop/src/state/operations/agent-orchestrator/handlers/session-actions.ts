@@ -44,6 +44,7 @@ type SessionActionsDependencies = {
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   unsubscribersRef: { current: Map<string, () => void> };
   turnStartedAtBySessionRef: { current: Record<string, number> };
+  turnUserAnchorAtBySessionRef?: { current: Record<string, number> };
   turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
   updateSession: (
     sessionId: string,
@@ -57,7 +58,7 @@ type SessionActionsDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  clearTurnDuration: (sessionId: string) => void;
+  clearTurnDuration: (sessionId: string, completedTimestamp?: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopAuthoritativeSession?: (target: AgentSessionStopTarget) => Promise<void>;
@@ -68,16 +69,16 @@ type SessionActionsDependencies = {
   }) => Promise<void>;
 };
 
-const markTurnStartedIfMissing = (
-  turnStartedAtBySessionRef: { current: Record<string, number> },
+const markTurnUserAnchorIfMissing = (
+  turnUserAnchorAtBySessionRef: { current: Record<string, number> },
   turnModelBySessionRef:
     | { current: Record<string, AgentSessionState["selectedModel"]> }
     | undefined,
   sessionsRef: { current: Record<string, AgentSessionState> },
   sessionId: string,
 ): void => {
-  if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
-    turnStartedAtBySessionRef.current[sessionId] = Date.now();
+  if (turnUserAnchorAtBySessionRef.current[sessionId] === undefined) {
+    turnUserAnchorAtBySessionRef.current[sessionId] = Date.now();
   }
   if (turnModelBySessionRef) {
     turnModelBySessionRef.current[sessionId] =
@@ -127,7 +128,7 @@ export const createAgentSessionActions = ({
   currentWorkspaceRepoPathRef,
   inFlightStartsByWorkspaceTaskRef,
   unsubscribersRef,
-  turnStartedAtBySessionRef,
+  turnUserAnchorAtBySessionRef = { current: {} },
   turnModelBySessionRef,
   updateSession,
   attachSessionListener,
@@ -191,7 +192,7 @@ export const createAgentSessionActions = ({
     const selectedModel = readySession.selectedModel ?? undefined;
     const isBusyQueuedSend = readySession.status === "running";
     if (!isBusyQueuedSend) {
-      turnStartedAtBySessionRef.current[sessionId] = Date.now();
+      turnUserAnchorAtBySessionRef.current[sessionId] = Date.now();
       if (turnModelBySessionRef) {
         turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
       }
@@ -430,8 +431,8 @@ export const createAgentSessionActions = ({
     if (!adapter.hasSession(sessionId)) {
       await ensureSessionReady(sessionId, { allowPendingInput: true });
     }
-    markTurnStartedIfMissing(
-      turnStartedAtBySessionRef,
+    markTurnUserAnchorIfMissing(
+      turnUserAnchorAtBySessionRef,
       turnModelBySessionRef,
       sessionsRef,
       sessionId,
@@ -463,8 +464,8 @@ export const createAgentSessionActions = ({
     if (!adapter.hasSession(sessionId)) {
       await ensureSessionReady(sessionId, { allowPendingInput: true });
     }
-    markTurnStartedIfMissing(
-      turnStartedAtBySessionRef,
+    markTurnUserAnchorIfMissing(
+      turnUserAnchorAtBySessionRef,
       turnModelBySessionRef,
       sessionsRef,
       sessionId,

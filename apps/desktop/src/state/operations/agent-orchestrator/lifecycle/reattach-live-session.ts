@@ -29,12 +29,12 @@ type CreateReattachLiveSessionArgs = {
     runtimeConnection: AgentRuntimeConnection,
     directories: string[],
   ) => Promise<LiveAgentSessionSnapshot[]>;
-  resumeMissingLiveSession?: (input: {
+  attachMissingLiveSession?: (input: {
     record: AgentSessionRecord;
     runtimeKind: RuntimeKind;
     runtimeConnection: AgentRuntimeConnection;
   }) => Promise<void>;
-  allowResumeMissingSession?: boolean;
+  allowAttachMissingSession?: boolean;
   isStaleRepoOperation: () => boolean;
   toLiveSessionState: (status: LiveAgentSessionSnapshot["status"]) => AgentSessionState["status"];
 };
@@ -47,8 +47,8 @@ export const createReattachLiveSession = ({
   promptOverrides,
   resolveHydrationRuntime,
   listLiveAgentSessions,
-  resumeMissingLiveSession,
-  allowResumeMissingSession = true,
+  attachMissingLiveSession,
+  allowAttachMissingSession = true,
   isStaleRepoOperation,
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
@@ -110,16 +110,16 @@ export const createReattachLiveSession = ({
     const liveSessionTitle = normalizeLiveSessionTitle(liveSession.title);
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!attachedExistingSession) {
-      if (!allowResumeMissingSession) {
+      if (!allowAttachMissingSession) {
         return false;
       }
-      if (!resumeMissingLiveSession) {
+      if (!attachMissingLiveSession) {
         throw new Error(
-          `Cannot reattach live session ${record.sessionId} without a resumeMissingLiveSession handler.`,
+          `Cannot reattach live session ${record.sessionId} without an attachMissingLiveSession handler.`,
         );
       }
       const resumeResult = await awaitUnlessStale(
-        resumeMissingLiveSession({
+        attachMissingLiveSession({
           record,
           runtimeKind: runtimeResolution.runtimeKind,
           runtimeConnection: runtimeResolution.runtimeConnection,

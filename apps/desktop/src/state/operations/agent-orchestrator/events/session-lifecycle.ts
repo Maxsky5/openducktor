@@ -244,14 +244,15 @@ export const handleAssistantMessage = (
       ),
     };
   });
-  context.turn.clearTurnDuration(context.store.sessionId);
+  context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
   clearTurnTracking(context);
 };
 
 export const handleUserMessage = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,
 ): void => {
+  context.turn.recordTurnUserMessageTimestamp?.(context.store.sessionId, event.timestamp);
   context.store.updateSession(
     context.store.sessionId,
     (current) => {
@@ -277,7 +278,11 @@ export const handleSessionStatus = (
   const status = event.status;
 
   if (status.type === "busy") {
-    if (context.turn.turnStartedAtBySessionRef.current[context.store.sessionId] === undefined) {
+    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
+    if (
+      context.turn.recordTurnActivityTimestamp === undefined &&
+      context.turn.turnStartedAtBySessionRef.current[context.store.sessionId] === undefined
+    ) {
       context.turn.turnStartedAtBySessionRef.current[context.store.sessionId] = eventTimestampMs(
         event.timestamp,
       );
@@ -319,7 +324,7 @@ export const handleSessionStatus = (
   }
 
   if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.sessionId);
+    context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -513,7 +518,7 @@ export const handleSessionError = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.sessionId);
+  context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
   clearTurnTracking(context);
 };
 
@@ -524,7 +529,7 @@ export const handleSessionIdle = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.sessionId);
+    context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -567,6 +572,6 @@ export const handleSessionFinished = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.sessionId);
+  context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
   clearTurnTracking(context);
 };

@@ -184,7 +184,7 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
-  test("treats a session with existing transcript as hydrated even after a prior history failure", async () => {
+  test("rehydrates in the background when a session has transcript after a prior history failure", async () => {
     const ensureSessionReadyForView = mock(async (): Promise<boolean> => true);
     const harness = createHookHarness(
       createBaseArgs({
@@ -206,7 +206,12 @@ describe("useAgentStudioTaskHydration", () => {
     try {
       await harness.mount();
 
-      expect(ensureSessionReadyForView).not.toHaveBeenCalled();
+      await harness.waitFor(() => ensureSessionReadyForView.mock.calls.length === 1);
+      expect(ensureSessionReadyForView).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionId: "session-1",
+        repoReadinessState: "ready",
+      });
       expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);
       expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
     } finally {

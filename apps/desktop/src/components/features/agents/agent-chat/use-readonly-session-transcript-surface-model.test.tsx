@@ -8,6 +8,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 const hydrateRequestedTaskSessionHistory = mock(async () => {});
 const ensureSessionReadyForView = mock(async () => true);
 const useAgentSessionMock = mock((_sessionId: string | null) => null);
+let latestHydrationArgs: Record<string, unknown> | null = null;
 let latestSurfaceModelArgs: Record<string, unknown> | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
@@ -59,6 +60,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     hydrateRequestedTaskSessionHistory.mockClear();
     ensureSessionReadyForView.mockClear();
     useAgentSessionMock.mockClear();
+    latestHydrationArgs = null;
     latestSurfaceModelArgs = null;
 
     mock.module("@/state/app-state-provider", () => ({
@@ -120,14 +122,17 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }));
 
     mock.module("./use-agent-chat-session-hydration", () => ({
-      useAgentChatSessionHydration: () => ({
-        isActiveTaskHydrated: true,
-        isActiveTaskHydrationFailed: false,
-        isActiveSessionHistoryHydrated: false,
-        isActiveSessionHistoryHydrationFailed: false,
-        isActiveSessionHistoryHydrating: false,
-        isWaitingForRuntimeReadiness: false,
-      }),
+      useAgentChatSessionHydration: (args: Record<string, unknown>) => {
+        latestHydrationArgs = args;
+        return {
+          isActiveTaskHydrated: true,
+          isActiveTaskHydrationFailed: false,
+          isActiveSessionHistoryHydrated: false,
+          isActiveSessionHistoryHydrationFailed: false,
+          isActiveSessionHistoryHydrating: false,
+          isWaitingForRuntimeReadiness: false,
+        };
+      },
     }));
 
     mock.module("./use-agent-chat-surface-model", () => ({
@@ -194,6 +199,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
+        isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-1",
         persistedRecords,
@@ -229,6 +235,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
+        isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-subagent-1",
         fallbackSession: {
@@ -249,7 +256,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         taskId: "TASK-1",
         sessionId: "session-subagent-1",
         historyPreludeMode: "none",
-        allowLiveSessionResume: false,
         persistedRecords: [
           {
             sessionId: "session-subagent-1",
@@ -287,6 +293,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
+        isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-1",
         persistedRecords,
@@ -305,6 +312,132 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(consoleWarn).toHaveBeenCalled();
     } finally {
       console.warn = originalConsoleWarn;
+      await harness.unmount();
+    }
+  });
+
+  test("disables hydration inputs and clears stale failure state when the dialog closes", async () => {
+    hydrateRequestedTaskSessionHistory.mockImplementationOnce(async () => {
+      throw new Error("hydrate boom");
+    });
+    const originalConsoleWarn = console.warn;
+    const consoleWarn = mock(() => {});
+    console.warn = consoleWarn;
+
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => latestSurfaceModelArgs?.emptyState !== null);
+
+      expect(latestSurfaceModelArgs?.emptyState).toEqual({
+        title: "Failed to load conversation.",
+      });
+
+      await harness.update({
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: false,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      });
+
+      expect(latestHydrationArgs).toMatchObject({
+        activeWorkspace: null,
+        activeTaskId: "",
+        activeSession: null,
+        runtimeAttachmentCandidates: [],
+      });
+      expect(latestSurfaceModelArgs?.emptyState).toBeNull();
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
+      expect(consoleWarn).toHaveBeenCalled();
+    } finally {
+      console.warn = originalConsoleWarn;
+      await harness.unmount();
+    }
+  });
+
+  test("rehydrates the transcript when the dialog is reopened", async () => {
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      await harness.update({
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: false,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      });
+
+      await harness.update({
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      });
+
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 2);
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenNthCalledWith(2, {
+        taskId: "TASK-1",
+        sessionId: "session-1",
+        persistedRecords,
+      });
+    } finally {
       await harness.unmount();
     }
   });

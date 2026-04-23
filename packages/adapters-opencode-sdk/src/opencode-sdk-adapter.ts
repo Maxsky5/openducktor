@@ -8,6 +8,7 @@ import type {
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentWorkspaceInspectionPort,
+  AttachAgentSessionInput,
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
@@ -51,6 +52,7 @@ import { setSessionIdle } from "./event-stream/shared";
 import { sendUserMessage } from "./message-execution";
 import {
   listLiveAgentSessionPendingInput,
+  loadAndSeedSessionHistory,
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
@@ -58,7 +60,9 @@ import {
 } from "./message-ops";
 import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import {
+  attachSessionToRuntimeEvents,
   clearWorkflowToolCacheForDirectory,
+  detachSessionRuntime,
   hasSession,
   registerSession,
   requireSession,
@@ -255,6 +259,7 @@ export class OpencodeSdkAdapter
       (detailData as { time?: { created?: unknown } }).time?.created,
       this.now,
     );
+    const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
     const sessionInput = toSessionInput({
       ...input,
       sessionId: input.sessionId,
@@ -264,7 +269,7 @@ export class OpencodeSdkAdapter
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
-      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+      runtimeEndpoint,
       sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
       sessionInput,
@@ -275,6 +280,92 @@ export class OpencodeSdkAdapter
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     });
+  }
+
+  async attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary> {
+    const existing = this.sessions.get(input.sessionId);
+    if (existing) {
+      return existing.summary;
+    }
+
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "attach session",
+    );
+    const client = this.createClient(runtimeClientInput);
+    const detail = await client.session.get({
+      directory: input.workingDirectory,
+      sessionID: input.externalSessionId,
+    });
+    const detailData = unwrapData(detail, "get session");
+    const startedAt = toIsoFromEpoch(
+      (detailData as { time?: { created?: unknown } }).time?.created,
+      this.now,
+    );
+    const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
+    const sessionInput = toSessionInput({
+      ...input,
+      sessionId: input.sessionId,
+    });
+
+    const summary = registerSession({
+      sessions: this.sessions,
+      runtimeEventTransports: this.runtimeEventTransports,
+      createClient: this.createClient,
+      runtimeEndpoint,
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      sessionInput,
+      client,
+      startedAt,
+      startedMessage: `Attached ${input.role} session (${input.scenario})`,
+      emitStartedEvent: false,
+      subscribeToEvents: false,
+      now: this.now,
+      emit: this.emit.bind(this),
+      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+    });
+
+    try {
+      const session = requireSession(this.sessions, input.sessionId);
+      await loadAndSeedSessionHistory(this.createClient, this.now, {
+        runtimeEndpoint,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
+        session,
+      });
+      attachSessionToRuntimeEvents({
+        sessions: this.sessions,
+        runtimeEventTransports: this.runtimeEventTransports,
+        createClient: this.createClient,
+        runtimeEndpoint,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        sessionInput,
+        now: this.now,
+        emit: this.emit.bind(this),
+        ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      });
+    } catch (error) {
+      const session = this.sessions.get(input.sessionId);
+      if (session) {
+        await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
+      }
+      throw error;
+    }
+
+    return summary;
+  }
+
+  async detachSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      clearSessionListeners(this.listeners, sessionId);
+      return;
+    }
+
+    await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
+    clearSessionListeners(this.listeners, sessionId);
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
@@ -415,12 +506,51 @@ export class OpencodeSdkAdapter
         ),
     );
 
-    return loadSessionHistory(this.createClient, this.now, {
+    const matchingSessions = [...this.sessions.values()].filter(
+      (session) =>
+        session.externalSessionId === input.externalSessionId &&
+        session.eventTransportKey === runtimeClientInput.runtimeEndpoint,
+    );
+    const historyInput = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
       ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
       ...(preservedDisplayPartsByMessageId.size > 0 ? { preservedDisplayPartsByMessageId } : {}),
+    };
+
+    if (matchingSessions.length === 0) {
+      return loadSessionHistory(this.createClient, this.now, historyInput);
+    }
+
+    const [primarySession, ...otherSessions] = matchingSessions;
+    if (!primarySession) {
+      return loadSessionHistory(this.createClient, this.now, historyInput);
+    }
+
+    const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
+      ...historyInput,
+      session: primarySession,
     });
+
+    for (const session of otherSessions) {
+      for (const [partId, correlationKey] of primarySession.subagentCorrelationKeyByPartId) {
+        session.subagentCorrelationKeyByPartId.set(partId, correlationKey);
+      }
+      for (const [sessionId, correlationKey] of primarySession.subagentCorrelationKeyBySessionId) {
+        session.subagentCorrelationKeyBySessionId.set(sessionId, correlationKey);
+      }
+      session.pendingSubagentCorrelationKeys.splice(
+        0,
+        session.pendingSubagentCorrelationKeys.length,
+        ...primarySession.pendingSubagentCorrelationKeys,
+      );
+      session.pendingSubagentCorrelationKeysBySignature.clear();
+      for (const [signature, pending] of primarySession.pendingSubagentCorrelationKeysBySignature) {
+        session.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending]);
+      }
+    }
+
+    return history;
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {

@@ -1,7 +1,18 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
-import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
+import {
+  findLastSessionMessageByRole,
+  findSessionMessageById,
+  getSessionMessagesSlice,
+  removeSessionMessageById,
+  upsertSessionMessage,
+} from "../support/messages";
+import {
+  formatSubagentContent,
+  mergeSubagentMeta,
+  type SubagentMeta,
+} from "../support/subagent-messages";
 import type {
   DraftChannel,
   SessionEvent,
@@ -11,6 +22,7 @@ import type {
 } from "./session-event-types";
 import {
   createPrePartTodoSettlement,
+  eventTimestampMs,
   scheduleDraftFlush,
   toPartStreamKey,
 } from "./session-helpers";
@@ -184,6 +196,7 @@ export const handleAssistantDelta = (
   context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
+  context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
   if (event.channel === "text") {
     if (!event.messageId || event.delta.length === 0) {
       return;
@@ -337,32 +350,92 @@ const handleReasoningPart = (
   );
 };
 
-const handleSubtaskPart = (
+const handleSubagentPart = (
   context: SessionPartEventContext,
   event: SessionPartEvent,
-  part: Extract<SessionPart, { kind: "subtask" }>,
-  streamMessageKey: string,
+  part: Extract<SessionPart, { kind: "subagent" }>,
   prepareCurrent: PrepareCurrent,
 ): void => {
+  const eventTimestamp = eventTimestampMs(event.timestamp);
+
   context.store.updateSession(
     context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
+      const fallbackMatches =
+        typeof part.sessionId === "string" &&
+        part.correlationKey.startsWith("session:") &&
+        typeof part.agent === "string" &&
+        typeof part.prompt === "string"
+          ? getSessionMessagesSlice(prepared, 0).filter(
+              (message) =>
+                message.role === "system" &&
+                message.meta?.kind === "subagent" &&
+                !message.meta.sessionId &&
+                message.meta.correlationKey.startsWith("part:") &&
+                message.meta.agent === part.agent &&
+                message.meta.prompt === part.prompt,
+            )
+          : [];
+      const correlationMessage = findLastSessionMessageByRole(
+        prepared,
+        "system",
+        (message) =>
+          message.meta?.kind === "subagent" && message.meta.correlationKey === part.correlationKey,
+      );
+      const sessionMessage = part.sessionId
+        ? findLastSessionMessageByRole(
+            prepared,
+            "system",
+            (message) =>
+              message.meta?.kind === "subagent" && message.meta.sessionId === part.sessionId,
+          )
+        : undefined;
+      const fallbackMessage =
+        correlationMessage || sessionMessage || fallbackMatches.length !== 1
+          ? undefined
+          : fallbackMatches[0];
+      const existingMessage = correlationMessage ?? sessionMessage ?? fallbackMessage;
+      const existingMeta = existingMessage?.meta?.kind === "subagent" ? existingMessage.meta : null;
+      const incomingMeta: SubagentMeta = {
+        kind: "subagent",
+        partId: part.partId,
+        correlationKey: part.correlationKey,
+        status: part.status,
+        ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
+        ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
+        ...(typeof part.description === "string" ? { description: part.description } : {}),
+        ...(typeof part.sessionId === "string" ? { sessionId: part.sessionId } : {}),
+        ...(part.executionMode ? { executionMode: part.executionMode } : {}),
+        ...(part.metadata ? { metadata: part.metadata } : {}),
+        ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+        ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+      };
+      const nextMeta = mergeSubagentMeta(existingMeta, incomingMeta, {
+        startedAtMsFallback: eventTimestamp,
+      });
+      const duplicateMessageId =
+        correlationMessage &&
+        sessionMessage &&
+        correlationMessage.id !== sessionMessage.id &&
+        existingMessage?.id === correlationMessage.id
+          ? sessionMessage.id
+          : null;
+      const nextPrepared =
+        duplicateMessageId === null
+          ? prepared
+          : { ...prepared, messages: removeSessionMessageById(prepared, duplicateMessageId) };
+      const nextMessageId = existingMessage?.id ?? `subagent:${part.correlationKey}`;
+
       return {
-        ...prepared,
+        ...nextPrepared,
         status: "running",
-        messages: upsertSessionMessage(prepared, {
-          id: `subtask:${streamMessageKey}`,
+        messages: upsertSessionMessage(nextPrepared, {
+          id: nextMessageId,
           role: "system",
-          content: `Subtask (${part.agent}): ${part.description}`,
-          timestamp: event.timestamp,
-          meta: {
-            kind: "subtask",
-            partId: part.partId,
-            agent: part.agent,
-            prompt: part.prompt,
-            description: part.description,
-          },
+          content: formatSubagentContent(nextMeta),
+          timestamp: existingMessage?.timestamp ?? event.timestamp,
+          meta: nextMeta,
         }),
       };
     },
@@ -414,6 +487,13 @@ export const handleAssistantPart = (
   event: SessionPartEvent,
 ): void => {
   const part = event.part;
+  if (part.kind !== "step") {
+    const activityTimestamp =
+      (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
+        ? part.startedAtMs
+        : event.timestamp;
+    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, activityTimestamp);
+  }
   const streamMessageKey = toPartStreamKey(part);
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 
@@ -427,8 +507,8 @@ export const handleAssistantPart = (
     case "tool":
       handleToolPart(context, event, part, streamMessageKey, prepareCurrent);
       return;
-    case "subtask":
-      handleSubtaskPart(context, event, part, streamMessageKey, prepareCurrent);
+    case "subagent":
+      handleSubagentPart(context, event, part, prepareCurrent);
       return;
     case "step":
       handleStepPart(context, part, prepareCurrent);

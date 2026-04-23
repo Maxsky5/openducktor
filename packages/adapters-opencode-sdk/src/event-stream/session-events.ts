@@ -1,16 +1,26 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
+import { readStringProp } from "../guards";
 import { normalizeTodoList } from "../todo-normalizers";
-import { reconcileUserMessageQueuedStates } from "./message-events";
+import {
+  flushPendingSubagentPartEmissionsForSession,
+  reconcileUserMessageQueuedStates,
+} from "./message-events";
 import {
   parsePermissionAsked,
   parseQuestionAsked,
   parseSessionStatus,
+  readEventInfo,
   readEventProperties,
   readSessionErrorMessage,
   readTodoPayload,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { emitSessionIdle, markSessionActive, markSessionIdle } from "./shared";
+import {
+  emitSessionIdle,
+  markSessionActive,
+  markSessionIdle,
+  removePendingSubagentCorrelationKey,
+} from "./shared";
 
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.status") {
@@ -146,8 +156,108 @@ const handleTodoUpdatedEvent = (event: Event, runtime: EventStreamRuntime): bool
   return true;
 };
 
+const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime): boolean => {
+  if (event.type !== "session.created" && event.type !== "session.updated") {
+    return false;
+  }
+
+  const properties = readEventProperties(event);
+  const info = readEventInfo(properties);
+  const childSessionId =
+    readStringProp(
+      (properties && typeof properties === "object" && properties !== null
+        ? properties
+        : {}) as Record<string, unknown>,
+      ["sessionID", "sessionId", "session_id"],
+    ) ?? readStringProp(info, ["id", "sessionID", "sessionId", "session_id"]);
+  const parentSessionId =
+    info && typeof info === "object" && info !== null
+      ? (["parentID", "parentId", "parent_id"] as const).reduce<string | undefined>(
+          (found, key) => {
+            if (found) {
+              return found;
+            }
+            const value = (info as Record<string, unknown>)[key];
+            return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+          },
+          undefined,
+        )
+      : undefined;
+
+  if (
+    typeof childSessionId !== "string" ||
+    childSessionId.trim().length === 0 ||
+    parentSessionId !== runtime.externalSessionId
+  ) {
+    return true;
+  }
+
+  const normalizedChildSessionId = childSessionId.trim();
+  const createdAtValue =
+    info && typeof info === "object" && info !== null
+      ? (info as { time?: { created?: unknown } }).time?.created
+      : undefined;
+  const createdAtMs = typeof createdAtValue === "number" ? createdAtValue : undefined;
+  const existingSessionBinding = runtime.pendingSubagentSessionsById.get(normalizedChildSessionId);
+  runtime.pendingSubagentSessionsById.set(normalizedChildSessionId, {
+    arrivalOrder:
+      existingSessionBinding?.arrivalOrder ?? runtime.pendingSubagentSessionsById.size + 1,
+    ...(typeof createdAtMs === "number"
+      ? { createdAtMs }
+      : existingSessionBinding && typeof existingSessionBinding.createdAtMs === "number"
+        ? { createdAtMs: existingSessionBinding.createdAtMs }
+        : {}),
+  });
+
+  const existingCorrelationKey =
+    runtime.subagentCorrelationKeyBySessionId.get(normalizedChildSessionId);
+  if (existingCorrelationKey && !existingCorrelationKey.startsWith("session:")) {
+    flushPendingSubagentPartEmissionsForSession(runtime, normalizedChildSessionId);
+    return true;
+  }
+
+  const pendingSessionEntries = [...runtime.pendingSubagentSessionsById.entries()].filter(
+    ([sessionId]) => {
+      const correlationKey = runtime.subagentCorrelationKeyBySessionId.get(sessionId);
+      return !correlationKey || correlationKey.startsWith("session:");
+    },
+  );
+  const canResolveSingleBinding =
+    pendingSessionEntries.length === 1 && runtime.pendingSubagentCorrelationKeys.length === 1;
+  const canResolveMultipleBindings =
+    pendingSessionEntries.length > 1 &&
+    pendingSessionEntries.length === runtime.pendingSubagentCorrelationKeys.length;
+  if (!canResolveSingleBinding && !canResolveMultipleBindings) {
+    return true;
+  }
+
+  const sortedPendingSessions = pendingSessionEntries.sort((left, right) => {
+    const leftCreatedAt = left[1].createdAtMs ?? Number.POSITIVE_INFINITY;
+    const rightCreatedAt = right[1].createdAtMs ?? Number.POSITIVE_INFINITY;
+    if (leftCreatedAt !== rightCreatedAt) {
+      return leftCreatedAt - rightCreatedAt;
+    }
+    return left[1].arrivalOrder - right[1].arrivalOrder;
+  });
+  const queuedCorrelationKeys = [...runtime.pendingSubagentCorrelationKeys];
+  for (let index = 0; index < sortedPendingSessions.length; index += 1) {
+    const pendingSession = sortedPendingSessions[index];
+    const nextCorrelationKey = queuedCorrelationKeys[index];
+    if (!pendingSession || !nextCorrelationKey) {
+      continue;
+    }
+    const [sessionId] = pendingSession;
+    runtime.subagentCorrelationKeyBySessionId.set(sessionId, nextCorrelationKey);
+    runtime.pendingSubagentSessionsById.delete(sessionId);
+    removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
+    flushPendingSubagentPartEmissionsForSession(runtime, sessionId);
+  }
+  return true;
+};
+
 export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   return (
+    bindChildSessionCorrelation(event, runtime) ||
     handleSessionStatusEvent(event, runtime) ||
     handlePermissionAskedEvent(event, runtime) ||
     handleQuestionAskedEvent(event, runtime) ||

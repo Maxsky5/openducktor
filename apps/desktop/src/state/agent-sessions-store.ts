@@ -1,4 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/session-purpose";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<
@@ -190,12 +191,15 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
           ? previousSummary
           : nextSummary;
       });
-      const nextActivitySessionSummaries = nextSessions.map((session) => {
+      const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
+        if (!shouldIncludeAgentSessionInActivity(session)) {
+          return [];
+        }
         const nextSummary = toAgentActivitySessionSummary(session);
         const previousSummary = previousActivitySummaryById.get(session.sessionId);
         return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? previousSummary
-          : nextSummary;
+          ? [previousSummary]
+          : [nextSummary];
       });
 
       sessionsById = nextSessionsById;

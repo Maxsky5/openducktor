@@ -1,7 +1,9 @@
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentSessionDocument, TaskWorktreeSummary};
-use host_infra_system::resolve_effective_worktree_base_dir_for_workspace;
+use host_infra_system::{
+    resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir_for_workspace,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -154,6 +156,8 @@ fn validate_task_agent_session(
         return Ok(());
     }
 
+    let legacy_worktree_base_path = resolve_default_worktree_base_dir(Path::new(repo_path)).ok();
+
     let effective_worktree_base_path = service
         .workspace_list()?
         .into_iter()
@@ -168,6 +172,15 @@ fn validate_task_agent_session(
             try_canonicalize_existing_path(&worktree_base_path)
         {
             if canonical_working_directory.starts_with(&canonical_worktree_base_path) {
+                return Ok(());
+            }
+        }
+    }
+
+    if let Some(legacy_worktree_base_path) = legacy_worktree_base_path {
+        if let Ok(canonical_legacy_worktree_base_path) = fs::canonicalize(legacy_worktree_base_path)
+        {
+            if canonical_working_directory.starts_with(&canonical_legacy_worktree_base_path) {
                 return Ok(());
             }
         }

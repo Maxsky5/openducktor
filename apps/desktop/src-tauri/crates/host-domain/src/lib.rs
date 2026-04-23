@@ -33,7 +33,7 @@ pub use runtime::{
     RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities,
     RuntimeDefinition, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode,
     RuntimeRegistry, RuntimeRole, RuntimeRoute, RuntimeStartupReadinessConfig,
-    RuntimeSupportedScope, TaskWorktreeSummary,
+    RuntimeSubagentExecutionMode, RuntimeSupportedScope, TaskWorktreeSummary,
 };
 pub use store::TaskStore;
 pub use system::{
@@ -136,10 +136,10 @@ mod tests {
             RepoRuntimeStartupStatus, RepoStoreAttachmentHealth, RepoStoreHealth,
             RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
             RepoStoreSharedServerOwnershipState, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole,
-            SpecDocument, SystemCheck, SystemOpenInToolId, SystemOpenInToolInfo, TaskAction,
-            TaskCard, TaskDirectMergeResult, TaskDocumentPresence, TaskDocumentSummary,
-            TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore, TaskWorktreeSummary,
-            UpdateTaskPatch, WorkspaceRecord,
+            RuntimeSubagentExecutionMode, SpecDocument, SystemCheck, SystemOpenInToolId,
+            SystemOpenInToolInfo, TaskAction, TaskCard, TaskDirectMergeResult,
+            TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
+            TaskStatus, TaskStore, TaskWorktreeSummary, UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -217,6 +217,7 @@ mod tests {
             QaWorkflowVerdict,
             RuntimeCheck,
             RuntimeRole,
+            RuntimeSubagentExecutionMode,
             SpecDocument,
             SystemCheck,
             SystemOpenInToolId,

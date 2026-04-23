@@ -4,7 +4,7 @@ import {
   type AgentUserMessageDisplayPart,
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
-import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
+import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
   Fragment,
   lazy,
@@ -32,11 +32,14 @@ import {
   roleLabel,
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
+import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import {
   assistantRoleIcon,
   RegularToolMessage,
   WorkflowToolMessage,
 } from "./agent-chat-message-card-tool-presenters";
+import { formatAgentDuration } from "./format-agent-duration";
+import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const LazyMarkdownRenderer = lazy(async () => {
   const module = await import("@/components/ui/markdown-renderer");
@@ -445,6 +448,123 @@ type SessionNoticeMessageProps = {
   timeLabel: string;
 };
 
+const subagentStatusLabel = (status: SubagentMeta["status"]): string => {
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "completed") {
+    return "Completed";
+  }
+  if (status === "cancelled") {
+    return "Cancelled";
+  }
+  if (status === "error") {
+    return "Failed";
+  }
+
+  return "Queued";
+};
+
+const subagentStatusClassName = (status: SubagentMeta["status"]): string => {
+  if (status === "running") {
+    return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300";
+  }
+  if (status === "completed") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300";
+  }
+  if (status === "cancelled") {
+    return "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground";
+  }
+  if (status === "error") {
+    return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300";
+  }
+
+  return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300";
+};
+
+const readSubagentSummary = (meta: SubagentMeta): string | null => {
+  return meta.description?.trim() || meta.prompt?.trim() || null;
+};
+
+type SubagentMessageProps = {
+  meta: SubagentMeta;
+  taskId: string | null;
+  sessionRole: AgentRole | null;
+  sessionRuntimeKind?: import("@openducktor/contracts").RuntimeKind | null;
+  sessionWorkingDirectory?: string | null | undefined;
+  timeLabel: string;
+};
+
+const SubagentMessage = ({
+  meta,
+  taskId,
+  sessionRole,
+  sessionRuntimeKind,
+  sessionWorkingDirectory,
+  timeLabel,
+}: SubagentMessageProps): ReactElement => {
+  const summary = readSubagentSummary(meta);
+  const isRunning = meta.status === "running";
+  const durationMs =
+    meta.status !== "pending" &&
+    meta.status !== "running" &&
+    typeof meta.startedAtMs === "number" &&
+    typeof meta.endedAtMs === "number"
+      ? Math.max(0, meta.endedAtMs - meta.startedAtMs)
+      : null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        <div className="rounded-md border border-border bg-pending-surface p-2">
+          <Cpu className="size-4 text-pending-accent" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-start gap-2">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {meta.agent?.trim() || "Subagent"}
+            </p>
+            <span
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                subagentStatusClassName(meta.status),
+              )}
+            >
+              {subagentStatusLabel(meta.status)}
+            </span>
+            {meta.executionMode ? (
+              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {meta.executionMode}
+              </span>
+            ) : null}
+            <div className="ml-auto inline-flex shrink-0 items-center gap-2 pt-0.5 text-[11px] text-muted-foreground">
+              {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
+              {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
+              {timeLabel ? <span>{timeLabel}</span> : null}
+            </div>
+          </div>
+          <div className="flex items-start justify-between gap-3">
+            {summary ? (
+              <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                {summary}
+              </p>
+            ) : (
+              <div />
+            )}
+            <SubagentTranscriptButton
+              taskId={taskId}
+              sessionRole={sessionRole}
+              sessionRuntimeKind={sessionRuntimeKind ?? null}
+              sessionWorkingDirectory={sessionWorkingDirectory}
+              meta={meta}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps): ReactElement => {
   const meta = message.meta?.kind === "session_notice" ? message.meta : null;
   return (
@@ -496,9 +616,6 @@ export const MessageBody = ({
       return (
         <WorkflowToolMessage
           meta={meta}
-          taskId={sessionTaskId ?? null}
-          sessionRole={sessionRole ?? null}
-          sessionRuntimeKind={sessionRuntimeKind ?? null}
           messageTimestamp={message.timestamp}
           sessionWorkingDirectory={sessionWorkingDirectory}
           workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
@@ -508,9 +625,6 @@ export const MessageBody = ({
     return (
       <RegularToolMessage
         meta={meta}
-        taskId={sessionTaskId ?? null}
-        sessionRole={sessionRole ?? null}
-        sessionRuntimeKind={sessionRuntimeKind ?? null}
         messageContent={message.content}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
@@ -520,16 +634,16 @@ export const MessageBody = ({
     );
   }
 
-  if (meta?.kind === "subtask") {
+  if (meta?.kind === "subagent") {
     return (
-      <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700 dark:text-violet-300">
-        <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500 dark:text-violet-400" />
-        <p className="shrink-0 font-medium">subagent {meta.agent}</p>
-        <p className="truncate text-violet-700/90 dark:text-violet-300/90">{meta.description}</p>
-        {timeLabel ? (
-          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
-        ) : null}
-      </div>
+      <SubagentMessage
+        meta={meta}
+        taskId={sessionTaskId ?? null}
+        sessionRole={sessionRole ?? null}
+        sessionRuntimeKind={sessionRuntimeKind ?? null}
+        sessionWorkingDirectory={sessionWorkingDirectory}
+        timeLabel={timeLabel}
+      />
     );
   }
 

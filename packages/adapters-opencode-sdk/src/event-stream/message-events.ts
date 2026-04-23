@@ -38,7 +38,11 @@ import {
   emitSessionIdle,
   isReasoningDeltaField,
   markSessionActive,
+  removePendingSubagentCorrelationKey,
 } from "./shared";
+
+type MappedAssistantPart = NonNullable<ReturnType<typeof mapPartToAgentStreamPart>>;
+type MappedSubagentPart = Extract<MappedAssistantPart, { kind: "subagent" }>;
 
 const isAssistantMessage = (
   runtime: EventStreamRuntime,
@@ -46,6 +50,152 @@ const isAssistantMessage = (
   roleHint?: string,
 ): boolean => {
   return (roleHint ?? runtime.messageRoleById.get(messageId)) === "assistant";
+};
+
+const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
+  const agent = part.agent?.trim() ?? "";
+  const prompt = part.prompt?.trim() ?? "";
+  if (!agent && !prompt) {
+    return undefined;
+  }
+
+  return [agent, prompt].join(":");
+};
+
+const buildPartScopedSubagentCorrelationKey = (
+  part: MappedSubagentPart,
+  rawPartId: string,
+): string => {
+  return ["part", part.messageId, rawPartId].join(":");
+};
+
+const enqueuePendingSubagentCorrelationKey = (
+  runtime: EventStreamRuntime,
+  signature: string,
+  correlationKey: string,
+): void => {
+  const pending = runtime.pendingSubagentCorrelationKeysBySignature.get(signature) ?? [];
+  if (pending.includes(correlationKey)) {
+    return;
+  }
+
+  runtime.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending, correlationKey]);
+};
+
+const dequeuePendingSubagentCorrelationKey = (
+  runtime: EventStreamRuntime,
+  signature: string,
+): string | undefined => {
+  const pending = runtime.pendingSubagentCorrelationKeysBySignature.get(signature);
+  if (!pending || pending.length === 0) {
+    return undefined;
+  }
+
+  const [next, ...rest] = pending;
+  if (rest.length === 0) {
+    runtime.pendingSubagentCorrelationKeysBySignature.delete(signature);
+  } else {
+    runtime.pendingSubagentCorrelationKeysBySignature.set(signature, rest);
+  }
+
+  return next;
+};
+
+const peekPendingSubagentCorrelationKeys = (
+  runtime: EventStreamRuntime,
+  signature: string,
+): string[] => {
+  return runtime.pendingSubagentCorrelationKeysBySignature.get(signature) ?? [];
+};
+
+const queuePendingSubagentPartEmission = (
+  runtime: EventStreamRuntime,
+  sessionId: string,
+  part: Part,
+  roleHint?: string,
+): void => {
+  const pending = runtime.pendingSubagentPartEmissionsBySessionId.get(sessionId) ?? [];
+  pending.push({ part, ...(roleHint ? { roleHint } : {}) });
+  runtime.pendingSubagentPartEmissionsBySessionId.set(sessionId, pending);
+};
+
+const normalizeLiveSubagentCorrelation = (
+  runtime: EventStreamRuntime,
+  rawPart: Part,
+  part: MappedSubagentPart,
+  roleHint?: string,
+): MappedSubagentPart | null => {
+  const existingCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(rawPart.id);
+  if (existingCorrelationKey) {
+    if (part.sessionId) {
+      runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, existingCorrelationKey);
+      removePendingSubagentCorrelationKey(runtime, existingCorrelationKey);
+    }
+    return {
+      ...part,
+      correlationKey: existingCorrelationKey,
+    };
+  }
+
+  const signature = buildSubagentSignature(part);
+
+  if (rawPart.type === "subtask") {
+    const correlationKey = buildPartScopedSubagentCorrelationKey(part, rawPart.id);
+    runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
+    if (!runtime.pendingSubagentCorrelationKeys.includes(correlationKey)) {
+      runtime.pendingSubagentCorrelationKeys.push(correlationKey);
+    }
+    if (signature) {
+      enqueuePendingSubagentCorrelationKey(runtime, signature, correlationKey);
+    }
+    if (part.sessionId) {
+      runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+      removePendingSubagentCorrelationKey(runtime, correlationKey);
+    }
+
+    return {
+      ...part,
+      correlationKey,
+    };
+  }
+
+  const sessionCorrelationKey = part.sessionId
+    ? runtime.subagentCorrelationKeyBySessionId.get(part.sessionId)
+    : undefined;
+  const pendingCorrelationKeys = signature
+    ? peekPendingSubagentCorrelationKeys(runtime, signature)
+    : [];
+  const pendingSessionId = part.sessionId;
+  const shouldDeferAmbiguousSessionBinding =
+    typeof pendingSessionId === "string" &&
+    pendingSessionId.length > 0 &&
+    !sessionCorrelationKey &&
+    pendingCorrelationKeys.length > 1;
+  if (shouldDeferAmbiguousSessionBinding) {
+    queuePendingSubagentPartEmission(runtime, pendingSessionId, rawPart, roleHint);
+    return null;
+  }
+  const queuedCorrelationKey =
+    pendingCorrelationKeys.length === 1 && signature
+      ? dequeuePendingSubagentCorrelationKey(runtime, signature)
+      : undefined;
+  const correlationKey =
+    sessionCorrelationKey ??
+    queuedCorrelationKey ??
+    (part.sessionId
+      ? ["session", part.messageId, part.sessionId].join(":")
+      : buildPartScopedSubagentCorrelationKey(part, rawPart.id));
+
+  runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
+  if (part.sessionId) {
+    runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+    removePendingSubagentCorrelationKey(runtime, correlationKey);
+  }
+
+  return {
+    ...part,
+    correlationKey,
+  };
 };
 
 const shouldSuppressAssistantStreamingAfterIdle = (
@@ -72,11 +222,19 @@ const emitAssistantPart = (
     return false;
   }
 
-  if (!isAssistantMessage(runtime, mapped.messageId, roleHint)) {
+  const nextMapped =
+    mapped.kind === "subagent"
+      ? normalizeLiveSubagentCorrelation(runtime, part, mapped, roleHint)
+      : mapped;
+  if (!nextMapped) {
     return false;
   }
 
-  if (shouldSuppressAssistantStreamingAfterIdle(runtime, mapped.messageId, roleHint)) {
+  if (!isAssistantMessage(runtime, nextMapped.messageId, roleHint)) {
+    return false;
+  }
+
+  if (shouldSuppressAssistantStreamingAfterIdle(runtime, nextMapped.messageId, roleHint)) {
     return false;
   }
 
@@ -88,9 +246,23 @@ const emitAssistantPart = (
     type: "assistant_part",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
-    part: mapped,
+    part: nextMapped,
   });
   return true;
+};
+
+export const flushPendingSubagentPartEmissionsForSession = (
+  runtime: EventStreamRuntime,
+  sessionId: string,
+): void => {
+  const pending = runtime.pendingSubagentPartEmissionsBySessionId.get(sessionId);
+  if (!pending || pending.length === 0) {
+    return;
+  }
+  runtime.pendingSubagentPartEmissionsBySessionId.delete(sessionId);
+  for (const emission of pending) {
+    emitAssistantPart(runtime, emission.part, emission.roleHint);
+  }
 };
 
 const emitKnownAssistantPartsForMessage = (
@@ -930,6 +1102,27 @@ const handleMessagePartRemovedEvent = (event: Event, runtime: EventStreamRuntime
 
   runtime.partsById.delete(removedPartId);
   runtime.pendingDeltasByPartId.delete(removedPartId);
+  for (const [sessionId, pending] of runtime.pendingSubagentPartEmissionsBySessionId) {
+    const nextPending = pending.filter((emission) => emission.part.id !== removedPartId);
+    if (nextPending.length === pending.length) {
+      continue;
+    }
+    if (nextPending.length === 0) {
+      runtime.pendingSubagentPartEmissionsBySessionId.delete(sessionId);
+      continue;
+    }
+    runtime.pendingSubagentPartEmissionsBySessionId.set(sessionId, nextPending);
+  }
+  const removedCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(removedPartId);
+  runtime.subagentCorrelationKeyByPartId.delete(removedPartId);
+  if (removedCorrelationKey) {
+    removePendingSubagentCorrelationKey(runtime, removedCorrelationKey);
+    for (const [sessionId, correlationKey] of runtime.subagentCorrelationKeyBySessionId) {
+      if (correlationKey === removedCorrelationKey) {
+        runtime.subagentCorrelationKeyBySessionId.delete(sessionId);
+      }
+    }
+  }
   return true;
 };
 

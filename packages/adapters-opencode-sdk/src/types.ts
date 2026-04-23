@@ -5,7 +5,11 @@ import type {
   AgentUserMessageDisplayPart,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import type { PendingPartDelta } from "./event-stream/shared";
+import type {
+  PendingPartDelta,
+  PendingSubagentPartEmission,
+  PendingSubagentSessionBinding,
+} from "./event-stream/shared";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).
@@ -50,6 +54,12 @@ export type SessionRecord = {
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<string, SessionMessageMetadata>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
+  subagentCorrelationKeyByPartId: Map<string, string>;
+  subagentCorrelationKeyBySessionId: Map<string, string>;
+  pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
+  pendingSubagentCorrelationKeys: string[];
+  pendingSubagentSessionsById: Map<string, PendingSubagentSessionBinding>;
+  pendingSubagentPartEmissionsBySessionId: Map<string, PendingSubagentPartEmission[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */

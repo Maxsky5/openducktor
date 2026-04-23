@@ -71,6 +71,13 @@ impl fmt::Display for RuntimeSupportedScope {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeSubagentExecutionMode {
+    Foreground,
+    Background,
+}
+
 pub const REQUIRED_RUNTIME_SUPPORTED_SCOPES: [RuntimeSupportedScope; 3] = [
     RuntimeSupportedScope::Workspace,
     RuntimeSupportedScope::Task,
@@ -93,6 +100,8 @@ pub struct RuntimeCapabilities {
     pub supports_diff: bool,
     pub supports_file_status: bool,
     pub supports_mcp_status: bool,
+    pub supports_subagents: bool,
+    pub supported_subagent_execution_modes: Vec<RuntimeSubagentExecutionMode>,
     pub supported_scopes: Vec<RuntimeSupportedScope>,
     pub provisioning_mode: RuntimeProvisioningMode,
 }
@@ -155,6 +164,21 @@ impl RuntimeDescriptor {
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
+        }
+
+        let has_subagent_execution_modes =
+            !self.capabilities.supported_subagent_execution_modes.is_empty();
+        if self.capabilities.supports_subagents && !has_subagent_execution_modes {
+            errors.push(
+                "supports_subagents requires at least one supported subagent execution mode"
+                    .to_string(),
+            );
+        }
+        if !self.capabilities.supports_subagents && has_subagent_execution_modes {
+            errors.push(
+                "supported subagent execution modes must be empty when supports_subagents is false"
+                    .to_string(),
+            );
         }
 
         errors
@@ -391,6 +415,11 @@ fn opencode_runtime_definition() -> RuntimeDefinition {
                 supports_diff: true,
                 supports_file_status: true,
                 supports_mcp_status: true,
+                supports_subagents: true,
+                supported_subagent_execution_modes: vec![
+                    RuntimeSubagentExecutionMode::Foreground,
+                    RuntimeSubagentExecutionMode::Background,
+                ],
                 supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
                 provisioning_mode: RuntimeProvisioningMode::HostManaged,
             },
@@ -420,7 +449,7 @@ mod tests {
     use super::{
         AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
         RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
-        RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
+        RuntimeSubagentExecutionMode, RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
     use anyhow::Result;
     use std::collections::BTreeMap;
@@ -440,6 +469,11 @@ mod tests {
             supports_diff: true,
             supports_file_status: true,
             supports_mcp_status: true,
+            supports_subagents: true,
+            supported_subagent_execution_modes: vec![
+                RuntimeSubagentExecutionMode::Foreground,
+                RuntimeSubagentExecutionMode::Background,
+            ],
             supported_scopes: scopes,
             provisioning_mode: RuntimeProvisioningMode::HostManaged,
         }
@@ -492,6 +526,14 @@ mod tests {
         );
         assert!(descriptor.capabilities.supports_slash_commands);
         assert!(descriptor.capabilities.supports_file_search);
+        assert!(descriptor.capabilities.supports_subagents);
+        assert_eq!(
+            descriptor.capabilities.supported_subagent_execution_modes,
+            vec![
+                RuntimeSubagentExecutionMode::Foreground,
+                RuntimeSubagentExecutionMode::Background,
+            ]
+        );
         assert!(descriptor
             .read_only_role_blocked_tools
             .contains(&"apply_patch".to_string()));
@@ -549,6 +591,8 @@ mod tests {
                 supports_diff: true,
                 supports_file_status: true,
                 supports_mcp_status: true,
+                supports_subagents: false,
+                supported_subagent_execution_modes: vec![],
                 supported_scopes: vec![RuntimeSupportedScope::Workspace],
                 provisioning_mode: RuntimeProvisioningMode::HostManaged,
             },
@@ -560,6 +604,34 @@ mod tests {
                 "missing mandatory capabilities: supports_odt_workflow_tools, supports_session_fork"
                     .to_string(),
                 "missing required workflow scopes: task, build".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_requires_execution_modes_when_subagents_are_supported() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.capabilities.supported_subagent_execution_modes.clear();
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "supports_subagents requires at least one supported subagent execution mode"
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_rejects_execution_modes_when_subagents_are_disabled() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.capabilities.supports_subagents = false;
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "supported subagent execution modes must be empty when supports_subagents is false"
+                    .to_string()
             ]
         );
     }

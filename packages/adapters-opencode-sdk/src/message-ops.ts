@@ -1,3 +1,4 @@
+import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingPermissionRequest,
   AgentPendingQuestionRequest,
@@ -152,6 +153,207 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
   return typeof time?.completed === "number";
 };
 
+type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
+
+const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
+  const agent = part.agent?.trim() ?? "";
+  const prompt = part.prompt?.trim() ?? "";
+  if (!agent && !prompt) {
+    return undefined;
+  }
+
+  return [agent, prompt].join(":");
+};
+
+const buildPartScopedSubagentCorrelationKey = (
+  part: Pick<MappedSubagentPart, "messageId">,
+  rawPartId: string,
+): string => {
+  return ["part", part.messageId, rawPartId].join(":");
+};
+
+const enqueuePendingSubagentCorrelationKey = (
+  pendingBySignature: Map<string, string[]>,
+  signature: string,
+  correlationKey: string,
+): void => {
+  const pending = pendingBySignature.get(signature) ?? [];
+  if (pending.includes(correlationKey)) {
+    return;
+  }
+
+  pendingBySignature.set(signature, [...pending, correlationKey]);
+};
+
+const dequeuePendingSubagentCorrelationKey = (
+  pendingBySignature: Map<string, string[]>,
+  signature: string,
+): string | undefined => {
+  const pending = pendingBySignature.get(signature);
+  if (!pending || pending.length === 0) {
+    return undefined;
+  }
+
+  const [next, ...rest] = pending;
+  if (rest.length === 0) {
+    pendingBySignature.delete(signature);
+  } else {
+    pendingBySignature.set(signature, rest);
+  }
+
+  return next;
+};
+
+const peekPendingSubagentCorrelationKeys = (
+  pendingBySignature: Map<string, string[]>,
+  signature: string,
+): string[] => {
+  return pendingBySignature.get(signature) ?? [];
+};
+
+const removePendingSubagentCorrelationKey = (
+  pendingBySignature: Map<string, string[]>,
+  correlationKey: string,
+): void => {
+  for (const [signature, pending] of pendingBySignature) {
+    if (!pending.includes(correlationKey)) {
+      continue;
+    }
+
+    const nextPending = pending.filter((entry) => entry !== correlationKey);
+    if (nextPending.length === 0) {
+      pendingBySignature.delete(signature);
+      continue;
+    }
+
+    pendingBySignature.set(signature, nextPending);
+  }
+};
+
+const normalizeHistoryStreamParts = (parts: Part[]): AgentStreamPart[] => {
+  const pendingBySignature = new Map<string, string[]>();
+  const correlationBySessionId = new Map<string, string>();
+  const normalized: AgentStreamPart[] = [];
+
+  for (const rawPart of parts) {
+    const mapped = mapPartToAgentStreamPart(rawPart);
+    if (!mapped || mapped.kind === "text") {
+      continue;
+    }
+
+    if (mapped.kind !== "subagent") {
+      normalized.push(mapped);
+      continue;
+    }
+
+    const signature = buildSubagentSignature(mapped);
+    if (rawPart.type === "subtask") {
+      const correlationKey = buildPartScopedSubagentCorrelationKey(mapped, rawPart.id);
+      if (signature) {
+        enqueuePendingSubagentCorrelationKey(pendingBySignature, signature, correlationKey);
+      }
+      if (mapped.sessionId) {
+        correlationBySessionId.set(mapped.sessionId, correlationKey);
+      }
+
+      normalized.push({
+        ...mapped,
+        correlationKey,
+      });
+      continue;
+    }
+
+    const sessionCorrelationKey = mapped.sessionId
+      ? correlationBySessionId.get(mapped.sessionId)
+      : undefined;
+    const pendingCorrelationKeys = signature
+      ? peekPendingSubagentCorrelationKeys(pendingBySignature, signature)
+      : [];
+    const queuedCorrelationKey =
+      pendingCorrelationKeys.length === 1 && signature
+        ? dequeuePendingSubagentCorrelationKey(pendingBySignature, signature)
+        : undefined;
+    const correlationKey =
+      sessionCorrelationKey ??
+      queuedCorrelationKey ??
+      (mapped.sessionId
+        ? ["session", mapped.messageId, mapped.sessionId].join(":")
+        : buildPartScopedSubagentCorrelationKey(mapped, rawPart.id));
+
+    if (mapped.sessionId) {
+      correlationBySessionId.set(mapped.sessionId, correlationKey);
+      removePendingSubagentCorrelationKey(pendingBySignature, correlationKey);
+    }
+
+    normalized.push({
+      ...mapped,
+      correlationKey,
+    });
+  }
+
+  return normalized;
+};
+
+const seedSubagentCorrelationFromHistory = (
+  session: Pick<
+    SessionRecord,
+    | "subagentCorrelationKeyByPartId"
+    | "subagentCorrelationKeyBySessionId"
+    | "pendingSubagentCorrelationKeysBySignature"
+    | "pendingSubagentCorrelationKeys"
+  >,
+  parts: AgentStreamPart[],
+): void => {
+  for (const part of parts) {
+    if (part.kind !== "subagent") {
+      continue;
+    }
+
+    session.subagentCorrelationKeyByPartId.set(part.partId, part.correlationKey);
+    if (part.sessionId) {
+      session.subagentCorrelationKeyBySessionId.set(part.sessionId, part.correlationKey);
+    }
+
+    const signature = buildSubagentSignature(part);
+    if (!signature) {
+      continue;
+    }
+
+    if (part.status === "pending" || part.status === "running") {
+      if (part.sessionId) {
+        removePendingSubagentCorrelationKey(
+          session.pendingSubagentCorrelationKeysBySignature,
+          part.correlationKey,
+        );
+        const pendingIndex = session.pendingSubagentCorrelationKeys.indexOf(part.correlationKey);
+        if (pendingIndex >= 0) {
+          session.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
+        }
+        continue;
+      }
+
+      if (!session.pendingSubagentCorrelationKeys.includes(part.correlationKey)) {
+        session.pendingSubagentCorrelationKeys.push(part.correlationKey);
+      }
+      enqueuePendingSubagentCorrelationKey(
+        session.pendingSubagentCorrelationKeysBySignature,
+        signature,
+        part.correlationKey,
+      );
+      continue;
+    }
+
+    removePendingSubagentCorrelationKey(
+      session.pendingSubagentCorrelationKeysBySignature,
+      part.correlationKey,
+    );
+    const pendingIndex = session.pendingSubagentCorrelationKeys.indexOf(part.correlationKey);
+    if (pendingIndex >= 0) {
+      session.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
+    }
+  }
+};
+
 export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,
@@ -173,7 +375,7 @@ export const loadSessionHistory = async (
     ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
   });
   const data = unwrapData(response, "load session messages");
-  const entries = data
+  const normalizedEntries = data
     .map((entry) => {
       const infoText = readTextFromMessageInfo(entry.info);
       const displayParts =
@@ -198,9 +400,6 @@ export const loadSessionHistory = async (
       const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : infoText;
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
       const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
-      const parts = entry.parts
-        .map(mapPartToAgentStreamPart)
-        .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
       const timestamp = toIsoFromEpoch(entry.info.time.created, now);
       const model = readMessageModelSelection(entry.info);
       const infoRecord = asRecord(entry.info);
@@ -216,7 +415,7 @@ export const loadSessionHistory = async (
         ...(model ? { model } : {}),
         ...(parentId ? { parentId } : {}),
         ...(entry.info.role === "user" ? { displayParts } : {}),
-        parts,
+        rawParts: entry.parts,
       };
     })
     .sort((a, b) => {
@@ -227,6 +426,27 @@ export const loadSessionHistory = async (
       }
       return aTime - bTime;
     });
+
+  const assistantNormalizedPartsByMessageId = new Map(
+    normalizeHistoryStreamParts(
+      normalizedEntries.flatMap((item) =>
+        item.entry.info.role === "assistant" ? item.rawParts : [],
+      ),
+    ).reduce<Map<string, AgentStreamPart[]>>((byMessageId, part) => {
+      const existing = byMessageId.get(part.messageId) ?? [];
+      existing.push(part);
+      byMessageId.set(part.messageId, existing);
+      return byMessageId;
+    }, new Map()),
+  );
+
+  const entries = normalizedEntries.map((item) => ({
+    ...item,
+    parts:
+      item.entry.info.role === "assistant"
+        ? (assistantNormalizedPartsByMessageId.get(item.entry.info.id) ?? [])
+        : normalizeHistoryStreamParts(item.rawParts),
+  }));
 
   const pendingAssistantReverseIndex = [...entries]
     .reverse()
@@ -261,6 +481,36 @@ export const loadSessionHistory = async (
       parts: item.parts,
     };
   });
+};
+
+export const loadAndSeedSessionHistory = async (
+  createClient: ClientFactory,
+  now: () => string,
+  input: {
+    runtimeEndpoint: string;
+    workingDirectory: string;
+    externalSessionId: string;
+    limit?: number;
+    preservedDisplayPartsByMessageId?: Map<string, AgentUserMessageDisplayPart[]>;
+    session: Pick<
+      SessionRecord,
+      | "subagentCorrelationKeyByPartId"
+      | "subagentCorrelationKeyBySessionId"
+      | "pendingSubagentCorrelationKeysBySignature"
+      | "pendingSubagentCorrelationKeys"
+    >;
+  },
+): Promise<AgentSessionHistoryMessage[]> => {
+  const history = await loadSessionHistory(createClient, now, input);
+
+  for (const entry of history) {
+    if (entry.role !== "assistant") {
+      continue;
+    }
+    seedSubagentCorrelationFromHistory(input.session, entry.parts);
+  }
+
+  return history;
 };
 
 export const loadSessionTodos = async (

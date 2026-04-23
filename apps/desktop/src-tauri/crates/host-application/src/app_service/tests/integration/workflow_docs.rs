@@ -2455,6 +2455,49 @@ fn agent_session_upsert_accepts_working_directory_inside_default_workspace_workt
 }
 
 #[test]
+fn agent_session_upsert_accepts_working_directory_inside_legacy_repo_worktree_base() -> Result<()> {
+    let _env_lock = lock_env();
+    let repo_root = unique_temp_path("session-upsert-legacy-worktree-base");
+    let home = repo_root.join("home");
+    fs::create_dir_all(&home)?;
+    let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+    let repo = repo_root.join("repo");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    let legacy_worktree = host_infra_system::resolve_default_worktree_base_dir(Path::new(repo_path.as_str()))?
+        .join("task-1");
+    fs::create_dir_all(&legacy_worktree)?;
+
+    let mut session = make_session("task-1", "session-legacy-worktree");
+    session.working_directory = legacy_worktree.to_string_lossy().to_string();
+
+    let upserted = service.agent_session_upsert(repo_path.as_str(), "task-1", session)?;
+    assert!(upserted);
+    assert_eq!(
+        task_state
+            .lock()
+            .expect("task lock poisoned")
+            .upserted_sessions
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
 fn agent_session_upsert_rejects_unknown_role() -> Result<()> {
     let repo_root = unique_temp_path("session-upsert-invalid-role");
     let repo = repo_root.join("repo");

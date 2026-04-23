@@ -51,25 +51,6 @@ const PATH_DISPLAY_TOOL_NAMES = new Set([
   "look_at",
 ]);
 
-const REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES = new Set(["task", "subtask", "delegate"]);
-
-export const extractSubagentSessionId = (meta: ToolMeta): string | null => {
-  const sessionId = meta.metadata?.sessionId;
-  if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
-    return null;
-  }
-
-  const lowerTool = meta.tool.toLowerCase();
-  if (
-    REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES.has(lowerTool) ||
-    Array.isArray(meta.metadata?.summary)
-  ) {
-    return sessionId.trim();
-  }
-
-  return null;
-};
-
 const summarizeSearchToolInput = (
   tool: string,
   input: Record<string, unknown> | undefined,
@@ -103,18 +84,6 @@ const summarizeSearchToolInput = (
   return null;
 };
 
-const getTaskSummary = (meta: ToolMeta): string | null => {
-  const summary = meta.metadata?.summary;
-  if (Array.isArray(summary)) {
-    return `${summary.length} subagent tool step${summary.length === 1 ? "" : "s"}`;
-  }
-  const sessionId = extractSubagentSessionId(meta);
-  if (sessionId) {
-    return `Subagent session ${sessionId.slice(0, 8)}`;
-  }
-  return null;
-};
-
 const parseStructuredOutputSummary = (output: string): string | null => {
   const trimmed = output.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
@@ -124,19 +93,13 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (Array.isArray(parsed)) {
-      return parsed.length > 0
-        ? `${parsed.length} subagent result${parsed.length === 1 ? "" : "s"}`
-        : null;
+      return null;
     }
     if (!parsed || typeof parsed !== "object") {
       return null;
     }
 
     const record = parsed as Record<string, unknown>;
-    if (Array.isArray(record.summary)) {
-      return `${record.summary.length} subagent result${record.summary.length === 1 ? "" : "s"}`;
-    }
-
     if (typeof record.message === "string" && record.message.trim().length > 0) {
       return compactText(record.message, 160);
     }
@@ -248,13 +211,6 @@ export const buildToolSummary = (
     }
   }
 
-  if (lowerTool === "task") {
-    const taskSummary = getTaskSummary(meta);
-    if (taskSummary) {
-      return taskSummary;
-    }
-  }
-
   if (meta.status === "error" && hasNonEmptyText(meta.error)) {
     return compactText(meta.error, 220);
   }
@@ -298,11 +254,9 @@ export const buildToolSummary = (
   }
 
   if (!OUTPUT_IGNORED_TOOL_NAMES.has(lowerTool) && hasNonEmptyText(meta.output)) {
-    if (REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES.has(lowerTool)) {
-      const structured = parseStructuredOutputSummary(meta.output);
-      if (structured) {
-        return structured;
-      }
+    const structured = parseStructuredOutputSummary(meta.output);
+    if (structured) {
+      return structured;
     }
     return compactText(meta.output, 160);
   }

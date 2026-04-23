@@ -43,7 +43,7 @@ type AgentChatMessageCardViewModel = {
   isToolMessage: boolean;
   isWorkflowToolMessage: boolean;
   isRegularToolMessage: boolean;
-  isSubtaskMessage: boolean;
+  isSubagentMessage: boolean;
   isSessionNoticeMessage: boolean;
   isSystemPromptMessage: boolean;
   isRichCardMessage: boolean;
@@ -85,7 +85,7 @@ const toArticleClassName = (
   isQueuedUserMessage: boolean,
   isToolMessage: boolean,
   isWorkflowToolMessage: boolean,
-  isSubtaskMessage: boolean,
+  isSubagentMessage: boolean,
   isSessionNoticeMessage: boolean,
   isSystemPromptMessage: boolean,
 ): string => {
@@ -120,8 +120,8 @@ const toArticleClassName = (
                 ? "rounded-md border border-info-border bg-info-surface px-3 py-2 my-2 text-info-surface-foreground"
                 : "rounded-md border border-pending-border bg-pending-surface px-3 py-2 my-2 text-pending-surface-foreground"
         : "border-none bg-transparent px-0 py-0 text-foreground"
-      : isSubtaskMessage
-        ? "rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-warning-surface-foreground"
+      : isSubagentMessage
+        ? "rounded-md border border-border bg-card px-3 py-2 text-foreground shadow-sm my-2"
         : isSystemPromptMessage
           ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
           : message.role === "assistant"
@@ -150,12 +150,12 @@ export const buildAgentChatMessageCardViewModel = ({
     meta?.kind === "tool" &&
     isOdtWorkflowMutationToolName(meta.tool, workflowToolAliasesByCanonical);
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
-  const isSubtaskMessage = meta?.kind === "subtask";
+  const isSubagentMessage = meta?.kind === "subagent";
   const isSessionNoticeMessage = meta?.kind === "session_notice";
   const isSystemPromptMessage =
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage =
-    isToolMessage || isSubtaskMessage || isSessionNoticeMessage || isSystemPromptMessage;
+    isToolMessage || isSubagentMessage || isSessionNoticeMessage || isSystemPromptMessage;
   const assistantRole = assistantRoleFromMessage(message, sessionRole);
   const assistantAccentColor = resolveAssistantAgentColor(message, sessionAgentColors);
   const userAccentColor = resolveUserAgentColor(message, sessionAgentColors);
@@ -167,7 +167,8 @@ export const buildAgentChatMessageCardViewModel = ({
     !isRegularToolMessage &&
     !isReasoningMessage &&
     !isAssistantMessage &&
-    !isSessionNoticeMessage;
+    !isSessionNoticeMessage &&
+    !isSubagentMessage;
 
   return {
     timeLabel,
@@ -182,7 +183,7 @@ export const buildAgentChatMessageCardViewModel = ({
     isToolMessage,
     isWorkflowToolMessage,
     isRegularToolMessage,
-    isSubtaskMessage,
+    isSubagentMessage,
     isSessionNoticeMessage,
     isSystemPromptMessage,
     isRichCardMessage,
@@ -193,7 +194,7 @@ export const buildAgentChatMessageCardViewModel = ({
       isQueuedUserMessage,
       isToolMessage,
       isWorkflowToolMessage,
-      isSubtaskMessage,
+      isSubagentMessage,
       isSessionNoticeMessage,
       isSystemPromptMessage,
     ),

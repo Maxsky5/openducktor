@@ -75,4 +75,18 @@ describe("createAgentSessionsStore activity snapshots", () => {
       hasPendingQuestions: false,
     });
   });
+
+  test("omits transcript-only sessions from activity snapshots", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      sessionId: "session-1",
+      taskId: "task-1",
+      status: "running",
+      purpose: "transcript",
+    });
+
+    store.setSessionsById({ [session.sessionId]: session });
+
+    expect(store.getActivitySessionsSnapshot()).toEqual([]);
+  });
 });

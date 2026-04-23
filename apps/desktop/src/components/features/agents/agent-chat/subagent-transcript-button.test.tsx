@@ -1,52 +1,36 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
-import { extractSubagentSessionId } from "./tool-summary";
 
-const createToolMeta = (overrides: Partial<ToolMeta> = {}): ToolMeta => ({
-  kind: "tool",
+const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta => ({
+  kind: "subagent",
   partId: "part-1",
-  callId: "call-1",
-  tool: "subtask",
+  correlationKey: "session:assistant-1:session-child-1",
   status: "completed",
-  metadata: {
-    sessionId: "session-child-1",
-  },
+  agent: "build",
+  description: "Did work",
+  sessionId: "session-child-1",
   ...overrides,
 });
 
 describe("SubagentTranscriptButton", () => {
-  test("extracts only subagent-related session ids", () => {
-    expect(extractSubagentSessionId(createToolMeta())).toBe("session-child-1");
-    expect(
-      extractSubagentSessionId(
-        createToolMeta({
-          tool: "read",
-        }),
-      ),
-    ).toBeNull();
-    expect(
-      extractSubagentSessionId(
-        createToolMeta({
-          metadata: {},
-        }),
-      ),
-    ).toBeNull();
-  });
-
-  test("opens a read-only session view request for supported subagent tool calls", () => {
+  test("opens a read-only session view request for subagent cards", () => {
     const onOpenTranscript = mock(() => {});
 
     render(
       <SubagentTranscriptButton
         taskId="task-1"
-        meta={createToolMeta()}
+        meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "View subagent activity" }));
+    expect(screen.getByRole("button", { name: "View subagent session" }).textContent).toContain(
+      "Subagent session",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
       taskId: "task-1",
@@ -60,22 +44,25 @@ describe("SubagentTranscriptButton", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
         taskId={null}
-        meta={createToolMeta()}
+        meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
+
+    const metaWithoutSessionId = createSubagentMeta();
+    delete metaWithoutSessionId.sessionId;
 
     rerender(
       <SubagentTranscriptButton
         taskId="task-1"
-        meta={createToolMeta({ tool: "read" })}
+        meta={metaWithoutSessionId}
         onOpenTranscript={() => {}}
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent activity" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
   });
 
   test("prevents parent summary clicks when opening the session view", () => {
@@ -87,17 +74,32 @@ describe("SubagentTranscriptButton", () => {
       render(
         <SubagentTranscriptButton
           taskId="task-1"
-          meta={createToolMeta()}
+          meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "View subagent activity" }));
+      fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
       expect(onOpenTranscript).toHaveBeenCalledTimes(1);
       expect(onParentClick).not.toHaveBeenCalled();
     } finally {
       document.body.removeEventListener("click", onParentClick);
     }
+  });
+
+  test("renders the transcript action as a labeled outline button", () => {
+    render(
+      <SubagentTranscriptButton
+        taskId="task-1"
+        meta={createSubagentMeta()}
+        onOpenTranscript={() => {}}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "View subagent session" });
+    expect(button.className).toContain("shrink-0");
+    expect(button.getAttribute("title")).toBe("View subagent session");
+    expect(button.textContent).toContain("Subagent session");
   });
 });

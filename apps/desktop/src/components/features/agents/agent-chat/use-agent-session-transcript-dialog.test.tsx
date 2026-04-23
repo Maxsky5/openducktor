@@ -11,6 +11,8 @@ let actualOperationsHost: Awaited<typeof import("@/state/operations/host")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 let tasks: TaskCard[] = [];
+const removeAgentSession = mock(async () => {});
+let agentSessionState: { purpose?: "primary" | "transcript" } | null = null;
 let latestDialogProps: {
   taskId: string;
   sessionId: string | null;
@@ -63,6 +65,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
   beforeEach(() => {
     latestDialogProps = null;
     agentSessionsListBulk.mockClear();
+    removeAgentSession.mockClear();
+    agentSessionState = null;
     tasks = [
       createTask({
         id: "task-parent",
@@ -92,8 +96,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
         hydrateRequestedTaskSessionHistory: async () => {},
         readSessionModelCatalog: async () => ({ profiles: [], models: [] }),
         readSessionTodos: async () => [],
+        removeAgentSession,
       }),
-      useAgentSession: () => null,
+      useAgentSession: () => agentSessionState,
       useChecksState: () => ({
         runtimeHealthByRuntime: {},
         isLoadingChecks: false,
@@ -260,5 +265,93 @@ describe("AgentSessionTranscriptDialogHost", () => {
       "task-child",
       "task-parent",
     ]);
+  });
+
+  test("removes transcript-only sessions when the dialog closes", async () => {
+    agentSessionState = { purpose: "transcript" };
+
+    const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
+      "./use-agent-session-transcript-dialog"
+    );
+
+    function DialogControls(): ReactElement {
+      const { openSessionTranscript, closeSessionTranscript } = useAgentSessionTranscriptDialog();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              openSessionTranscript({
+                taskId: "task-parent",
+                sessionId: "session-child-1",
+              });
+            }}
+          >
+            Open
+          </button>
+          <button type="button" onClick={() => closeSessionTranscript()}>
+            Close
+          </button>
+        </>
+      );
+    }
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryProvider useIsolatedClient>
+        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+      </QueryProvider>
+    );
+
+    render(<DialogControls />, { wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    await waitFor(() => expect(latestDialogProps?.sessionId).toBe("session-child-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(removeAgentSession).toHaveBeenCalledWith("session-child-1"));
+  });
+
+  test("keeps regular sessions when the dialog closes", async () => {
+    agentSessionState = { purpose: "primary" };
+
+    const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
+      "./use-agent-session-transcript-dialog"
+    );
+
+    function DialogControls(): ReactElement {
+      const { openSessionTranscript, closeSessionTranscript } = useAgentSessionTranscriptDialog();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              openSessionTranscript({
+                taskId: "task-parent",
+                sessionId: "session-build-1",
+              });
+            }}
+          >
+            Open
+          </button>
+          <button type="button" onClick={() => closeSessionTranscript()}>
+            Close
+          </button>
+        </>
+      );
+    }
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryProvider useIsolatedClient>
+        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+      </QueryProvider>
+    );
+
+    render(<DialogControls />, { wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    await waitFor(() => expect(latestDialogProps?.sessionId).toBe("session-build-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(removeAgentSession).not.toHaveBeenCalled());
   });
 });

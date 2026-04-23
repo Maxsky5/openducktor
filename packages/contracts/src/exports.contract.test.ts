@@ -91,6 +91,7 @@ import type {
   RuntimeKind,
   RuntimeProvisioningMode,
   RuntimeRef,
+  RuntimeSubagentExecutionMode,
   RuntimeSupportedScope,
   SettingsSnapshot,
   SlashCommandCatalog,
@@ -295,10 +296,13 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "getMissingRequiredRuntimeSupportedScopes",
   "runtimeRequiredScopesByRole",
   "runtimeRefSchema",
+  "runtimeSubagentExecutionModeSchema",
+  "runtimeSubagentExecutionModeValues",
   "requiredRuntimeSupportedScopes",
   "runtimeSupportedScopeSchema",
   "runtimeSupportedScopeValues",
   "runtimeSupportedScopesSchema",
+  "runtimeSupportedSubagentExecutionModesSchema",
   "runtimeTransportSchema",
   "searchTasksResultSchema",
   "SearchTasksInputSchema",
@@ -454,6 +458,7 @@ type ExportedTypeContract = {
   RuntimeKind: RuntimeKind;
   RuntimeProvisioningMode: RuntimeProvisioningMode;
   RuntimeRef: RuntimeRef;
+  RuntimeSubagentExecutionMode: RuntimeSubagentExecutionMode;
   RuntimeSupportedScope: RuntimeSupportedScope;
   SettingsSnapshot: SettingsSnapshot;
   SystemCheck: SystemCheck;

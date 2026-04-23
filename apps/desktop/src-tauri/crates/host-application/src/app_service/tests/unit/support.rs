@@ -6,8 +6,9 @@ pub(super) use host_domain::{
     DevServerScriptState, DevServerScriptStatus, GitBranch, IssueType, PlanSubtaskInput,
     PullRequestRecord, QaWorkflowVerdict, RuntimeCapabilities, RuntimeDefinition,
     RuntimeDescriptor, RuntimeHealth, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole,
-    RuntimeStartupReadinessConfig, RuntimeSupportedScope, SystemOpenInToolId, SystemOpenInToolInfo,
-    TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
+    RuntimeStartupReadinessConfig, RuntimeSubagentExecutionMode, RuntimeSupportedScope,
+    SystemOpenInToolId, SystemOpenInToolInfo, TaskAction, TaskCard, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 pub(super) use host_infra_system::{
     AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
@@ -412,6 +413,11 @@ pub(super) fn test_runtime_definition_with_provisioning(
                 supports_diff: true,
                 supports_file_status: true,
                 supports_mcp_status: true,
+                supports_subagents: true,
+                supported_subagent_execution_modes: vec![
+                    RuntimeSubagentExecutionMode::Foreground,
+                    RuntimeSubagentExecutionMode::Background,
+                ],
                 supported_scopes: vec![
                     RuntimeSupportedScope::Workspace,
                     RuntimeSupportedScope::Task,

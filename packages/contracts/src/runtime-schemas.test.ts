@@ -694,6 +694,11 @@ describe("runtime schemas", () => {
     });
     expect(parsed.descriptor.capabilities.supportsSlashCommands).toBe(true);
     expect(parsed.descriptor.capabilities.supportsFileSearch).toBe(true);
+    expect(parsed.descriptor.capabilities.supportsSubagents).toBe(true);
+    expect(parsed.descriptor.capabilities.supportedSubagentExecutionModes).toEqual([
+      "foreground",
+      "background",
+    ]);
     expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
     expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
     expect(parsed.descriptor.workflowToolAliasesByCanonical.odt_set_spec).toEqual([
@@ -808,6 +813,34 @@ describe("runtime schemas", () => {
       type: "stdio",
       workingDirectory: "/repo",
     });
+  });
+
+  test("runtime capabilities require execution modes only when subagents are supported", () => {
+    expect(() =>
+      runtimeDescriptorSchema.parse({
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          supportsSubagents: true,
+          supportedSubagentExecutionModes: [],
+        },
+      }),
+    ).toThrow(
+      "Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
+    );
+
+    expect(() =>
+      runtimeDescriptorSchema.parse({
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          supportsSubagents: false,
+          supportedSubagentExecutionModes: ["foreground"],
+        },
+      }),
+    ).toThrow(
+      "Runtime descriptors that do not support subagents must not declare subagent execution modes.",
+    );
   });
 
   test("runtime connection schema rejects malformed stdio payloads", () => {

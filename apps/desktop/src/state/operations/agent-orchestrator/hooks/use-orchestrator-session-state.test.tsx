@@ -181,4 +181,73 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       await harness.unmount();
     }
   });
+
+  test("writes and deletes assistant turn timing through the field bridges", async () => {
+    const harness = createHookHarness({
+      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      tasks: [taskFixture],
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run((hook) => {
+        hook.refBridges.turnUserAnchorAtBySessionRef.current["session-1"] = 111;
+        hook.refBridges.previousAssistantCompletedAtBySessionRef.current["session-1"] = 222;
+      });
+
+      expect(harness.getLatest().refBridges.assistantTurnTimingBySessionRef.current).toEqual({
+        "session-1": {
+          userAnchorAtMs: 111,
+          previousAssistantCompletedAtMs: 222,
+        },
+      });
+
+      await harness.run((hook) => {
+        delete hook.refBridges.turnUserAnchorAtBySessionRef.current["session-1"];
+      });
+
+      expect(harness.getLatest().refBridges.assistantTurnTimingBySessionRef.current).toEqual({
+        "session-1": {
+          previousAssistantCompletedAtMs: 222,
+        },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("prunes empty assistant timing sessions after wholesale field replacement", async () => {
+    const harness = createHookHarness({
+      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      tasks: [taskFixture],
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run((hook) => {
+        hook.refBridges.turnUserAnchorAtBySessionRef.current["session-1"] = 111;
+        hook.refBridges.previousAssistantCompletedAtBySessionRef.current["session-1"] = 222;
+      });
+
+      await harness.run((hook) => {
+        hook.refBridges.turnUserAnchorAtBySessionRef.current = {};
+      });
+
+      expect(harness.getLatest().refBridges.assistantTurnTimingBySessionRef.current).toEqual({
+        "session-1": {
+          previousAssistantCompletedAtMs: 222,
+        },
+      });
+
+      await harness.run((hook) => {
+        hook.refBridges.previousAssistantCompletedAtBySessionRef.current = {};
+      });
+
+      expect(harness.getLatest().refBridges.assistantTurnTimingBySessionRef.current).toEqual({});
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

@@ -47,6 +47,7 @@ const toFallbackPersistedRecord = ({
 });
 
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
+  isOpen: boolean;
   activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   sessionId: string | null;
@@ -62,6 +63,7 @@ type UseReadonlySessionTranscriptSurfaceModelArgs = {
 const SYNTHETIC_SESSION_STARTED_AT = "1970-01-01T00:00:00.000Z";
 
 export function useReadonlySessionTranscriptSurfaceModel({
+  isOpen,
   activeWorkspace,
   taskId,
   sessionId,
@@ -180,7 +182,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const historyPreludeMode = usesSyntheticRequestedRecord
     ? SYNTHETIC_HISTORY_PRELUDE_MODE
     : undefined;
-  const allowLiveSessionResume = usesSyntheticRequestedRecord ? false : undefined;
   const hasPersistedSessionRecord = useMemo(
     () =>
       Boolean(
@@ -191,8 +192,20 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const [requestedHistoryHydrationFailed, setRequestedHistoryHydrationFailed] = useState(false);
 
   useEffect(() => {
-    if (!activeWorkspace || !taskId || !sessionId || liveSession || !hasPersistedSessionRecord) {
-      return;
+    let cancelled = false;
+
+    if (
+      !isOpen ||
+      !activeWorkspace ||
+      !taskId ||
+      !sessionId ||
+      !hasPersistedSessionRecord ||
+      isResolvingRequestedSession
+    ) {
+      setRequestedHistoryHydrationFailed(false);
+      return () => {
+        cancelled = true;
+      };
     }
 
     setRequestedHistoryHydrationFailed(false);
@@ -200,20 +213,26 @@ export function useReadonlySessionTranscriptSurfaceModel({
       taskId,
       sessionId,
       ...(historyPreludeMode ? { historyPreludeMode } : {}),
-      ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
       ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
     }).catch((error) => {
+      if (cancelled) {
+        return;
+      }
       console.warn("Failed to hydrate read-only session history", error);
       setRequestedHistoryHydrationFailed(true);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
+    isOpen,
     activeWorkspace,
     effectivePersistedRecords,
     hasPersistedSessionRecord,
     hydrateRequestedTaskSessionHistory,
     historyPreludeMode,
-    allowLiveSessionResume,
-    liveSession,
+    isResolvingRequestedSession,
     sessionId,
     taskId,
   ]);
@@ -227,18 +246,21 @@ export function useReadonlySessionTranscriptSurfaceModel({
       }),
     [runtimeAttachmentSources, runtimeData.session, workspaceRepoPath],
   );
+  const hydrationActiveWorkspace = isOpen ? activeWorkspace : null;
+  const hydrationActiveTaskId = isOpen ? taskId : "";
+  const hydrationActiveSession = isOpen ? runtimeData.session : null;
+  const hydrationRuntimeAttachmentCandidates = isOpen ? runtimeAttachmentCandidates : [];
 
   const hydration = useAgentChatSessionHydration({
-    activeWorkspace,
-    activeTaskId: taskId,
-    activeSession: runtimeData.session,
+    activeWorkspace: hydrationActiveWorkspace,
+    activeTaskId: hydrationActiveTaskId,
+    activeSession: hydrationActiveSession,
     ...(historyPreludeMode ? { historyPreludeMode } : {}),
-    ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
     ...(effectivePersistedRecords ? { persistedRecords: effectivePersistedRecords } : {}),
     repoReadinessState: runtimeReadiness.readinessState,
     ensureSessionReadyForView,
     refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
-    runtimeAttachmentCandidates,
+    runtimeAttachmentCandidates: hydrationRuntimeAttachmentCandidates,
   });
 
   const isSessionWorking =

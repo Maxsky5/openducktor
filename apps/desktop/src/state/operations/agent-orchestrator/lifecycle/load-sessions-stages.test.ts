@@ -241,6 +241,319 @@ describe("load-sessions-stages", () => {
     });
   });
 
+  test("absorbs current subagent rows when hydrated history has the same child session id", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Finished A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-completed",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-200:child-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-running",
+            correlationKey: "session:msg-200:child-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      role: "system",
+      content: "Subagent (build): Finished A",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "completed",
+        sessionId: "child-a",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+  });
+
+  test("absorbs a unique current completed session row when hydrated history still has the unresolved part row", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (build): Finished A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-completed",
+            correlationKey: "session:msg-201:child-a",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      role: "system",
+      content: "Subagent (build): Finished A",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "completed",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Finished A",
+        sessionId: "child-a",
+        startedAtMs: 100,
+        endedAtMs: 300,
+      },
+    });
+  });
+
+  test("absorbs a unique current cancelled session row when hydrated history still has the unresolved part row", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (build): Cancelled A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-cancelled",
+            correlationKey: "session:msg-201:child-a",
+            status: "cancelled",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Cancelled A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 280,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      role: "system",
+      content: "Subagent (build): Cancelled A",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "cancelled",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Cancelled A",
+        sessionId: "child-a",
+        startedAtMs: 100,
+        endedAtMs: 280,
+      },
+    });
+  });
+
+  test("keeps same-prompt current session rows separate when the hydration fallback is ambiguous", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (build): Starting A",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Starting A",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (build): Finished A",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-completed",
+            correlationKey: "session:msg-201:child-a",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished A",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+        {
+          id: "subagent:session:msg-202:child-b",
+          role: "system",
+          content: "Subagent (build): Finished B",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-b-completed",
+            correlationKey: "session:msg-202:child-b",
+            status: "completed",
+            agent: "build",
+            prompt: "Inspect repo",
+            description: "Finished B",
+            sessionId: "child-b",
+            startedAtMs: 110,
+            endedAtMs: 320,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(3);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "running",
+      },
+    });
+  });
+
+  test("does not absorb descriptor-less rows through the hydration fallback", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "subagent:part:msg-200:subtask-a",
+          role: "system",
+          content: "Subagent (subagent): Subagent activity",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-a-running",
+            correlationKey: "part:msg-200:subtask-a",
+            status: "running",
+            startedAtMs: 100,
+          },
+        },
+      ],
+      [
+        {
+          id: "subagent:session:msg-201:child-a",
+          role: "system",
+          content: "Subagent (subagent): Session child-a",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "session-a-completed",
+            correlationKey: "session:msg-201:child-a",
+            status: "completed",
+            sessionId: "child-a",
+            startedAtMs: 100,
+            endedAtMs: 300,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(2);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "subagent:part:msg-200:subtask-a",
+      meta: {
+        kind: "subagent",
+        correlationKey: "part:msg-200:subtask-a",
+        status: "running",
+      },
+    });
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 1)).toMatchObject({
+      id: "subagent:session:msg-201:child-a",
+      meta: {
+        kind: "subagent",
+        correlationKey: "session:msg-201:child-a",
+        status: "completed",
+        sessionId: "child-a",
+      },
+    });
+  });
+
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
     const existingSession = createSession({
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
@@ -309,6 +622,25 @@ describe("load-sessions-stages", () => {
     expect(nextSession?.pendingQuestions).toEqual(existingSession.pendingQuestions);
   });
 
+  test("preserves transcript-purpose sessions on non-requested loads", async () => {
+    const existingSession = createSession({ purpose: "transcript" });
+    const stateHarness = createStateHarness({ "session-1": existingSession });
+
+    await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        mode: "bootstrap",
+        shouldHydrateRequestedSession: false,
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [createRecord()],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["session-1"]?.purpose).toBe("transcript");
+  });
+
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
     const stateHarness = createStateHarness({ "session-1": createSession() });
     let promptLoads = 0;
@@ -319,6 +651,15 @@ describe("load-sessions-stages", () => {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
           loadSessionHistory: async () => [],
+          attachSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
           resumeSession: async (input) => ({
             sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
@@ -371,6 +712,15 @@ describe("load-sessions-stages", () => {
             historyLoads += 1;
             return [];
           },
+          attachSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
           resumeSession: async (input) => ({
             sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
@@ -424,6 +774,15 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
@@ -471,6 +830,15 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
@@ -527,6 +895,15 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
@@ -633,6 +1010,15 @@ describe("load-sessions-stages", () => {
       adapter: {
         hasSession: () => false,
         loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
         resumeSession: async (input) => ({
           sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,

@@ -344,6 +344,15 @@ describe("repo-session-hydration-service", () => {
               adapter: {
                 hasSession: () => false,
                 loadSessionHistory: async () => [],
+                attachSession: async (input) => ({
+                  sessionId: input.sessionId,
+                  externalSessionId: input.externalSessionId,
+                  role: input.role,
+                  scenario: input.scenario,
+                  startedAt: "2026-02-22T08:00:00.000Z",
+                  status: "idle",
+                  runtimeKind: input.runtimeKind,
+                }),
                 resumeSession: async (input) => ({
                   sessionId: input.sessionId,
                   externalSessionId: input.externalSessionId,

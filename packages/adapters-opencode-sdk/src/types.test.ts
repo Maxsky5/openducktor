@@ -56,6 +56,12 @@ describe("types", () => {
       messageRoleById: new Map(),
       messageMetadataById: new Map(),
       pendingDeltasByPartId: new Map(),
+      subagentCorrelationKeyByPartId: new Map(),
+      subagentCorrelationKeyBySessionId: new Map(),
+      pendingSubagentCorrelationKeysBySignature: new Map(),
+      pendingSubagentCorrelationKeys: [],
+      pendingSubagentSessionsById: new Map(),
+      pendingSubagentPartEmissionsBySessionId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };
     const options: OpencodeSdkAdapterOptions = {

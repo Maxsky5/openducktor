@@ -41,6 +41,8 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
   supportsDiff: true,
   supportsFileStatus: true,
   supportsMcpStatus: true,
+  supportsSubagents: true,
+  supportedSubagentExecutionModes: ["foreground", "background"],
   supportedScopes: requiredRuntimeSupportedScopes,
   provisioningMode: "host_managed",
 } as const satisfies RuntimeCapabilities;

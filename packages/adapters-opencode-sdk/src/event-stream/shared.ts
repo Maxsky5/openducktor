@@ -9,6 +9,16 @@ export type PendingPartDelta = {
   delta: string;
 };
 
+export type PendingSubagentPartEmission = {
+  part: Part;
+  roleHint?: string;
+};
+
+export type PendingSubagentSessionBinding = {
+  createdAtMs?: number;
+  arrivalOrder: number;
+};
+
 export type EventStreamContext = {
   sessionId: string;
   externalSessionId: string;
@@ -22,9 +32,42 @@ export type EventStreamState = {
   partsById: Map<string, Part>;
   messageRoleById: Map<string, string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
+  subagentCorrelationKeyByPartId: Map<string, string>;
+  subagentCorrelationKeyBySessionId: Map<string, string>;
+  pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
+  pendingSubagentCorrelationKeys: string[];
+  pendingSubagentSessionsById: Map<string, PendingSubagentSessionBinding>;
+  pendingSubagentPartEmissionsBySessionId: Map<string, PendingSubagentPartEmission[]>;
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
+
+export const removePendingSubagentCorrelationKey = (
+  state: Pick<
+    EventStreamState,
+    "pendingSubagentCorrelationKeys" | "pendingSubagentCorrelationKeysBySignature"
+  >,
+  correlationKey: string,
+): void => {
+  const pendingIndex = state.pendingSubagentCorrelationKeys.indexOf(correlationKey);
+  if (pendingIndex >= 0) {
+    state.pendingSubagentCorrelationKeys.splice(pendingIndex, 1);
+  }
+
+  for (const [signature, pending] of state.pendingSubagentCorrelationKeysBySignature) {
+    if (!pending.includes(correlationKey)) {
+      continue;
+    }
+
+    const nextPending = pending.filter((entry) => entry !== correlationKey);
+    if (nextPending.length === 0) {
+      state.pendingSubagentCorrelationKeysBySignature.delete(signature);
+      continue;
+    }
+
+    state.pendingSubagentCorrelationKeysBySignature.set(signature, nextPending);
+  }
+};
 
 export const setSessionActive = (session: SessionRecord | undefined): void => {
   if (!session) {
