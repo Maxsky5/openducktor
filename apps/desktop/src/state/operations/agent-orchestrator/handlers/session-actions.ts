@@ -243,6 +243,12 @@ export const createAgentSessionActions = ({
             role: "system",
             content: `Failed to send message: ${errorMessage(error)}`,
             timestamp: now(),
+            meta: {
+              kind: "session_notice",
+              tone: "error",
+              reason: "session_error",
+              title: "Error",
+            },
           }),
         }),
         { persist: false },
@@ -412,6 +418,7 @@ export const createAgentSessionActions = ({
         model: selection,
       });
     }
+
     updateSession(
       sessionId,
       (current) => ({

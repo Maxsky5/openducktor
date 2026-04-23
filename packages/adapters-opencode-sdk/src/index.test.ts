@@ -647,6 +647,16 @@ describe("OpencodeSdkAdapter", () => {
       action: "deny",
     });
     expect(permissionRules).toContainEqual({
+      permission: "odt_search_tasks",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "odt_get_workspaces",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
       permission: "odt_read_task",
       pattern: "*",
       action: "allow",
@@ -899,6 +909,9 @@ describe("OpencodeSdkAdapter", () => {
         apply_patch: false,
         ast_grep_replace: false,
         lsp_rename: false,
+        odt_create_task: false,
+        odt_search_tasks: false,
+        odt_get_workspaces: false,
         openducktor_odt_read_task: true,
         openducktor_odt_read_task_documents: true,
         openducktor_odt_set_spec: true,
@@ -1329,14 +1342,9 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(2);
   });
 
-  test("sendUserMessage falls back to the session model for model-scoped tool discovery", async () => {
+  test("sendUserMessage uses global workflow tool discovery even when the session has a selected model", async () => {
     const mock = makeMockClient({
       toolIdsResponse: ["bash", "read", "glob"],
-      modelToolsResponse: [
-        { id: "openducktor_odt_read_task" },
-        { id: "openducktor_odt_read_task_documents" },
-        { id: "openducktor_odt_set_spec" },
-      ],
     });
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -1354,25 +1362,21 @@ describe("OpencodeSdkAdapter", () => {
       parts: [{ kind: "text", text: "Use the saved model" }],
     });
 
-    expect(mock.tool.listCalls).toEqual([
-      {
-        directory: "/repo",
-        provider: "openai",
-        model: "gpt-5",
-      },
-    ]);
+    expect(mock.tool.listCalls).toEqual([]);
     expect(mock.session.promptCalls).toHaveLength(0);
-    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
-      tools: {
-        edit: false,
-        write: false,
-        apply_patch: false,
-        ast_grep_replace: false,
-        lsp_rename: false,
-        openducktor_odt_read_task: true,
-        openducktor_odt_read_task_documents: true,
-        openducktor_odt_set_spec: true,
-      },
+    expect(mock.session.promptAsyncCalls[0]?.tools).toMatchObject({
+      edit: false,
+      write: false,
+      apply_patch: false,
+      ast_grep_replace: false,
+      lsp_rename: false,
+      odt_create_task: false,
+      odt_search_tasks: false,
+      odt_get_workspaces: false,
+      odt_read_task: true,
+      odt_read_task_documents: true,
+      odt_set_spec: true,
+      odt_set_plan: false,
     });
   });
 

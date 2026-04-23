@@ -89,7 +89,7 @@ Desktop-managed and standalone MCP clients intentionally use this same host-brid
 
 Public external tools:
 
-- `get_workspaces`
+- `odt_get_workspaces`
 - `odt_create_task`
 - `odt_search_tasks`
 - `odt_read_task`
@@ -106,27 +106,29 @@ Internal workflow tools remain on the same MCP server:
 - `odt_qa_approved`
 - `odt_qa_rejected`
 
-Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `odt_create_task` or `odt_search_tasks` in their tool selection.
+Current OpenDucktor Spec/Planner/Builder/QA agents must not receive `odt_create_task`, `odt_search_tasks`, or `odt_get_workspaces` in their tool selection.
 
 ## Workspace Discovery And Scoping
 
-Use `get_workspaces` when you start the MCP without a default workspace and need to discover the canonical `workspaceId` values known to the host.
+Use `odt_get_workspaces` when you start the MCP without a default workspace and need to discover the canonical `workspaceId` values known to the host.
 
-`get_workspaces` takes no input and returns the existing shared workspace record shape:
+`odt_get_workspaces` takes no input and returns the existing shared workspace record shape:
 
 ```json
-[
-  {
-    "workspaceId": "my-workspace",
-    "workspaceName": "My Workspace",
-    "repoPath": "/Users/maxsky5/code/my-repo",
-    "isActive": true,
-    "hasConfig": true,
-    "configuredWorktreeBasePath": null,
-    "defaultWorktreeBasePath": null,
-    "effectiveWorktreeBasePath": null
-  }
-]
+{
+  "workspaces": [
+    {
+      "workspaceId": "my-workspace",
+      "workspaceName": "My Workspace",
+      "repoPath": "/Users/maxsky5/code/my-repo",
+      "isActive": true,
+      "hasConfig": true,
+      "configuredWorktreeBasePath": null,
+      "defaultWorktreeBasePath": null,
+      "effectiveWorktreeBasePath": null
+    }
+  ]
+}
 ```
 
 Workspace resolution for workspace-scoped tools is deterministic:

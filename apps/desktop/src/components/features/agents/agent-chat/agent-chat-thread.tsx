@@ -398,16 +398,8 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
       ))}
 
       {sessionRuntimeDataError ? (
-        <div className="border border-input border-b-0 border-l-0 bg-card">
-          <div
-            className={cn(
-              "px-3 py-2 text-sm text-destructive",
-              sessionAccentColor ? "border-l-4" : "border-l border-input",
-            )}
-            style={sessionAccentColor ? { borderLeftColor: sessionAccentColor } : undefined}
-          >
-            {sessionRuntimeDataError}
-          </div>
+        <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
+          {sessionRuntimeDataError}
         </div>
       ) : null}
 

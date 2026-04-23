@@ -1014,12 +1014,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invoke_handler_lists_workspaces_through_get_workspaces() {
+    async fn invoke_handler_lists_workspaces_through_odt_get_workspaces() {
         let (fixture, _task_state, repo_path, workspace_id) =
             test_state_fixture_with_task_store(Vec::new());
 
         let response = invoke_handler(
-            Path("get_workspaces".to_string()),
+            Path("odt_get_workspaces".to_string()),
             State(fixture.state.clone()),
             Ok(Json(json!({}))),
         )

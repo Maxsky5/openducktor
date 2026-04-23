@@ -147,7 +147,7 @@ mod tests {
     }
 
     #[test]
-    fn get_workspaces_result_serializes_as_object_payload() {
+    fn odt_get_workspaces_result_serializes_as_object_payload() {
         let payload = types::OdtGetWorkspacesResult {
             workspaces: vec![WorkspaceRecord {
                 workspace_id: "repo".to_string(),

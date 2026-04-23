@@ -8,6 +8,7 @@ const makeClient = (input: {
   modelTools?: unknown;
   throwOnIds?: boolean;
   throwOnList?: boolean;
+  onList?: () => void;
   mcpStatusResponse?: unknown;
   throwOnMcpStatus?: boolean;
 }): OpencodeClient => {
@@ -23,6 +24,7 @@ const makeClient = (input: {
         };
       },
       list: async () => {
+        input.onList?.();
         if (input.throwOnList) {
           throw new Error("list-boom");
         }
@@ -113,34 +115,23 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_set_plan).toBe(false);
   });
 
-  test("uses model-scoped tool ids when global ids miss ODT tools", async () => {
+  test("keeps canonical trusted role tools when global ids miss ODT tools", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
         toolIds: ["bash", "read", "glob"],
-        modelTools: [
-          { id: "openducktor_odt_read_task" },
-          { id: "openducktor_odt_read_task_documents" },
-          { id: "openducktor_odt_set_spec" },
-          { id: "openducktor_odt_set_plan" },
-        ],
       }),
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-      model: {
-        providerId: "openai",
-        modelId: "gpt-5",
-      },
     });
 
-    expect(selection.openducktor_odt_read_task).toBe(true);
-    expect(selection.openducktor_odt_read_task_documents).toBe(true);
-    expect(selection.openducktor_odt_set_spec).toBe(true);
-    expect(selection.openducktor_odt_set_plan).toBe(false);
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
+    expect(selection.odt_create_task).toBe(false);
+    expect(selection.odt_search_tasks).toBe(false);
+    expect(selection.odt_get_workspaces).toBe(false);
   });
 
   test("propagates tool discovery errors", async () => {
@@ -153,25 +144,6 @@ describe("workflow-tool-selection", () => {
 
     expect(selection).toBeInstanceOf(Error);
     expect((selection as Error).message).toBe("boom");
-  });
-
-  test("propagates model-scoped tool discovery errors", async () => {
-    const selectionError = await resolveWorkflowToolSelection({
-      client: makeClient({
-        toolIds: ["bash", "read", "glob"],
-        throwOnList: true,
-      }),
-      role: "spec",
-      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      workingDirectory: "/repo",
-      model: {
-        providerId: "openai",
-        modelId: "gpt-5",
-      },
-    }).catch((error: unknown) => error);
-
-    expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toBe("list-boom");
   });
 
   test("throws actionable error when trusted MCP server is disconnected", async () => {
@@ -256,7 +228,9 @@ describe("workflow-tool-selection", () => {
           "openducktor_odt_read_task",
           "openducktor_odt_read_task_documents",
           "openducktor_odt_create_task",
+          "openducktor_odt_get_workspaces",
           "functions.openducktor_odt_search_tasks",
+          "functions.openducktor_odt_get_workspaces",
         ],
       }),
       role: "spec",
@@ -267,7 +241,9 @@ describe("workflow-tool-selection", () => {
     expect(selection.openducktor_odt_read_task).toBe(true);
     expect(selection.openducktor_odt_read_task_documents).toBe(true);
     expect(selection.openducktor_odt_create_task).toBe(false);
+    expect(selection.openducktor_odt_get_workspaces).toBe(false);
     expect(selection["functions.openducktor_odt_search_tasks"]).toBe(false);
+    expect(selection["functions.openducktor_odt_get_workspaces"]).toBe(false);
   });
 
   test("denies canonical public tool ids when discovery exposes them without a server prefix", async () => {
@@ -276,6 +252,7 @@ describe("workflow-tool-selection", () => {
         toolIds: [
           "odt_create_task",
           "odt_search_tasks",
+          "odt_get_workspaces",
           "odt_read_task",
           "odt_read_task_documents",
         ],
@@ -287,6 +264,7 @@ describe("workflow-tool-selection", () => {
 
     expect(selection.odt_create_task).toBe(false);
     expect(selection.odt_search_tasks).toBe(false);
+    expect(selection.odt_get_workspaces).toBe(false);
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_documents).toBe(true);
   });

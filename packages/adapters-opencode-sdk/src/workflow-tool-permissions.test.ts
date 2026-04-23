@@ -32,6 +32,11 @@ describe("workflow-tool-permissions", () => {
     });
     expect(rules).toContainEqual({ permission: "odt_create_task", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({ permission: "odt_search_tasks", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({
+      permission: "odt_get_workspaces",
+      pattern: "*",
+      action: "deny",
+    });
     expect(rules).toContainEqual({ permission: "odt_read_task", pattern: "*", action: "allow" });
     expect(rules).toContainEqual({
       permission: "odt_read_task_documents",
