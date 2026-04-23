@@ -373,7 +373,7 @@ export function useAgentChatSurfaceModel({
     if (!composerSessionId || !stopAgentSession) {
       return;
     }
-    void stopAgentSession(composerSessionId);
+    void stopAgentSession(composerSessionId).catch(() => undefined);
   }, [composerSessionId, stopAgentSession]);
 
   const composerModel = useMemo(() => {
