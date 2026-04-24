@@ -103,10 +103,20 @@ export function useAgentChatTurnStaging({
   }, [activeSessionId, disabled, turns.length, windowStart]);
 
   return useMemo(() => {
+    const shouldStage =
+      !disabled &&
+      activeSessionId !== null &&
+      windowStart > 0 &&
+      turns.length > STAGE_INIT &&
+      !completedSessionIdsRef.current.has(activeSessionId);
+    if (!shouldStage) {
+      return turns;
+    }
+
     if (count >= turns.length) {
       return turns;
     }
 
     return turns.slice(Math.max(0, turns.length - count));
-  }, [count, turns]);
+  }, [activeSessionId, count, disabled, turns, windowStart]);
 }

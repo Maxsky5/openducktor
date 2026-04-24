@@ -29,7 +29,7 @@ describe("getAgentChatThreadState", () => {
     });
 
     expect(state.isTranscriptLoading).toBe(true);
-    expect(state.hideTranscriptWhileHydrating).toBe(true);
+    expect(state.hideTranscriptWhileHydrating).toBe(false);
     expect(state.statusOverlay?.kind).toBe("session_loading");
     expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
   });

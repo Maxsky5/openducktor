@@ -32,7 +32,7 @@ export const getAgentChatThreadState = ({
 }: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
   const isTranscriptLoading =
     isSessionViewLoading || isSessionHistoryLoading || isTranscriptRenderDeferred;
-  const hideTranscriptWhileHydrating = isSessionHistoryLoading || isTranscriptRenderDeferred;
+  const hideTranscriptWhileHydrating = isTranscriptRenderDeferred;
   const statusOverlay = (() => {
     if (
       isWaitingForRuntimeReadiness &&
@@ -56,9 +56,10 @@ export const getAgentChatThreadState = ({
     return {
       kind: "session_loading" as const,
       title: "Loading session",
-      description: hideTranscriptWhileHydrating
-        ? "Loading the selected conversation."
-        : "Preparing the selected session view.",
+      description:
+        isSessionHistoryLoading || isTranscriptRenderDeferred
+          ? "Loading the selected conversation."
+          : "Preparing the selected session view.",
     };
   })();
 

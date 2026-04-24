@@ -107,6 +107,15 @@ export function useAgentChatRowStaging({
   }, [activeSessionId, disabled, rows.length]);
 
   return useMemo(() => {
+    const shouldStage =
+      !disabled &&
+      activeSessionId !== null &&
+      rows.length > ROW_STAGE_INIT &&
+      !completedSessionIdsRef.current.has(activeSessionId);
+    if (!shouldStage) {
+      return { rows, turns };
+    }
+
     if (rowCount >= rows.length) {
       return { rows, turns };
     }
@@ -122,5 +131,5 @@ export function useAgentChatRowStaging({
           end: turn.end - rowStart,
         })),
     };
-  }, [rowCount, rows, turns]);
+  }, [activeSessionId, disabled, rowCount, rows, turns]);
 }

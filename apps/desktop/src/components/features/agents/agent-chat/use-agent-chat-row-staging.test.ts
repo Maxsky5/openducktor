@@ -182,4 +182,36 @@ describe("useAgentChatRowStaging", () => {
 
     await harness.unmount();
   });
+
+  test("returns all rows immediately when a small active transcript grows", async () => {
+    const harness = createHookHarness(
+      ({ activeSessionId, nextRows, nextTurns }) =>
+        useAgentChatRowStaging({
+          activeSessionId,
+          rows: nextRows,
+          turns: nextTurns,
+          disabled: false,
+        }),
+      {
+        activeSessionId: "session-1",
+        nextRows: buildRows(1),
+        nextTurns: [{ key: "turn-0", start: 0, end: 0 }],
+      },
+    );
+
+    await harness.mount();
+    await harness.update({
+      activeSessionId: "session-1",
+      nextRows: buildRows(2),
+      nextTurns: [{ key: "turn-0", start: 0, end: 1 }],
+    });
+
+    expect(harness.getLatest().rows.map((row: AgentChatWindowRow) => row.key)).toEqual([
+      "session-1:row-0",
+      "session-1:row-1",
+    ]);
+    expect(animationFrameCallbacks.size).toBe(0);
+
+    await harness.unmount();
+  });
 });
