@@ -724,7 +724,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Preparing the selected session view.");
   });
 
-  test("hides transcript rows while session history is hydrating", () => {
+  test("keeps transcript rows visible while the same session history is hydrating", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -740,7 +740,69 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("Loading session");
     expect(html).toContain("Loading the selected conversation.");
-    expect(html).not.toContain("Old cached message");
+    expect(html).toContain("Old cached message");
+  });
+
+  test("preserves expanded tool details while same-session history hydration appends messages", async () => {
+    const messages = [
+      buildMessage("tool", "Tool read_task completed", {
+        id: "tool-1",
+        meta: {
+          kind: "tool",
+          partId: "part-1",
+          callId: "call-1",
+          tool: "read_task",
+          status: "completed",
+          input: { taskId: "openducktor-d4li" },
+          output: '{"task":{"id":"openducktor-d4li","title":"Fix chat flicker"}}',
+        },
+      }),
+    ];
+    const session = buildSession({
+      sessionId: "session-tool-hydrating",
+      messages,
+    });
+    const model = {
+      ...buildBaseModel(),
+      isSessionHistoryLoading: true,
+      session,
+    };
+
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model,
+      }),
+    );
+    await act(flush);
+
+    const toolDetails = rendered.container.querySelector(
+      "details.group",
+    ) as HTMLDetailsElement | null;
+    if (!toolDetails) {
+      throw new Error("Expected expandable tool details");
+    }
+    toolDetails.open = true;
+
+    rendered.rerender(
+      createElement(AgentChatThread, {
+        model: {
+          ...model,
+          session: buildSession({
+            ...session,
+            messages: [
+              ...messages,
+              buildMessage("assistant", "Next streamed response", { id: "assistant-2" }),
+            ],
+          }),
+        },
+      }),
+    );
+    await act(flush);
+
+    expect(toolDetails.isConnected).toBe(true);
+    expect(toolDetails.open).toBe(true);
+
+    rendered.unmount();
   });
 
   test("renders native scroll controls for top and bottom navigation", async () => {

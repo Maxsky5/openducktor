@@ -229,6 +229,38 @@ describe("useAgentChatTurnStaging", () => {
     await harness.unmount();
   });
 
+  test("returns all turns immediately when an unwindowed active transcript grows", async () => {
+    const harness = createHookHarness(
+      ({ activeSessionId, windowStart, nextTurns }) =>
+        useAgentChatTurnStaging({
+          activeSessionId,
+          windowStart,
+          turns: nextTurns,
+          disabled: false,
+        }),
+      {
+        activeSessionId: "session-1",
+        windowStart: 0,
+        nextTurns: buildTurns(1),
+      },
+    );
+
+    await harness.mount();
+    await harness.update({
+      activeSessionId: "session-1",
+      windowStart: 0,
+      nextTurns: buildTurns(2),
+    });
+
+    expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual([
+      "turn-0",
+      "turn-1",
+    ]);
+    expect(animationFrameCallbacks.size).toBe(0);
+
+    await harness.unmount();
+  });
+
   test("returns all turns immediately when staging is disabled", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(

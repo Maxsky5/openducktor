@@ -452,7 +452,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
   const {
     isTranscriptLoading,
-    hideTranscriptWhileHydrating,
+    hideTranscriptWhileDeferred,
     statusOverlay,
     showRuntimeBlockedCard,
   } = getAgentChatThreadState({
@@ -466,7 +466,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const rowsCacheRef = useRef<Map<string, AgentChatWindowRowsCacheEntry>>(new Map());
 
   const transcriptState = useMemo(() => {
-    if (!session || hideTranscriptWhileHydrating) {
+    if (!session || hideTranscriptWhileDeferred) {
       return {
         rows: EMPTY_ROWS,
         turns: [] as AgentChatWindowTurn[],
@@ -481,7 +481,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       showThinkingMessages,
       cache: rowsCacheRef.current,
     });
-  }, [hideTranscriptWhileHydrating, session, showThinkingMessages]);
+  }, [hideTranscriptWhileDeferred, session, showThinkingMessages]);
   const rows = transcriptState.rows;
   const transcriptTurns = transcriptState.turns;
   const hasAttachmentMessages = transcriptState.hasAttachmentMessages;
@@ -653,7 +653,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionRuntimeKind={sessionRuntimeKind}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
-        renderedTurns={rows.length > 0 && !hideTranscriptWhileHydrating ? renderedTurns : []}
+        renderedTurns={rows.length > 0 && !hideTranscriptWhileDeferred ? renderedTurns : []}
         allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
         statusOverlay={statusOverlay}
