@@ -184,6 +184,36 @@ fn set_plan_for_active_epic_without_subtasks_preserves_existing_direct_subtasks(
 }
 
 #[test]
+fn set_plan_for_ready_epic_without_subtasks_preserves_existing_direct_subtasks() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-plan-ready-epic-preserve";
+    let epic = make_task("epic-1", "epic", TaskStatus::ReadyForDev);
+    let mut existing_child = make_task("child-1", "task", TaskStatus::Open);
+    existing_child.parent_id = Some("epic-1".to_string());
+
+    let (service, task_state, _git_state) =
+        build_service_with_git_state(vec![epic, existing_child], vec![], main_branch());
+
+    let plan = service.set_plan(repo_path, "epic-1", "# Revised Epic Plan", None)?;
+    assert_eq!(plan.markdown, "# Revised Epic Plan");
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.plan_set_calls,
+        vec![("epic-1".to_string(), "# Revised Epic Plan".to_string())]
+    );
+    assert!(task_state.delete_calls.is_empty());
+    assert!(task_state.created_inputs.is_empty());
+    assert!(
+        !task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status.is_some()),
+        "status update should be skipped for ready_for_dev epic revisions"
+    );
+    Ok(())
+}
+
+#[test]
 fn set_plan_for_active_epic_rejects_explicit_subtask_replacement_before_persisting_plan() {
     let repo_path = "/tmp/odt-repo-plan-active-epic-active-subtask";
     let epic = make_task("epic-1", "epic", TaskStatus::InProgress);

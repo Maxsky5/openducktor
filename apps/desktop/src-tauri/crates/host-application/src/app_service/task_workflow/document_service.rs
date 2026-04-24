@@ -92,8 +92,7 @@ impl AppService {
             subtask_creates.clear();
         }
 
-        let should_replace_epic_subtasks =
-            issue_type == IssueType::Epic && (!is_active_or_review || has_explicit_subtasks);
+        let should_replace_epic_subtasks = issue_type == IssueType::Epic && has_explicit_subtasks;
         if should_replace_epic_subtasks {
             self.validate_epic_subtasks_replaceable(&context)?;
         }
@@ -143,7 +142,6 @@ impl AppService {
         subtask_creates: Vec<CreateTaskInput>,
     ) -> Result<()> {
         let task_id = context.task.id.clone();
-        self.validate_epic_subtasks_replaceable(context)?;
 
         let existing_direct_subtasks = context
             .repo
