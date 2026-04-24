@@ -203,11 +203,13 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   const hostUrl = explicitHostUrl
     ? await validateExplicitHostUrl(explicitHostUrl)
     : await discoverHostUrl(workspaceId);
+  const workspaceIdInputMode =
+    forbidWorkspaceIdInput !== undefined ? { forbidWorkspaceIdInput } : {};
 
   if (!workspaceId) {
     return {
       hostUrl,
-      ...(forbidWorkspaceIdInput ? { forbidWorkspaceIdInput } : {}),
+      ...workspaceIdInputMode,
     };
   }
 
@@ -218,6 +220,6 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   return {
     workspaceId,
     hostUrl,
-    ...(forbidWorkspaceIdInput ? { forbidWorkspaceIdInput } : {}),
+    ...workspaceIdInputMode,
   };
 };

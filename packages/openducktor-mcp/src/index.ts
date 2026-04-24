@@ -99,6 +99,24 @@ const createServerInstructions = (options: { forbidWorkspaceIdInput: boolean }):
   return `OpenDucktor workflow server. ${workspaceInstruction} ${SHARED_SERVER_INSTRUCTIONS}`;
 };
 
+const hasOwnWorkspaceIdInput = (input: unknown): boolean => {
+  return typeof input === "object" && input !== null && Object.hasOwn(input, "workspaceId");
+};
+
+const rejectForbiddenWorkspaceIdInput = (
+  toolName: RegisteredToolName,
+  input: unknown,
+  options: { forbidWorkspaceIdInput: boolean },
+): void => {
+  if (
+    options.forbidWorkspaceIdInput &&
+    WORKSPACE_SCOPED_TOOL_NAMES.has(toolName) &&
+    hasOwnWorkspaceIdInput(input)
+  ) {
+    throw new Error("workspaceId is not allowed in workflow-scoped tool calls.");
+  }
+};
+
 const isSchemaLike = (value: unknown): value is ZodRawShapeCompat[string] => {
   if (!value || typeof value !== "object") {
     return false;
@@ -161,6 +179,7 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     },
     async (input: unknown) => {
       try {
+        rejectForbiddenWorkspaceIdInput(tool.name, input, options);
         const parsedInput = schema.parse(input) as ToolInputByName<Name>;
         const result = await tool.execute(store, parsedInput);
         return toToolResult(result);
