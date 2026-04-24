@@ -1,4 +1,5 @@
 mod approval_workflow;
+mod build_worktree_upstream;
 mod opencode_runtime;
 mod session_stop;
 mod support;
