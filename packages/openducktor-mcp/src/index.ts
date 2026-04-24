@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import { z } from "zod";
 import packageJson from "../package.json" with { type: "json" };
-import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS } from "./lib";
+import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import { toErrorMessage, toToolError, toToolResult } from "./tool-results";
@@ -85,6 +86,37 @@ type RegisteredToolSpecs = {
   };
 };
 
+const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
+const FORBIDDEN_WORKSPACE_ID_SCHEMA = z.never().optional().describe("Do not provide.");
+const SHARED_SERVER_INSTRUCTIONS =
+  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).";
+
+const createServerInstructions = (options: { forbidWorkspaceIdInput: boolean }): string => {
+  const workspaceInstruction = options.forbidWorkspaceIdInput
+    ? "This MCP is already scoped to its startup workspace. Do not provide workspaceId in tool calls."
+    : "Use odt_get_workspaces to discover available workspaces only when no startup workspace is configured. Workspace-scoped tools accept optional top-level workspaceId; when provided, it overrides the startup workspace.";
+
+  return `OpenDucktor workflow server. ${workspaceInstruction} ${SHARED_SERVER_INSTRUCTIONS}`;
+};
+
+const hasOwnWorkspaceIdInput = (input: unknown): boolean => {
+  return typeof input === "object" && input !== null && Object.hasOwn(input, "workspaceId");
+};
+
+const rejectForbiddenWorkspaceIdInput = (
+  toolName: RegisteredToolName,
+  input: unknown,
+  options: { forbidWorkspaceIdInput: boolean },
+): void => {
+  if (
+    options.forbidWorkspaceIdInput &&
+    WORKSPACE_SCOPED_TOOL_NAMES.has(toolName) &&
+    hasOwnWorkspaceIdInput(input)
+  ) {
+    throw new Error("workspaceId is not allowed in workflow-scoped tool calls.");
+  }
+};
+
 const isSchemaLike = (value: unknown): value is ZodRawShapeCompat[string] => {
   if (!value || typeof value !== "object") {
     return false;
@@ -113,14 +145,31 @@ const assertRegisterToolInputSchema: (
   }
 };
 
+const toVisibleInputSchema = (
+  toolName: RegisteredToolName,
+  options: { forbidWorkspaceIdInput: boolean },
+): ZodRawShapeCompat => {
+  const inputSchema: unknown = ODT_TOOL_SCHEMAS[toolName].shape;
+  assertRegisterToolInputSchema(toolName, inputSchema);
+
+  if (!options.forbidWorkspaceIdInput || !WORKSPACE_SCOPED_TOOL_NAMES.has(toolName)) {
+    return inputSchema;
+  }
+
+  return {
+    ...inputSchema,
+    workspaceId: FORBIDDEN_WORKSPACE_ID_SCHEMA,
+  };
+};
+
 const registerOdtTool = <Name extends RegisteredToolName>(
   server: McpServer,
   store: OdtTaskStore,
   tool: RegisteredTool<Name>,
+  options: { forbidWorkspaceIdInput: boolean },
 ): void => {
   const schema = ODT_TOOL_SCHEMAS[tool.name];
-  const inputSchema: unknown = schema.shape;
-  assertRegisterToolInputSchema(tool.name, inputSchema);
+  const inputSchema = toVisibleInputSchema(tool.name, options);
 
   server.registerTool(
     tool.name,
@@ -130,6 +179,7 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     },
     async (input: unknown) => {
       try {
+        rejectForbiddenWorkspaceIdInput(tool.name, input, options);
         const parsedInput = schema.parse(input) as ToolInputByName<Name>;
         const result = await tool.execute(store, parsedInput);
         return toToolResult(result);
@@ -203,7 +253,11 @@ const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   },
 };
 
-const registerTools = (server: McpServer, store: OdtTaskStore): void => {
+const registerTools = (
+  server: McpServer,
+  store: OdtTaskStore,
+  options: { forbidWorkspaceIdInput: boolean },
+): void => {
   const registerOneTool = <Name extends RegisteredToolName>(toolName: Name): void => {
     const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
     const tool: RegisteredTool<Name> = {
@@ -211,7 +265,7 @@ const registerTools = (server: McpServer, store: OdtTaskStore): void => {
       description: spec.description,
       execute: spec.execute,
     };
-    registerOdtTool(server, store, tool);
+    registerOdtTool(server, store, tool, options);
   };
 
   for (const toolName of ODT_MCP_TOOL_NAMES) {
@@ -222,6 +276,8 @@ const registerTools = (server: McpServer, store: OdtTaskStore): void => {
 const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer> => {
   const resolved = await resolveStoreContext(context);
   const store = new OdtTaskStore(resolved);
+  const forbidWorkspaceIdInput =
+    resolved.forbidWorkspaceIdInput === true && resolved.workspaceId !== undefined;
 
   const server = new McpServer(
     {
@@ -229,12 +285,11 @@ const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer
       version: packageJson.version,
     },
     {
-      instructions:
-        "OpenDucktor workflow server. Use odt_get_workspaces to discover available workspaces only when no startup workspace is configured. Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Workspace-scoped tools accept optional top-level workspaceId: it overrides the startup workspace when provided; workflow agents should omit it. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
+      instructions: createServerInstructions({ forbidWorkspaceIdInput }),
     },
   );
 
-  registerTools(server, store);
+  registerTools(server, store, { forbidWorkspaceIdInput });
   return server;
 };
 

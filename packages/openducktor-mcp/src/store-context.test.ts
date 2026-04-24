@@ -31,6 +31,7 @@ afterEach(async () => {
   globalThis.fetch = originalFetch;
   delete process.env.ODT_WORKSPACE_ID;
   delete process.env.ODT_HOST_URL;
+  delete process.env.ODT_FORBID_WORKSPACE_ID_INPUT;
   delete process.env.ODT_METADATA_NAMESPACE;
   delete process.env.OPENDUCKTOR_CONFIG_DIR;
   delete process.env.ODT_BEADS_ATTACHMENT_DIR;
@@ -101,6 +102,81 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       hostUrl: "http://127.0.0.1:14327",
     });
+  });
+
+  test("reads workspaceId-forbidden mode from the environment", async () => {
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url.endsWith("/health")) {
+        return jsonResponse({ ok: true });
+      }
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        });
+      }
+      if (url.endsWith("/invoke/odt_get_workspaces")) {
+        return jsonResponse({
+          workspaces: [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    process.env.ODT_WORKSPACE_ID = "repo";
+    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+    process.env.ODT_FORBID_WORKSPACE_ID_INPUT = "true";
+
+    await expect(resolveStoreContext({})).resolves.toEqual({
+      workspaceId: "repo",
+      hostUrl: "http://127.0.0.1:14327",
+      forbidWorkspaceIdInput: true,
+    });
+  });
+
+  test("preserves explicit false for workspaceId-forbidden mode", async () => {
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url.endsWith("/health")) {
+        return jsonResponse({ ok: true });
+      }
+      if (url.endsWith("/invoke/odt_mcp_ready")) {
+        return jsonResponse({
+          bridgeVersion: 1,
+          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+    process.env.ODT_FORBID_WORKSPACE_ID_INPUT = "0";
+
+    await expect(resolveStoreContext({})).resolves.toEqual({
+      hostUrl: "http://127.0.0.1:14327",
+      forbidWorkspaceIdInput: false,
+    });
+  });
+
+  test("rejects invalid workspaceId-forbidden mode values", async () => {
+    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
+    process.env.ODT_FORBID_WORKSPACE_ID_INPUT = "yes";
+
+    await expect(resolveStoreContext({})).rejects.toThrow(
+      "ODT_FORBID_WORKSPACE_ID_INPUT must be true, false, 1, or 0.",
+    );
   });
 
   test("rejects legacy direct Beads/Dolt startup contract", async () => {

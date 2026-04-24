@@ -146,6 +146,7 @@ pub(crate) fn build_opencode_config_content(workspace_id: &str, host_url: &str) 
                 "environment": {
                     "ODT_WORKSPACE_ID": workspace_id,
                     "ODT_HOST_URL": host_url,
+                    "ODT_FORBID_WORKSPACE_ID_INPUT": "true",
                 }
             }
         }

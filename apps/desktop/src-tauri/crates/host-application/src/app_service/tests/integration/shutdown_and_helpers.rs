@@ -1095,4 +1095,5 @@ fn build_opencode_config_content_embeds_mcp_command_and_env() {
     let env = &parsed["mcp"]["openducktor"]["environment"];
     assert_eq!(env["ODT_WORKSPACE_ID"].as_str(), Some("repo"));
     assert_eq!(env["ODT_HOST_URL"].as_str(), Some("http://127.0.0.1:14327"));
+    assert_eq!(env["ODT_FORBID_WORKSPACE_ID_INPUT"].as_str(), Some("true"));
 }
