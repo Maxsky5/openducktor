@@ -44,6 +44,7 @@ describe("buildAgentSystemPrompt", () => {
       "OpenDucktor workflow tools are native MCP tools.",
       "Allowed tools for this role:",
       "Use this exact taskId literal in every odt_* call: task-42.",
+      "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
       "Start each session by calling odt_read_task with taskId task-42 to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
       "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
       "Task context:",

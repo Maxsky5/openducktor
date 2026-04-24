@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 import type { SessionRecord } from "./types";
@@ -15,36 +16,9 @@ const defaultRuntimeConnection = {
 } as const;
 
 const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
-  "odt_read_task",
-  "odt_read_task_documents",
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_set_pull_request",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-  "openducktor_odt_read_task",
-  "openducktor_odt_read_task_documents",
-  "openducktor_odt_set_spec",
-  "openducktor_odt_set_plan",
-  "openducktor_odt_build_blocked",
-  "openducktor_odt_build_resumed",
-  "openducktor_odt_build_completed",
-  "openducktor_odt_set_pull_request",
-  "openducktor_odt_qa_approved",
-  "openducktor_odt_qa_rejected",
-  "functions.openducktor_odt_read_task",
-  "functions.openducktor_odt_read_task_documents",
-  "functions.openducktor_odt_set_spec",
-  "functions.openducktor_odt_set_plan",
-  "functions.openducktor_odt_build_blocked",
-  "functions.openducktor_odt_build_resumed",
-  "functions.openducktor_odt_build_completed",
-  "functions.openducktor_odt_set_pull_request",
-  "functions.openducktor_odt_qa_approved",
-  "functions.openducktor_odt_qa_rejected",
+  ...ODT_MCP_TOOL_NAMES,
+  ...ODT_MCP_TOOL_NAMES.map((toolName) => `openducktor_${toolName}`),
+  ...ODT_MCP_TOOL_NAMES.map((toolName) => `functions.openducktor_${toolName}`),
 ] as const;
 
 type MockSession = {

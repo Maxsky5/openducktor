@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
   getWorkspacesResultSchema,
+  ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   publicTaskSchema,
+  ReadTaskInputSchema,
   taskSummarySchema,
 } from "./odt-mcp-schemas";
+import {
+  ODT_MCP_TOOL_NAMES,
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+} from "./odt-tool-names";
 
 describe("odt mcp public task schemas", () => {
   test("public task schema parses optional target branches", () => {
@@ -79,6 +86,31 @@ describe("odt mcp public task schemas", () => {
         "odt_set_pull_request",
         "odt_set_spec",
       ].sort(),
+    );
+  });
+
+  test("mcp tool policy lists partition global tools for workflow agents", () => {
+    const allTools = new Set(ODT_MCP_TOOL_NAMES);
+    const workflowTools = new Set(ODT_WORKFLOW_AGENT_TOOL_NAMES);
+    const blockedTools = new Set(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES);
+
+    expect(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES).toEqual([
+      "odt_get_workspaces",
+      "odt_create_task",
+      "odt_search_tasks",
+    ]);
+    expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
+    expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
+    for (const toolName of workflowTools) {
+      expect(blockedTools.has(toolName)).toBe(false);
+    }
+  });
+
+  test("workspace-scoped tool workspaceId description distinguishes ids from paths", () => {
+    const description = ReadTaskInputSchema.shape.workspaceId.description ?? "";
+
+    expect(description).toBe(
+      "Optional workspaceId. Overrides startup workspace; workflow agents omit.",
     );
   });
 

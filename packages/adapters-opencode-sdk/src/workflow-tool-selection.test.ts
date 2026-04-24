@@ -132,6 +132,12 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_create_task).toBe(false);
     expect(selection.odt_search_tasks).toBe(false);
     expect(selection.odt_get_workspaces).toBe(false);
+    expect(selection.openducktor_odt_create_task).toBe(false);
+    expect(selection.openducktor_odt_search_tasks).toBe(false);
+    expect(selection.openducktor_odt_get_workspaces).toBe(false);
+    expect(selection["functions.openducktor_odt_create_task"]).toBe(false);
+    expect(selection["functions.openducktor_odt_search_tasks"]).toBe(false);
+    expect(selection["functions.openducktor_odt_get_workspaces"]).toBe(false);
   });
 
   test("propagates tool discovery errors", async () => {

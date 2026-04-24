@@ -1,11 +1,17 @@
 import { z } from "zod";
-import { agentToolNameValues } from "./agent-workflow-schemas";
 import {
   gitTargetBranchSchema,
   knownGitProviderIdSchema,
   pullRequestSchema,
   workspaceRecordSchema,
 } from "./git-schemas";
+import {
+  type ODT_MCP_TOOL_NAMES,
+  ODT_TOOL_NAMES,
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+  ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
+} from "./odt-tool-names";
 import {
   issueTypeSchema,
   planSubtaskInputSchema,
@@ -94,9 +100,16 @@ export const taskDocumentsReadSchema = z
   .strict();
 export type TaskDocumentsRead = z.infer<typeof taskDocumentsReadSchema>;
 
+const workspaceScopedToolWorkspaceIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .optional()
+  .describe("Optional workspaceId. Overrides startup workspace; workflow agents omit.");
+
 export const ReadTaskInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
   })
   .strict();
@@ -104,7 +117,7 @@ export type ReadTaskInput = z.infer<typeof ReadTaskInputSchema>;
 
 export const ReadTaskDocumentsInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     includeSpec: z.boolean().optional(),
     includePlan: z.boolean().optional(),
@@ -139,7 +152,7 @@ const labelStringSchema = z.string().trim().min(1);
 
 export const SetSpecInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
   })
@@ -148,7 +161,7 @@ export type SetSpecInput = z.infer<typeof SetSpecInputSchema>;
 
 export const SetPlanInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
     subtasks: z.array(planSubtaskInputSchema.strict()).optional(),
@@ -158,7 +171,7 @@ export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
 
 export const BuildBlockedInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     reason: z.string().trim().min(1),
   })
@@ -167,7 +180,7 @@ export type BuildBlockedInput = z.infer<typeof BuildBlockedInputSchema>;
 
 export const BuildResumedInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
   })
   .strict();
@@ -175,7 +188,7 @@ export type BuildResumedInput = z.infer<typeof BuildResumedInputSchema>;
 
 export const BuildCompletedInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     summary: z.string().optional(),
   })
@@ -184,7 +197,7 @@ export type BuildCompletedInput = z.infer<typeof BuildCompletedInputSchema>;
 
 export const SetPullRequestInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     providerId: knownGitProviderIdSchema,
     number: z.number().int().positive(),
@@ -194,7 +207,7 @@ export type SetPullRequestInput = z.infer<typeof SetPullRequestInputSchema>;
 
 export const QaApprovedInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     reportMarkdown: z.string().trim().min(1),
   })
@@ -203,7 +216,7 @@ export type QaApprovedInput = z.infer<typeof QaApprovedInputSchema>;
 
 export const QaRejectedInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     reportMarkdown: z.string().trim().min(1),
   })
@@ -212,7 +225,7 @@ export type QaRejectedInput = z.infer<typeof QaRejectedInputSchema>;
 
 export const CreateTaskInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     title: z.string().trim().min(1).describe("Task title."),
     issueType: publicIssueTypeSchema.describe(
       "Issue type. Allowed values: task, feature, bug. Epic is not supported by the public MCP create tool.",
@@ -232,7 +245,7 @@ export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
 
 export const SearchTasksInputSchema = z
   .object({
-    workspaceId: z.string().trim().min(1).optional(),
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
     priority: taskPrioritySchema.optional().describe("Exact-match priority filter."),
     issueType: issueTypeSchema
       .optional()
@@ -271,6 +284,8 @@ const pickToolSchemas = <
   >;
 };
 
+export type OdtToolName = (typeof ODT_MCP_TOOL_NAMES)[number];
+
 export const ODT_TOOL_SCHEMAS = {
   odt_get_workspaces: GetWorkspacesInputSchema,
   odt_create_task: CreateTaskInputSchema,
@@ -285,27 +300,22 @@ export const ODT_TOOL_SCHEMAS = {
   odt_set_pull_request: SetPullRequestInputSchema,
   odt_qa_approved: QaApprovedInputSchema,
   odt_qa_rejected: QaRejectedInputSchema,
-} as const;
+} as const satisfies Record<OdtToolName, unknown>;
 
-export type OdtToolName = keyof typeof ODT_TOOL_SCHEMAS;
-
-export const ODT_WORKFLOW_TOOL_SCHEMAS = pickToolSchemas(ODT_TOOL_SCHEMAS, agentToolNameValues);
+export const ODT_WORKFLOW_TOOL_SCHEMAS = pickToolSchemas(
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+);
 
 export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
 
-export const ODT_TOOL_NAMES = Object.keys(ODT_TOOL_SCHEMAS) as OdtToolName[];
+export type WorkflowAgentBlockedOdtToolName =
+  (typeof ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES)[number];
 
-const ODT_WORKFLOW_TOOL_NAME_SET = new Set<OdtToolName>(
-  Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS) as OdtToolName[],
+export const ODT_WORKFLOW_AGENT_BLOCKED_TOOL_SCHEMAS = pickToolSchemas(
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
 );
-
-export type NonWorkflowOdtToolName = Exclude<OdtToolName, OdtWorkflowToolName>;
-
-export const ODT_NON_WORKFLOW_TOOL_NAMES = ODT_TOOL_NAMES.filter(
-  (toolName): toolName is NonWorkflowOdtToolName => !ODT_WORKFLOW_TOOL_NAME_SET.has(toolName),
-);
-
-const ODT_WORKSPACE_DISCOVERY_TOOL_NAME = "odt_get_workspaces" as const;
 
 export type WorkspaceScopedOdtToolName = Exclude<
   OdtToolName,

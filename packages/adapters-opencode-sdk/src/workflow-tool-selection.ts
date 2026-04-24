@@ -1,15 +1,33 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { ODT_NON_WORKFLOW_TOOL_NAMES, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
 import { toToolIdList } from "./payload-mappers";
 import { isReadOnlyRole } from "./read-only-roles";
 
-const TRUSTED_ODT_MCP_SERVER_NAME = "openducktor";
-const CONNECTED_MCP_SERVER_STATUSES = new Set(["connected"]);
-const TRUSTED_ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
-const NON_WORKFLOW_ODT_TOOL_IDS = new Set<string>(ODT_NON_WORKFLOW_TOOL_NAMES);
+const OPENDUCKTOR_MCP_SERVER_NAME = "openducktor";
+const CONNECTED_MCP_STATUS = "connected";
+const OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
+
+const toOpenCodeExposedOdtToolIds = (canonicalOdtToolName: string): string[] => [
+  canonicalOdtToolName,
+  ...OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}${canonicalOdtToolName}`),
+];
+
+const OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS = new Set<string>(
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES.flatMap(toOpenCodeExposedOdtToolIds),
+);
+
+const isOpenCodePrefixedOdtToolId = (toolId: string): boolean =>
+  OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES.some((prefix) => toolId.startsWith(prefix));
+
+const isToolIdControlledByOdtWorkflowSelection = (toolId: string): boolean =>
+  isOpenCodePrefixedOdtToolId(toolId) ||
+  OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS.has(toolId);
 
 const assertTrustedOdtMcpServerConnected = async (input: {
   client: OpencodeClient;
@@ -18,7 +36,7 @@ const assertTrustedOdtMcpServerConnected = async (input: {
   const mcp = (input.client as { mcp?: { status?: unknown } }).mcp;
   if (!mcp || typeof mcp.status !== "function") {
     throw new Error(
-      `ODT workflow tools unavailable: OpenCode MCP status API is unavailable for "${TRUSTED_ODT_MCP_SERVER_NAME}".`,
+      `ODT workflow tools unavailable: OpenCode MCP status API is unavailable for "${OPENDUCKTOR_MCP_SERVER_NAME}".`,
     );
   }
 
@@ -32,25 +50,25 @@ const assertTrustedOdtMcpServerConnected = async (input: {
   const statusRecord = asUnknownRecord(statusPayload);
   if (!statusRecord) {
     throw new Error(
-      `ODT workflow tools unavailable: invalid MCP status payload while checking "${TRUSTED_ODT_MCP_SERVER_NAME}".`,
+      `ODT workflow tools unavailable: invalid MCP status payload while checking "${OPENDUCKTOR_MCP_SERVER_NAME}".`,
     );
   }
 
-  const serverStatus = statusRecord[TRUSTED_ODT_MCP_SERVER_NAME];
+  const serverStatus = statusRecord[OPENDUCKTOR_MCP_SERVER_NAME];
   const status = readStringProp(serverStatus, ["status"]);
   if (!status) {
     throw new Error(
-      `ODT workflow tools unavailable: MCP server "${TRUSTED_ODT_MCP_SERVER_NAME}" status is missing.`,
+      `ODT workflow tools unavailable: MCP server "${OPENDUCKTOR_MCP_SERVER_NAME}" status is missing.`,
     );
   }
   const normalizedStatus = status.trim().toLowerCase();
-  if (CONNECTED_MCP_SERVER_STATUSES.has(normalizedStatus)) {
+  if (normalizedStatus === CONNECTED_MCP_STATUS) {
     return;
   }
 
   const errorDetails = readStringProp(serverStatus, ["error"]);
   throw new Error(
-    `ODT workflow tools unavailable: MCP server "${TRUSTED_ODT_MCP_SERVER_NAME}" is "${status.trim()}"${
+    `ODT workflow tools unavailable: MCP server "${OPENDUCKTOR_MCP_SERVER_NAME}" is "${status.trim()}"${
       errorDetails ? ` (${errorDetails})` : ""
     }.`,
   );
@@ -78,7 +96,7 @@ export const resolveWorkflowToolSelection = async (input: {
     workflowToolAliasesByCanonical: input.runtimeDescriptor.workflowToolAliasesByCanonical,
   });
 
-  for (const toolId of NON_WORKFLOW_ODT_TOOL_IDS) {
+  for (const toolId of OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS) {
     selection[toolId] = false;
   }
 
@@ -93,10 +111,8 @@ export const resolveWorkflowToolSelection = async (input: {
     if (trimmedToolId.length === 0) {
       continue;
     }
-    if (!TRUSTED_ODT_MCP_TOOL_PREFIXES.some((prefix) => trimmedToolId.startsWith(prefix))) {
-      if (!NON_WORKFLOW_ODT_TOOL_IDS.has(trimmedToolId)) {
-        continue;
-      }
+    if (!isToolIdControlledByOdtWorkflowSelection(trimmedToolId)) {
+      continue;
     }
     if (selection[trimmedToolId] !== undefined) {
       continue;
