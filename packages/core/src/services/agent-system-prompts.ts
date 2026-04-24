@@ -184,7 +184,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       bulletSection("Tool and communication protocol", [
         "Always include taskId in every odt_* tool call.",
-        "Omit workspaceId from workflow tool calls; the MCP session supplies the current OpenDucktor workspace.",
+        "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
         "Never invent tool names. Never call tools not listed above.",
         "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
         "If odt_read_task fails, surface the blocker or retry with the exact taskId instead of relying on stale summaries or prompt-copied artifacts.",

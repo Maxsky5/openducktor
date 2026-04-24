@@ -110,7 +110,7 @@ describe("odt mcp public task schemas", () => {
     const description = ReadTaskInputSchema.shape.workspaceId.description ?? "";
 
     expect(description).toBe(
-      "Optional OpenDucktor workspaceId. Omit when the MCP server has a startup workspace.",
+      "Optional workspaceId. Overrides startup workspace; workflow agents omit.",
     );
   });
 

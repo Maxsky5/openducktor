@@ -105,7 +105,7 @@ const workspaceScopedToolWorkspaceIdSchema = z
   .trim()
   .min(1)
   .optional()
-  .describe("Optional OpenDucktor workspaceId. Omit when the MCP server has a startup workspace.");
+  .describe("Optional workspaceId. Overrides startup workspace; workflow agents omit.");
 
 export const ReadTaskInputSchema = z
   .object({

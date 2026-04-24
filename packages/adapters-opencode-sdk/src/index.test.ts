@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
-import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 import type { SessionRecord } from "./types";
@@ -16,9 +16,9 @@ const defaultRuntimeConnection = {
 } as const;
 
 const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
-  ...ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  ...ODT_WORKFLOW_AGENT_TOOL_NAMES.map((toolName) => `openducktor_${toolName}`),
-  ...ODT_WORKFLOW_AGENT_TOOL_NAMES.map((toolName) => `functions.openducktor_${toolName}`),
+  ...ODT_MCP_TOOL_NAMES,
+  ...ODT_MCP_TOOL_NAMES.map((toolName) => `openducktor_${toolName}`),
+  ...ODT_MCP_TOOL_NAMES.map((toolName) => `functions.openducktor_${toolName}`),
 ] as const;
 
 type MockSession = {

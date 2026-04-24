@@ -10,7 +10,7 @@ import { toToolIdList } from "./payload-mappers";
 import { isReadOnlyRole } from "./read-only-roles";
 
 const OPENDUCKTOR_MCP_SERVER_NAME = "openducktor";
-const CONNECTED_MCP_STATUSES = new Set(["connected"]);
+const CONNECTED_MCP_STATUS = "connected";
 const OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
 
 const toOpenCodeExposedOdtToolIds = (canonicalOdtToolName: string): string[] => [
@@ -62,7 +62,7 @@ const assertTrustedOdtMcpServerConnected = async (input: {
     );
   }
   const normalizedStatus = status.trim().toLowerCase();
-  if (CONNECTED_MCP_STATUSES.has(normalizedStatus)) {
+  if (normalizedStatus === CONNECTED_MCP_STATUS) {
     return;
   }
 
