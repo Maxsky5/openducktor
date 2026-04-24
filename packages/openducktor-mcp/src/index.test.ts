@@ -158,7 +158,10 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   };
 };
 
-const createTransport = (hostUrl: string) => {
+const createTransport = (
+  hostUrl: string,
+  options: { workspaceId?: string; forbidWorkspaceIdInput?: boolean } = {},
+) => {
   return new StdioClientTransport({
     command: process.execPath,
     args: ["src/index.ts"],
@@ -166,6 +169,8 @@ const createTransport = (hostUrl: string) => {
     env: {
       ...inheritedEnv,
       ODT_HOST_URL: hostUrl,
+      ...(options.workspaceId ? { ODT_WORKSPACE_ID: options.workspaceId } : {}),
+      ...(options.forbidWorkspaceIdInput ? { ODT_FORBID_WORKSPACE_ID_INPUT: "true" } : {}),
     },
     stderr: "pipe",
   });
@@ -180,6 +185,20 @@ const requireContentToolResult = (result: unknown): ContentToolResult => {
   return result as ContentToolResult;
 };
 
+const readToolInputProperties = (
+  toolsResult: unknown,
+  toolName: string,
+): Record<string, unknown> => {
+  const tools = (toolsResult as { tools?: Array<{ name?: string; inputSchema?: unknown }> }).tools;
+  const tool = tools?.find((entry) => entry.name === toolName);
+  const properties = (tool?.inputSchema as { properties?: Record<string, unknown> } | undefined)
+    ?.properties;
+  if (!properties) {
+    throw new Error(`Expected ${toolName} to expose input schema properties.`);
+  }
+  return properties;
+};
+
 afterEach(async () => {
   await Promise.all(
     Array.from(activeServers, async (server) => {
@@ -190,6 +209,91 @@ afterEach(async () => {
 });
 
 describe("MCP server tool results", () => {
+  test("workspaceId-forbidden mode rejects workspaceId for advertised workspace-scoped tools", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, {
+      workspaceId: "repo",
+      forbidWorkspaceIdInput: true,
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+
+      expect(readToolInputProperties(tools, "odt_read_task")).toMatchObject({
+        taskId: expect.any(Object),
+        workspaceId: expect.any(Object),
+      });
+      expect(readToolInputProperties(tools, "odt_set_plan")).toHaveProperty("workspaceId");
+      expect(readToolInputProperties(tools, "odt_get_workspaces")).not.toHaveProperty(
+        "workspaceId",
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("workspaceId-forbidden mode rejects explicit workspaceId instead of dropping it", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, {
+      workspaceId: "repo",
+      forbidWorkspaceIdInput: true,
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_read_task",
+        arguments: {
+          workspaceId: "tool-repo",
+          taskId: "task-1",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+
+      expect(contentResult.structuredContent).toBeUndefined();
+      expect(contentResult.content[0]?.text ?? "").toContain("Invalid arguments");
+      expect(bridge.requests).toEqual([
+        { url: "/invoke/odt_mcp_ready", body: {} },
+        { url: "/invoke/odt_get_workspaces", body: {} },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("workspaceId stays advertised for public MCP clients with a startup workspace", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+
+      expect(readToolInputProperties(tools, "odt_read_task")).toHaveProperty("workspaceId");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("workspaceId stays advertised when no startup workspace is configured", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url);
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+
+      expect(readToolInputProperties(tools, "odt_read_task")).toHaveProperty("workspaceId");
+    } finally {
+      await client.close();
+    }
+  });
+
   test("odt_get_workspaces keeps structuredContent for workspace discovery payloads", async () => {
     const bridge = await startMockBridge();
     const transport = createTransport(bridge.url);
@@ -261,6 +365,39 @@ describe("MCP server tool results", () => {
           url: "/invoke/odt_read_task",
           body: {
             workspaceId: "repo",
+            taskId: "task-1",
+          },
+        },
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("startup workspace still lets explicit tool input workspaceId override execution", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_read_task",
+        arguments: {
+          workspaceId: "tool-repo",
+          taskId: "task-1",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+
+      expect(contentResult.structuredContent).toEqual(taskSummaryPayload);
+      expect(bridge.requests).toEqual([
+        { url: "/invoke/odt_mcp_ready", body: {} },
+        { url: "/invoke/odt_get_workspaces", body: {} },
+        {
+          url: "/invoke/odt_read_task",
+          body: {
+            workspaceId: "tool-repo",
             taskId: "task-1",
           },
         },

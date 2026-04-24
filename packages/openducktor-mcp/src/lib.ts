@@ -18,6 +18,7 @@ export {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   odtHostBridgeReadySchema,
   type PublicTask,
   publicTaskSchema,

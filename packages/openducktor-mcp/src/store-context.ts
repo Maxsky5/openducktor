@@ -2,14 +2,18 @@ import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeRegistryPath } from "./path-utils";
 
+const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
+
 export type OdtStoreOptions = {
   workspaceId?: string;
   hostUrl: string;
+  forbidWorkspaceIdInput?: boolean;
 };
 
 export type OdtStoreContext = {
   workspaceId?: string;
   hostUrl?: string;
+  forbidWorkspaceIdInput?: boolean;
   beadsAttachmentDir?: string;
   doltHost?: string;
   doltPort?: string;
@@ -61,6 +65,21 @@ const validateExplicitHostUrl = async (hostUrl: string): Promise<string> => {
 
   await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
   return hostUrl;
+};
+
+const readBooleanEnv = (name: string): boolean | undefined => {
+  const value = normalizeOptionalInput(process.env[name]);
+  if (value === undefined) {
+    return undefined;
+  }
+  const normalized = value.toLowerCase();
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+  throw new Error(`${name} must be true, false, 1, or 0.`);
 };
 
 const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string): Promise<void> => {
@@ -176,6 +195,8 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   const workspaceId =
     normalizeOptionalInput(context.workspaceId) ??
     normalizeOptionalInput(process.env.ODT_WORKSPACE_ID);
+  const forbidWorkspaceIdInput =
+    context.forbidWorkspaceIdInput ?? readBooleanEnv(FORBID_WORKSPACE_ID_INPUT_ENV);
 
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
@@ -184,7 +205,10 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     : await discoverHostUrl(workspaceId);
 
   if (!workspaceId) {
-    return { hostUrl };
+    return {
+      hostUrl,
+      ...(forbidWorkspaceIdInput ? { forbidWorkspaceIdInput } : {}),
+    };
   }
 
   if (explicitHostUrl) {
@@ -194,5 +218,6 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   return {
     workspaceId,
     hostUrl,
+    ...(forbidWorkspaceIdInput ? { forbidWorkspaceIdInput } : {}),
   };
 };
