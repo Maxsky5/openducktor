@@ -4,6 +4,20 @@ import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-threa
 const ROW_STAGE_INIT = 24;
 const ROW_STAGE_BATCH = 32;
 
+const shouldStageRows = ({
+  activeSessionId,
+  completedSessionIds,
+  disabled,
+  rowCount,
+}: {
+  activeSessionId: string;
+  completedSessionIds: Set<string>;
+  disabled: boolean;
+  rowCount: number;
+}): boolean => {
+  return !disabled && rowCount > ROW_STAGE_INIT && !completedSessionIds.has(activeSessionId);
+};
+
 type UseAgentChatRowStagingArgs = {
   activeSessionId: string | null;
   rows: AgentChatWindowRow[];
@@ -51,11 +65,18 @@ export function useAgentChatRowStaging({
       completedSessionIdsRef.current.delete(activeSessionId);
     }
 
-    const shouldStage =
-      !disabled &&
-      activeSessionId !== null &&
-      rows.length > ROW_STAGE_INIT &&
-      !completedSessionIdsRef.current.has(activeSessionId);
+    if (activeSessionId === null) {
+      activeSessionRef.current = null;
+      updateRowCount(rows.length);
+      return;
+    }
+
+    const shouldStage = shouldStageRows({
+      activeSessionId,
+      completedSessionIds: completedSessionIdsRef.current,
+      disabled,
+      rowCount: rows.length,
+    });
 
     if (!shouldStage) {
       activeSessionRef.current = null;
@@ -107,12 +128,15 @@ export function useAgentChatRowStaging({
   }, [activeSessionId, disabled, rows.length]);
 
   return useMemo(() => {
-    const shouldStage =
-      !disabled &&
-      activeSessionId !== null &&
-      rows.length > ROW_STAGE_INIT &&
-      !completedSessionIdsRef.current.has(activeSessionId);
-    if (!shouldStage) {
+    if (
+      activeSessionId === null ||
+      !shouldStageRows({
+        activeSessionId,
+        completedSessionIds: completedSessionIdsRef.current,
+        disabled,
+        rowCount: rows.length,
+      })
+    ) {
       return { rows, turns };
     }
 

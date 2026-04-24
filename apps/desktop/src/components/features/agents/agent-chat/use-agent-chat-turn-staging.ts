@@ -4,6 +4,27 @@ import type { AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 const STAGE_INIT = 1;
 const STAGE_BATCH = 3;
 
+const shouldStageTurns = ({
+  activeSessionId,
+  completedSessionIds,
+  disabled,
+  turnCount,
+  windowStart,
+}: {
+  activeSessionId: string;
+  completedSessionIds: Set<string>;
+  disabled: boolean;
+  turnCount: number;
+  windowStart: number;
+}): boolean => {
+  return (
+    !disabled &&
+    windowStart > 0 &&
+    turnCount > STAGE_INIT &&
+    !completedSessionIds.has(activeSessionId)
+  );
+};
+
 type UseAgentChatTurnStagingArgs = {
   activeSessionId: string | null;
   windowStart: number;
@@ -46,12 +67,19 @@ export function useAgentChatTurnStaging({
       completedSessionIdsRef.current.delete(activeSessionId);
     }
 
-    const shouldStage =
-      !disabled &&
-      activeSessionId !== null &&
-      windowStart > 0 &&
-      turns.length > STAGE_INIT &&
-      !completedSessionIdsRef.current.has(activeSessionId);
+    if (activeSessionId === null) {
+      activeSessionRef.current = null;
+      updateCount(turns.length);
+      return;
+    }
+
+    const shouldStage = shouldStageTurns({
+      activeSessionId,
+      completedSessionIds: completedSessionIdsRef.current,
+      disabled,
+      turnCount: turns.length,
+      windowStart,
+    });
 
     if (!shouldStage) {
       activeSessionRef.current = null;
@@ -103,13 +131,16 @@ export function useAgentChatTurnStaging({
   }, [activeSessionId, disabled, turns.length, windowStart]);
 
   return useMemo(() => {
-    const shouldStage =
-      !disabled &&
-      activeSessionId !== null &&
-      windowStart > 0 &&
-      turns.length > STAGE_INIT &&
-      !completedSessionIdsRef.current.has(activeSessionId);
-    if (!shouldStage) {
+    if (
+      activeSessionId === null ||
+      !shouldStageTurns({
+        activeSessionId,
+        completedSessionIds: completedSessionIdsRef.current,
+        disabled,
+        turnCount: turns.length,
+        windowStart,
+      })
+    ) {
       return turns;
     }
 
