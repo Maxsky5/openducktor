@@ -82,13 +82,18 @@ impl AppService {
         let issue_type = context.task.issue_type.clone();
         let has_explicit_subtasks = subtasks.is_some();
         let mut subtask_creates = normalize_subtask_plan_inputs(subtasks.unwrap_or_default())?;
-        validate_plan_subtask_rules(&context.task, &context.repo.tasks, &subtask_creates)?;
+        let is_active_or_review = is_active_or_review_status(&context.task.status);
+        let should_validate_subtask_rules =
+            issue_type != IssueType::Epic || !is_active_or_review || has_explicit_subtasks;
+        if should_validate_subtask_rules {
+            validate_plan_subtask_rules(&context.task, &context.repo.tasks, &subtask_creates)?;
+        }
         if issue_type != IssueType::Epic {
             subtask_creates.clear();
         }
 
-        let should_replace_epic_subtasks = issue_type == IssueType::Epic
-            && (!is_active_or_review_status(&context.task.status) || has_explicit_subtasks);
+        let should_replace_epic_subtasks =
+            issue_type == IssueType::Epic && (!is_active_or_review || has_explicit_subtasks);
         if should_replace_epic_subtasks {
             self.validate_epic_subtasks_replaceable(&context)?;
         }
