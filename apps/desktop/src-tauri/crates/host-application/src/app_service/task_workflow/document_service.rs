@@ -2,8 +2,8 @@ use super::task_context::LoadedTaskContext;
 use crate::app_service::service_core::AppService;
 use crate::app_service::workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
-    normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
-    validate_parent_relationships_for_create, validate_plan_subtask_rules,
+    is_active_or_review_status, normalize_required_markdown, normalize_subtask_plan_inputs,
+    normalize_title_key, validate_parent_relationships_for_create, validate_plan_subtask_rules,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{CreateTaskInput, IssueType, PlanSubtaskInput, SpecDocument, TaskStatus};
@@ -20,7 +20,7 @@ impl AppService {
         let context = self.load_task_context_from_resolved(repo_path, task_id)?;
         if !can_set_spec_from_status(&context.task.status) {
             return Err(anyhow!(
-                "set_spec is only allowed from open/spec_ready/ready_for_dev (current: {})",
+                "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: {})",
                 context.task.status.as_cli_value()
             ));
         }
@@ -73,17 +73,28 @@ impl AppService {
         let mut context = self.load_task_context_from_resolved(repo_path, task_id)?;
         if !can_set_plan(&context.task) {
             return Err(anyhow!(
-                "set_plan is not allowed for issue type {} from status {}",
+                "set_plan is not allowed for issue type {} from status {}. feature/epic allow spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review; task/bug also allow open.",
                 context.task.issue_type.as_cli_value(),
                 context.task.status.as_cli_value()
             ));
         }
 
         let issue_type = context.task.issue_type.clone();
+        let has_explicit_subtasks = subtasks.is_some();
         let mut subtask_creates = normalize_subtask_plan_inputs(subtasks.unwrap_or_default())?;
-        validate_plan_subtask_rules(&context.task, &context.repo.tasks, &subtask_creates)?;
+        let is_active_or_review = is_active_or_review_status(&context.task.status);
+        let should_validate_subtask_rules =
+            issue_type != IssueType::Epic || !is_active_or_review || has_explicit_subtasks;
+        if should_validate_subtask_rules {
+            validate_plan_subtask_rules(&context.task, &context.repo.tasks, &subtask_creates)?;
+        }
         if issue_type != IssueType::Epic {
             subtask_creates.clear();
+        }
+
+        let should_replace_epic_subtasks = issue_type == IssueType::Epic && has_explicit_subtasks;
+        if should_replace_epic_subtasks {
+            self.validate_epic_subtasks_replaceable(&context)?;
         }
 
         let plan = self
@@ -91,16 +102,21 @@ impl AppService {
             .set_plan(context.repo_dir(), task_id, &markdown)
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))?;
 
-        if issue_type == IssueType::Epic {
+        if should_replace_epic_subtasks {
             self.replace_epic_plan_subtasks(&mut context, subtask_creates)?;
         }
 
-        self.task_transition(
-            context.repo.repo_path.as_str(),
-            task_id,
-            TaskStatus::ReadyForDev,
-            Some("Implementation plan ready"),
-        )?;
+        if matches!(
+            context.task.status,
+            TaskStatus::Open | TaskStatus::SpecReady
+        ) {
+            self.task_transition(
+                context.repo.repo_path.as_str(),
+                task_id,
+                TaskStatus::ReadyForDev,
+                Some("Implementation plan ready"),
+            )?;
+        }
 
         Ok(plan)
     }
@@ -134,19 +150,6 @@ impl AppService {
             .filter(|entry| entry.parent_id.as_deref() == Some(task_id.as_str()))
             .cloned()
             .collect::<Vec<_>>();
-        let blocked_subtasks = existing_direct_subtasks
-            .iter()
-            .filter(|entry| !can_replace_epic_subtask_status(&entry.status))
-            .map(|entry| format!("{} ({})", entry.id, entry.status.as_cli_value()))
-            .collect::<Vec<_>>();
-        if !blocked_subtasks.is_empty() {
-            return Err(anyhow!(
-                "Cannot replace epic subtasks while active work exists. \
-Move subtasks to open/spec_ready/ready_for_dev first: {}",
-                blocked_subtasks.join(", ")
-            ));
-        }
-
         let existing_direct_subtask_ids = existing_direct_subtasks
             .iter()
             .map(|entry| entry.id.clone())
@@ -183,6 +186,27 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
                 .task_store
                 .create_task(context.repo_dir(), create_input)?;
             context.repo.tasks.push(created);
+        }
+
+        Ok(())
+    }
+
+    fn validate_epic_subtasks_replaceable(&self, context: &LoadedTaskContext) -> Result<()> {
+        let task_id = context.task.id.as_str();
+        let blocked_subtasks = context
+            .repo
+            .tasks
+            .iter()
+            .filter(|entry| entry.parent_id.as_deref() == Some(task_id))
+            .filter(|entry| !can_replace_epic_subtask_status(&entry.status))
+            .map(|entry| format!("{} ({})", entry.id, entry.status.as_cli_value()))
+            .collect::<Vec<_>>();
+        if !blocked_subtasks.is_empty() {
+            return Err(anyhow!(
+                "Cannot replace epic subtasks while active work exists. \
+Move subtasks to open/spec_ready/ready_for_dev first: {}",
+                blocked_subtasks.join(", ")
+            ));
         }
 
         Ok(())

@@ -1520,25 +1520,6 @@ fn set_spec_persists_trimmed_markdown_and_transitions_open_task() -> Result<()> 
 }
 
 #[test]
-fn set_spec_rejects_invalid_status() {
-    let repo_path = "/tmp/odt-repo-spec-invalid";
-    let (service, _task_state, _git_state) = build_service_with_git_state(
-        vec![make_task("task-1", "task", TaskStatus::InProgress)],
-        vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
-
-    let error = service
-        .set_spec(repo_path, "task-1", "# Spec")
-        .expect_err("set_spec should be blocked in in_progress");
-    assert!(error.to_string().contains("set_spec is only allowed"));
-}
-
-#[test]
 fn set_spec_allows_ready_for_dev_without_status_transition() -> Result<()> {
     let repo_path = "/tmp/odt-repo-spec-ready";
     let (service, task_state, _git_state) = build_service_with_git_state(
@@ -1714,8 +1695,8 @@ fn set_plan_for_epic_replaces_existing_subtasks_with_new_plan_proposals() -> Res
 }
 
 #[test]
-fn set_plan_for_epic_without_subtasks_clears_existing_direct_subtasks() -> Result<()> {
-    let repo_path = "/tmp/odt-repo-plan-epic-clear";
+fn set_plan_for_epic_without_subtasks_preserves_existing_direct_subtasks() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-plan-epic-preserve";
     let epic = make_task("epic-1", "epic", TaskStatus::SpecReady);
     let mut existing_child = make_task("child-1", "task", TaskStatus::Open);
     existing_child.parent_id = Some("epic-1".to_string());
@@ -1734,10 +1715,7 @@ fn set_plan_for_epic_without_subtasks_clears_existing_direct_subtasks() -> Resul
     assert_eq!(plan.markdown, "# Epic Plan");
 
     let task_state = task_state.lock().expect("task lock poisoned");
-    assert_eq!(
-        task_state.delete_calls,
-        vec![("child-1".to_string(), false)]
-    );
+    assert!(task_state.delete_calls.is_empty());
     assert!(task_state.created_inputs.is_empty());
     assert!(task_state
         .updated_patches
@@ -1784,6 +1762,7 @@ fn set_plan_for_epic_rejects_subtask_replacement_when_existing_subtask_is_active
     );
 
     let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.plan_set_calls.is_empty());
     assert!(task_state.delete_calls.is_empty());
     assert!(task_state.created_inputs.is_empty());
 }

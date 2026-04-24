@@ -61,6 +61,47 @@ fn module_derive_available_actions_exposes_qa_start_for_review_states() {
 }
 
 #[test]
+fn module_derive_available_actions_exposes_document_updates_for_active_and_review_states() {
+    for issue_type in ["epic", "feature", "task", "bug"] {
+        for status in [
+            TaskStatus::InProgress,
+            TaskStatus::Blocked,
+            TaskStatus::AiReview,
+            TaskStatus::HumanReview,
+        ] {
+            let task = make_task("task-1", issue_type, status);
+
+            let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+            assert!(
+                actions.contains(&TaskAction::SetSpec),
+                "set_spec missing for {issue_type} {}",
+                task.status.as_cli_value()
+            );
+            assert!(
+                actions.contains(&TaskAction::SetPlan),
+                "set_plan missing for {issue_type} {}",
+                task.status.as_cli_value()
+            );
+        }
+    }
+}
+
+#[test]
+fn module_derive_available_actions_hides_document_updates_for_terminal_or_deferred_states() {
+    for issue_type in ["epic", "feature", "task", "bug"] {
+        for status in [TaskStatus::Deferred, TaskStatus::Closed] {
+            let task = make_task("task-1", issue_type, status);
+
+            let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+            assert!(!actions.contains(&TaskAction::SetSpec));
+            assert!(!actions.contains(&TaskAction::SetPlan));
+        }
+    }
+}
+
+#[test]
 fn module_derive_available_actions_exposes_rework_and_open_qa_for_qa_rejected_tasks() {
     let mut task = make_task("task-1", "task", TaskStatus::InProgress);
     task.document_summary.qa_report.has = true;

@@ -56,6 +56,10 @@ describe("buildAgentSystemPrompt", () => {
       "governing constitution for the current task",
       "higher-trust inputs than conversational summaries",
       "Treat the odt_read_task response as the latest persisted workflow summary",
+      "odt_set_spec allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review",
+      "odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
+      "odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
+      "document-only revisions",
     ]);
     expect(prompt).not.toContain("Existing documents:");
     expect(prompt).not.toContain("- spec: # Purpose");

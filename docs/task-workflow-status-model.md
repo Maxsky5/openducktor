@@ -54,9 +54,10 @@ Removed from OpenDucktor UI scope:
 ## Type-Specific Flow Rules
 - `feature` and `epic` follow the standard path:
   `open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed`
-- `feature` and `epic` cannot start planning directly from `open`; `set_plan` is allowed from `spec_ready` and `ready_for_dev`.
+- `feature` and `epic` cannot start planning directly from `open`; `set_plan` is allowed from `spec_ready`, `ready_for_dev`, and later active/review states as document revisions.
 - `task` and `bug` may skip spec/planning:
   `open -> in_progress`
+- Spec and plan documents can be revised during `in_progress`, `blocked`, `ai_review`, and `human_review` without changing task status.
 
 ## QA Requirement Defaults
 `qaRequired` defaults by issue type:

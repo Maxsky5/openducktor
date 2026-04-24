@@ -168,12 +168,12 @@ const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   },
   odt_set_spec: {
     description:
-      "Persist specification markdown for a task and transition open->spec_ready when needed.",
+      "Persist specification markdown for a task. Transitions open->spec_ready only when starting from open; allowed revisions from later active/review states leave status unchanged.",
     execute: (store, input) => store.setSpec(input),
   },
   odt_set_plan: {
     description:
-      "Persist implementation plan markdown and transition task to ready_for_dev (with optional epic subtask proposals). Subtask priority values must be integers in [0, 4], default 2.",
+      "Persist implementation plan markdown. Valid pre-build planning transitions to ready_for_dev; allowed revisions from active/review states leave status unchanged. Optional epic subtask proposal priority values must be integers in [0, 4], default 2.",
     execute: (store, input) => store.setPlan(input),
   },
   odt_build_blocked: {

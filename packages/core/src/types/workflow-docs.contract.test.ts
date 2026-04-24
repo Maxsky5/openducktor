@@ -40,10 +40,10 @@ describe("workflow docs contract", () => {
     );
 
     expect(transitionDoc).toMatch(
-      /\| `odt_set_plan` \(feature\/epic\) \| `spec_ready`, `ready_for_dev` \|/,
+      /\| `odt_set_plan` \(feature\/epic\) \| `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,
     );
     expect(transitionDoc).toMatch(
-      /\| `odt_set_plan` \(task\/bug\) \| `open`, `spec_ready`, `ready_for_dev` \|/,
+      /\| `odt_set_plan` \(task\/bug\) \| `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,
     );
   });
 
