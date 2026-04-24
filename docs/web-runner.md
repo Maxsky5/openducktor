@@ -40,6 +40,8 @@ Published installs resolve a platform-specific host binary from `packages/opendu
 
 Each binary must have a sibling `.sha256` file. The launcher fails before startup if the current platform is unsupported, the binary is missing, or the checksum does not match.
 
+Release automation owns those artifacts in `.github/workflows/publish-web.yml`. The workflow builds `openducktor-web-host` for both macOS targets, uploads the binaries and checksums to the draft GitHub release, downloads them into `packages/openducktor-web/bin/`, rewrites local `workspace:*` dependencies to the release version for npm packaging, runs `npm publish --dry-run`, and then publishes the web runtime packages in dependency order.
+
 Workspace development mode (`bun run browser:dev`) resolves the host through Cargo instead:
 
 ```sh
@@ -52,8 +54,12 @@ Relevant checks for web-runner changes:
 
 ```sh
 bun run frontend:boundary-guard
+(cd packages/openducktor-web && bunx vite build --outDir /tmp/openducktor-web-vite-build --emptyOutDir)
 bun run --filter @openducktor/frontend test
 bun run --filter @openducktor/web test
 bun run --filter @openducktor/web typecheck
+bun run --filter @openducktor/web build
 cd apps/desktop/src-tauri && cargo test --bin openducktor-web-host
 ```
+
+Full release confidence also requires the root repo checks (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, `bun run check:rust`, `bun run test:rust`) and a browser smoke against the live `bun run browser:dev` app. Desktop changes should be smoke-tested with `bun run tauri:dev` or the packaged desktop artifact before publishing the draft release.

@@ -588,10 +588,6 @@ pub fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
-    headless::run_browser_backend(port).await
-}
-
 pub async fn run_web_host(
     port: u16,
     frontend_origin: String,

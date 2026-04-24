@@ -176,6 +176,13 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: gh workflow run publish-mcp.yml --ref "$DEFAULT_BRANCH" -f tag="v$VERSION"
 
+      - name: Dispatch web publish workflow
+        env:
+          DEFAULT_BRANCH: ${{ env.DEFAULT_BRANCH }}
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: gh workflow run publish-web.yml --ref "$DEFAULT_BRANCH" -f tag="v$VERSION"
+
       - name: Publish workflow summary
         env:
           DRAFT_RELEASE_STATUS: ${{ steps.draft_release.outputs.status }}
@@ -187,5 +194,5 @@ jobs:
             echo "- Release commit created on default branch"
             echo "- Release tag pushed: v$VERSION"
             echo "- Draft GitHub release ${DRAFT_RELEASE_STATUS:-verified} with generated notes"
-            echo "- Dispatched workflows: Release Desktop, Publish MCP Package"
+            echo "- Dispatched workflows: Release Desktop, Publish MCP Package, Publish Web Package"
           } >> "$GITHUB_STEP_SUMMARY"

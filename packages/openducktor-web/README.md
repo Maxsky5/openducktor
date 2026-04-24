@@ -16,7 +16,7 @@ From the OpenDucktor repository root:
 bun run browser:dev
 ```
 
-That workspace mode runs the Rust host through Cargo. Published installs use a packaged macOS host binary plus a `.sha256` checksum file.
+That workspace mode runs the Rust host through Cargo. Published installs use a packaged macOS host binary plus a `.sha256` checksum file. Missing or mismatched packaged artifacts fail startup before any fallback is attempted.
 
 ## Options
 
@@ -29,3 +29,14 @@ bunx @openducktor/web --port 1420 --backend-port 14327
 - `--host-binary`: explicit host binary path for local testing
 
 OpenDucktor is macOS-first; packaged web-host binaries currently support Apple Silicon and Intel macOS.
+
+## Release contents
+
+The npm package must include:
+
+- `bin/openducktor-web-host-darwin-arm64`
+- `bin/openducktor-web-host-darwin-arm64.sha256`
+- `bin/openducktor-web-host-darwin-x64`
+- `bin/openducktor-web-host-darwin-x64.sha256`
+
+The release workflow builds those binaries, verifies checksums, dry-runs npm packaging, and publishes the shared OpenDucktor runtime packages before publishing `@openducktor/web`.

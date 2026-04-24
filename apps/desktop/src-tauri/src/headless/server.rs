@@ -26,12 +26,6 @@ use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
 
 const DEFAULT_BROWSER_BACKEND_HOST: &str = "127.0.0.1";
-const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
-    "http://localhost:1420",
-    "http://127.0.0.1:1420",
-    "http://[::1]:1420",
-];
-const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
 const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 const CONTROL_TOKEN_HEADER: &str = "x-openducktor-control-token";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
@@ -39,8 +33,8 @@ pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 #[derive(Debug, Clone)]
 pub struct BrowserBackendOptions {
     pub port: u16,
-    pub frontend_origin: Option<String>,
-    pub control_token: Option<String>,
+    pub frontend_origin: String,
+    pub control_token: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,15 +72,6 @@ fn reject_when_shutting_down(state: &HeadlessState) -> Result<(), HeadlessComman
     }
 }
 
-pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
-    run_browser_backend_with_options(BrowserBackendOptions {
-        port,
-        frontend_origin: std::env::var(BROWSER_FRONTEND_ORIGIN_ENV).ok(),
-        control_token: None,
-    })
-    .await
-}
-
 pub async fn run_browser_backend_with_options(
     options: BrowserBackendOptions,
 ) -> anyhow::Result<()> {
@@ -104,7 +89,7 @@ pub async fn run_browser_backend_with_options(
         shutdown_started.clone(),
         Some(shutdown_signal.clone()),
     );
-    let cors_layer = browser_backend_cors_layer(options.frontend_origin.as_deref())?;
+    let cors_layer = browser_backend_cors_layer(&options.frontend_origin)?;
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, options.port))
         .await
         .with_context(|| {
@@ -147,7 +132,7 @@ pub async fn run_browser_backend_with_options(
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
-            control_token: options.control_token.clone(),
+            control_token: Some(options.control_token.clone()),
         });
 
     tracing::info!(
@@ -390,24 +375,16 @@ fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
     }
 }
 
-fn browser_backend_cors_layer(frontend_origin: Option<&str>) -> anyhow::Result<CorsLayer> {
-    let layer = if let Some(origin) = frontend_origin {
-        let origin = origin.trim();
-        if origin.is_empty() {
-            anyhow::bail!("browser frontend origin cannot be empty")
-        }
-        CorsLayer::new()
-            .allow_origin(parse_origin_header(origin)?)
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers(browser_backend_allowed_headers())
-    } else {
-        CorsLayer::new()
-            .allow_origin(parse_default_frontend_origins()?)
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers(browser_backend_allowed_headers())
-    };
+fn browser_backend_cors_layer(frontend_origin: &str) -> anyhow::Result<CorsLayer> {
+    let origin = frontend_origin.trim();
+    if origin.is_empty() {
+        anyhow::bail!("browser frontend origin cannot be empty")
+    }
 
-    Ok(layer)
+    Ok(CorsLayer::new()
+        .allow_origin(parse_origin_header(origin)?)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(browser_backend_allowed_headers()))
 }
 
 fn browser_backend_allowed_headers() -> [header::HeaderName; 3] {
@@ -416,13 +393,6 @@ fn browser_backend_allowed_headers() -> [header::HeaderName; 3] {
         header::HeaderName::from_static(LAST_EVENT_ID_HEADER),
         header::HeaderName::from_static(CONTROL_TOKEN_HEADER),
     ]
-}
-
-fn parse_default_frontend_origins() -> anyhow::Result<Vec<HeaderValue>> {
-    DEFAULT_BROWSER_FRONTEND_ORIGINS
-        .iter()
-        .map(|origin| parse_origin_header(origin))
-        .collect()
 }
 
 fn parse_origin_header(origin: &str) -> anyhow::Result<HeaderValue> {

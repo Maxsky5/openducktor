@@ -78,11 +78,17 @@ fn spawn_parent_death_watcher(_parent_pid: u32, _child_pid: u32) -> Result<()> {
 
 fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
     let bridge_binary = resolve_mcp_bridge_binary_path()?;
+    let frontend_origin = format!("http://127.0.0.1:{port}");
+    let control_token = uuid::Uuid::new_v4().to_string();
     let mut command = Command::new(bridge_binary);
     command
         .arg("--browser-backend")
         .arg("--port")
         .arg(port.to_string())
+        .arg("--frontend-origin")
+        .arg(frontend_origin)
+        .arg("--control-token")
+        .arg(control_token)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

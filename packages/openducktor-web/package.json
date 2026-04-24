@@ -32,10 +32,13 @@
   "scripts": {
     "dev": "bun run src/cli.ts --workspace",
     "start": "bun run src/cli.ts",
-    "build": "bun build --target=bun --packages external --outfile dist/cli.js --banner '#!/usr/bin/env bun' src/cli.ts && chmod +x dist/cli.js && bunx tsc -p tsconfig.json --declaration --emitDeclarationOnly --noEmit false --outDir dist",
+    "build": "bun run build:web-shell && bun run build:cli",
+    "build:web-shell": "bunx vite build --outDir dist/web-shell --emptyOutDir",
+    "build:cli": "bun build --target=bun --packages external --outfile dist/cli.js --banner '#!/usr/bin/env bun' src/cli.ts && chmod +x dist/cli.js && bunx tsc -p tsconfig.json --declaration --emitDeclarationOnly --noEmit false --outDir dist",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test --timeout 1000",
-    "lint": "biome check src"
+    "lint": "biome check src",
+    "publish:dry-run": "npm publish --dry-run --access public"
   },
   "dependencies": {
     "@openducktor/adapters-tauri-host": "workspace:*",

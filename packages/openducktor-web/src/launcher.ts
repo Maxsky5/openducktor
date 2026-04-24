@@ -14,6 +14,10 @@ export type LauncherOptions = {
 };
 
 type ManagedProcess = Bun.Subprocess;
+type BackendReadinessDependencies = {
+  fetch: typeof fetch;
+  sleep: (durationMs: number) => Promise<unknown>;
+};
 
 const LOCALHOST = "127.0.0.1";
 const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
@@ -57,11 +61,15 @@ const spawnHost = (
   });
 };
 
-const requestHostShutdown = async (backendUrl: string, controlToken: string): Promise<void> => {
+const requestHostShutdown = async (
+  backendUrl: string,
+  controlToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3_000);
   try {
-    const response = await fetch(`${backendUrl}/shutdown`, {
+    const response = await fetchImpl(`${backendUrl}/shutdown`, {
       method: "POST",
       headers: {
         [CONTROL_TOKEN_HEADER]: controlToken,
@@ -108,6 +116,7 @@ const waitForBackend = async (
   backendUrl: string,
   timeoutMs: number,
   hostProcess: ManagedProcess,
+  dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
 ): Promise<void> => {
   const startedAt = Date.now();
   let lastError: unknown;
@@ -125,7 +134,7 @@ const waitForBackend = async (
     }
 
     try {
-      const response = await fetch(`${backendUrl}/health`);
+      const response = await dependencies.fetch(`${backendUrl}/health`);
       if (response.ok) {
         return;
       }
@@ -134,7 +143,7 @@ const waitForBackend = async (
       lastError = error;
     }
 
-    await Bun.sleep(250);
+    await dependencies.sleep(250);
   }
 
   if (earlyExitCode !== null) {
@@ -145,6 +154,11 @@ const waitForBackend = async (
 
   const detail = lastError instanceof Error ? ` Last error: ${lastError.message}` : "";
   throw new Error(`Timed out waiting for OpenDucktor web host at ${backendUrl}.${detail}`);
+};
+
+export const __launcherTestInternals = {
+  requestHostShutdown,
+  waitForBackend,
 };
 
 const startViteServer = async (
