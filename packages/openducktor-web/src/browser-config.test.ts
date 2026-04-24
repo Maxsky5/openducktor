@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
 
+type OriginValidationCase = {
+  name: string;
+  input: string;
+  expected?: string;
+  errorIncludes?: string;
+};
+
+const loadOriginValidationCases = async (): Promise<OriginValidationCase[]> =>
+  (await Bun.file(
+    new URL("./browser-origin-validation-cases.json", import.meta.url),
+  ).json()) as OriginValidationCase[];
+
 describe("browser web host config", () => {
   test("requires the launcher-injected backend URL", () => {
     expect(() => getBrowserBackendUrl({ VITE_ODT_BROWSER_AUTH_TOKEN: "token" })).toThrow(
@@ -14,31 +26,17 @@ describe("browser web host config", () => {
     ).toThrow("OpenDucktor web is missing the local web host app token");
   });
 
-  test("accepts loopback http origins with explicit ports", () => {
-    expect(
-      getBrowserBackendUrl({
-        VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327",
-      }),
-    ).toBe("http://127.0.0.1:14327");
-    expect(
-      getBrowserBackendUrl({
-        VITE_ODT_BROWSER_BACKEND_URL: "http://localhost:14327",
-      }),
-    ).toBe("http://localhost:14327");
-  });
+  test("matches the shared loopback origin validation cases", async () => {
+    const cases = await loadOriginValidationCases();
 
-  test("rejects non-loopback or non-origin backend URLs", () => {
-    expect(() =>
-      getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: "https://example.com:14327" }),
-    ).toThrow("must use http");
-    expect(() =>
-      getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: "http://example.com:14327" }),
-    ).toThrow("must target 127.0.0.1");
-    expect(() =>
-      getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1" }),
-    ).toThrow("must include an explicit port");
-    expect(() =>
-      getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327/app" }),
-    ).toThrow("must be an origin only");
+    for (const testCase of cases) {
+      const validate = () => getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: testCase.input });
+
+      if (testCase.expected) {
+        expect(validate(), testCase.name).toBe(testCase.expected);
+      } else {
+        expect(validate, testCase.name).toThrow(testCase.errorIncludes);
+      }
+    }
   });
 });

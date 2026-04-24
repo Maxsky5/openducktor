@@ -1,8 +1,9 @@
 import type { ShellBridge } from "@openducktor/frontend";
-import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
+import { getBrowserBackendUrl } from "./browser-config";
 import {
   buildLocalAttachmentPreviewUrl,
   createLocalHostClient,
+  ensureLocalHostSession,
   subscribeLocalHostDevServerEvents,
   subscribeLocalHostRunEvents,
   subscribeLocalHostTaskEvents,
@@ -30,11 +31,8 @@ export const createBrowserShellBridge = (): ShellBridge => {
     },
     resolveLocalAttachmentPreviewSrc: async (path) => {
       const resolvedPath = (await client.workspaceResolveLocalAttachmentPath({ path })).path;
-      return buildLocalAttachmentPreviewUrl(
-        getBrowserBackendUrl(),
-        getBrowserAuthToken(),
-        resolvedPath,
-      );
+      await ensureLocalHostSession();
+      return buildLocalAttachmentPreviewUrl(getBrowserBackendUrl(), resolvedPath);
     },
   };
 };

@@ -6,7 +6,7 @@ Local browser runner for OpenDucktor.
 bunx @openducktor/web
 ```
 
-The CLI starts the OpenDucktor Rust web host on `127.0.0.1`, waits for readiness, serves the shared React frontend with Vite, and shuts the host down with a control-token-protected request when the process exits. The browser shell receives a launcher-generated app token and fails fast if the launcher does not inject the local host URL or token.
+The CLI starts the OpenDucktor Rust web host on `127.0.0.1`, waits for readiness, serves the shared React frontend with Vite, and shuts the host down with a control-token-protected request when the process exits. The browser shell receives a launcher-generated app token, opens an HttpOnly host session cookie through `/session`, and fails fast if the launcher does not inject the local host URL or token.
 
 ## Development
 

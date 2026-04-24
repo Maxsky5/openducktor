@@ -83,7 +83,7 @@ fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
     let app_token = uuid::Uuid::new_v4().to_string();
     let mut command = Command::new(bridge_binary);
     command
-        .arg("--browser-backend")
+        .arg("--web-host")
         .arg("--port")
         .arg(port.to_string())
         .arg("--frontend-origin")
@@ -119,7 +119,7 @@ fn resolve_mcp_bridge_binary_path() -> Result<PathBuf> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Err(anyhow!(
-                "{MCP_BRIDGE_BINARY_ENV} is set but empty. Provide a browser-backend-capable executable path."
+                "{MCP_BRIDGE_BINARY_ENV} is set but empty. Provide a web-host-capable executable path."
             ));
         }
         return Ok(PathBuf::from(trimmed));

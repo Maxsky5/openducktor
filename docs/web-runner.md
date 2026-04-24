@@ -30,11 +30,13 @@ Shared frontend code must not import `@tauri-apps/api`, `apps/desktop`, or `src-
 The launcher generates two tokens for each run and passes both to the Rust web host:
 
 - a control token for launcher-only operations such as `/shutdown`, sent with the `x-openducktor-control-token` header;
-- an app token for browser-facing API calls, sent with the `x-openducktor-app-token` header for invoke requests and as a query token for SSE streams and attachment previews because `EventSource` and image requests cannot send custom headers.
+- an app token for browser-facing API bootstrap. The browser shell sends it once to `/session` with the `x-openducktor-app-token` header. The host then sets an HttpOnly `openducktor_web_session` cookie for SSE streams and attachment previews, so app tokens are not placed in URLs. Invoke requests still include the app-token header and credentials.
 
 The browser shell fails fast if the launcher does not inject `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN`. There is no default backend URL, so a page cannot accidentally attach to a stale local host.
 
 The web host validates the configured frontend origin for CORS. The origin must be an `http` loopback origin with an explicit port and no credentials, path, query, or fragment. There is no fallback from the web host to a desktop runtime route.
+
+The desktop binary also accepts a strict internal `--web-host` mode for bridge processes. The older `--browser-backend` flag remains as a compatibility alias, but new callers should use `--web-host`.
 
 ## Release Packaging
 

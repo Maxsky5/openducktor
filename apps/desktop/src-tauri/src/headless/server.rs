@@ -30,6 +30,7 @@ const DEFAULT_BROWSER_BACKEND_HOST: &str = "127.0.0.1";
 const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 const CONTROL_TOKEN_HEADER: &str = "x-openducktor-control-token";
 const APP_TOKEN_HEADER: &str = "x-openducktor-app-token";
+const APP_SESSION_COOKIE_NAME: &str = "openducktor_web_session";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 
 #[derive(Debug, Clone)]
@@ -117,6 +118,7 @@ pub async fn run_browser_backend_with_options(
     });
     let app = Router::new()
         .route("/health", get(health_handler))
+        .route("/session", post(session_handler))
         .route("/shutdown", post(shutdown_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
@@ -244,6 +246,50 @@ fn validate_app_token_header(
     )
 }
 
+fn read_app_session_cookie(headers: &HeaderMap) -> Option<String> {
+    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
+    for part in cookie_header.split(';') {
+        let trimmed = part.trim();
+        if let Some((name, value)) = trimmed.split_once('=') {
+            if name == APP_SESSION_COOKIE_NAME && !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn validate_app_token_cookie(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    let received_token = read_app_session_cookie(headers);
+    validate_app_token(received_token.as_deref(), expected_token)
+}
+
+async fn session_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<Response, HeadlessCommandError> {
+    validate_app_token_header(&headers, state.app_token.as_deref())?;
+
+    let mut response = Json(json!({ "ok": true })).into_response();
+    if let Some(app_token) = state.app_token.as_deref() {
+        let cookie =
+            format!("{APP_SESSION_COOKIE_NAME}={app_token}; HttpOnly; SameSite=Strict; Path=/");
+        let cookie_value =
+            HeaderValue::from_str(&cookie).map_err(|error| HeadlessCommandError {
+                message: format!("Failed to build OpenDucktor web session cookie: {error}"),
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                failure_kind: None,
+            })?;
+        response
+            .headers_mut()
+            .append(header::SET_COOKIE, cookie_value);
+    }
+    Ok(response)
+}
+
 async fn shutdown_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
@@ -290,11 +336,10 @@ async fn shutdown_handler(
 }
 
 async fn events_handler(
-    Query(query): Query<AppTokenQuery>,
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
-    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
+    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -305,11 +350,10 @@ async fn events_handler(
 }
 
 async fn dev_server_events_handler(
-    Query(query): Query<AppTokenQuery>,
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
-    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
+    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -320,11 +364,10 @@ async fn dev_server_events_handler(
 }
 
 async fn task_events_handler(
-    Query(query): Query<AppTokenQuery>,
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
-    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
+    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -359,23 +402,16 @@ async fn invoke_handler(
 }
 
 #[derive(Deserialize)]
-struct AppTokenQuery {
-    #[serde(rename = "token")]
-    token: Option<String>,
-}
-
-#[derive(Deserialize)]
 struct LocalAttachmentPreviewQuery {
     path: String,
-    #[serde(rename = "token")]
-    token: Option<String>,
 }
 
 async fn local_attachment_preview_handler(
     State(state): State<HeadlessState>,
+    headers: HeaderMap,
     Query(query): Query<LocalAttachmentPreviewQuery>,
 ) -> Result<Response, HeadlessCommandError> {
-    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
+    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
     let path = PathBuf::from(&query.path);
     let metadata = tokio::fs::metadata(&path)
         .await
@@ -443,7 +479,8 @@ fn browser_backend_cors_layer(frontend_origin: &str) -> anyhow::Result<CorsLayer
     Ok(CorsLayer::new()
         .allow_origin(parse_origin_header(&origin)?)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers(browser_backend_allowed_headers()))
+        .allow_headers(browser_backend_allowed_headers())
+        .allow_credentials(true))
 }
 
 fn browser_backend_allowed_headers() -> [header::HeaderName; 4] {
@@ -1030,32 +1067,55 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn event_stream_handlers_require_matching_app_token_when_configured() {
+    async fn session_handler_sets_http_only_app_session_cookie() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            APP_TOKEN_HEADER,
+            HeaderValue::from_static("expected-app-token"),
+        );
+
+        let response = session_handler(State(state), headers)
+            .await
+            .expect("session should be accepted");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let cookie = response
+            .headers()
+            .get(header::SET_COOKIE)
+            .expect("session response should set cookie")
+            .to_str()
+            .expect("cookie should be a string");
+        assert_eq!(
+            cookie,
+            "openducktor_web_session=expected-app-token; HttpOnly; SameSite=Strict; Path=/"
+        );
+    }
+
+    #[tokio::test]
+    async fn event_stream_handlers_require_matching_app_session_cookie_when_configured() {
         let fixture = test_state_fixture();
         let state = HeadlessState {
             app_token: Some("expected-app-token".to_string()),
             ..fixture.state.clone()
         };
 
-        let missing_response = events_handler(
-            Query(AppTokenQuery { token: None }),
-            State(state.clone()),
-            HeaderMap::new(),
-        )
-        .await
-        .into_response();
+        let missing_response = events_handler(State(state.clone()), HeaderMap::new())
+            .await
+            .into_response();
 
         assert_eq!(missing_response.status(), StatusCode::UNAUTHORIZED);
 
-        let accepted_response = events_handler(
-            Query(AppTokenQuery {
-                token: Some("expected-app-token".to_string()),
-            }),
-            State(state),
-            HeaderMap::new(),
-        )
-        .await
-        .into_response();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("openducktor_web_session=expected-app-token"),
+        );
+        let accepted_response = events_handler(State(state), headers).await.into_response();
 
         assert_eq!(accepted_response.status(), StatusCode::OK);
     }
@@ -1247,40 +1307,47 @@ mod tests {
         assert!(headers.contains(&header::HeaderName::from_static(APP_TOKEN_HEADER)));
     }
 
-    #[test]
-    fn validate_web_frontend_origin_accepts_loopback_http_origins() {
-        assert_eq!(
-            validate_web_frontend_origin("http://127.0.0.1:1420").expect("valid origin"),
-            "http://127.0.0.1:1420"
-        );
-        assert_eq!(
-            validate_web_frontend_origin("http://localhost:1420").expect("valid origin"),
-            "http://localhost:1420"
-        );
-        assert_eq!(
-            validate_web_frontend_origin("http://[::1]:1420").expect("valid origin"),
-            "http://[::1]:1420"
-        );
+    #[derive(serde::Deserialize)]
+    struct OriginValidationCase {
+        name: String,
+        input: String,
+        expected: Option<String>,
+        #[serde(rename = "errorIncludes")]
+        error_includes: Option<String>,
     }
 
     #[test]
-    fn validate_web_frontend_origin_rejects_remote_or_non_origin_values() {
-        assert!(validate_web_frontend_origin("https://127.0.0.1:1420")
-            .expect_err("https should fail")
-            .to_string()
-            .contains("must use http"));
-        assert!(validate_web_frontend_origin("http://example.com:1420")
-            .expect_err("remote host should fail")
-            .to_string()
-            .contains("must target"));
-        assert!(validate_web_frontend_origin("http://127.0.0.1")
-            .expect_err("missing port should fail")
-            .to_string()
-            .contains("explicit port"));
-        assert!(validate_web_frontend_origin("http://127.0.0.1:1420/app")
-            .expect_err("path should fail")
-            .to_string()
-            .contains("must not include a path"));
+    fn validate_web_frontend_origin_matches_shared_cases() {
+        let cases: Vec<OriginValidationCase> = serde_json::from_str(include_str!(
+            "../../../../../packages/openducktor-web/src/browser-origin-validation-cases.json"
+        ))
+        .expect("shared web origin validation cases should parse");
+
+        for test_case in cases {
+            let result = validate_web_frontend_origin(&test_case.input);
+            match (test_case.expected, test_case.error_includes) {
+                (Some(expected), None) => {
+                    assert_eq!(
+                        result.expect(&test_case.name),
+                        expected,
+                        "{}",
+                        test_case.name
+                    );
+                }
+                (None, Some(error_includes)) => {
+                    let error = result.expect_err(&test_case.name).to_string();
+                    assert!(
+                        error.contains(&error_includes),
+                        "{}: expected `{error}` to contain `{error_includes}`",
+                        test_case.name
+                    );
+                }
+                _ => panic!(
+                    "{} must specify exactly one of expected or errorIncludes",
+                    test_case.name
+                ),
+            }
+        }
     }
 
     #[tokio::test]
@@ -1451,9 +1518,9 @@ mod tests {
 
         let response = local_attachment_preview_handler(
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Query(LocalAttachmentPreviewQuery {
                 path: preview_path.to_string_lossy().into_owned(),
-                token: None,
             }),
         )
         .await
@@ -1483,9 +1550,9 @@ mod tests {
 
         let error = local_attachment_preview_handler(
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Query(LocalAttachmentPreviewQuery {
                 path: preview_path.to_string_lossy().into_owned(),
-                token: None,
             }),
         )
         .await
@@ -1505,9 +1572,9 @@ mod tests {
 
         let error = local_attachment_preview_handler(
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Query(LocalAttachmentPreviewQuery {
                 path: preview_path.to_string_lossy().into_owned(),
-                token: None,
             }),
         )
         .await

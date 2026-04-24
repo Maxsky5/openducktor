@@ -1611,7 +1611,7 @@ if [ "$1" = "--version" ]; then
   exit 0
 fi
 
-if [ "$1" = "serve" ] || [ "$1" = "--browser-backend" ]; then
+if [ "$1" = "serve" ] || [ "$1" = "--web-host" ] || [ "$1" = "--browser-backend" ]; then
   MODE="$1"
   HOST="127.0.0.1"
   PORT="0"

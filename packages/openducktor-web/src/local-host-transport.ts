@@ -10,7 +10,7 @@ type BrowserSseListener = (payload: unknown) => void;
 
 const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
-const APP_TOKEN_QUERY_PARAM = "token";
+const SESSION_PATH = "session";
 
 type BrowserSseChannel = {
   eventSource: EventSource;
@@ -22,6 +22,7 @@ type BrowserSseChannel = {
 
 const sseChannels = new Map<string, BrowserSseChannel>();
 let nextSseListenerId = 0;
+let sessionPromise: Promise<void> | null = null;
 
 const readLocalHostErrorPayload = async (
   response: Response,
@@ -54,13 +55,43 @@ export const readLocalHostErrorMessage = async (response: Response): Promise<str
   return message;
 };
 
+export const ensureLocalHostSession = (): Promise<void> => {
+  if (sessionPromise) {
+    return sessionPromise;
+  }
+
+  const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
+  const appToken = getBrowserAuthToken();
+  sessionPromise = fetch(`${baseUrl}/${SESSION_PATH}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      [APP_TOKEN_HEADER]: appToken,
+    },
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const { message, payload } = await readLocalHostErrorPayload(response);
+        throw new Error(message, payload ? { cause: payload } : undefined);
+      }
+    })
+    .catch((error) => {
+      sessionPromise = null;
+      throw error;
+    });
+
+  return sessionPromise;
+};
+
 const createHttpInvoke = () => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
   const appToken = getBrowserAuthToken();
 
   return async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
+    await ensureLocalHostSession();
     const response = await fetch(`${baseUrl}/invoke/${command}`, {
       method: "POST",
+      credentials: "include",
       headers: {
         "content-type": "application/json",
         [APP_TOKEN_HEADER]: appToken,
@@ -104,12 +135,10 @@ const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void
 
 const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() => void) => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
-  const appToken = getBrowserAuthToken();
   let channel = sseChannels.get(path);
 
   if (!channel) {
-    const query = new URLSearchParams({ [APP_TOKEN_QUERY_PARAM]: appToken });
-    const eventSource = new EventSource(`${baseUrl}/${path}?${query.toString()}`);
+    const eventSource = new EventSource(`${baseUrl}/${path}`, { withCredentials: true });
     const listeners = new Map<number, BrowserSseListener>();
     const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
     let hasOpened = false;
@@ -171,22 +200,37 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
 
 export const subscribeLocalHostRunEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => subscribeSseChannel("events", listener);
+): Promise<() => void> => {
+  await ensureLocalHostSession();
+  return subscribeSseChannel("events", listener);
+};
 
 export const subscribeLocalHostDevServerEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => subscribeSseChannel("dev-server-events", listener);
+): Promise<() => void> => {
+  await ensureLocalHostSession();
+  return subscribeSseChannel("dev-server-events", listener);
+};
 
 export const subscribeLocalHostTaskEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => subscribeSseChannel("task-events", listener);
+): Promise<() => void> => {
+  await ensureLocalHostSession();
+  return subscribeSseChannel("task-events", listener);
+};
 
-export const buildLocalAttachmentPreviewUrl = (
-  browserBackendUrl: string,
-  appToken: string,
-  path: string,
-): string => {
+export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
   const baseUrl = browserBackendUrl.replace(/\/$/, "");
-  const query = new URLSearchParams({ path, [APP_TOKEN_QUERY_PARAM]: appToken });
+  const query = new URLSearchParams({ path });
   return `${baseUrl}/local-attachment-preview?${query.toString()}`;
+};
+
+export const __localHostTransportTestInternals = {
+  resetSession() {
+    sessionPromise = null;
+    for (const [path, channel] of sseChannels) {
+      channel.eventSource.close();
+      sseChannels.delete(path);
+    }
+  },
 };

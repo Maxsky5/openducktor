@@ -4,7 +4,7 @@ fn main() {
     let browser_backend_config = match parse_browser_backend_config(&args) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("OpenDucktor browser backend argument error: {error}");
+            eprintln!("OpenDucktor web host argument error: {error}");
             std::process::exit(1);
         }
     };
@@ -13,7 +13,7 @@ fn main() {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("browser backend runtime should build");
+            .expect("web host runtime should build");
         runtime.block_on(async move {
             if let Err(error) = openducktor_desktop_lib::run_web_host(
                 config.port,
@@ -23,7 +23,7 @@ fn main() {
             )
             .await
             {
-                eprintln!("OpenDucktor browser backend failed to start: {error:#}");
+                eprintln!("OpenDucktor web host failed to start: {error:#}");
                 std::process::exit(1);
             }
         });
@@ -36,6 +36,10 @@ fn main() {
     }
 }
 
+const WEB_HOST_FLAG: &str = "--web-host";
+const LEGACY_BROWSER_BACKEND_FLAG: &str = "--browser-backend";
+const WEB_HOST_FLAG_LABEL: &str = "--web-host/--browser-backend";
+
 #[derive(Debug, PartialEq, Eq)]
 struct BrowserBackendConfig {
     port: u16,
@@ -46,7 +50,7 @@ struct BrowserBackendConfig {
 
 fn parse_port_value(raw: &str, source: &str) -> Result<u16, String> {
     raw.parse::<u16>()
-        .map_err(|_| format!("Invalid {source} value for --browser-backend: `{raw}`"))
+        .map_err(|_| format!("Invalid {source} value for {WEB_HOST_FLAG_LABEL}: `{raw}`"))
 }
 
 fn arg_value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
@@ -57,11 +61,11 @@ fn arg_value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
 
 fn parse_required_non_empty_arg(args: &[String], flag: &str) -> Result<String, String> {
     let raw = arg_value(args, flag)
-        .ok_or_else(|| format!("Missing required {flag} value with --browser-backend."))?;
+        .ok_or_else(|| format!("Missing required {flag} value with {WEB_HOST_FLAG_LABEL}."))?;
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(format!(
-            "{flag} value for --browser-backend cannot be empty."
+            "{flag} value for {WEB_HOST_FLAG_LABEL} cannot be empty."
         ));
     }
     Ok(trimmed.to_string())
@@ -70,21 +74,26 @@ fn parse_required_non_empty_arg(args: &[String], flag: &str) -> Result<String, S
 fn parse_frontend_origin_arg(args: &[String]) -> Result<String, String> {
     let raw = parse_required_non_empty_arg(args, "--frontend-origin")?;
     openducktor_desktop_lib::validate_web_frontend_origin(&raw).map_err(|error| {
-        format!("Invalid --frontend-origin value with --browser-backend: {error:#}")
+        format!("Invalid --frontend-origin value with {WEB_HOST_FLAG_LABEL}: {error:#}")
     })
+}
+
+fn has_web_host_flag(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| arg == WEB_HOST_FLAG || arg == LEGACY_BROWSER_BACKEND_FLAG)
 }
 
 fn parse_browser_backend_config_from_sources(
     args: &[String],
     env_port: Option<&str>,
 ) -> Result<Option<BrowserBackendConfig>, String> {
-    if !args.iter().any(|arg| arg == "--browser-backend") {
+    if !has_web_host_flag(args) {
         return Ok(None);
     }
 
     let port = if args.iter().any(|arg| arg == "--port") {
         let raw = arg_value(args, "--port")
-            .ok_or_else(|| "Missing value for --port with --browser-backend.".to_string())?;
+            .ok_or_else(|| format!("Missing value for --port with {WEB_HOST_FLAG_LABEL}."))?;
         parse_port_value(raw, "--port")?
     } else if let Some(raw) = env_port {
         parse_port_value(raw, "ODT_BROWSER_BACKEND_PORT")?
@@ -126,7 +135,7 @@ mod tests {
         assert_eq!(
             parse_browser_backend_config_from_sources(
                 &args(&[
-                    "--browser-backend",
+                    "--web-host",
                     "--port",
                     "2345",
                     "--frontend-origin",
@@ -140,6 +149,30 @@ mod tests {
             ),
             Ok(Some(BrowserBackendConfig {
                 port: 2345,
+                frontend_origin: "http://127.0.0.1:1420".to_string(),
+                control_token: "token-1".to_string(),
+                app_token: "app-token-1".to_string(),
+            }))
+        );
+    }
+
+    #[test]
+    fn parse_browser_backend_config_accepts_legacy_browser_backend_flag() {
+        assert_eq!(
+            parse_browser_backend_config_from_sources(
+                &args(&[
+                    "--browser-backend",
+                    "--frontend-origin",
+                    "http://127.0.0.1:1420",
+                    "--control-token",
+                    "token-1",
+                    "--app-token",
+                    "app-token-1",
+                ]),
+                None,
+            ),
+            Ok(Some(BrowserBackendConfig {
+                port: 14327,
                 frontend_origin: "http://127.0.0.1:1420".to_string(),
                 control_token: "token-1".to_string(),
                 app_token: "app-token-1".to_string(),

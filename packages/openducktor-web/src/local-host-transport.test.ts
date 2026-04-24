@@ -6,11 +6,13 @@ class FakeEventSource {
   static instances: FakeEventSource[] = [];
 
   readonly url: string;
+  readonly options: EventSourceInit | undefined;
   closed = false;
   private readonly listeners = new Map<string, Set<FakeEventSourceListener>>();
 
-  constructor(url: string) {
+  constructor(url: string, options?: EventSourceInit) {
     this.url = url;
+    this.options = options;
     FakeEventSource.instances.push(this);
   }
 
@@ -59,12 +61,14 @@ const originalAuthToken = process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
 
 const loadLocalHostTransport = () => import("./local-host-transport");
 
-beforeEach(() => {
+beforeEach(async () => {
   FakeEventSource.reset();
   process.env.VITE_ODT_BROWSER_BACKEND_URL = "http://127.0.0.1:14327";
   process.env.VITE_ODT_BROWSER_AUTH_TOKEN = "app-token";
   // @ts-expect-error test shim
   globalThis.EventSource = FakeEventSource;
+  const { __localHostTransportTestInternals } = await loadLocalHostTransport();
+  __localHostTransportTestInternals.resetSession();
 });
 
 afterEach(() => {
@@ -119,7 +123,14 @@ describe("readLocalHostErrorMessage", () => {
 describe("createLocalHostClient", () => {
   test("preserves structured timeout metadata through local web runtimeEnsure", async () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
-    const fetchMock = mock(async () => {
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/session")) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
       return new Response(
         JSON.stringify({
           error: "OpenCode runtime is still starting",
@@ -151,10 +162,23 @@ describe("createLocalHostClient", () => {
     expect(error.message).toBe("OpenCode runtime is still starting");
     expect(Reflect.get(error, "failureKind")).toBe("timeout");
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:14327/session",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "x-openducktor-app-token": "app-token",
+        },
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       "http://127.0.0.1:14327/invoke/runtime_ensure",
       expect.objectContaining({
         method: "POST",
+        credentials: "include",
         headers: {
           "content-type": "application/json",
           "x-openducktor-app-token": "app-token",
@@ -168,6 +192,8 @@ describe("createLocalHostClient", () => {
 describe("local host SSE subscriptions", () => {
   test("shares one EventSource for multiple run-event subscribers", async () => {
     const { subscribeLocalHostRunEvents } = await loadLocalHostTransport();
+    const fetchMock = mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
     const listenerA = mock(() => {});
     const listenerB = mock(() => {});
 
@@ -175,7 +201,9 @@ describe("local host SSE subscriptions", () => {
     const unsubscribeB = await subscribeLocalHostRunEvents(listenerB);
 
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events?token=app-token");
+    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events");
+    expect(FakeEventSource.instances[0]?.options).toEqual({ withCredentials: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     FakeEventSource.instances[0]?.emit("message", JSON.stringify({ type: "run" }));
 
@@ -191,6 +219,9 @@ describe("local host SSE subscriptions", () => {
 
   test("emits reconnect and stream-warning control payloads for task-event subscribers", async () => {
     const { subscribeLocalHostTaskEvents } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
     const listener = mock(() => {});
 
     const unsubscribe = await subscribeLocalHostTaskEvents(listener);
@@ -220,10 +251,8 @@ describe("local host SSE subscriptions", () => {
   test("buildLocalAttachmentPreviewUrl normalizes the backend base URL", async () => {
     const { buildLocalAttachmentPreviewUrl } = await loadLocalHostTransport();
 
-    expect(
-      buildLocalAttachmentPreviewUrl("http://127.0.0.1:14327/", "app-token", "/tmp/preview.png"),
-    ).toBe(
-      "http://127.0.0.1:14327/local-attachment-preview?path=%2Ftmp%2Fpreview.png&token=app-token",
+    expect(buildLocalAttachmentPreviewUrl("http://127.0.0.1:14327/", "/tmp/preview.png")).toBe(
+      "http://127.0.0.1:14327/local-attachment-preview?path=%2Ftmp%2Fpreview.png",
     );
   });
 });
