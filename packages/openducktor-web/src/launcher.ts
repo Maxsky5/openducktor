@@ -30,6 +30,7 @@ const spawnHost = (
   backendPort: number,
   frontendOrigin: string,
   controlToken: string,
+  appToken: string,
 ): ManagedProcess => {
   const hostArgs = [
     "--port",
@@ -38,6 +39,8 @@ const spawnHost = (
     frontendOrigin,
     "--control-token",
     controlToken,
+    "--app-token",
+    appToken,
   ];
 
   if (resolved.kind === "workspace") {
@@ -156,7 +159,14 @@ const waitForBackend = async (
   throw new Error(`Timed out waiting for OpenDucktor web host at ${backendUrl}.${detail}`);
 };
 
+const buildViteDefine = (backendUrl: string, appToken: string): Record<string, string> => ({
+  "import.meta.env.VITE_ODT_BROWSER_BACKEND_URL": JSON.stringify(backendUrl),
+  "import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN": JSON.stringify(appToken),
+  "import.meta.env.VITE_ODT_APP_MODE": JSON.stringify("browser"),
+});
+
 export const __launcherTestInternals = {
+  buildViteDefine,
   requestHostShutdown,
   waitForBackend,
 };
@@ -164,6 +174,7 @@ export const __launcherTestInternals = {
 const startViteServer = async (
   options: LauncherOptions,
   backendUrl: string,
+  appToken: string,
 ): Promise<ViteDevServer> => {
   const server = await createServer({
     root: options.packageRoot,
@@ -173,10 +184,7 @@ const startViteServer = async (
       port: options.frontendPort,
       strictPort: true,
     },
-    define: {
-      "import.meta.env.VITE_ODT_BROWSER_BACKEND_URL": JSON.stringify(backendUrl),
-      "import.meta.env.VITE_ODT_APP_MODE": JSON.stringify("browser"),
-    },
+    define: buildViteDefine(backendUrl, appToken),
   });
 
   await server.listen(options.frontendPort);
@@ -189,6 +197,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
   const frontendUrl = buildFrontendUrl(options.frontendPort);
   const backendUrl = buildBackendUrl(options.backendPort);
   const controlToken = randomUUID();
+  const appToken = randomUUID();
   const hostOptions = {
     packageRoot: options.packageRoot,
     workspaceMode: options.workspaceMode,
@@ -199,7 +208,13 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     ...(options.explicitHostBinary ? { explicitBinaryPath: options.explicitHostBinary } : {}),
   });
 
-  const hostProcess = spawnHost(resolvedHost, options.backendPort, frontendUrl, controlToken);
+  const hostProcess = spawnHost(
+    resolvedHost,
+    options.backendPort,
+    frontendUrl,
+    controlToken,
+    appToken,
+  );
   let viteServer: ViteDevServer | null = null;
   let stopping = false;
 
@@ -236,7 +251,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
 
   try {
     await waitForBackend(backendUrl, readinessTimeoutMs, hostProcess);
-    viteServer = await startViteServer(options, backendUrl);
+    viteServer = await startViteServer(options, backendUrl, appToken);
     console.log(`OpenDucktor web is ready: ${frontendUrl}`);
 
     const exitCode = await hostProcess.exited;

@@ -25,6 +25,7 @@ pub(super) struct HeadlessState {
     pub(super) shutdown_signal: Arc<Notify>,
     pub(super) shutdown_started: Arc<AtomicBool>,
     pub(super) control_token: Option<String>,
+    pub(super) app_token: Option<String>,
 }
 
 #[derive(Debug)]

@@ -14,11 +14,17 @@ pub async fn run_web_host(
     port: u16,
     frontend_origin: String,
     control_token: String,
+    app_token: String,
 ) -> anyhow::Result<()> {
     server::run_browser_backend_with_options(server::BrowserBackendOptions {
         port,
         frontend_origin,
         control_token,
+        app_token,
     })
     .await
+}
+
+pub fn validate_web_frontend_origin(origin: &str) -> anyhow::Result<String> {
+    server::validate_web_frontend_origin(origin)
 }

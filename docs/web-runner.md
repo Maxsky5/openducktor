@@ -27,9 +27,14 @@ Shared frontend code must not import `@tauri-apps/api`, `apps/desktop`, or `src-
 
 ## Control Plane
 
-The launcher generates a control token for each run and passes it to the Rust web host. The web shell uses the host only through the configured loopback URL. The shutdown endpoint requires the `x-openducktor-control-token` header so random local pages cannot stop the host.
+The launcher generates two tokens for each run and passes both to the Rust web host:
 
-The web host validates the configured frontend origin for CORS. There is no fallback from the web host to a desktop runtime route.
+- a control token for launcher-only operations such as `/shutdown`, sent with the `x-openducktor-control-token` header;
+- an app token for browser-facing API calls, sent with the `x-openducktor-app-token` header for invoke requests and as a query token for SSE streams and attachment previews because `EventSource` and image requests cannot send custom headers.
+
+The browser shell fails fast if the launcher does not inject `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN`. There is no default backend URL, so a page cannot accidentally attach to a stale local host.
+
+The web host validates the configured frontend origin for CORS. The origin must be an `http` loopback origin with an explicit port and no credentials, path, query, or fragment. There is no fallback from the web host to a desktop runtime route.
 
 ## Release Packaging
 
@@ -45,7 +50,7 @@ Release automation owns those artifacts in `.github/workflows/publish-web.yml`. 
 Workspace development mode (`bun run browser:dev`) resolves the host through Cargo instead:
 
 ```sh
-cargo run --bin openducktor-web-host -- --port <port> --frontend-origin <origin> --control-token <token>
+cargo run --bin openducktor-web-host -- --port <port> --frontend-origin <origin> --control-token <token> --app-token <token>
 ```
 
 ## Verification

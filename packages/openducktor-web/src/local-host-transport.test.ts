@@ -54,11 +54,15 @@ class FakeEventSource {
 
 const originalEventSource = globalThis.EventSource;
 const originalFetch = globalThis.fetch;
+const originalBackendUrl = process.env.VITE_ODT_BROWSER_BACKEND_URL;
+const originalAuthToken = process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
 
 const loadLocalHostTransport = () => import("./local-host-transport");
 
 beforeEach(() => {
   FakeEventSource.reset();
+  process.env.VITE_ODT_BROWSER_BACKEND_URL = "http://127.0.0.1:14327";
+  process.env.VITE_ODT_BROWSER_AUTH_TOKEN = "app-token";
   // @ts-expect-error test shim
   globalThis.EventSource = FakeEventSource;
 });
@@ -66,6 +70,16 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.EventSource = originalEventSource;
   globalThis.fetch = originalFetch;
+  if (originalBackendUrl === undefined) {
+    delete process.env.VITE_ODT_BROWSER_BACKEND_URL;
+  } else {
+    process.env.VITE_ODT_BROWSER_BACKEND_URL = originalBackendUrl;
+  }
+  if (originalAuthToken === undefined) {
+    delete process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
+  } else {
+    process.env.VITE_ODT_BROWSER_AUTH_TOKEN = originalAuthToken;
+  }
 });
 
 describe("readLocalHostErrorMessage", () => {
@@ -141,7 +155,10 @@ describe("createLocalHostClient", () => {
       "http://127.0.0.1:14327/invoke/runtime_ensure",
       expect.objectContaining({
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": "app-token",
+        },
         body: JSON.stringify({ repoPath: "/repo", runtimeKind: "opencode" }),
       }),
     );
@@ -158,7 +175,7 @@ describe("local host SSE subscriptions", () => {
     const unsubscribeB = await subscribeLocalHostRunEvents(listenerB);
 
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events");
+    expect(FakeEventSource.instances[0]?.url).toBe("http://127.0.0.1:14327/events?token=app-token");
 
     FakeEventSource.instances[0]?.emit("message", JSON.stringify({ type: "run" }));
 
@@ -203,8 +220,10 @@ describe("local host SSE subscriptions", () => {
   test("buildLocalAttachmentPreviewUrl normalizes the backend base URL", async () => {
     const { buildLocalAttachmentPreviewUrl } = await loadLocalHostTransport();
 
-    expect(buildLocalAttachmentPreviewUrl("http://127.0.0.1:14327/", "/tmp/preview.png")).toBe(
-      "http://127.0.0.1:14327/local-attachment-preview?path=%2Ftmp%2Fpreview.png",
+    expect(
+      buildLocalAttachmentPreviewUrl("http://127.0.0.1:14327/", "app-token", "/tmp/preview.png"),
+    ).toBe(
+      "http://127.0.0.1:14327/local-attachment-preview?path=%2Ftmp%2Fpreview.png&token=app-token",
     );
   });
 });

@@ -19,6 +19,7 @@ fn main() {
                 config.port,
                 config.frontend_origin,
                 config.control_token,
+                config.app_token,
             )
             .await
             {
@@ -40,6 +41,7 @@ struct BrowserBackendConfig {
     port: u16,
     frontend_origin: String,
     control_token: String,
+    app_token: String,
 }
 
 fn parse_port_value(raw: &str, source: &str) -> Result<u16, String> {
@@ -65,6 +67,13 @@ fn parse_required_non_empty_arg(args: &[String], flag: &str) -> Result<String, S
     Ok(trimmed.to_string())
 }
 
+fn parse_frontend_origin_arg(args: &[String]) -> Result<String, String> {
+    let raw = parse_required_non_empty_arg(args, "--frontend-origin")?;
+    openducktor_desktop_lib::validate_web_frontend_origin(&raw).map_err(|error| {
+        format!("Invalid --frontend-origin value with --browser-backend: {error:#}")
+    })
+}
+
 fn parse_browser_backend_config_from_sources(
     args: &[String],
     env_port: Option<&str>,
@@ -85,8 +94,9 @@ fn parse_browser_backend_config_from_sources(
 
     Ok(Some(BrowserBackendConfig {
         port,
-        frontend_origin: parse_required_non_empty_arg(args, "--frontend-origin")?,
+        frontend_origin: parse_frontend_origin_arg(args)?,
         control_token: parse_required_non_empty_arg(args, "--control-token")?,
+        app_token: parse_required_non_empty_arg(args, "--app-token")?,
     }))
 }
 
@@ -123,6 +133,8 @@ mod tests {
                     "http://127.0.0.1:1420",
                     "--control-token",
                     "token-1",
+                    "--app-token",
+                    "app-token-1",
                 ]),
                 Some("9999"),
             ),
@@ -130,6 +142,7 @@ mod tests {
                 port: 2345,
                 frontend_origin: "http://127.0.0.1:1420".to_string(),
                 control_token: "token-1".to_string(),
+                app_token: "app-token-1".to_string(),
             }))
         );
     }
@@ -145,6 +158,8 @@ mod tests {
                 "http://127.0.0.1:1420",
                 "--control-token",
                 "token-1",
+                "--app-token",
+                "app-token-1",
             ]),
             None,
         )
@@ -163,6 +178,8 @@ mod tests {
                     "http://127.0.0.1:1420",
                     "--control-token",
                     "token-1",
+                    "--app-token",
+                    "app-token-1",
                 ]),
                 None,
             ),
@@ -170,6 +187,7 @@ mod tests {
                 port: 14327,
                 frontend_origin: "http://127.0.0.1:1420".to_string(),
                 control_token: "token-1".to_string(),
+                app_token: "app-token-1".to_string(),
             }))
         );
     }
@@ -177,7 +195,13 @@ mod tests {
     #[test]
     fn parse_browser_backend_config_requires_frontend_origin() {
         let error = parse_browser_backend_config_from_sources(
-            &args(&["--browser-backend", "--control-token", "token-1"]),
+            &args(&[
+                "--browser-backend",
+                "--control-token",
+                "token-1",
+                "--app-token",
+                "app-token-1",
+            ]),
             None,
         )
         .expect_err("missing frontend origin should fail");
@@ -192,11 +216,49 @@ mod tests {
                 "--browser-backend",
                 "--frontend-origin",
                 "http://127.0.0.1:1420",
+                "--app-token",
+                "app-token-1",
             ]),
             None,
         )
         .expect_err("missing control token should fail");
 
         assert!(error.contains("Missing required --control-token value"));
+    }
+
+    #[test]
+    fn parse_browser_backend_config_requires_app_token() {
+        let error = parse_browser_backend_config_from_sources(
+            &args(&[
+                "--browser-backend",
+                "--frontend-origin",
+                "http://127.0.0.1:1420",
+                "--control-token",
+                "token-1",
+            ]),
+            None,
+        )
+        .expect_err("missing app token should fail");
+
+        assert!(error.contains("Missing required --app-token value"));
+    }
+
+    #[test]
+    fn parse_browser_backend_config_rejects_non_loopback_origin() {
+        let error = parse_browser_backend_config_from_sources(
+            &args(&[
+                "--browser-backend",
+                "--frontend-origin",
+                "https://example.com:1420",
+                "--control-token",
+                "token-1",
+                "--app-token",
+                "app-token-1",
+            ]),
+            None,
+        )
+        .expect_err("non-loopback origin should fail");
+
+        assert!(error.contains("Invalid --frontend-origin value"));
     }
 }

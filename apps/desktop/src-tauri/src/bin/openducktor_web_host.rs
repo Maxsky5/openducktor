@@ -7,6 +7,7 @@ struct WebHostArgs {
     port: u16,
     frontend_origin: String,
     control_token: String,
+    app_token: String,
 }
 
 fn parse_port_value(raw: &str, source: &str) -> Result<u16, String> {
@@ -27,6 +28,7 @@ where
     let mut port = DEFAULT_PORT;
     let mut frontend_origin: Option<String> = None;
     let mut control_token: Option<String> = None;
+    let mut app_token: Option<String> = None;
 
     while let Some(arg) = args.pop_front() {
         match arg.as_str() {
@@ -35,10 +37,9 @@ where
             }
             "--frontend-origin" => {
                 let value = require_value(&mut args, "--frontend-origin")?;
-                if value.trim().is_empty() {
-                    return Err("--frontend-origin cannot be empty.".to_string());
-                }
-                frontend_origin = Some(value);
+                let origin = openducktor_desktop_lib::validate_web_frontend_origin(&value)
+                    .map_err(|error| format!("Invalid --frontend-origin: {error:#}"))?;
+                frontend_origin = Some(origin);
             }
             "--control-token" => {
                 let value = require_value(&mut args, "--control-token")?;
@@ -47,9 +48,16 @@ where
                 }
                 control_token = Some(value);
             }
+            "--app-token" => {
+                let value = require_value(&mut args, "--app-token")?;
+                if value.trim().is_empty() {
+                    return Err("--app-token cannot be empty.".to_string());
+                }
+                app_token = Some(value);
+            }
             "-h" | "--help" => {
                 return Err(
-                    "Usage: openducktor-web-host --frontend-origin <origin> --control-token <token> [--port <port>]"
+                    "Usage: openducktor-web-host --frontend-origin <origin> --control-token <token> --app-token <token> [--port <port>]"
                         .to_string(),
                 );
             }
@@ -63,6 +71,7 @@ where
             .ok_or_else(|| "Missing required --frontend-origin.".to_string())?,
         control_token: control_token
             .ok_or_else(|| "Missing required --control-token.".to_string())?,
+        app_token: app_token.ok_or_else(|| "Missing required --app-token.".to_string())?,
     })
 }
 
@@ -88,6 +97,7 @@ fn main() {
             args.port,
             args.frontend_origin,
             args.control_token,
+            args.app_token,
         )
         .await
         {
@@ -107,18 +117,41 @@ mod tests {
 
     #[test]
     fn parse_web_host_args_requires_frontend_origin() {
-        let error = parse_web_host_args_from(args(&["--control-token", "token"]))
-            .expect_err("missing frontend origin should fail");
+        let error = parse_web_host_args_from(args(&[
+            "--control-token",
+            "token",
+            "--app-token",
+            "app-token",
+        ]))
+        .expect_err("missing frontend origin should fail");
 
         assert!(error.contains("Missing required --frontend-origin"));
     }
 
     #[test]
     fn parse_web_host_args_requires_control_token() {
-        let error = parse_web_host_args_from(args(&["--frontend-origin", "http://127.0.0.1:1420"]))
-            .expect_err("missing control token should fail");
+        let error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "http://127.0.0.1:1420",
+            "--app-token",
+            "app-token",
+        ]))
+        .expect_err("missing control token should fail");
 
         assert!(error.contains("Missing required --control-token"));
+    }
+
+    #[test]
+    fn parse_web_host_args_requires_app_token() {
+        let error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "http://127.0.0.1:1420",
+            "--control-token",
+            "token",
+        ]))
+        .expect_err("missing app token should fail");
+
+        assert!(error.contains("Missing required --app-token"));
     }
 
     #[test]
@@ -129,6 +162,8 @@ mod tests {
                 "http://127.0.0.1:1420",
                 "--control-token",
                 "token",
+                "--app-token",
+                "app-token",
                 "--port",
                 "2345",
             ])),
@@ -136,7 +171,23 @@ mod tests {
                 port: 2345,
                 frontend_origin: "http://127.0.0.1:1420".to_string(),
                 control_token: "token".to_string(),
+                app_token: "app-token".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn parse_web_host_args_rejects_origin_with_path() {
+        let error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "http://127.0.0.1:1420/app",
+            "--control-token",
+            "token",
+            "--app-token",
+            "app-token",
+        ]))
+        .expect_err("origin path should fail");
+
+        assert!(error.contains("Invalid --frontend-origin"));
     }
 }

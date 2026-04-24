@@ -24,10 +24,12 @@ use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
+use url::Url;
 
 const DEFAULT_BROWSER_BACKEND_HOST: &str = "127.0.0.1";
 const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 const CONTROL_TOKEN_HEADER: &str = "x-openducktor-control-token";
+const APP_TOKEN_HEADER: &str = "x-openducktor-app-token";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,7 @@ pub struct BrowserBackendOptions {
     pub port: u16,
     pub frontend_origin: String,
     pub control_token: String,
+    pub app_token: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,7 +92,8 @@ pub async fn run_browser_backend_with_options(
         shutdown_started.clone(),
         Some(shutdown_signal.clone()),
     );
-    let cors_layer = browser_backend_cors_layer(&options.frontend_origin)?;
+    let frontend_origin = validate_web_frontend_origin(&options.frontend_origin)?;
+    let cors_layer = browser_backend_cors_layer(&frontend_origin)?;
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, options.port))
         .await
         .with_context(|| {
@@ -133,6 +137,7 @@ pub async fn run_browser_backend_with_options(
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
             control_token: Some(options.control_token.clone()),
+            app_token: Some(options.app_token.clone()),
         });
 
     tracing::info!(
@@ -172,20 +177,19 @@ async fn health_handler() -> impl IntoResponse {
     Json(json!({ "ok": true }))
 }
 
-fn validate_control_token(
-    headers: &HeaderMap,
+fn validate_expected_token(
+    received_token: Option<&str>,
     expected_token: Option<&str>,
+    missing_message: &'static str,
+    invalid_message: &'static str,
 ) -> Result<(), HeadlessCommandError> {
     let Some(expected_token) = expected_token else {
         return Ok(());
     };
 
-    let Some(received_token) = headers
-        .get(CONTROL_TOKEN_HEADER)
-        .and_then(|value| value.to_str().ok())
-    else {
+    let Some(received_token) = received_token else {
         return Err(HeadlessCommandError {
-            message: "Missing OpenDucktor web host control token.".to_string(),
+            message: missing_message.to_string(),
             status: StatusCode::UNAUTHORIZED,
             failure_kind: None,
         });
@@ -193,13 +197,51 @@ fn validate_control_token(
 
     if received_token != expected_token {
         return Err(HeadlessCommandError {
-            message: "Invalid OpenDucktor web host control token.".to_string(),
+            message: invalid_message.to_string(),
             status: StatusCode::FORBIDDEN,
             failure_kind: None,
         });
     }
 
     Ok(())
+}
+
+fn validate_control_token(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    validate_expected_token(
+        headers
+            .get(CONTROL_TOKEN_HEADER)
+            .and_then(|value| value.to_str().ok()),
+        expected_token,
+        "Missing OpenDucktor web host control token.",
+        "Invalid OpenDucktor web host control token.",
+    )
+}
+
+fn validate_app_token(
+    received_token: Option<&str>,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    validate_expected_token(
+        received_token,
+        expected_token,
+        "Missing OpenDucktor web host app token.",
+        "Invalid OpenDucktor web host app token.",
+    )
+}
+
+fn validate_app_token_header(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    validate_app_token(
+        headers
+            .get(APP_TOKEN_HEADER)
+            .and_then(|value| value.to_str().ok()),
+        expected_token,
+    )
 }
 
 async fn shutdown_handler(
@@ -248,9 +290,11 @@ async fn shutdown_handler(
 }
 
 async fn events_handler(
+    Query(query): Query<AppTokenQuery>,
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -261,9 +305,11 @@ async fn events_handler(
 }
 
 async fn dev_server_events_handler(
+    Query(query): Query<AppTokenQuery>,
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -274,9 +320,11 @@ async fn dev_server_events_handler(
 }
 
 async fn task_events_handler(
+    Query(query): Query<AppTokenQuery>,
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -289,8 +337,12 @@ async fn task_events_handler(
 async fn invoke_handler(
     Path(command): Path<String>,
     State(state): State<HeadlessState>,
+    headers: HeaderMap,
     args: Result<Json<Value>, JsonRejection>,
 ) -> impl IntoResponse {
+    if let Err(error) = validate_app_token_header(&headers, state.app_token.as_deref()) {
+        return error.into_response();
+    }
     if let Err(error) = reject_when_shutting_down(&state) {
         return error.into_response();
     }
@@ -307,13 +359,23 @@ async fn invoke_handler(
 }
 
 #[derive(Deserialize)]
+struct AppTokenQuery {
+    #[serde(rename = "token")]
+    token: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct LocalAttachmentPreviewQuery {
     path: String,
+    #[serde(rename = "token")]
+    token: Option<String>,
 }
 
 async fn local_attachment_preview_handler(
+    State(state): State<HeadlessState>,
     Query(query): Query<LocalAttachmentPreviewQuery>,
 ) -> Result<Response, HeadlessCommandError> {
+    validate_app_token(query.token.as_deref(), state.app_token.as_deref())?;
     let path = PathBuf::from(&query.path);
     let metadata = tokio::fs::metadata(&path)
         .await
@@ -376,23 +438,52 @@ fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
 }
 
 fn browser_backend_cors_layer(frontend_origin: &str) -> anyhow::Result<CorsLayer> {
-    let origin = frontend_origin.trim();
-    if origin.is_empty() {
-        anyhow::bail!("browser frontend origin cannot be empty")
-    }
+    let origin = validate_web_frontend_origin(frontend_origin)?;
 
     Ok(CorsLayer::new()
-        .allow_origin(parse_origin_header(origin)?)
+        .allow_origin(parse_origin_header(&origin)?)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers(browser_backend_allowed_headers()))
 }
 
-fn browser_backend_allowed_headers() -> [header::HeaderName; 3] {
+fn browser_backend_allowed_headers() -> [header::HeaderName; 4] {
     [
         header::CONTENT_TYPE,
         header::HeaderName::from_static(LAST_EVENT_ID_HEADER),
         header::HeaderName::from_static(CONTROL_TOKEN_HEADER),
+        header::HeaderName::from_static(APP_TOKEN_HEADER),
     ]
+}
+
+pub fn validate_web_frontend_origin(origin: &str) -> anyhow::Result<String> {
+    let trimmed = origin.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("browser frontend origin cannot be empty");
+    }
+
+    let url = Url::parse(trimmed)
+        .with_context(|| format!("invalid browser frontend origin configured: {trimmed}"))?;
+    if url.scheme() != "http" {
+        anyhow::bail!("browser frontend origin must use http");
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        anyhow::bail!("browser frontend origin must not include credentials");
+    }
+    if url.port().is_none() {
+        anyhow::bail!("browser frontend origin must include an explicit port");
+    }
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        anyhow::bail!("browser frontend origin must not include a path, query string, or fragment");
+    }
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("browser frontend origin must include a host"))?;
+    if !matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]") {
+        anyhow::bail!("browser frontend origin must target 127.0.0.1, localhost, or [::1]");
+    }
+
+    Ok(url.origin().ascii_serialization())
 }
 
 fn parse_origin_header(origin: &str) -> anyhow::Result<HeaderValue> {
@@ -896,6 +987,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invoke_handler_requires_matching_app_token_when_configured() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+
+        let missing_response = invoke_handler(
+            Path("workspace_list".to_string()),
+            State(state.clone()),
+            HeaderMap::new(),
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+        let missing_status = missing_response.status();
+        let missing_body = to_bytes(missing_response.into_body(), usize::MAX)
+            .await
+            .expect("missing app token response body should collect");
+        let missing_payload: Value = serde_json::from_slice(&missing_body)
+            .expect("missing app token response body should deserialize");
+
+        assert_eq!(missing_status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            missing_payload,
+            json!({ "error": "Missing OpenDucktor web host app token." })
+        );
+
+        let mut invalid_headers = HeaderMap::new();
+        invalid_headers.insert(APP_TOKEN_HEADER, HeaderValue::from_static("wrong-token"));
+        let invalid_response = invoke_handler(
+            Path("workspace_list".to_string()),
+            State(state),
+            invalid_headers,
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(invalid_response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn event_stream_handlers_require_matching_app_token_when_configured() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+
+        let missing_response = events_handler(
+            Query(AppTokenQuery { token: None }),
+            State(state.clone()),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(missing_response.status(), StatusCode::UNAUTHORIZED);
+
+        let accepted_response = events_handler(
+            Query(AppTokenQuery {
+                token: Some("expected-app-token".to_string()),
+            }),
+            State(state),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(accepted_response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn invoke_handler_rejects_new_work_when_shutdown_started() {
         let fixture = test_state_fixture();
         fixture.state.shutdown_started.store(true, Ordering::SeqCst);
@@ -903,6 +1068,7 @@ mod tests {
         let response = invoke_handler(
             Path("workspace_list".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({}))),
         )
         .await
@@ -968,6 +1134,7 @@ mod tests {
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
                 control_token: None,
+                app_token: None,
             },
             root,
         }
@@ -1028,6 +1195,7 @@ mod tests {
                     shutdown_signal: Arc::new(Notify::new()),
                     shutdown_started: Arc::new(AtomicBool::new(false)),
                     control_token: None,
+                    app_token: None,
                 },
                 root,
             },
@@ -1049,6 +1217,7 @@ mod tests {
         let response = invoke_handler(
             Path("workspace_list".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             args,
         )
         .await
@@ -1071,10 +1240,47 @@ mod tests {
     fn browser_backend_allowed_headers_include_last_event_id_for_sse_replay() {
         let headers = browser_backend_allowed_headers();
 
-        assert_eq!(headers.len(), 3);
+        assert_eq!(headers.len(), 4);
         assert!(headers.contains(&header::CONTENT_TYPE));
         assert!(headers.contains(&header::HeaderName::from_static(LAST_EVENT_ID_HEADER)));
         assert!(headers.contains(&header::HeaderName::from_static(CONTROL_TOKEN_HEADER)));
+        assert!(headers.contains(&header::HeaderName::from_static(APP_TOKEN_HEADER)));
+    }
+
+    #[test]
+    fn validate_web_frontend_origin_accepts_loopback_http_origins() {
+        assert_eq!(
+            validate_web_frontend_origin("http://127.0.0.1:1420").expect("valid origin"),
+            "http://127.0.0.1:1420"
+        );
+        assert_eq!(
+            validate_web_frontend_origin("http://localhost:1420").expect("valid origin"),
+            "http://localhost:1420"
+        );
+        assert_eq!(
+            validate_web_frontend_origin("http://[::1]:1420").expect("valid origin"),
+            "http://[::1]:1420"
+        );
+    }
+
+    #[test]
+    fn validate_web_frontend_origin_rejects_remote_or_non_origin_values() {
+        assert!(validate_web_frontend_origin("https://127.0.0.1:1420")
+            .expect_err("https should fail")
+            .to_string()
+            .contains("must use http"));
+        assert!(validate_web_frontend_origin("http://example.com:1420")
+            .expect_err("remote host should fail")
+            .to_string()
+            .contains("must target"));
+        assert!(validate_web_frontend_origin("http://127.0.0.1")
+            .expect_err("missing port should fail")
+            .to_string()
+            .contains("explicit port"));
+        assert!(validate_web_frontend_origin("http://127.0.0.1:1420/app")
+            .expect_err("path should fail")
+            .to_string()
+            .contains("must not include a path"));
     }
 
     #[tokio::test]
@@ -1085,6 +1291,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_get_workspaces".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({}))),
         )
         .await
@@ -1118,6 +1325,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_create_task".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({
                 "workspaceId": workspace_id,
                 "title": "Bridge task",
@@ -1172,6 +1380,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_search_tasks".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({
                 "workspaceId": workspace_id,
                 "status": "open",
@@ -1209,6 +1418,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_read_task_documents".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({
                 "workspaceId": workspace_id,
                 "taskId": "task-1",
@@ -1235,13 +1445,17 @@ mod tests {
 
     #[tokio::test]
     async fn local_attachment_preview_handler_returns_file_bytes() {
-        let _fixture = test_state_fixture();
+        let fixture = test_state_fixture();
         let preview_path = stage_local_attachment_to_temp("preview.png", "cHJldmlldy1ieXRlcw==")
             .expect("preview fixture should stage");
 
-        let response = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
-            path: preview_path.to_string_lossy().into_owned(),
-        }))
+        let response = local_attachment_preview_handler(
+            State(fixture.state.clone()),
+            Query(LocalAttachmentPreviewQuery {
+                path: preview_path.to_string_lossy().into_owned(),
+                token: None,
+            }),
+        )
         .await
         .expect("preview request should succeed");
 
@@ -1262,14 +1476,18 @@ mod tests {
 
     #[tokio::test]
     async fn local_attachment_preview_handler_returns_not_found_for_missing_files() {
-        let _fixture = test_state_fixture();
+        let fixture = test_state_fixture();
         let preview_path = std::env::temp_dir()
             .join("openducktor-local-attachments")
             .join("missing.png");
 
-        let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
-            path: preview_path.to_string_lossy().into_owned(),
-        }))
+        let error = local_attachment_preview_handler(
+            State(fixture.state.clone()),
+            Query(LocalAttachmentPreviewQuery {
+                path: preview_path.to_string_lossy().into_owned(),
+                token: None,
+            }),
+        )
         .await
         .expect_err("missing preview path should fail");
 
@@ -1285,9 +1503,13 @@ mod tests {
         let preview_path = fixture.root.join("outside-staging.png");
         fs::write(&preview_path, b"preview-bytes").expect("preview fixture should write");
 
-        let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
-            path: preview_path.to_string_lossy().into_owned(),
-        }))
+        let error = local_attachment_preview_handler(
+            State(fixture.state.clone()),
+            Query(LocalAttachmentPreviewQuery {
+                path: preview_path.to_string_lossy().into_owned(),
+                token: None,
+            }),
+        )
         .await
         .expect_err("non-staged preview path should fail");
 

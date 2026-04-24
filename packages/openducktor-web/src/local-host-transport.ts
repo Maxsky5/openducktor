@@ -4,11 +4,13 @@ import {
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@openducktor/frontend/lib/browser-live/constants";
 import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
-import { getBrowserBackendUrl } from "./browser-config";
+import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
 
 type BrowserSseListener = (payload: unknown) => void;
 
 const CONTROL_EVENT_SSE_PATHS = new Set(["dev-server-events", "task-events"]);
+const APP_TOKEN_HEADER = "x-openducktor-app-token";
+const APP_TOKEN_QUERY_PARAM = "token";
 
 type BrowserSseChannel = {
   eventSource: EventSource;
@@ -54,12 +56,14 @@ export const readLocalHostErrorMessage = async (response: Response): Promise<str
 
 const createHttpInvoke = () => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
+  const appToken = getBrowserAuthToken();
 
   return async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
     const response = await fetch(`${baseUrl}/invoke/${command}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        [APP_TOKEN_HEADER]: appToken,
       },
       body: JSON.stringify(args ?? {}),
     });
@@ -100,10 +104,12 @@ const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void
 
 const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() => void) => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
+  const appToken = getBrowserAuthToken();
   let channel = sseChannels.get(path);
 
   if (!channel) {
-    const eventSource = new EventSource(`${baseUrl}/${path}`);
+    const query = new URLSearchParams({ [APP_TOKEN_QUERY_PARAM]: appToken });
+    const eventSource = new EventSource(`${baseUrl}/${path}?${query.toString()}`);
     const listeners = new Map<number, BrowserSseListener>();
     const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
     let hasOpened = false;
@@ -175,8 +181,12 @@ export const subscribeLocalHostTaskEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => subscribeSseChannel("task-events", listener);
 
-export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
+export const buildLocalAttachmentPreviewUrl = (
+  browserBackendUrl: string,
+  appToken: string,
+  path: string,
+): string => {
   const baseUrl = browserBackendUrl.replace(/\/$/, "");
-  const query = new URLSearchParams({ path });
+  const query = new URLSearchParams({ path, [APP_TOKEN_QUERY_PARAM]: appToken });
   return `${baseUrl}/local-attachment-preview?${query.toString()}`;
 };

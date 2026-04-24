@@ -68,4 +68,12 @@ describe("launcher internals", () => {
       },
     ]);
   });
+
+  test("injects the browser host URL and app token into the web shell", () => {
+    expect(__launcherTestInternals.buildViteDefine("http://127.0.0.1:14327", "app-token")).toEqual({
+      "import.meta.env.VITE_ODT_APP_MODE": JSON.stringify("browser"),
+      "import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN": JSON.stringify("app-token"),
+      "import.meta.env.VITE_ODT_BROWSER_BACKEND_URL": JSON.stringify("http://127.0.0.1:14327"),
+    });
+  });
 });
