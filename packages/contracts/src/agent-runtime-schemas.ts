@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { AgentRole } from "./agent-workflow-schemas";
-import { type AgentToolName, agentToolNameValues } from "./agent-workflow-schemas";
+import type { AgentRole, AgentToolName } from "./agent-workflow-schemas";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
 export const knownRuntimeKindValues = ["opencode"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
@@ -179,7 +179,10 @@ const runtimeWorkflowToolAliasesSchema = z
   });
 
 const runtimeWorkflowToolAliasesByCanonicalShape = Object.fromEntries(
-  agentToolNameValues.map((toolName) => [toolName, runtimeWorkflowToolAliasesSchema.optional()]),
+  ODT_WORKFLOW_AGENT_TOOL_NAMES.map((toolName) => [
+    toolName,
+    runtimeWorkflowToolAliasesSchema.optional(),
+  ]),
 ) as Record<AgentToolName, z.ZodOptional<typeof runtimeWorkflowToolAliasesSchema>>;
 
 const runtimeWorkflowToolAliasesByCanonicalSchema = z
@@ -188,10 +191,10 @@ const runtimeWorkflowToolAliasesByCanonicalSchema = z
   .superRefine((aliasesByCanonical, context) => {
     const canonicalByAlias = new Map<string, AgentToolName>();
 
-    for (const canonicalTool of agentToolNameValues) {
+    for (const canonicalTool of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
       const aliases = aliasesByCanonical[canonicalTool] ?? [];
       for (const [index, alias] of aliases.entries()) {
-        if (agentToolNameValues.includes(alias as AgentToolName)) {
+        if (ODT_WORKFLOW_AGENT_TOOL_NAMES.includes(alias as AgentToolName)) {
           context.addIssue({
             code: "custom",
             path: [canonicalTool, index],

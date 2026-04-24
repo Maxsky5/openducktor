@@ -16,6 +16,7 @@ export {
   type GetWorkspacesResult,
   getWorkspacesResultSchema,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
   odtHostBridgeReadySchema,
   type PublicTask,

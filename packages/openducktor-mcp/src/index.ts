@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import packageJson from "../package.json" with { type: "json" };
-import { ODT_TOOL_SCHEMAS } from "./lib";
+import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS } from "./lib";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import { toErrorMessage, toToolError, toToolResult } from "./tool-results";
@@ -203,8 +203,6 @@ const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   },
 };
 
-const ODT_REGISTERED_TOOL_NAMES = Object.keys(ODT_REGISTERED_TOOL_SPECS) as RegisteredToolName[];
-
 const registerTools = (server: McpServer, store: OdtTaskStore): void => {
   const registerOneTool = <Name extends RegisteredToolName>(toolName: Name): void => {
     const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
@@ -216,7 +214,7 @@ const registerTools = (server: McpServer, store: OdtTaskStore): void => {
     registerOdtTool(server, store, tool);
   };
 
-  for (const toolName of ODT_REGISTERED_TOOL_NAMES) {
+  for (const toolName of ODT_MCP_TOOL_NAMES) {
     registerOneTool(toolName);
   }
 };
@@ -232,7 +230,7 @@ const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer
     },
     {
       instructions:
-        "OpenDucktor workflow server. Use odt_get_workspaces to discover available workspaces when no startup --workspace-id default is configured. Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Workspace-scoped tools accept an optional top-level workspaceId that overrides the startup default when provided. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
+        "OpenDucktor workflow server. Use odt_get_workspaces to discover available workspaces only when no startup --workspace-id default is configured. Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Workspace-scoped tools accept an optional top-level workspaceId that overrides the startup default when provided. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
     },
   );
 

@@ -3,7 +3,7 @@ import {
   type RuntimeDescriptor,
   requiredRuntimeSupportedScopes,
 } from "./agent-runtime-schemas";
-import { agentToolNameValues } from "./agent-workflow-schemas";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
 const OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
   "edit",
@@ -18,7 +18,7 @@ const createOpencodeWorkflowToolAliasesByCanonical =
   (): RuntimeDescriptor["workflowToolAliasesByCanonical"] => {
     const aliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
 
-    for (const toolName of agentToolNameValues) {
+    for (const toolName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
       aliasesByCanonical[toolName] = OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES.map(
         (prefix) => `${prefix}${toolName}`,
       );

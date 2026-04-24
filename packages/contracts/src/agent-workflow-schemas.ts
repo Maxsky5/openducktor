@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
 export const agentRoleValues = ["spec", "planner", "build", "qa"] as const;
 export const agentSessionStartModeValues = ["fresh", "reuse", "fork"] as const;
@@ -21,18 +22,7 @@ export const agentKickoffScenarioValues = [
   "build_pull_request_generation",
   "qa_review",
 ] as const;
-export const agentToolNameValues = [
-  "odt_read_task",
-  "odt_read_task_documents",
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_set_pull_request",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-] as const;
+export const agentToolNameValues = ODT_WORKFLOW_AGENT_TOOL_NAMES;
 
 export const agentRoleSchema = z.enum(agentRoleValues);
 export type AgentRole = z.infer<typeof agentRoleSchema>;

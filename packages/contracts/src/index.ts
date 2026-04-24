@@ -9,6 +9,7 @@ export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./metadata-schemas";
 export * from "./odt-mcp-schemas";
+export * from "./odt-tool-names";
 export * from "./prompt-schemas";
 export * from "./run-schemas";
 export * from "./runtime-descriptors";

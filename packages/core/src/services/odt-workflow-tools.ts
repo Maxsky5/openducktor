@@ -1,11 +1,12 @@
-import { agentToolNameValues, type RuntimeDescriptor } from "@openducktor/contracts";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeDescriptor } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
   type AgentToolName,
 } from "../types/agent-orchestrator";
 
-export const ODT_WORKFLOW_TOOL_NAMES = agentToolNameValues satisfies readonly AgentToolName[];
+export const ODT_WORKFLOW_TOOL_NAMES =
+  ODT_WORKFLOW_AGENT_TOOL_NAMES satisfies readonly AgentToolName[];
 
 export const ODT_WORKFLOW_READ_TOOL_NAMES = [
   "odt_read_task",
