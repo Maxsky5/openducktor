@@ -6,7 +6,7 @@ use crate::app_service::task_workflow::builder_branch_service::BuilderBranchServ
 use anyhow::{anyhow, Context, Result};
 use host_domain::{GitTargetBranch, TaskStatus};
 use host_infra_system::{
-    build_branch_name, copy_configured_worktree_files, remove_worktree,
+    build_branch_name, copy_configured_worktree_files,
     resolve_effective_worktree_base_dir_for_workspace, run_command, RepoConfig,
 };
 use std::fs;
@@ -102,7 +102,6 @@ fn configure_build_worktree_upstream(
 
     let branch_remote_key = format!("branch.{branch}.remote");
     let branch_merge_key = format!("branch.{branch}.merge");
-    let branch_merge_ref = format!("refs/heads/{branch}");
     let local_branch_ref = format!("refs/heads/{branch}");
     let tracking_ref = format!("refs/remotes/{remote}/{branch}");
     let expected_upstream = format!("{remote}/{branch}");
@@ -112,15 +111,21 @@ fn configure_build_worktree_upstream(
         &["config", branch_remote_key.as_str(), remote],
         Some(repo_path_ref),
     )?;
-    run_command(
+    if let Err(error) = run_command(
         "git",
         &[
             "config",
             branch_merge_key.as_str(),
-            branch_merge_ref.as_str(),
+            local_branch_ref.as_str(),
         ],
         Some(repo_path_ref),
-    )?;
+    ) {
+        let cleanup_error =
+            cleanup_failed_upstream_branch_config(repo_path_ref, branch_remote_key.as_str(), None);
+        return Err(anyhow!(
+            "Failed configuring upstream merge for build worktree branch {branch}: {error}{cleanup_error}"
+        ));
+    }
 
     let tracking_ref_already_exists = git_reference_exists(repo_path_ref, tracking_ref.as_str())?;
     let created_tracking_ref = !tracking_ref_already_exists;
@@ -128,7 +133,7 @@ fn configure_build_worktree_upstream(
         // Git stores upstream config independently, but `@{upstream}` only resolves
         // when the matching tracking ref exists. Seed the local tracking ref without
         // publishing remote state so later generic push flows target the task branch.
-        run_command(
+        if let Err(error) = run_command(
             "git",
             &[
                 "update-ref",
@@ -136,7 +141,17 @@ fn configure_build_worktree_upstream(
                 local_branch_ref.as_str(),
             ],
             Some(repo_path_ref),
-        )?;
+        ) {
+            let cleanup_error = cleanup_failed_upstream_setup(
+                repo_path_ref,
+                branch_remote_key.as_str(),
+                branch_merge_key.as_str(),
+                None,
+            );
+            return Err(anyhow!(
+                "Failed creating upstream tracking ref {tracking_ref} for build worktree branch {branch}: {error}{cleanup_error}"
+            ));
+        }
     }
 
     let resolved_upstream = match run_command(
@@ -151,34 +166,100 @@ fn configure_build_worktree_upstream(
     ) {
         Ok(upstream) => upstream,
         Err(error) => {
-            if created_tracking_ref {
-                let _ = run_command(
-                    "git",
-                    &["update-ref", "-d", tracking_ref.as_str()],
-                    Some(repo_path_ref),
-                );
-            }
-            return Err(error).with_context(|| {
-                format!("Failed verifying upstream tracking for build worktree branch {branch}")
-            });
+            let cleanup_error = cleanup_failed_upstream_setup(
+                repo_path_ref,
+                branch_remote_key.as_str(),
+                branch_merge_key.as_str(),
+                created_tracking_ref.then_some(tracking_ref.as_str()),
+            );
+            return Err(anyhow!(
+                "Failed verifying upstream tracking for build worktree branch {branch}: {error}{cleanup_error}"
+            ));
         }
     };
     if resolved_upstream != expected_upstream {
-        if created_tracking_ref {
-            let _ = run_command(
-                "git",
-                &["update-ref", "-d", tracking_ref.as_str()],
-                Some(repo_path_ref),
-            );
-        }
+        let cleanup_error = cleanup_failed_upstream_setup(
+            repo_path_ref,
+            branch_remote_key.as_str(),
+            branch_merge_key.as_str(),
+            created_tracking_ref.then_some(tracking_ref.as_str()),
+        );
         return Err(anyhow!(
-            "configured upstream resolved to {resolved_upstream}, expected {expected_upstream}"
+            "configured upstream resolved to {resolved_upstream}, expected {expected_upstream}{cleanup_error}"
         ));
     }
 
     Ok(BuildUpstreamSetup {
         created_tracking_ref: created_tracking_ref.then_some(tracking_ref),
     })
+}
+
+fn cleanup_failed_upstream_setup(
+    repo_path_ref: &Path,
+    branch_remote_key: &str,
+    branch_merge_key: &str,
+    created_tracking_ref: Option<&str>,
+) -> String {
+    let mut cleanup_errors = Vec::new();
+    if let Some(tracking_ref) = created_tracking_ref {
+        if let Err(error) = run_command(
+            "git",
+            &["update-ref", "-d", tracking_ref],
+            Some(repo_path_ref),
+        ) {
+            cleanup_errors.push(format!(
+                "Also failed to delete created upstream tracking ref {tracking_ref}: {error}"
+            ));
+        }
+    }
+
+    collect_failed_upstream_branch_config_cleanup(
+        repo_path_ref,
+        branch_remote_key,
+        Some(branch_merge_key),
+        &mut cleanup_errors,
+    );
+    format_cleanup_errors(cleanup_errors)
+}
+
+fn cleanup_failed_upstream_branch_config(
+    repo_path_ref: &Path,
+    branch_remote_key: &str,
+    branch_merge_key: Option<&str>,
+) -> String {
+    let mut cleanup_errors = Vec::new();
+    collect_failed_upstream_branch_config_cleanup(
+        repo_path_ref,
+        branch_remote_key,
+        branch_merge_key,
+        &mut cleanup_errors,
+    );
+    format_cleanup_errors(cleanup_errors)
+}
+
+fn collect_failed_upstream_branch_config_cleanup(
+    repo_path_ref: &Path,
+    branch_remote_key: &str,
+    branch_merge_key: Option<&str>,
+    cleanup_errors: &mut Vec<String>,
+) {
+    for key in [Some(branch_remote_key), branch_merge_key]
+        .into_iter()
+        .flatten()
+    {
+        if let Err(error) = run_command("git", &["config", "--unset-all", key], Some(repo_path_ref))
+        {
+            cleanup_errors.push(format!("Also failed to unset git config {key}: {error}"));
+        }
+    }
+}
+
+fn format_cleanup_errors(cleanup_errors: Vec<String>) -> String {
+    if cleanup_errors.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", cleanup_errors.join("\n"))
+    }
 }
 
 impl AppService {
@@ -286,6 +367,8 @@ impl AppService {
         ) {
             Ok(setup) => setup,
             Err(error) => {
+                // Upstream setup removes any tracking ref and branch config it creates before
+                // returning an error, so rollback only needs to remove the worktree and branch.
                 let cleanup_error = self.rollback_failed_build_worktree(
                     repo_path_ref,
                     worktree_dir.as_path(),
@@ -374,8 +457,30 @@ impl AppService {
                 ));
             }
         }
-        if let Err(error) = remove_worktree(repo_path_ref, worktree_dir) {
-            cleanup_errors.push(format!("Also failed to remove worktree: {error}"));
+        let worktree_dir_string = match worktree_dir.to_str() {
+            Some(value) => value,
+            None => {
+                cleanup_errors.push(format!(
+                    "Also failed to remove worktree: path contains non-UTF-8 data ({})",
+                    worktree_dir.display()
+                ));
+                ""
+            }
+        };
+        if !worktree_dir_string.is_empty() {
+            if let Err(error) = run_command(
+                "git",
+                &[
+                    "worktree",
+                    "remove",
+                    "--force",
+                    "--end-of-options",
+                    worktree_dir_string,
+                ],
+                Some(repo_path_ref),
+            ) {
+                cleanup_errors.push(format!("Also failed to remove worktree: {error}"));
+            }
         }
         if let Err(error) = run_command(
             "git",
@@ -394,11 +499,7 @@ impl AppService {
             ));
         }
 
-        if cleanup_errors.is_empty() {
-            String::new()
-        } else {
-            format!("\n{}", cleanup_errors.join("\n"))
-        }
+        format_cleanup_errors(cleanup_errors)
     }
 }
 
@@ -680,7 +781,8 @@ mod tests {
 
         assert!(error_message
             .contains("Failed configuring upstream tracking for build worktree branch odt/task-1"));
-        assert!(error_message.contains("upstream"));
+        assert!(error_message
+            .contains("Failed verifying upstream tracking for build worktree branch odt/task-1"));
         assert!(!worktree_base.join("task-1").exists());
         assert!(!git_reference_exists(
             repo.as_path(),
