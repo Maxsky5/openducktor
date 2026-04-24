@@ -405,7 +405,11 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app_service::test_support::{init_git_repo, unique_temp_path};
+    use crate::app_service::test_support::{
+        build_service_with_store, init_git_repo, make_task, unique_temp_path,
+    };
+    use host_domain::GitCurrentBranch;
+    use host_infra_system::AppConfigStore;
 
     fn run_git(repo_path: &Path, args: &[&str]) -> Result<String> {
         let output = Command::new("git")
@@ -616,6 +620,76 @@ mod tests {
 
         assert_eq!(setup.created_tracking_ref, None);
         assert!(current_upstream(worktree.as_path()).is_err());
+        assert_eq!(
+            git_config_value(repo.as_path(), "branch.odt/task-1.remote")?,
+            None
+        );
+        assert_eq!(
+            git_config_value(repo.as_path(), "branch.odt/task-1.merge")?,
+            None
+        );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_build_worktree_rolls_back_when_required_upstream_setup_fails() -> Result<()> {
+        let root = unique_temp_path("build-upstream-failure-cleanup");
+        let repo = root.join("repo");
+        let worktree_base = root.join("worktrees");
+        init_git_repo(repo.as_path())?;
+        create_branch_with_commit(repo.as_path(), "release", "release.txt")?;
+        run_git_success(
+            repo.as_path(),
+            &["update-ref", "refs/remotes/upstream/release", "release"],
+        )?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+            config_store,
+        );
+        let prerequisites = BuildPrerequisites {
+            repo_path: repo.to_string_lossy().to_string(),
+            repo_config: RepoConfig::default(),
+            target_branch: GitTargetBranch {
+                remote: Some("upstream".to_string()),
+                branch: "release".to_string(),
+            },
+            allow_local_branch_fallback: false,
+            branch: "odt/task-1".to_string(),
+            worktree_base: worktree_base.to_string_lossy().to_string(),
+        };
+
+        let error = match service.prepare_build_worktree(&prerequisites, "task-1") {
+            Ok(_) => {
+                return Err(anyhow!(
+                    "missing remote config should fail upstream verification"
+                ))
+            }
+            Err(error) => error,
+        };
+        let error_message = error.to_string();
+
+        assert!(error_message
+            .contains("Failed configuring upstream tracking for build worktree branch odt/task-1"));
+        assert!(error_message.contains("upstream"));
+        assert!(!worktree_base.join("task-1").exists());
+        assert!(!git_reference_exists(
+            repo.as_path(),
+            "refs/heads/odt/task-1"
+        )?);
+        assert!(!git_reference_exists(
+            repo.as_path(),
+            "refs/remotes/upstream/odt/task-1"
+        )?);
         assert_eq!(
             git_config_value(repo.as_path(), "branch.odt/task-1.remote")?,
             None
