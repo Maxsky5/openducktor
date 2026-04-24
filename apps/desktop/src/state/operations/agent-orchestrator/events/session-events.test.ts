@@ -2200,7 +2200,8 @@ describe("agent-orchestrator-session-events", () => {
         callId: "call-guard",
         tool: "odt_set_spec",
         status: "error",
-        error: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+        error:
+          "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
       },
     });
 

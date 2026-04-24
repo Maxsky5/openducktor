@@ -46,10 +46,10 @@ Native task actions:
 | Trigger | From | Guards | To |
 |---|---|---|---|
 | `task_create` | n/a | always | `open` |
-| `odt_set_spec` | `open`, `spec_ready`, `ready_for_dev` | non-empty markdown | `spec_ready` when starting from `open`, otherwise unchanged |
-| `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev` | non-empty markdown | `ready_for_dev` |
-| `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev` | non-empty markdown | `ready_for_dev` |
-| `odt_set_plan` (epic with subtasks) | `spec_ready`, `ready_for_dev` | plan includes subtask proposals | `ready_for_dev` |
+| `odt_set_spec` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | non-empty markdown | `spec_ready` when starting from `open`, otherwise unchanged |
+| `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | non-empty markdown | `ready_for_dev` when starting from `spec_ready`, otherwise unchanged |
+| `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | non-empty markdown | `ready_for_dev` when starting from `open` or `spec_ready`, otherwise unchanged |
+| `odt_set_plan` (epic with subtasks) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | plan includes subtask proposals; replacing existing direct subtasks requires all direct subtasks to be `open`, `spec_ready`, or `ready_for_dev` | `ready_for_dev` when starting from `spec_ready`, otherwise unchanged |
 | `odt_build_resumed` | `ready_for_dev` | feature/epic standard flow | `in_progress` |
 | `odt_build_resumed` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | task/bug optional flow + blocked resume | `in_progress` |
 | `odt_build_blocked` | `in_progress` | reason required | `blocked` |

@@ -161,7 +161,23 @@ pub(crate) fn allows_transition(task: &TaskCard, from: &TaskStatus, to: &TaskSta
 pub(crate) fn can_set_spec_from_status(status: &TaskStatus) -> bool {
     matches!(
         status,
-        TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
+        TaskStatus::Open
+            | TaskStatus::SpecReady
+            | TaskStatus::ReadyForDev
+            | TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
+    )
+}
+
+pub(crate) fn is_active_or_review_status(status: &TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
     )
 }
 
@@ -169,11 +185,14 @@ pub(crate) fn can_set_plan(task: &TaskCard) -> bool {
     match task.issue_type {
         IssueType::Epic | IssueType::Feature => {
             matches!(task.status, TaskStatus::SpecReady | TaskStatus::ReadyForDev)
+                || is_active_or_review_status(&task.status)
         }
-        IssueType::Task | IssueType::Bug => matches!(
-            task.status,
-            TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
-        ),
+        IssueType::Task | IssueType::Bug => {
+            matches!(
+                task.status,
+                TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
+            ) || is_active_or_review_status(&task.status)
+        }
     }
 }
 

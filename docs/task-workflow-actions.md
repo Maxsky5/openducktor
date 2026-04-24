@@ -36,13 +36,16 @@ The backend is the single source of truth for which actions are currently allowe
 
 ### `set_spec`
 - Purpose: author or revise the specification markdown.
-- Transition: `open -> spec_ready`, or stays in place when already `spec_ready` or `ready_for_dev`.
+- Allowed from `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review`.
+- Transition: `open -> spec_ready`; all other allowed statuses stay in place as document-only revisions.
 
 ### `set_plan`
 - Purpose: author or revise implementation plan markdown.
-- Transition:
-  - `feature/epic`: allowed from `spec_ready` and `ready_for_dev` (`ready_for_dev` remains `ready_for_dev`).
-  - `task/bug`: allowed from `open`, `spec_ready`, and `ready_for_dev` (`ready_for_dev` remains `ready_for_dev`).
+- Allowed statuses:
+  - `feature/epic`: `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review`.
+  - `task/bug`: `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review`.
+- Transition: valid pre-build planning moves to `ready_for_dev`; `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review` stay in place as document-only revisions.
+- Epic subtask proposals are replacement intent; replacing existing direct subtasks is allowed only when those subtasks are still `open`, `spec_ready`, or `ready_for_dev`. Omitting `subtasks` during active/review epic revisions preserves existing direct subtasks.
 
 ### `build_start`
 - Purpose: start build execution for this task.

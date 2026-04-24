@@ -158,7 +158,12 @@ fn spec_and_plan_write_status_guards_follow_matrix() {
     assert!(can_set_spec_from_status(&TaskStatus::Open));
     assert!(can_set_spec_from_status(&TaskStatus::SpecReady));
     assert!(can_set_spec_from_status(&TaskStatus::ReadyForDev));
-    assert!(!can_set_spec_from_status(&TaskStatus::InProgress));
+    assert!(can_set_spec_from_status(&TaskStatus::InProgress));
+    assert!(can_set_spec_from_status(&TaskStatus::Blocked));
+    assert!(can_set_spec_from_status(&TaskStatus::AiReview));
+    assert!(can_set_spec_from_status(&TaskStatus::HumanReview));
+    assert!(!can_set_spec_from_status(&TaskStatus::Deferred));
+    assert!(!can_set_spec_from_status(&TaskStatus::Closed));
 
     let epic_open = make_task("epic-open", "epic", TaskStatus::Open);
     let epic_spec_ready = make_task("epic-spec", "epic", TaskStatus::SpecReady);
@@ -170,6 +175,13 @@ fn spec_and_plan_write_status_guards_follow_matrix() {
     let bug_open = make_task("bug-open", "bug", TaskStatus::Open);
     let bug_ready_for_dev = make_task("bug-ready", "bug", TaskStatus::ReadyForDev);
     let feature_in_progress = make_task("feature-progress", "feature", TaskStatus::InProgress);
+    let task_in_progress = make_task("task-progress", "task", TaskStatus::InProgress);
+    let bug_blocked = make_task("bug-blocked", "bug", TaskStatus::Blocked);
+    let epic_ai_review = make_task("epic-ai-review", "epic", TaskStatus::AiReview);
+    let feature_human_review =
+        make_task("feature-human-review", "feature", TaskStatus::HumanReview);
+    let task_deferred = make_task("task-deferred", "task", TaskStatus::Deferred);
+    let task_closed = make_task("task-closed", "task", TaskStatus::Closed);
 
     assert!(!can_set_plan(&epic_open));
     assert!(can_set_plan(&epic_spec_ready));
@@ -180,7 +192,13 @@ fn spec_and_plan_write_status_guards_follow_matrix() {
     assert!(can_set_plan(&task_ready_for_dev));
     assert!(can_set_plan(&bug_open));
     assert!(can_set_plan(&bug_ready_for_dev));
-    assert!(!can_set_plan(&feature_in_progress));
+    assert!(can_set_plan(&feature_in_progress));
+    assert!(can_set_plan(&task_in_progress));
+    assert!(can_set_plan(&bug_blocked));
+    assert!(can_set_plan(&epic_ai_review));
+    assert!(can_set_plan(&feature_human_review));
+    assert!(!can_set_plan(&task_deferred));
+    assert!(!can_set_plan(&task_closed));
 }
 
 #[test]
@@ -247,15 +265,15 @@ fn bug_in_open_can_start_build_directly() {
 }
 
 #[test]
-fn in_progress_tasks_expose_builder_action_and_no_plan_actions() {
+fn in_progress_tasks_expose_builder_action_and_document_revision_actions() {
     let task = make_task("task-1", "task", TaskStatus::InProgress);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::OpenBuilder));
     assert!(actions.contains(&TaskAction::ResetImplementation));
     assert!(!actions.contains(&TaskAction::BuildStart));
     assert!(!actions.contains(&TaskAction::OpenQa));
-    assert!(!actions.contains(&TaskAction::SetSpec));
-    assert!(!actions.contains(&TaskAction::SetPlan));
+    assert!(actions.contains(&TaskAction::SetSpec));
+    assert!(actions.contains(&TaskAction::SetPlan));
 }
 
 #[test]
