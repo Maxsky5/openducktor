@@ -1,4 +1,4 @@
-# Desktop and MCP release process
+# Desktop, Web, and MCP release process
 
 OpenDucktor releases are now owned by GitHub Actions. Maintainers do not need to run local release commands or create tags by hand.
 
@@ -29,6 +29,8 @@ It does all release preparation work:
 - creates the draft GitHub release with generated notes after the commit and tag are pushed
 - dispatches the desktop and MCP publish workflows explicitly after the draft exists
 
+The same release version applies to the web runner package. A publishable `@openducktor/web` build must include macOS web-host binaries for Apple Silicon and Intel plus `.sha256` checksum files under the package's `bin/` directory before npm publication.
+
 ### 2. Release Desktop
 
 `Release Desktop` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
@@ -56,6 +58,21 @@ It:
 - validates that `packages/openducktor-mcp/package.json` matches the tag version
 - verifies the MCP package
 - publishes `@openducktor/mcp` to npmjs
+
+### Web runner package
+
+`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only Rust host, waits for `/health`, serves the shared frontend with Vite, and shuts the host down with a control-token-protected `/shutdown` request.
+
+Before publishing `@openducktor/web`, release automation must:
+
+- publish `@openducktor/frontend` at the same version, because the web CLI imports the shared app package when Vite serves the browser UI
+- build `openducktor-web-host` for `aarch64-apple-darwin` and `x86_64-apple-darwin`
+- place the binaries at `packages/openducktor-web/bin/openducktor-web-host-darwin-arm64` and `packages/openducktor-web/bin/openducktor-web-host-darwin-x64`
+- write matching `.sha256` files next to each binary
+- run `bun run --filter @openducktor/web build`
+- run `bun publish --dry-run` from `packages/openducktor-web`
+
+The launcher refuses unsupported platforms and refuses packaged host binaries without matching checksums. Development mode (`bun run browser:dev`) uses Cargo directly and does not bypass these packaged-install checks.
 
 ### 4. Publish Homebrew Tap
 
@@ -159,9 +176,10 @@ The helper script remains useful because this repo spans three version domains:
 4. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
 5. Wait for `Release Desktop` to finish uploading desktop assets.
 6. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
-7. Open the draft GitHub release and smoke-test the desktop assets.
-8. Publish the draft release when the assets and notes look correct.
-9. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
+7. Publish `@openducktor/web` after the web-host binaries and checksums have been produced and smoke-tested.
+8. Open the draft GitHub release and smoke-test the desktop assets.
+9. Publish the draft release when the assets and notes look correct.
+10. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
 
 ## Homebrew tap setup
 
@@ -184,6 +202,6 @@ brew install --cask openducktor
 
 OpenDucktor is currently macOS-first, so the desktop workflow publishes macOS artifacts only.
 
-The workflow does **not** generate a public updater channel yet. That should wait until the in-app updater flow is explicitly wired and tested. The current release pipeline is focused on reliable GitHub Releases distribution first, plus npm publishing for `@openducktor/mcp`.
+The workflow does **not** generate a public updater channel yet. That should wait until the in-app updater flow is explicitly wired and tested. The current release pipeline is focused on reliable GitHub Releases distribution first, plus npm publishing for `@openducktor/mcp` and the local web runner package.
 
 Homebrew distribution also stays GitHub Releases based. The cask generator fails if the desktop asset naming stops being architecture-derivable, so maintainers update the generator at the same time the bundle naming changes instead of silently publishing a broken cask.

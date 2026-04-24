@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
-    "browser:dev": "bun run scripts/browser-dev.ts",
+    "browser:dev": "bun run --filter @openducktor/web dev",
     "hooks:install": "husky",
     "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",
@@ -29,7 +29,8 @@
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test",
     "test:hooks": "bun run --filter @openducktor/desktop test:hooks",
-    "lint": "bun run tauri:commands:panic-guard && bun run --workspaces lint",
+    "lint": "bun run tauri:commands:panic-guard && bun run frontend:boundary-guard && bun run --workspaces lint",
+    "frontend:boundary-guard": "bun run scripts/frontend-boundary-guard.ts",
     "tauri:commands:panic-guard": "bun run scripts/tauri-command-panic-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",
     "deps:unused:exports": "bunx knip --workspace='@openducktor/*' --include exports --no-exit-code",

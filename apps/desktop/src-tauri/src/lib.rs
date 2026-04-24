@@ -592,6 +592,14 @@ pub async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     headless::run_browser_backend(port).await
 }
 
+pub async fn run_web_host(
+    port: u16,
+    frontend_origin: String,
+    control_token: String,
+) -> anyhow::Result<()> {
+    headless::run_web_host(port, frontend_origin, control_token).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

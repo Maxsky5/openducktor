@@ -58,7 +58,7 @@ OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:dev:cef
 Useful alternatives:
 
 - Faster fallback for local iteration without CEF parity: `bun run tauri:dev`
-- Browser mode if you want agents to access it with tools like `agent-browser`: `bun run browser:dev`
+- Browser mode if you want agents to access it with tools like `agent-browser`: `bun run browser:dev`. This now routes through the `@openducktor/web` launcher and the dedicated `openducktor-web-host` binary instead of the desktop app binary.
 
 ## Local Tooling Reference
 
@@ -103,6 +103,8 @@ Browser mode for UI validation against the real backend:
 ```sh
 OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run browser:dev
 ```
+
+This command starts the Rust web host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must not import Tauri APIs directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
 
 ## CEF Development And Build Flow
 
@@ -179,6 +181,8 @@ bun run --filter @openducktor/core test
 bun run --filter @openducktor/desktop test
 bun run --filter @openducktor/desktop typecheck
 bun run --filter @openducktor/desktop lint
+bun run --filter @openducktor/frontend test
+bun run --filter @openducktor/web test
 cd apps/desktop/src-tauri && cargo test -p host-domain
 cd apps/desktop/src-tauri && cargo test -p host-infra-beads
 cd apps/desktop/src-tauri && cargo test -p host-application

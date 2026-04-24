@@ -13,3 +13,16 @@ mod workspace_commands;
 pub async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     server::run_browser_backend(port).await
 }
+
+pub async fn run_web_host(
+    port: u16,
+    frontend_origin: String,
+    control_token: String,
+) -> anyhow::Result<()> {
+    server::run_browser_backend_with_options(server::BrowserBackendOptions {
+        port,
+        frontend_origin: Some(frontend_origin),
+        control_token: Some(control_token),
+    })
+    .await
+}

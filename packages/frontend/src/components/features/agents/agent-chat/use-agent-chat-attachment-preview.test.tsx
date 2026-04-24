@@ -1,40 +1,39 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { hostClient } from "@/lib/host-client";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "@/lib/shell-bridge";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   readAttachmentPreviewLoadFailureMessage,
   useAgentChatAttachmentPreview,
 } from "./use-agent-chat-attachment-preview";
 
-type TestWindow = Window &
-  typeof globalThis & {
-    __TAURI_INTERNALS__?: {
-      convertFileSrc: (path: string, protocol?: string) => string;
-    };
-  };
-
-const testWindow = window as TestWindow;
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
-const originalResolveLocalAttachmentPath = hostClient.workspaceResolveLocalAttachmentPath;
-const originalTauriInternals = testWindow.__TAURI_INTERNALS__;
 
-const installMockTauriRuntime = (): void => {
-  testWindow.__TAURI_INTERNALS__ = {
-    convertFileSrc: (path: string, protocol = "asset") =>
-      `${protocol}://localhost/${encodeURIComponent(path)}`,
-  };
+const configureAttachmentPreviewShellBridge = (
+  resolveLocalAttachmentPreviewSrc: ShellBridge["resolveLocalAttachmentPreviewSrc"],
+): void => {
+  configureShellBridge({
+    client: {} as ShellBridge["client"],
+    subscribeRunEvents: async () => () => {},
+    subscribeDevServerEvents: async () => () => {},
+    subscribeTaskEvents: async () => () => {},
+    capabilities: {
+      canOpenExternalUrls: true,
+      canPreviewLocalAttachments: true,
+    },
+    openExternalUrl: async () => {},
+    resolveLocalAttachmentPreviewSrc,
+  });
 };
 
 afterEach(() => {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;
-  hostClient.workspaceResolveLocalAttachmentPath = originalResolveLocalAttachmentPath;
-  if (originalTauriInternals) {
-    testWindow.__TAURI_INTERNALS__ = originalTauriInternals;
-    return;
-  }
-  delete testWindow.__TAURI_INTERNALS__;
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("useAgentChatAttachmentPreview", () => {
@@ -133,10 +132,12 @@ describe("useAgentChatAttachmentPreview", () => {
   });
 
   test("resolves transcript image previews through the desktop asset protocol", async () => {
-    hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
-      path: `/tmp/openducktor-local-attachments/${path}`,
-    }));
-    installMockTauriRuntime();
+    configureAttachmentPreviewShellBridge(
+      mock(
+        async (path) =>
+          `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
+      ),
+    );
 
     const harness = createHookHarness(useAgentChatAttachmentPreview, {
       attachment: {
@@ -161,10 +162,11 @@ describe("useAgentChatAttachmentPreview", () => {
   });
 
   test("surfaces transcript preview resolution failures as explicit errors", async () => {
-    hostClient.workspaceResolveLocalAttachmentPath = mock(async () => {
-      throw new Error("Attachment path is not a staged local attachment.");
-    });
-    installMockTauriRuntime();
+    configureAttachmentPreviewShellBridge(
+      mock(async () => {
+        throw new Error("Attachment path is not a staged local attachment.");
+      }),
+    );
 
     const harness = createHookHarness(useAgentChatAttachmentPreview, {
       attachment: {

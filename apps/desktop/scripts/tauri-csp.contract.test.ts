@@ -22,7 +22,7 @@ const toSourceList = (value: CspDirectiveSources | undefined): string[] => {
 };
 
 const loadCspConfig = (): { csp: CspConfig; devCsp: CspConfig } => {
-  const configPath = resolve(import.meta.dir, "../../src-tauri/tauri.conf.json");
+  const configPath = resolve(import.meta.dir, "../src-tauri/tauri.conf.json");
   const raw = readFileSync(configPath, "utf8");
   const parsed = JSON.parse(raw) as TauriConfig;
 

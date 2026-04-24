@@ -1,13 +1,13 @@
 # apps/desktop/
 
 ## Responsibility
-React/Vite desktop frontend for OpenDucktor. This workspace owns the browser UI, shared app state, and package-level scripts that launch or build the desktop shell.
+Tauri desktop workspace for OpenDucktor. The shared browser UI now lives in `packages/frontend`; this workspace owns the thin Tauri shell, desktop shell bridge, Tauri configuration, and package-level scripts that launch or build the desktop app.
 
 ## Design Patterns
-Layered frontend boundaries: `src/components` renders UI, `src/pages` composes routes, `src/state` owns host/query orchestration, and `src/lib` contains pure/shared utilities.
+Thin-shell boundary: `src/main.tsx` configures a Tauri-backed shell bridge and mounts `@openducktor/frontend`; shared routes, components, state, and feature code stay in `packages/frontend/src`.
 
 ## Data & Control Flow
-`src/main.tsx` preloads settings, applies the theme, and mounts `App`. `App.tsx` wires query/state providers, route switches, and cross-page overlays.
+`src/main.tsx` creates the desktop shell bridge, registers it with the shared frontend, imports shared styles, and delegates rendering to `mountOpenDucktorApp`.
 
 ## Integration Points
-`package.json`, `vite.config.ts`, `src/styles.css`, `src-tauri` command/runtime boundaries, and `scripts/*.ts` build/CEF/Tauri helpers.
+`package.json`, `vite.config.ts`, `src/desktop-shell-bridge.ts`, `src-tauri` command/runtime boundaries, and `scripts/*.ts` build/CEF/Tauri helpers.

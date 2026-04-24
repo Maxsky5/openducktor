@@ -1,26 +1,30 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { hostClient } from "@/lib/host-client";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "@/lib/shell-bridge";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 
-type TestWindow = Window &
-  typeof globalThis & {
-    __TAURI_INTERNALS__?: {
-      convertFileSrc: (path: string, protocol?: string) => string;
-    };
-  };
-
-const testWindow = window as TestWindow;
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
-const originalResolveLocalAttachmentPath = hostClient.workspaceResolveLocalAttachmentPath;
-const originalTauriInternals = testWindow.__TAURI_INTERNALS__;
 
-const installMockTauriRuntime = (): void => {
-  testWindow.__TAURI_INTERNALS__ = {
-    convertFileSrc: (path: string, protocol = "asset") =>
-      `${protocol}://localhost/${encodeURIComponent(path)}`,
-  };
+const configureAttachmentPreviewShellBridge = (
+  resolveLocalAttachmentPreviewSrc: ShellBridge["resolveLocalAttachmentPreviewSrc"],
+): void => {
+  configureShellBridge({
+    client: {} as ShellBridge["client"],
+    subscribeRunEvents: async () => () => {},
+    subscribeDevServerEvents: async () => () => {},
+    subscribeTaskEvents: async () => () => {},
+    capabilities: {
+      canOpenExternalUrls: true,
+      canPreviewLocalAttachments: true,
+    },
+    openExternalUrl: async () => {},
+    resolveLocalAttachmentPreviewSrc,
+  });
 };
 
 const getPreviewButton = (): HTMLElement => {
@@ -56,12 +60,7 @@ const getDialogImage = (name: string): HTMLImageElement => {
 afterEach(() => {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;
-  hostClient.workspaceResolveLocalAttachmentPath = originalResolveLocalAttachmentPath;
-  if (originalTauriInternals) {
-    testWindow.__TAURI_INTERNALS__ = originalTauriInternals;
-    return;
-  }
-  delete testWindow.__TAURI_INTERNALS__;
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("AgentChatAttachmentChip", () => {
@@ -102,10 +101,12 @@ describe("AgentChatAttachmentChip", () => {
   });
 
   test("surfaces inline thumbnail failures as explicit preview errors", async () => {
-    hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
-      path: `/tmp/openducktor-local-attachments/${path}`,
-    }));
-    installMockTauriRuntime();
+    configureAttachmentPreviewShellBridge(
+      mock(
+        async (path) =>
+          `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
+      ),
+    );
 
     render(
       <AgentChatAttachmentChip
@@ -142,10 +143,12 @@ describe("AgentChatAttachmentChip", () => {
   });
 
   test("renders transcript image previews from the resolved desktop asset url", async () => {
-    hostClient.workspaceResolveLocalAttachmentPath = mock(async ({ path }) => ({
-      path: `/tmp/openducktor-local-attachments/${path}`,
-    }));
-    installMockTauriRuntime();
+    configureAttachmentPreviewShellBridge(
+      mock(
+        async (path) =>
+          `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
+      ),
+    );
 
     render(
       <AgentChatAttachmentChip

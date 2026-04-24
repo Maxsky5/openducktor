@@ -33,7 +33,15 @@ const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
 ];
 const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
 const LAST_EVENT_ID_HEADER: &str = "last-event-id";
+const CONTROL_TOKEN_HEADER: &str = "x-openducktor-control-token";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
+
+#[derive(Debug, Clone)]
+pub struct BrowserBackendOptions {
+    pub port: u16,
+    pub frontend_origin: Option<String>,
+    pub control_token: Option<String>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShutdownRequestAction {
@@ -71,6 +79,17 @@ fn reject_when_shutting_down(state: &HeadlessState) -> Result<(), HeadlessComman
 }
 
 pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
+    run_browser_backend_with_options(BrowserBackendOptions {
+        port,
+        frontend_origin: std::env::var(BROWSER_FRONTEND_ORIGIN_ENV).ok(),
+        control_token: None,
+    })
+    .await
+}
+
+pub async fn run_browser_backend_with_options(
+    options: BrowserBackendOptions,
+) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
     let registry =
@@ -85,11 +104,14 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         shutdown_started.clone(),
         Some(shutdown_signal.clone()),
     );
-    let cors_layer = browser_backend_cors_layer()?;
-    let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
+    let cors_layer = browser_backend_cors_layer(options.frontend_origin.as_deref())?;
+    let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, options.port))
         .await
         .with_context(|| {
-            format!("failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{port}")
+            format!(
+                "failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{}",
+                options.port
+            )
         })?;
     let pull_request_sync_stop_requested = start_pull_request_sync_loop(service.clone(), {
         let task_events = task_events.clone();
@@ -125,12 +147,13 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
+            control_token: options.control_token.clone(),
         });
 
     tracing::info!(
         target: "openducktor.browser-backend",
         host = DEFAULT_BROWSER_BACKEND_HOST,
-        port,
+        port = options.port,
         "OpenDucktor browser backend listening"
     );
 
@@ -164,11 +187,46 @@ async fn health_handler() -> impl IntoResponse {
     Json(json!({ "ok": true }))
 }
 
-async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoResponse {
+fn validate_control_token(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    let Some(expected_token) = expected_token else {
+        return Ok(());
+    };
+
+    let Some(received_token) = headers
+        .get(CONTROL_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return Err(HeadlessCommandError {
+            message: "Missing OpenDucktor web host control token.".to_string(),
+            status: StatusCode::UNAUTHORIZED,
+            failure_kind: None,
+        });
+    };
+
+    if received_token != expected_token {
+        return Err(HeadlessCommandError {
+            message: "Invalid OpenDucktor web host control token.".to_string(),
+            status: StatusCode::FORBIDDEN,
+            failure_kind: None,
+        });
+    }
+
+    Ok(())
+}
+
+async fn shutdown_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_control_token(&headers, state.control_token.as_deref())?;
+
     if classify_shutdown_request(state.shutdown_started.swap(true, Ordering::SeqCst))
         == ShutdownRequestAction::AlreadyStarted
     {
-        return (StatusCode::ACCEPTED, Json(json!({ "ok": true })));
+        return Ok((StatusCode::ACCEPTED, Json(json!({ "ok": true }))));
     }
 
     let service = state.service.clone();
@@ -201,7 +259,7 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
         std::process::exit(exit_code);
     });
 
-    (StatusCode::ACCEPTED, Json(json!({ "ok": true })))
+    Ok((StatusCode::ACCEPTED, Json(json!({ "ok": true }))))
 }
 
 async fn events_handler(
@@ -332,20 +390,16 @@ fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
     }
 }
 
-fn browser_backend_cors_layer() -> anyhow::Result<CorsLayer> {
-    let layer = if let Ok(origin) = std::env::var(BROWSER_FRONTEND_ORIGIN_ENV) {
+fn browser_backend_cors_layer(frontend_origin: Option<&str>) -> anyhow::Result<CorsLayer> {
+    let layer = if let Some(origin) = frontend_origin {
         let origin = origin.trim();
         if origin.is_empty() {
-            CorsLayer::new()
-                .allow_origin(parse_default_frontend_origins()?)
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(browser_backend_allowed_headers())
-        } else {
-            CorsLayer::new()
-                .allow_origin(parse_origin_header(origin)?)
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(browser_backend_allowed_headers())
+            anyhow::bail!("browser frontend origin cannot be empty")
         }
+        CorsLayer::new()
+            .allow_origin(parse_origin_header(origin)?)
+            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_headers(browser_backend_allowed_headers())
     } else {
         CorsLayer::new()
             .allow_origin(parse_default_frontend_origins()?)
@@ -356,10 +410,11 @@ fn browser_backend_cors_layer() -> anyhow::Result<CorsLayer> {
     Ok(layer)
 }
 
-fn browser_backend_allowed_headers() -> [header::HeaderName; 2] {
+fn browser_backend_allowed_headers() -> [header::HeaderName; 3] {
     [
         header::CONTENT_TYPE,
         header::HeaderName::from_static(LAST_EVENT_ID_HEADER),
+        header::HeaderName::from_static(CONTROL_TOKEN_HEADER),
     ]
 }
 
@@ -820,7 +875,7 @@ mod tests {
         let fixture = test_state_fixture();
         fixture.state.shutdown_started.store(true, Ordering::SeqCst);
 
-        let response = shutdown_handler(State(fixture.state.clone()))
+        let response = shutdown_handler(State(fixture.state.clone()), HeaderMap::new())
             .await
             .into_response();
         let status = response.status();
@@ -832,6 +887,42 @@ mod tests {
 
         assert_eq!(status, StatusCode::ACCEPTED);
         assert_eq!(payload, json!({ "ok": true }));
+    }
+
+    #[tokio::test]
+    async fn shutdown_handler_requires_matching_control_token_when_configured() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            control_token: Some("expected-token".to_string()),
+            ..fixture.state.clone()
+        };
+
+        let missing_response = shutdown_handler(State(state.clone()), HeaderMap::new())
+            .await
+            .into_response();
+        let missing_status = missing_response.status();
+        let missing_body = to_bytes(missing_response.into_body(), usize::MAX)
+            .await
+            .expect("missing token response body should collect");
+        let missing_payload: Value = serde_json::from_slice(&missing_body)
+            .expect("missing token response body should deserialize");
+
+        assert_eq!(missing_status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            missing_payload,
+            json!({ "error": "Missing OpenDucktor web host control token." })
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTROL_TOKEN_HEADER,
+            HeaderValue::from_static("expected-token"),
+        );
+        let accepted_response = shutdown_handler(State(state), headers)
+            .await
+            .into_response();
+
+        assert_eq!(accepted_response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
@@ -906,6 +997,7 @@ mod tests {
                 registry,
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
+                control_token: None,
             },
             root,
         }
@@ -965,6 +1057,7 @@ mod tests {
                     registry,
                     shutdown_signal: Arc::new(Notify::new()),
                     shutdown_started: Arc::new(AtomicBool::new(false)),
+                    control_token: None,
                 },
                 root,
             },
@@ -1008,9 +1101,10 @@ mod tests {
     fn browser_backend_allowed_headers_include_last_event_id_for_sse_replay() {
         let headers = browser_backend_allowed_headers();
 
-        assert_eq!(headers.len(), 2);
+        assert_eq!(headers.len(), 3);
         assert!(headers.contains(&header::CONTENT_TYPE));
         assert!(headers.contains(&header::HeaderName::from_static(LAST_EVENT_ID_HEADER)));
+        assert!(headers.contains(&header::HeaderName::from_static(CONTROL_TOKEN_HEADER)));
     }
 
     #[tokio::test]

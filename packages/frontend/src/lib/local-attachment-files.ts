@@ -1,6 +1,5 @@
-import { getBrowserBackendUrl, isBrowserAppMode } from "@/lib/browser-mode";
 import { hostClient } from "@/lib/host-client";
-import { isTauriRuntime } from "@/lib/runtime";
+import { getShellBridge } from "./shell-bridge";
 
 const bufferToBase64 = (buffer: ArrayBuffer): string => {
   const bytes = new Uint8Array(buffer);
@@ -23,32 +22,11 @@ export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
   return staged.path;
 };
 
-export const buildBrowserLocalAttachmentPreviewUrl = (
-  browserBackendUrl: string,
-  path: string,
-): string => {
-  const baseUrl = browserBackendUrl.replace(/\/$/, "");
-  const query = new URLSearchParams({ path });
-  return `${baseUrl}/local-attachment-preview?${query.toString()}`;
-};
-
 export const resolveLocalAttachmentPreviewSrc = async (path: string): Promise<string> => {
   const trimmedPath = path.trim();
   if (trimmedPath.length === 0) {
     throw new Error("Attachment preview is unavailable because the local file path is missing.");
   }
 
-  const resolvedPath = (await hostClient.workspaceResolveLocalAttachmentPath({ path: trimmedPath }))
-    .path;
-
-  if (isBrowserAppMode()) {
-    return buildBrowserLocalAttachmentPreviewUrl(getBrowserBackendUrl(), resolvedPath);
-  }
-
-  if (isTauriRuntime()) {
-    const api = await import("@tauri-apps/api/core");
-    return api.convertFileSrc(resolvedPath, "asset");
-  }
-
-  return resolvedPath;
+  return getShellBridge().resolveLocalAttachmentPreviewSrc(trimmedPath);
 };

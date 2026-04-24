@@ -2,9 +2,9 @@ import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapte
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
-} from "@/lib/browser-live/constants";
-import { browserLiveControlEvent } from "@/lib/browser-live-control-events";
-import { getBrowserBackendUrl } from "@/lib/browser-mode";
+} from "@openducktor/frontend/lib/browser-live/constants";
+import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
+import { getBrowserBackendUrl } from "./browser-config";
 
 type BrowserSseListener = (payload: unknown) => void;
 
@@ -21,7 +21,7 @@ type BrowserSseChannel = {
 const sseChannels = new Map<string, BrowserSseChannel>();
 let nextSseListenerId = 0;
 
-const readBrowserLiveErrorPayload = async (
+const readLocalHostErrorPayload = async (
   response: Response,
 ): Promise<{ message: string; payload: unknown | null }> => {
   const text = await response.text().catch(() => "");
@@ -42,13 +42,13 @@ const readBrowserLiveErrorPayload = async (
   }
 
   return {
-    message: `Browser backend request failed with status ${response.status}.`,
+    message: `OpenDucktor web host request failed with status ${response.status}.`,
     payload: null,
   };
 };
 
-export const readBrowserLiveErrorMessage = async (response: Response): Promise<string> => {
-  const { message } = await readBrowserLiveErrorPayload(response);
+export const readLocalHostErrorMessage = async (response: Response): Promise<string> => {
+  const { message } = await readLocalHostErrorPayload(response);
   return message;
 };
 
@@ -65,7 +65,7 @@ const createHttpInvoke = () => {
     });
 
     if (!response.ok) {
-      const { message, payload } = await readBrowserLiveErrorPayload(response);
+      const { message, payload } = await readLocalHostErrorPayload(response);
       throw new Error(message, payload ? { cause: payload } : undefined);
     }
 
@@ -73,9 +73,8 @@ const createHttpInvoke = () => {
   };
 };
 
-export const createBrowserLiveHostClient = (): TauriHostClient => {
-  return createTauriHostClient(createHttpInvoke());
-};
+export const createLocalHostClient = (): TauriHostClient =>
+  createTauriHostClient(createHttpInvoke());
 
 const parseSsePayload = (raw: string): unknown => {
   try {
@@ -164,20 +163,20 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
   };
 };
 
-export const subscribeBrowserLiveRunEvents = async (
+export const subscribeLocalHostRunEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
-  return subscribeSseChannel("events", listener);
-};
+): Promise<() => void> => subscribeSseChannel("events", listener);
 
-export const subscribeBrowserLiveDevServerEvents = async (
+export const subscribeLocalHostDevServerEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
-  return subscribeSseChannel("dev-server-events", listener);
-};
+): Promise<() => void> => subscribeSseChannel("dev-server-events", listener);
 
-export const subscribeBrowserLiveTaskEvents = async (
+export const subscribeLocalHostTaskEvents = async (
   listener: (payload: unknown) => void,
-): Promise<() => void> => {
-  return subscribeSseChannel("task-events", listener);
+): Promise<() => void> => subscribeSseChannel("task-events", listener);
+
+export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
+  const baseUrl = browserBackendUrl.replace(/\/$/, "");
+  const query = new URLSearchParams({ path });
+  return `${baseUrl}/local-attachment-preview?${query.toString()}`;
 };

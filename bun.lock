@@ -17,7 +17,64 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.0.5",
+      "version": "0.1.0",
+      "dependencies": {
+        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/frontend": "workspace:*",
+        "@tauri-apps/api": "^2.0.0",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "^20.9.0",
+        "@tailwindcss/typography": "^0.5.19",
+        "@tailwindcss/vite": "^4.2.2",
+        "@tauri-apps/cli": "^2.10.1",
+        "@testing-library/react": "^16.3.0",
+        "@types/node": "^25.6.0",
+        "@types/react": "^19.0.1",
+        "@types/react-dom": "^19.0.1",
+        "@types/react-syntax-highlighter": "^15.5.13",
+        "@vitejs/plugin-react": "^6.0.1",
+        "bun-types": "^1.3.12",
+        "tailwindcss": "^4.1.12",
+        "vite": "^8.0.9",
+      },
+    },
+    "packages/adapters-opencode-sdk": {
+      "name": "@openducktor/adapters-opencode-sdk",
+      "version": "0.1.0",
+      "dependencies": {
+        "@opencode-ai/sdk": "^1.14.18",
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
+      },
+    },
+    "packages/adapters-tauri-host": {
+      "name": "@openducktor/adapters-tauri-host",
+      "version": "0.1.0",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
+      },
+    },
+    "packages/contracts": {
+      "name": "@openducktor/contracts",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.3.6",
+      },
+    },
+    "packages/core": {
+      "name": "@openducktor/core",
+      "version": "0.1.0",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+      },
+    },
+    "packages/frontend": {
+      "name": "@openducktor/frontend",
+      "version": "0.1.0",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -38,7 +95,6 @@
         "@radix-ui/react-tabs": "^1.1.13",
         "@radix-ui/react-tooltip": "^1.2.8",
         "@tanstack/react-query": "^5.99.2",
-        "@tauri-apps/api": "^2.0.0",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
         "class-variance-authority": "^0.7.1",
@@ -59,53 +115,19 @@
       "devDependencies": {
         "@happy-dom/global-registrator": "^20.9.0",
         "@tailwindcss/typography": "^0.5.19",
-        "@tailwindcss/vite": "^4.2.2",
-        "@tauri-apps/cli": "^2.10.1",
         "@testing-library/react": "^16.3.0",
         "@types/node": "^25.6.0",
         "@types/react": "^19.0.1",
         "@types/react-dom": "^19.0.1",
         "@types/react-syntax-highlighter": "^15.5.13",
-        "@vitejs/plugin-react": "^6.0.1",
         "bun-types": "^1.3.12",
         "tailwindcss": "^4.1.12",
         "vite": "^8.0.9",
       },
     },
-    "packages/adapters-opencode-sdk": {
-      "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.0.5",
-      "dependencies": {
-        "@opencode-ai/sdk": "^1.14.18",
-        "@openducktor/contracts": "workspace:*",
-        "@openducktor/core": "workspace:*",
-      },
-    },
-    "packages/adapters-tauri-host": {
-      "name": "@openducktor/adapters-tauri-host",
-      "version": "0.0.5",
-      "dependencies": {
-        "@openducktor/contracts": "workspace:*",
-        "@openducktor/core": "workspace:*",
-      },
-    },
-    "packages/contracts": {
-      "name": "@openducktor/contracts",
-      "version": "0.0.5",
-      "dependencies": {
-        "zod": "^4.3.6",
-      },
-    },
-    "packages/core": {
-      "name": "@openducktor/core",
-      "version": "0.0.5",
-      "dependencies": {
-        "@openducktor/contracts": "workspace:*",
-      },
-    },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.0.5",
+      "version": "0.1.0",
       "bin": {
         "openducktor-mcp": "./dist/index.js",
       },
@@ -115,6 +137,29 @@
       },
       "devDependencies": {
         "@openducktor/contracts": "workspace:*",
+      },
+    },
+    "packages/openducktor-web": {
+      "name": "@openducktor/web",
+      "version": "0.1.0",
+      "bin": {
+        "web": "dist/cli.js",
+        "openducktor-web": "dist/cli.js",
+      },
+      "dependencies": {
+        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/frontend": "workspace:*",
+        "@tailwindcss/vite": "^4.2.2",
+        "@vitejs/plugin-react": "^6.0.1",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+        "vite": "^8.0.9",
+      },
+      "devDependencies": {
+        "@types/node": "^25.6.0",
+        "@types/react": "^19.0.1",
+        "@types/react-dom": "^19.0.1",
+        "bun-types": "^1.3.12",
       },
     },
   },
@@ -248,7 +293,11 @@
 
     "@openducktor/desktop": ["@openducktor/desktop@workspace:apps/desktop"],
 
+    "@openducktor/frontend": ["@openducktor/frontend@workspace:packages/frontend"],
+
     "@openducktor/mcp": ["@openducktor/mcp@workspace:packages/openducktor-mcp"],
+
+    "@openducktor/web": ["@openducktor/web@workspace:packages/openducktor-web"],
 
     "@oxc-parser/binding-android-arm-eabi": ["@oxc-parser/binding-android-arm-eabi@0.121.0", "", { "os": "android", "cpu": "arm" }, "sha512-n07FQcySwOlzap424/PLMtOkbS7xOu8nsJduKL8P3COGHKgKoDYXwoAHCbChfgFpHnviehrLWIPX0lKGtbEk/A=="],
 
