@@ -15,12 +15,19 @@ const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
     ...init,
   });
 
-const createDiscoveryRegistry = async (ports: number[]): Promise<string> => {
+const createDiscoveryRegistry = async (
+  ports: number[],
+  bridgeTokens?: Record<string, string>,
+): Promise<string> => {
   const dir = join(tmpdir(), `openducktor-mcp-store-context-${Date.now()}-${Math.random()}`);
   await mkdir(join(dir, "runtime"), { recursive: true });
+  const registryPayload = {
+    ports,
+    ...(bridgeTokens ? { bridgeTokens } : {}),
+  };
   await writeFile(
     join(dir, "runtime", "mcp-bridge-ports.json"),
-    JSON.stringify({ ports }, null, 2),
+    JSON.stringify(registryPayload, null, 2),
     "utf8",
   );
   tempDirs.push(dir);
@@ -31,6 +38,7 @@ afterEach(async () => {
   globalThis.fetch = originalFetch;
   delete process.env.ODT_WORKSPACE_ID;
   delete process.env.ODT_HOST_URL;
+  delete process.env.ODT_HOST_TOKEN;
   delete process.env.ODT_FORBID_WORKSPACE_ID_INPUT;
   delete process.env.ODT_METADATA_NAMESPACE;
   delete process.env.OPENDUCKTOR_CONFIG_DIR;
@@ -208,22 +216,29 @@ describe("resolveStoreContext", () => {
   });
 
   test("discovers a running host from the registry when no explicit host is provided", async () => {
-    const configDir = await createDiscoveryRegistry([14327]);
+    const configDir = await createDiscoveryRegistry([14327], { 14327: "registry-token" });
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
     process.env.ODT_WORKSPACE_ID = "repo";
+    const observedHostTokens: Array<string | undefined> = [];
 
-    globalThis.fetch = (async (input) => {
+    globalThis.fetch = (async (input, init) => {
       const url = String(input);
       if (url === "http://127.0.0.1:14327/health") {
         return jsonResponse({ ok: true });
       }
       if (url === "http://127.0.0.1:14327/invoke/odt_mcp_ready") {
+        observedHostTokens.push(
+          (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
+        );
         return jsonResponse({
           bridgeVersion: 1,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
         });
       }
       if (url === "http://127.0.0.1:14327/invoke/odt_get_workspaces") {
+        observedHostTokens.push(
+          (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
+        );
         return jsonResponse({
           workspaces: [
             {
@@ -245,7 +260,9 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
+      hostToken: "registry-token",
     });
+    expect(observedHostTokens).toEqual(["registry-token", "registry-token"]);
   });
 
   test("tries discovered ports until one host becomes ready", async () => {

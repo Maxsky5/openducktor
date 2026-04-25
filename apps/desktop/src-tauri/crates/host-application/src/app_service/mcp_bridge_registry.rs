@@ -1,5 +1,6 @@
 use super::*;
 use anyhow::Context;
+use std::collections::BTreeMap;
 use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
@@ -11,6 +12,8 @@ const MCP_BRIDGE_HEALTH_PATH: &str = "/health";
 struct McpBridgeRegistryFile {
     #[serde(default)]
     ports: Vec<u16>,
+    #[serde(default, rename = "bridgeTokens")]
+    bridge_tokens: BTreeMap<String, String>,
 }
 
 pub(super) fn bridge_base_url(port: u16) -> String {
@@ -122,9 +125,21 @@ fn normalize_bridge_ports(ports: &mut Vec<u16>) {
     ports.retain(|port| seen.insert(*port));
 }
 
+fn bridge_token_key(port: u16) -> String {
+    port.to_string()
+}
+
+fn prune_bridge_tokens(ports: &[u16], bridge_tokens: &mut BTreeMap<String, String>) {
+    let allowed = ports
+        .iter()
+        .map(|port| bridge_token_key(*port))
+        .collect::<HashSet<_>>();
+    bridge_tokens.retain(|port, token| allowed.contains(port) && !token.trim().is_empty());
+}
+
 fn with_locked_mcp_bridge_registry<T>(
     path: &Path,
-    mutator: impl FnOnce(&mut Vec<u16>) -> Result<T>,
+    mutator: impl FnOnce(&mut Vec<u16>, &mut BTreeMap<String, String>) -> Result<T>,
 ) -> Result<T> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| {
@@ -175,9 +190,11 @@ fn with_locked_mcp_bridge_registry<T>(
         })?
     };
     normalize_bridge_ports(&mut parsed.ports);
+    prune_bridge_tokens(&parsed.ports, &mut parsed.bridge_tokens);
 
-    let output = mutator(&mut parsed.ports)?;
+    let output = mutator(&mut parsed.ports, &mut parsed.bridge_tokens)?;
     normalize_bridge_ports(&mut parsed.ports);
+    prune_bridge_tokens(&parsed.ports, &mut parsed.bridge_tokens);
 
     let payload = serde_json::to_string_pretty(&parsed)
         .context("Failed serializing MCP bridge registry payload")?;
@@ -189,13 +206,14 @@ fn with_locked_mcp_bridge_registry<T>(
 fn reconcile_mcp_bridge_registry_with_health_check<F>(
     path: &Path,
     register_port: Option<u16>,
+    register_token: Option<&str>,
     remove_port: Option<u16>,
     mut is_healthy: F,
 ) -> Result<Vec<u16>>
 where
     F: FnMut(u16) -> Result<bool>,
 {
-    with_locked_mcp_bridge_registry(path, |ports| {
+    with_locked_mcp_bridge_registry(path, |ports, bridge_tokens| {
         let mut retained = Vec::with_capacity(ports.len() + usize::from(register_port.is_some()));
 
         for port in ports.drain(..) {
@@ -212,6 +230,12 @@ where
 
         if let Some(port) = register_port {
             retained.insert(0, port);
+            if let Some(token) = register_token {
+                bridge_tokens.insert(bridge_token_key(port), token.to_string());
+            }
+        }
+        if let Some(port) = remove_port {
+            bridge_tokens.remove(&bridge_token_key(port));
         }
 
         *ports = retained;
@@ -223,9 +247,16 @@ where
 fn reconcile_mcp_bridge_registry(
     path: &Path,
     register_port: Option<u16>,
+    register_token: Option<&str>,
     remove_port: Option<u16>,
 ) -> Result<Vec<u16>> {
-    reconcile_mcp_bridge_registry_with_health_check(path, register_port, remove_port, health_check)
+    reconcile_mcp_bridge_registry_with_health_check(
+        path,
+        register_port,
+        register_token,
+        remove_port,
+        health_check,
+    )
 }
 
 impl AppService {
@@ -239,24 +270,39 @@ impl AppService {
     }
 
     pub(super) fn reconcile_mcp_bridge_registry_on_startup(&self) -> Result<()> {
-        reconcile_mcp_bridge_registry(self.mcp_bridge_registry_path.as_path(), None, None)
+        reconcile_mcp_bridge_registry(self.mcp_bridge_registry_path.as_path(), None, None, None)
             .map(|_| ())
     }
 
-    pub(super) fn register_mcp_bridge_port(&self, port: u16) -> Result<()> {
-        reconcile_mcp_bridge_registry(self.mcp_bridge_registry_path.as_path(), Some(port), None)
-            .map(|_| ())
+    pub(super) fn register_mcp_bridge_connection(&self, port: u16, app_token: &str) -> Result<()> {
+        reconcile_mcp_bridge_registry(
+            self.mcp_bridge_registry_path.as_path(),
+            Some(port),
+            Some(app_token),
+            None,
+        )
+        .map(|_| ())
     }
 
     pub(super) fn unregister_mcp_bridge_port(&self, port: u16) -> Result<()> {
-        reconcile_mcp_bridge_registry(self.mcp_bridge_registry_path.as_path(), None, Some(port))
-            .map(|_| ())
+        reconcile_mcp_bridge_registry(
+            self.mcp_bridge_registry_path.as_path(),
+            None,
+            None,
+            Some(port),
+        )
+        .map(|_| ())
     }
 }
 
 #[cfg(test)]
 pub(crate) fn read_mcp_bridge_registry(path: &Path) -> Result<Vec<u16>> {
-    with_locked_mcp_bridge_registry(path, |ports| Ok(ports.clone()))
+    with_locked_mcp_bridge_registry(path, |ports, _bridge_tokens| Ok(ports.clone()))
+}
+
+#[cfg(test)]
+fn read_mcp_bridge_tokens(path: &Path) -> Result<BTreeMap<String, String>> {
+    with_locked_mcp_bridge_registry(path, |_ports, bridge_tokens| Ok(bridge_tokens.clone()))
 }
 
 #[cfg(test)]
@@ -286,7 +332,7 @@ mod tests {
     #[test]
     fn reconcile_registry_adds_registered_port_and_prunes_unhealthy_entries() {
         let path = unique_temp_path("register").join("runtime/mcp-bridge-ports.json");
-        with_locked_mcp_bridge_registry(path.as_path(), |ports| {
+        with_locked_mcp_bridge_registry(path.as_path(), |ports, _bridge_tokens| {
             *ports = vec![4200, 4100, 4200, 4300];
             Ok(())
         })
@@ -295,6 +341,7 @@ mod tests {
         let ports = reconcile_mcp_bridge_registry_with_health_check(
             path.as_path(),
             Some(4400),
+            Some("new-token"),
             None,
             |port| Ok(port == 4200),
         )
@@ -305,13 +352,21 @@ mod tests {
             read_mcp_bridge_registry(path.as_path()).expect("registry read should succeed"),
             vec![4400, 4200]
         );
+        assert_eq!(
+            read_mcp_bridge_tokens(path.as_path())
+                .expect("registry tokens should read")
+                .get("4400")
+                .map(String::as_str),
+            Some("new-token")
+        );
     }
 
     #[test]
     fn reconcile_registry_moves_re_registered_port_to_front() {
         let path = unique_temp_path("reregister").join("runtime/mcp-bridge-ports.json");
-        with_locked_mcp_bridge_registry(path.as_path(), |ports| {
+        with_locked_mcp_bridge_registry(path.as_path(), |ports, bridge_tokens| {
             *ports = vec![4200, 4300, 4400];
+            bridge_tokens.insert("4300".to_string(), "old-token".to_string());
             Ok(())
         })
         .expect("seed registry should succeed");
@@ -319,6 +374,7 @@ mod tests {
         let ports = reconcile_mcp_bridge_registry_with_health_check(
             path.as_path(),
             Some(4300),
+            Some("new-token"),
             None,
             |_port| Ok(true),
         )
@@ -329,19 +385,28 @@ mod tests {
             read_mcp_bridge_registry(path.as_path()).expect("registry read should succeed"),
             vec![4300, 4200, 4400]
         );
+        assert_eq!(
+            read_mcp_bridge_tokens(path.as_path())
+                .expect("registry tokens should read")
+                .get("4300")
+                .map(String::as_str),
+            Some("new-token")
+        );
     }
 
     #[test]
     fn reconcile_registry_removes_stopped_port() {
         let path = unique_temp_path("remove").join("runtime/mcp-bridge-ports.json");
-        with_locked_mcp_bridge_registry(path.as_path(), |ports| {
+        with_locked_mcp_bridge_registry(path.as_path(), |ports, bridge_tokens| {
             *ports = vec![4200, 4300];
+            bridge_tokens.insert("4300".to_string(), "stopped-token".to_string());
             Ok(())
         })
         .expect("seed registry should succeed");
 
         let ports = reconcile_mcp_bridge_registry_with_health_check(
             path.as_path(),
+            None,
             None,
             Some(4300),
             |_port| Ok(true),
@@ -353,5 +418,8 @@ mod tests {
             read_mcp_bridge_registry(path.as_path()).expect("registry read should succeed"),
             vec![4200]
         );
+        assert!(!read_mcp_bridge_tokens(path.as_path())
+            .expect("registry tokens should read")
+            .contains_key("4300"));
     }
 }

@@ -191,7 +191,7 @@ impl AppService {
                     "Reusing running OpenDucktor MCP host bridge at http://127.0.0.1:{}",
                     process.port
                 );
-                self.register_mcp_bridge_port(process.port)?;
+                self.register_mcp_bridge_connection(process.port, process.app_token.as_str())?;
                 return Ok((process.base_url.clone(), process.app_token.clone()));
             }
             *bridge = None;
@@ -205,7 +205,7 @@ impl AppService {
         }
 
         let base_url = bridge_base_url(port);
-        if let Err(error) = self.register_mcp_bridge_port(port) {
+        if let Err(error) = self.register_mcp_bridge_connection(port, app_token.as_str()) {
             terminate_child_process(&mut child);
             return Err(error);
         }
