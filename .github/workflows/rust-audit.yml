@@ -57,26 +57,4 @@ jobs:
         run: cargo install cargo-audit --version $CARGO_AUDIT_VERSION --locked --no-default-features
 
       - name: Audit Rust dependencies
-        # The ignored advisories are currently inherited from Tauri's WebKit/GTK
-        # dependency graph or legacy transitive generators with no direct fix in
-        # OpenDucktor. Keep newly fixable advisories visible; do not blanket-disable
-        # audit warnings.
-        run: |
-          cargo audit --file apps/desktop/src-tauri/Cargo.lock \
-            --ignore RUSTSEC-2024-0370 \
-            --ignore RUSTSEC-2024-0411 \
-            --ignore RUSTSEC-2024-0412 \
-            --ignore RUSTSEC-2024-0413 \
-            --ignore RUSTSEC-2024-0415 \
-            --ignore RUSTSEC-2024-0416 \
-            --ignore RUSTSEC-2024-0418 \
-            --ignore RUSTSEC-2024-0419 \
-            --ignore RUSTSEC-2024-0420 \
-            --ignore RUSTSEC-2024-0429 \
-            --ignore RUSTSEC-2025-0057 \
-            --ignore RUSTSEC-2025-0075 \
-            --ignore RUSTSEC-2025-0080 \
-            --ignore RUSTSEC-2025-0081 \
-            --ignore RUSTSEC-2025-0098 \
-            --ignore RUSTSEC-2025-0100 \
-            --ignore RUSTSEC-2026-0097
+        run: cargo audit --file apps/desktop/src-tauri/Cargo.lock
