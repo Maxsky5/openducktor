@@ -232,6 +232,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CEF_PATH: ${{ steps.cef.outputs.cef_path }}
+          OPENDUCKTOR_TAURI_TARGET: ${{ matrix.target }}
           OPENDUCKTOR_PREPARE_SIDECARS: "1"
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
