@@ -6,6 +6,9 @@ type CspDirectiveSources = string[] | string;
 type CspConfig = Record<string, CspDirectiveSources>;
 
 type TauriConfig = {
+  build?: {
+    beforeBundleCommand?: string;
+  };
   app?: {
     security?: {
       csp?: CspConfig | null;
@@ -38,7 +41,19 @@ const loadCspConfig = (): { csp: CspConfig; devCsp: CspConfig } => {
   };
 };
 
+const loadTauriConfig = (): TauriConfig => {
+  const configPath = resolve(import.meta.dir, "../src-tauri/tauri.conf.json");
+  const raw = readFileSync(configPath, "utf8");
+  return JSON.parse(raw) as TauriConfig;
+};
+
 describe("tauri CSP contract", () => {
+  test("runs the CEF helper signing script from the desktop package root", () => {
+    const config = loadTauriConfig();
+
+    expect(config.build?.beforeBundleCommand).toBe("bun run scripts/sign-macos-cef-helper.ts");
+  });
+
   test("keeps production CSP hardened and explicit", () => {
     const { csp } = loadCspConfig();
 
