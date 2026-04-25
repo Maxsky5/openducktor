@@ -4,8 +4,8 @@
   "version": "0.1.1",
   "identifier": "dev.openducktor.desktop",
   "build": {
-    "beforeDevCommand": "cd .. && bun run dev",
-    "beforeBuildCommand": "cd .. && bun run build",
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build",
     "beforeBundleCommand": "bun run scripts/sign-macos-cef-helper.ts",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
