@@ -23,7 +23,11 @@ const parsePort = (raw: string | undefined, flag: string): number => {
   if (!raw) {
     throw new Error(`Missing value for ${flag}.`);
   }
-  const parsed = Number.parseInt(raw, 10);
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`Invalid ${flag} value: ${raw}. Expected a TCP port between 1 and 65535.`);
+  }
+  const parsed = Number(trimmed);
   if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
     throw new Error(`Invalid ${flag} value: ${raw}. Expected a TCP port between 1 and 65535.`);
   }

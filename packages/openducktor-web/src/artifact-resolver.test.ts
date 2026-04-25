@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getHostArtifactName, resolveHostBinary } from "./artifact-resolver";
@@ -21,6 +21,7 @@ const cleanup = (root: string): void => {
 const writeArtifact = (packageRoot: string, name: string, contents: string): string => {
   const binaryPath = path.join(packageRoot, "bin", name);
   writeFileSync(binaryPath, contents);
+  chmodSync(binaryPath, 0o755);
   const checksum = createHash("sha256").update(contents).digest("hex");
   writeFileSync(`${binaryPath}.sha256`, `${checksum}  ${name}\n`);
   return binaryPath;
@@ -74,7 +75,9 @@ describe("artifact resolver", () => {
     const packageRoot = createTempPackageRoot();
     try {
       const artifactName = getHostArtifactName({ platform: "darwin", arch: "x64" });
-      writeFileSync(path.join(packageRoot, "bin", artifactName), "host-binary");
+      const binaryPath = path.join(packageRoot, "bin", artifactName);
+      writeFileSync(binaryPath, "host-binary");
+      chmodSync(binaryPath, 0o755);
 
       expect(() =>
         resolveHostBinary({
@@ -95,6 +98,7 @@ describe("artifact resolver", () => {
       const artifactName = getHostArtifactName({ platform: "darwin", arch: "x64" });
       const binaryPath = path.join(packageRoot, "bin", artifactName);
       writeFileSync(binaryPath, "host-binary");
+      chmodSync(binaryPath, 0o755);
       writeFileSync(`${binaryPath}.sha256`, "deadbeef\n");
 
       expect(() =>
@@ -119,5 +123,28 @@ describe("artifact resolver", () => {
         arch: "x64",
       }),
     ).toThrow("@openducktor/web supports macOS arm64 and x64");
+  });
+
+  test("rejects packaged host artifacts that are not executable", () => {
+    const packageRoot = createTempPackageRoot();
+    try {
+      const artifactName = getHostArtifactName({ platform: "darwin", arch: "arm64" });
+      const binaryPath = path.join(packageRoot, "bin", artifactName);
+      writeFileSync(binaryPath, "host-binary");
+      chmodSync(binaryPath, 0o644);
+      const checksum = createHash("sha256").update("host-binary").digest("hex");
+      writeFileSync(`${binaryPath}.sha256`, `${checksum}  ${artifactName}\n`);
+
+      expect(() =>
+        resolveHostBinary({
+          packageRoot,
+          workspaceMode: false,
+          platform: "darwin",
+          arch: "arm64",
+        }),
+      ).toThrow("OpenDucktor web host binary is not executable");
+    } finally {
+      cleanup(packageRoot);
+    }
   });
 });

@@ -172,6 +172,8 @@ jobs:
           test -f packages/openducktor-web/bin/openducktor-web-host-darwin-arm64.sha256
           test -f packages/openducktor-web/bin/openducktor-web-host-darwin-x64
           test -f packages/openducktor-web/bin/openducktor-web-host-darwin-x64.sha256
+          chmod +x packages/openducktor-web/bin/openducktor-web-host-darwin-arm64
+          chmod +x packages/openducktor-web/bin/openducktor-web-host-darwin-x64
 
       - name: Prepare npm package manifests
         run: bun run scripts/prepare-web-publish-packages.ts "${{ steps.release_meta.outputs.version }}"

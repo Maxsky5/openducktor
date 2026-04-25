@@ -55,8 +55,12 @@ const assertExecutableFile = (binaryPath: string): void => {
   if (!existsSync(binaryPath)) {
     throw new Error(`OpenDucktor web host binary not found: ${binaryPath}`);
   }
-  if (!statSync(binaryPath).isFile()) {
+  const stats = statSync(binaryPath);
+  if (!stats.isFile()) {
     throw new Error(`OpenDucktor web host path is not a file: ${binaryPath}`);
+  }
+  if (process.platform !== "win32" && (stats.mode & 0o111) === 0) {
+    throw new Error(`OpenDucktor web host binary is not executable: ${binaryPath}`);
   }
 };
 
