@@ -6,6 +6,7 @@
   "build": {
     "beforeDevCommand": "cd .. && bun run dev",
     "beforeBuildCommand": "cd .. && bun run build",
+    "beforeBundleCommand": "cd .. && bun run scripts/sign-macos-cef-helper.ts",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
