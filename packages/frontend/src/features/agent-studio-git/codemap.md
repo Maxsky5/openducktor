@@ -1,4 +1,4 @@
-# apps/desktop/src/features/agent-studio-git/
+# packages/frontend/src/features/agent-studio-git/
 
 ## Responsibility
 Agent Studio git diff state, polling, refresh, and worktree resolution helpers.

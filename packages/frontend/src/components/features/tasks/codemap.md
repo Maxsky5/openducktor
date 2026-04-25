@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/tasks/
+# packages/frontend/src/components/features/tasks/
 
 ## Responsibility
 Task selection affordances and small task identity badges used across board, sheet, and workspace views.

@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/agents/session-start/
+# packages/frontend/src/pages/agents/session-start/
 
 ## Responsibility
 Agent Studio session-start bridge: modal flow, fresh-session creation, and the session-specific launch helper used by the shell and Kanban flows.

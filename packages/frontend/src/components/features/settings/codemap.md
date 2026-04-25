@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/settings/
+# packages/frontend/src/components/features/settings/
 
 ## Responsibility
 Settings modal, repository configuration sections, prompt override editing, kanban/autopilot settings, and validation helpers.

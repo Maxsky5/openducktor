@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Define the public schema surface for OpenDucktor runtime descriptors, task/workflow records, MCP tool payloads, git/session config, and supporting enums.
+Define the public schema surface for OpenDucktor runtime descriptors, task/workflow records, MCP tool payloads, host-bridge responses, browser runtime config, git/session config, and supporting enums.
 
 ## Design Patterns
 
@@ -13,10 +13,10 @@ Define the public schema surface for OpenDucktor runtime descriptors, task/workf
 ## Data & Control Flow
 
 - `agent-workflow-schemas.ts` and `agent-runtime-schemas.ts` model runtime roles, capabilities, scenarios, and transport routes.
-- `task-schemas.ts` and `odt-mcp-schemas.ts` model task cards and the MCP tool inputs/outputs.
+- `task-schemas.ts`, `odt-mcp-schemas.ts`, and `run-schemas.ts` model task cards, MCP tool inputs/outputs, and host-facing run/session payloads.
 - `runtime-descriptors.ts` assembles the OpenCode runtime descriptor from canonical tool names and capability rules.
 
 ## Integration Points
 
 - Re-exported by `src/index.ts` for all workspace consumers.
-- Drives host-side parsing in `apps/desktop/src-tauri` and adapter-side request validation in `packages/adapters-*`.
+- Drives host-side parsing in `apps/desktop/src-tauri`, adapter-side request validation in `packages/adapters-*`, browser launcher runtime config, and MCP host-bridge validation.

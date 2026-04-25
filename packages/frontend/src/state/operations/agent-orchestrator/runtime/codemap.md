@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/runtime/
+# packages/frontend/src/state/operations/agent-orchestrator/runtime/
 
 ## Responsibility
 Runtime loading helpers for repo defaults, prompt overrides, task documents, and worktree/runtime attachment.

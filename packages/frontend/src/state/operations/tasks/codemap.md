@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/tasks/
+# packages/frontend/src/state/operations/tasks/
 
 ## Responsibility
 Task mutation operations for create/update/transition/defer/reset/delete, plus PR and QA workflow actions.

@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/workspace/
+# packages/frontend/src/state/operations/workspace/
 
 ## Responsibility
 Workspace selection, branch switching, repo settings, checks, and branch-probe operations.

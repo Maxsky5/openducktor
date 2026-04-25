@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/
+# packages/frontend/src/state/operations/agent-orchestrator/
 
 ## Responsibility
 Agent-session orchestration: load, hydrate, start, stop, attach, reconcile, and persist live sessions and transcripts.

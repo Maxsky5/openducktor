@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/agents/shell/
+# packages/frontend/src/pages/agents/shell/
 
 ## Responsibility
 Top-level Agent Studio shell model and layout glue for tabs, chat header, right panel, task details, and session modals.

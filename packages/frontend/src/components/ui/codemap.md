@@ -1,4 +1,4 @@
-# apps/desktop/src/components/ui/
+# packages/frontend/src/components/ui/
 
 ## Responsibility
 Shared shadcn-style primitives and small UI helpers: buttons, dialogs, inputs, markdown renderers, comboboxes, badges, and visual affordances.

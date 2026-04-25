@@ -1,4 +1,4 @@
-# apps/desktop/src/features/agent-studio-build-tools/
+# packages/frontend/src/features/agent-studio-build-tools/
 
 ## Responsibility
 Build-tools diff/dev-server read models and bootstrap helpers for Agent Studio’s right panel.

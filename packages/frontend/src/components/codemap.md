@@ -1,4 +1,4 @@
-# apps/desktop/src/components/
+# packages/frontend/src/components/
 
 ## Responsibility
 Reusable UI and feature widgets used across pages, including layout chrome, shadcn primitives, error screens, and feature-specific panels/modals.

@@ -1,4 +1,4 @@
-# apps/desktop/src/types/
+# packages/frontend/src/types/
 
 ## Responsibility
 Shared TypeScript contracts for the desktop app: app-state slices, orchestrator/session models, browser-live events, task documents, diagnostics, and exported constants.

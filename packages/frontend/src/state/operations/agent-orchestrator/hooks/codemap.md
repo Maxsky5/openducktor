@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/hooks/
+# packages/frontend/src/state/operations/agent-orchestrator/hooks/
 
 ## Responsibility
 React hooks that expose orchestrator session state to components and page models.

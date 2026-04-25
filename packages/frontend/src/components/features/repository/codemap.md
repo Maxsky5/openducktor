@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/repository/
+# packages/frontend/src/components/features/repository/
 
 ## Responsibility
 Repository selection and branch switching UI, including the open-repository modal and folder picker.

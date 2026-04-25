@@ -1,4 +1,4 @@
-# apps/desktop/src/features/
+# packages/frontend/src/features/
 
 ## Responsibility
 Cross-cutting feature workflows that sit above page components but below app-wide state: session start, git conflict resolution, build-tools views, human-review feedback, agent git state, and autopilot catalogs.

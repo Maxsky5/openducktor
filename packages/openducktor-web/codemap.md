@@ -9,11 +9,11 @@ Public local browser runner for OpenDucktor. It provides the `@openducktor/web` 
 - `src/cli.ts` parses launcher flags and keeps side effects behind `import.meta.main` for testability.
 - `src/launcher.ts` owns process orchestration, readiness polling, Vite startup, signal handling, and fail-fast shutdown behavior.
 - `src/artifact-resolver.ts` resolves either the workspace Cargo binary during development or a signed/checksummed packaged macOS host binary for published installs.
-- `src/local-host-transport.ts` owns the browser HTTP/SSE transport; shared frontend code does not import it directly.
+- `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` own the browser runtime config and HTTP/SSE transport; shared frontend code does not import them directly.
 
 ## Data & Control Flow
 
-`bunx @openducktor/web` launches `openducktor-web-host` on loopback, injects `VITE_ODT_BROWSER_BACKEND_URL` into Vite, configures the shared frontend with `createBrowserShellBridge`, and serves the app on `http://127.0.0.1:<port>`.
+`bunx @openducktor/web` or the repo-level `browser:dev` shim launches `openducktor-web-host` on loopback, injects `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN` into Vite/browser runtime config, configures the shared frontend with `createBrowserShellBridge`, and serves the app on `http://127.0.0.1:<port>`.
 
 ## Integration Points
 

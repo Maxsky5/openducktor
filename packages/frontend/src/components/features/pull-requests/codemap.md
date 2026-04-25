@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/pull-requests/
+# packages/frontend/src/components/features/pull-requests/
 
 ## Responsibility
 Pull-request confirmation UI used when linking a merged PR back to a task.

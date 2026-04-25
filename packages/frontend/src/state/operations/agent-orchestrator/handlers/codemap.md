@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/handlers/
+# packages/frontend/src/state/operations/agent-orchestrator/handlers/
 
 ## Responsibility
 Session action handlers and start-session strategies for the agent orchestrator.

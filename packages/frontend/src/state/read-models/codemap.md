@@ -1,4 +1,4 @@
-# apps/desktop/src/state/read-models/
+# packages/frontend/src/state/read-models/
 
 ## Responsibility
 Derived read-model transforms for state data that should stay separate from direct host DTOs.

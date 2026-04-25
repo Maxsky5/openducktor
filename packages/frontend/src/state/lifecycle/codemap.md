@@ -1,4 +1,4 @@
-# apps/desktop/src/state/lifecycle/
+# packages/frontend/src/state/lifecycle/
 
 ## Responsibility
 Lifecycle state helpers for app startup and readiness, especially checks loading heuristics.

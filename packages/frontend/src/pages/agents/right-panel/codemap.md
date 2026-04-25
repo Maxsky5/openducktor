@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/agents/right-panel/
+# packages/frontend/src/pages/agents/right-panel/
 
 ## Responsibility
 Builds the Agent Studio right-panel model for documents or build-tools content, plus dev-server and diff/git controls.

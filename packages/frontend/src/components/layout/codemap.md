@@ -1,4 +1,4 @@
-# apps/desktop/src/components/layout/
+# packages/frontend/src/components/layout/
 
 ## Responsibility
 App chrome for the shell: sidebar/workspace rail, main outlet frame, overlays, and theme wiring.

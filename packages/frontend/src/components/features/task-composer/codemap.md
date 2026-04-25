@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/task-composer/
+# packages/frontend/src/components/features/task-composer/
 
 ## Responsibility
 Task creation/editing composer UI: issue-type selection, editor state, normalization, and draft-to-input translation.

@@ -1,4 +1,4 @@
-# apps/desktop/src/features/human-review-feedback/
+# packages/frontend/src/features/human-review-feedback/
 
 ## Responsibility
 Human-review feedback workflow for rejected QA tasks and the builder follow-up message modal.

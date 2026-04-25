@@ -1,4 +1,4 @@
-# apps/desktop/src/test-utils/
+# packages/frontend/src/test-utils/
 
 ## Responsibility
 Test-only harnesses, mocks, and isolated fixtures for Bun/React Query/app-state testing.

@@ -1,4 +1,4 @@
-# apps/desktop/src/lib/diff/
+# packages/frontend/src/lib/diff/
 
 ## Responsibility
 Worker bootstrap for Pierre diff rendering.

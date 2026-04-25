@@ -1,4 +1,4 @@
-# apps/desktop/src/features/session-start/
+# packages/frontend/src/features/session-start/
 
 ## Responsibility
 Shared session-start workflow: modal decisions, reuse/fresh/fork launch logic, kickoff prompts, and scenario resolution.

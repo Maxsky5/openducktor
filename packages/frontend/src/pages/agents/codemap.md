@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/agents/
+# packages/frontend/src/pages/agents/
 
 ## Responsibility
 Agent Studio route orchestration: task/session navigation, chat surface composition, right-panel state, session creation, runtime readiness, and URL synchronization.

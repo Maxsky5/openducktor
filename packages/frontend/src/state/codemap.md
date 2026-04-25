@@ -1,4 +1,4 @@
-# apps/desktop/src/state/
+# packages/frontend/src/state/
 
 ## Responsibility
 Application state and host orchestration. This layer owns workspace/task/runtime query access, mutation services, app providers, and agent-session lifecycle state.

@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/events/
+# packages/frontend/src/state/operations/agent-orchestrator/events/
 
 ## Responsibility
 Session event assembly and translation for live transcript, lifecycle, tool, and batching events.

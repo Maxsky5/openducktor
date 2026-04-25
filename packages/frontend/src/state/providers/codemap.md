@@ -1,4 +1,4 @@
-# apps/desktop/src/state/providers/
+# packages/frontend/src/state/providers/
 
 ## Responsibility
 Context providers that back the app state slices exposed by `AppStateProvider`.

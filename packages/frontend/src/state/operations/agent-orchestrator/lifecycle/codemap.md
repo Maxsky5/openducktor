@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/lifecycle/
+# packages/frontend/src/state/operations/agent-orchestrator/lifecycle/
 
 ## Responsibility
 Session hydration, loading, runtime attachment, live-session cache/store, and readiness recovery.

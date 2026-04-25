@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/task-create/
+# packages/frontend/src/components/features/task-create/
 
 ## Responsibility
 Task creation modal, discard confirmation, and controller/model glue for adding new work items.

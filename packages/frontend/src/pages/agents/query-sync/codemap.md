@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/agents/query-sync/
+# packages/frontend/src/pages/agents/query-sync/
 
 ## Responsibility
 Keeps Agent Studio URL state, repository navigation persistence, and session/task selection synchronized with the browser location.

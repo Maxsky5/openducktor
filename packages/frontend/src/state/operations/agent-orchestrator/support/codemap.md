@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/agent-orchestrator/support/
+# packages/frontend/src/state/operations/agent-orchestrator/support/
 
 ## Responsibility
 Pure helpers for agent-session orchestration internals.

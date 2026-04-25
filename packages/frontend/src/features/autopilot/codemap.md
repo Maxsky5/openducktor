@@ -1,4 +1,4 @@
-# apps/desktop/src/features/autopilot/
+# packages/frontend/src/features/autopilot/
 
 ## Responsibility
 Autopilot rule/event catalog for starting Planner, Builder, QA, and follow-up workflows from task state transitions.

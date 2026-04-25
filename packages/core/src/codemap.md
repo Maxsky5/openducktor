@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Core agent workflow logic: ports, runtime guards, role/tool policies, planner helpers, and task/session mapping utilities.
+Core agent workflow logic: ports, runtime guards, role/tool policies, planner helpers, prompt builders, and task/session mapping utilities.
 
 ## Design Patterns
 
@@ -13,7 +13,7 @@ Core agent workflow logic: ports, runtime guards, role/tool policies, planner he
 ## Data & Control Flow
 
 - `ports/agent-engine.ts` defines the operations that adapters must implement for agent sessions and workspace inspection.
-- `services/*` shape workflow tool authorization, runtime connection validation, planner spec persistence, and todo mapping.
+- `services/*` shape workflow tool authorization, runtime connection validation, planner spec persistence, prompt synthesis, and todo mapping.
 - `types/*` define agent orchestrator inputs/outputs plus planning/task action model types.
 
 ## Integration Points

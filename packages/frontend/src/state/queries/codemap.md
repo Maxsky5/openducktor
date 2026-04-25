@@ -1,4 +1,4 @@
-# apps/desktop/src/state/queries/
+# packages/frontend/src/state/queries/
 
 ## Responsibility
 Typed React Query adapters for workspace, tasks, runtime, documents, checks, git, agent sessions, filesystem, and dev-server reads.

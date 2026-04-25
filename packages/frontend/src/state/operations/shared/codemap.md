@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/shared/
+# packages/frontend/src/state/operations/shared/
 
 ## Responsibility
 Shared host/runtime mutation helpers used by workspace and agent-orchestrator operations.

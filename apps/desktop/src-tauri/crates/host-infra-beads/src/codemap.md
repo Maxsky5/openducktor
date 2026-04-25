@@ -7,7 +7,7 @@ Implementation details for the Beads adapter: command execution, lifecycle coord
 The crate is split into focused modules for command runner abstraction, constants, document storage, lifecycle, metadata/model parsing, and store helpers.
 
 ## Flow
-`BeadsTaskStore` reads and writes Beads metadata, while `BeadsLifecycle` ensures repo readiness and shared-Dolt availability before task operations run.
+`BeadsTaskStore` reads and writes Beads metadata/documents, while `BeadsLifecycle` ensures repo readiness and shared-Dolt availability before task operations run.
 
 ## Integration
 Used by the application service through `host_infra_beads::BeadsTaskStore` and by `host_infra_system` utilities for Beads paths and server state.

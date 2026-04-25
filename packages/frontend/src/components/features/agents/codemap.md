@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/agents/
+# packages/frontend/src/components/features/agents/
 
 ## Responsibility
 Agent Studio feature UI: chat surface, session tabs, workspace sidebar, dev-server panel, git panel, right-panel composition, and session-start modal entry points.

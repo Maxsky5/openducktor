@@ -1,4 +1,4 @@
-# apps/desktop/src/components/errors/
+# packages/frontend/src/components/errors/
 
 ## Responsibility
 Crash and fatal-error handling for the desktop UI.

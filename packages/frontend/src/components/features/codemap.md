@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/
+# packages/frontend/src/components/features/
 
 ## Responsibility
 Feature UI blocks shared across pages: Kanban, task details/composer, repository switching, settings, diagnostics, pull requests, and Agent Studio subpanels.

@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/kanban/
+# packages/frontend/src/pages/kanban/
 
 ## Responsibility
 Kanban route composition for task intake, board rendering, task dialogs, approvals, resets, PR linking, and session-start entry points.

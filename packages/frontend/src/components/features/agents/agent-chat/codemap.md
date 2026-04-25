@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/agents/agent-chat/
+# packages/frontend/src/components/features/agents/agent-chat/
 
 ## Responsibility
 Agent Studio chat surface: transcript thread, composer, tool cards, pending permissions/questions, session todos, and transcript dialog hosting.

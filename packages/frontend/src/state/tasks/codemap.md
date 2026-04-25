@@ -1,4 +1,4 @@
-# apps/desktop/src/state/tasks/
+# packages/frontend/src/state/tasks/
 
 ## Responsibility
 Task-specific normalization and error summaries for Beads-backed task loading.

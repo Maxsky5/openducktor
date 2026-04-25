@@ -4,7 +4,7 @@
 Task lifecycle workflows backed by Beads task storage.
 
 ## Design
-The folder groups approval, QA, document, session, PR sync, reset, delete, and cleanup services around one task domain.
+The folder groups approval, QA, document, session, PR sync, reset, delete, and cleanup services around one task domain. `document_service` owns spec/plan persistence and epic-subtask replacement, while the other services focus on task lifecycle side effects.
 
 ## Flow
 Task actions resolve the current task state, apply workflow rules, mutate Beads metadata/documents, and return updated task summaries or workflow results.

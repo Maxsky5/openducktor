@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/agents/agent-studio-git-panel/
+# packages/frontend/src/components/features/agents/agent-studio-git-panel/
 
 ## Responsibility
 Agent Studio git/worktree UI: diff lists, commit composer, open-in tooling, force-push/rebase dialogs, and git confirmation flows.

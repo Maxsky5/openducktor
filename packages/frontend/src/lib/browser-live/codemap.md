@@ -1,4 +1,4 @@
-# apps/desktop/src/lib/browser-live/
+# packages/frontend/src/lib/browser-live/
 
 ## Responsibility
 Browser-live transport constants and helpers for the browser app mode.

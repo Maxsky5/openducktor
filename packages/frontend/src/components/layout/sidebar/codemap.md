@@ -1,4 +1,4 @@
-# apps/desktop/src/components/layout/sidebar/
+# packages/frontend/src/components/layout/sidebar/
 
 ## Responsibility
 Sidebar-specific chrome for workspace context, branch switching, navigation, activity summaries, and theme toggling.

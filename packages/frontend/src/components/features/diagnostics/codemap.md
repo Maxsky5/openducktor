@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/diagnostics/
+# packages/frontend/src/components/features/diagnostics/
 
 ## Responsibility
 Health/status diagnostics UI for workspace, beads, and runtime checks.

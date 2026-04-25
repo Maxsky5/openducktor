@@ -1,4 +1,4 @@
-# apps/desktop/src/features/git-conflict-resolution/
+# packages/frontend/src/features/git-conflict-resolution/
 
 ## Responsibility
 Git-conflict resolution workflow: copy text, conflict actions, dialog UI, strip presentation, and orchestration hooks.

@@ -1,4 +1,4 @@
-# apps/desktop/src/contexts/
+# packages/frontend/src/contexts/
 
 ## Responsibility
 Cross-tree React context providers that are too specialized for `state/` but still needed app-wide.

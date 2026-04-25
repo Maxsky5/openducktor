@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/task-details/
+# packages/frontend/src/components/features/task-details/
 
 ## Responsibility
 Task detail sheet, markdown/doc viewers, document loading, delete/reset confirmations, and subtask/metadata presentation.

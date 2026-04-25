@@ -1,4 +1,4 @@
-# apps/desktop/src/pages/
+# packages/frontend/src/pages/
 
 ## Responsibility
 Route-level screens for the Kanban board and Agent Studio, plus the lazy loaders consumed by `App.tsx`.

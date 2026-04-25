@@ -1,4 +1,4 @@
-# apps/desktop/src/state/operations/
+# packages/frontend/src/state/operations/
 
 ## Responsibility
 Mutation/side-effect orchestration for workspace, task, and agent-session state.

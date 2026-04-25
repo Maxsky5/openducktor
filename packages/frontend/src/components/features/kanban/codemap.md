@@ -1,4 +1,4 @@
-# apps/desktop/src/components/features/kanban/
+# packages/frontend/src/components/features/kanban/
 
 ## Responsibility
 Kanban board renderers, task cards, workflow controls, virtualization, and status/theme presentation.
