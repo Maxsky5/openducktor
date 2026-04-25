@@ -134,6 +134,12 @@ jobs:
           path: packages/openducktor-web/bin
           merge-multiple: true
 
+      - name: Restore web host executable permissions
+        run: |
+          set -euo pipefail
+          chmod 755 packages/openducktor-web/bin/openducktor-web-host-darwin-arm64
+          chmod 755 packages/openducktor-web/bin/openducktor-web-host-darwin-x64
+
       - name: Verify web package contents
         run: bun run scripts/prepare-web-publish-packages.ts "${{ steps.release_meta.outputs.version }}"
 
