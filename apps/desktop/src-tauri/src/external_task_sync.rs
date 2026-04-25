@@ -111,8 +111,10 @@ fn run_task_event_relay<R: tauri::Runtime>(
 
     let mut last_event_id: Option<SseEventId> = None;
     while !stop_requested.load(Ordering::SeqCst) {
-        let stream_url = match service.mcp_bridge_base_url() {
-            Ok(base_url) => format!("{base_url}/{TASK_EVENT_STREAM_PATH}"),
+        let (stream_url, app_token) = match service.mcp_bridge_connection() {
+            Ok((base_url, app_token)) => {
+                (format!("{base_url}/{TASK_EVENT_STREAM_PATH}"), app_token)
+            }
             Err(error) => {
                 tracing::error!(
                     target: "openducktor.task-sync",
@@ -124,7 +126,14 @@ fn run_task_event_relay<R: tauri::Runtime>(
             }
         };
 
-        let response = match build_sse_stream_request(&client, &stream_url, last_event_id).send() {
+        let response = match build_sse_stream_request(
+            &client,
+            &stream_url,
+            last_event_id,
+            Some(app_token.as_str()),
+        )
+        .send()
+        {
             Ok(response) => response,
             Err(error) => {
                 tracing::error!(
@@ -213,9 +222,9 @@ fn relay_task_event_reader(
                 tracing::error!(
                     target: "openducktor.task-sync",
                     event_type = message.event.as_deref().unwrap_or("message"),
-                    raw_payload = message.data,
+                    payload_bytes = message.data.len(),
                     error = %error,
-                    "Task event relay received an invalid task sync payload"
+                    "Task event relay received an invalid task sync payload; payload omitted from terminal logs"
                 );
             }
         }
@@ -309,6 +318,7 @@ mod tests {
             &Client::builder().build().expect("client should build"),
             "http://127.0.0.1:1234/task-events",
             last_event_id,
+            None,
         )
         .build()
         .expect("request should build");
@@ -397,6 +407,7 @@ mod tests {
             &Client::builder().build().expect("client should build"),
             "http://127.0.0.1:1234/task-events",
             last_event_id,
+            None,
         )
         .build()
         .expect("request should build");

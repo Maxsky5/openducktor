@@ -70,7 +70,7 @@ impl BeadsLifecycle {
             return Ok(());
         }
 
-        ensure_shared_dolt_server_running(std::process::id()).with_context(|| {
+        ensure_shared_dolt_server_running(self.owner_pid()).with_context(|| {
             format!(
                 "Failed to ensure shared Dolt server is running for {}",
                 repo_path.display()
@@ -100,7 +100,7 @@ impl BeadsLifecycle {
         };
         if self.command_runner().uses_real_processes() {
             restore_shared_dolt_database_from_backup(
-                std::process::id(),
+                self.owner_pid(),
                 database_name.as_str(),
                 &backup_dir,
             )?;

@@ -1,0 +1,45 @@
+{
+  "name": "@openducktor/web",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "exports": {
+    ".": "./dist/cli.js"
+  },
+  "bin": {
+    "web": "dist/cli.js",
+    "openducktor-web": "dist/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Maxsky5/openducktor.git"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "FORCE_COLOR=1 bun src/cli.ts --workspace",
+    "start": "bun run src/cli.ts",
+    "build": "rm -rf dist && bun run build:web-shell && bun run build:cli",
+    "build:web-shell": "bunx vite build --outDir dist/web-shell --emptyOutDir",
+    "build:cli": "bun build --target=bun --external vite --outfile dist/cli.js src/cli.ts && chmod +x dist/cli.js",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test --timeout 1000",
+    "lint": "biome check src",
+    "publish:dry-run": "npm publish --dry-run --access public"
+  },
+  "devDependencies": {
+    "@openducktor/adapters-tauri-host": "workspace:*",
+    "@openducktor/frontend": "workspace:*",
+    "@tailwindcss/vite": "^4.2.2",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@types/node": "^25.6.0",
+    "bun-types": "^1.3.12",
+    "vite": "^8.0.9"
+  }
+}

@@ -5,7 +5,10 @@
     "baseUrl": ".",
     "types": ["vite/client", "node", "bun-types"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["../../packages/frontend/src/*"],
+      "@openducktor/frontend": ["../../packages/frontend/src/index.ts"],
+      "@openducktor/frontend/styles.css": ["../../packages/frontend/src/styles.css"],
+      "@openducktor/frontend/lib/*": ["../../packages/frontend/src/lib/*"]
     }
   },
   "include": ["src", "scripts", "vite.config.ts"]

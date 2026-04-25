@@ -7,6 +7,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [../README.md](../README.md): public project overview, install guide, and contribution entry point.
 - [architecture-overview.md](architecture-overview.md): high-level map of the system and how data moves across layers.
 - [runtime-integration-guide.md](runtime-integration-guide.md): how runtimes fit into OpenDucktor and what a new runtime integration requires.
+- [web-runner.md](web-runner.md): local browser runner architecture, command usage, and package/release expectations.
 
 ## Workflow Docs
 
@@ -22,6 +23,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md): detailed Beads attachment and shared Dolt lifecycle, command inventory, startup, hydration, and shutdown rules.
 - [external-mcp.md](external-mcp.md): public MCP package usage, host-bridge startup contract, and the external task tools.
 - [runtime-integration-guide.md](runtime-integration-guide.md): runtime vocabulary, capability model, integration checklist, and verification path.
+- [web-runner.md](web-runner.md): how `@openducktor/web` starts the Rust host and serves the shared frontend without Tauri.
 
 ## Security And Maintenance Docs
 

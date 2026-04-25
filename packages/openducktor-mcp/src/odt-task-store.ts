@@ -20,7 +20,9 @@ export class OdtTaskStore {
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.workspaceId = options.workspaceId;
-    this.client = deps.client ?? new OdtHostBridgeClient({ baseUrl: options.hostUrl });
+    this.client =
+      deps.client ??
+      new OdtHostBridgeClient({ baseUrl: options.hostUrl, appToken: options.hostToken });
   }
 
   private resolveWorkspaceId(

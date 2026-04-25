@@ -3,21 +3,34 @@ import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeRegistryPath } from "./path-utils";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
+const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
 
 export type OdtStoreOptions = {
   workspaceId?: string;
   hostUrl: string;
+  hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
 };
 
 export type OdtStoreContext = {
   workspaceId?: string;
   hostUrl?: string;
+  hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
   beadsAttachmentDir?: string;
   doltHost?: string;
   doltPort?: string;
   databaseName?: string;
+};
+
+type DiscoveredBridge = {
+  port: number;
+  hostToken?: string;
+};
+
+type DiscoveredHostConnection = {
+  hostUrl: string;
+  hostToken?: string;
 };
 
 const rejectLegacyContract = (context: OdtStoreContext): void => {
@@ -56,14 +69,14 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
   );
 };
 
-const validateExplicitHostUrl = async (hostUrl: string): Promise<string> => {
+const validateExplicitHostUrl = async (hostUrl: string, hostToken?: string): Promise<string> => {
   try {
     new URL(hostUrl);
   } catch {
     throw new Error(`Invalid ODT_HOST_URL for OpenDucktor MCP: ${hostUrl}`);
   }
 
-  await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
+  await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken }).ready();
   return hostUrl;
 };
 
@@ -82,8 +95,15 @@ const readBooleanEnv = (name: string): boolean | undefined => {
   throw new Error(`${name} must be true, false, 1, or 0.`);
 };
 
-const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string): Promise<void> => {
-  const workspaces = await new OdtHostBridgeClient({ baseUrl: hostUrl }).getWorkspaces();
+const validateConfiguredWorkspace = async (
+  hostUrl: string,
+  workspaceId: string,
+  hostToken?: string,
+): Promise<void> => {
+  const workspaces = await new OdtHostBridgeClient({
+    baseUrl: hostUrl,
+    appToken: hostToken,
+  }).getWorkspaces();
   if (workspaces.workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
     return;
   }
@@ -93,7 +113,10 @@ const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string)
   );
 };
 
-const parseDiscoveredPorts = (payload: string, registryPath: string): number[] => {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const parseDiscoveredBridges = (payload: string, registryPath: string): DiscoveredBridge[] => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
@@ -104,17 +127,20 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
     );
   }
 
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    !Array.isArray((parsed as { ports?: unknown }).ports)
-  ) {
+  if (!isRecord(parsed) || !Array.isArray(parsed.ports)) {
     throw new Error(
       `Invalid OpenDucktor MCP discovery registry at ${registryPath}: expected a JSON object with a ports array.`,
     );
   }
 
-  const ports = (parsed as { ports: unknown[] }).ports.map((port) => {
+  const bridgeTokens = parsed.bridgeTokens;
+  if (bridgeTokens !== undefined && !isRecord(bridgeTokens)) {
+    throw new Error(
+      `Invalid OpenDucktor MCP discovery registry at ${registryPath}: bridgeTokens must be an object when present.`,
+    );
+  }
+
+  const ports = parsed.ports.map((port) => {
     if (!Number.isInteger(port)) {
       throw new Error(
         `Invalid OpenDucktor MCP discovery registry at ${registryPath}: ports must be integers between 1 and 65535.`,
@@ -130,20 +156,33 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
     return numericPort;
   });
 
-  const discoveredPorts: number[] = [];
+  const discoveredBridges: DiscoveredBridge[] = [];
   const seen = new Set<number>();
   for (const port of ports) {
     if (seen.has(port)) {
       continue;
     }
     seen.add(port);
-    discoveredPorts.push(port);
+    const token = bridgeTokens?.[String(port)];
+    if (token !== undefined && typeof token !== "string") {
+      throw new Error(
+        `Invalid OpenDucktor MCP discovery registry at ${registryPath}: bridgeTokens entries must be strings.`,
+      );
+    }
+    const normalizedToken = normalizeOptionalInput(token);
+    discoveredBridges.push({
+      port,
+      ...(normalizedToken ? { hostToken: normalizedToken } : {}),
+    });
   }
 
-  return discoveredPorts;
+  return discoveredBridges;
 };
 
-const discoverHostUrl = async (workspaceId?: string): Promise<string> => {
+const discoverHostConnection = async (
+  workspaceId?: string,
+  hostToken?: string,
+): Promise<DiscoveredHostConnection> => {
   const registryPath = resolveMcpBridgeRegistryPath();
 
   let registryPayload: string;
@@ -162,22 +201,27 @@ const discoverHostUrl = async (workspaceId?: string): Promise<string> => {
     );
   }
 
-  const discoveredPorts = parseDiscoveredPorts(registryPayload, registryPath);
-  if (discoveredPorts.length === 0) {
+  const discoveredBridges = parseDiscoveredBridges(registryPayload, registryPath);
+  if (discoveredBridges.length === 0) {
     throw new Error(
       `No running OpenDucktor host was discovered. ${registryPath} does not contain any bridge ports. Start the OpenDucktor desktop app or provide ODT_HOST_URL to override discovery.`,
     );
   }
 
   const failures: string[] = [];
-  for (const port of discoveredPorts) {
+  for (const bridge of discoveredBridges) {
+    const candidateHostToken = hostToken ?? bridge.hostToken;
+    const port = bridge.port;
     const hostUrl = `http://127.0.0.1:${port}`;
     try {
-      await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
+      await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: candidateHostToken }).ready();
       if (workspaceId) {
-        await validateConfiguredWorkspace(hostUrl, workspaceId);
+        await validateConfiguredWorkspace(hostUrl, workspaceId, candidateHostToken);
       }
-      return hostUrl;
+      return {
+        hostUrl,
+        ...(candidateHostToken ? { hostToken: candidateHostToken } : {}),
+      };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       failures.push(`${hostUrl}: ${reason}`);
@@ -200,26 +244,36 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
 
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
-  const hostUrl = explicitHostUrl
-    ? await validateExplicitHostUrl(explicitHostUrl)
-    : await discoverHostUrl(workspaceId);
+  let resolvedHostToken =
+    normalizeOptionalInput(context.hostToken) ??
+    normalizeOptionalInput(process.env[HOST_TOKEN_ENV]);
+  let hostUrl: string;
+  if (explicitHostUrl) {
+    hostUrl = await validateExplicitHostUrl(explicitHostUrl, resolvedHostToken);
+  } else {
+    const discovered = await discoverHostConnection(workspaceId, resolvedHostToken);
+    hostUrl = discovered.hostUrl;
+    resolvedHostToken = discovered.hostToken;
+  }
   const workspaceIdInputMode =
     forbidWorkspaceIdInput !== undefined ? { forbidWorkspaceIdInput } : {};
 
   if (!workspaceId) {
     return {
       hostUrl,
+      ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
       ...workspaceIdInputMode,
     };
   }
 
   if (explicitHostUrl) {
-    await validateConfiguredWorkspace(hostUrl, workspaceId);
+    await validateConfiguredWorkspace(hostUrl, workspaceId, resolvedHostToken);
   }
 
   return {
     workspaceId,
     hostUrl,
+    ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
     ...workspaceIdInputMode,
   };
 };

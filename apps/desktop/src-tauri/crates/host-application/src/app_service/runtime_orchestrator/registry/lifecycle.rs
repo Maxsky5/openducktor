@@ -186,24 +186,47 @@ impl AppService {
     }
 
     pub fn shutdown(&self) -> Result<()> {
+        tracing::info!(
+            target: "openducktor.lifecycle",
+            "Shutting down OpenDucktor host services"
+        );
         self.startup_cancel_epoch
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut cleanup_errors = Vec::new();
         for runtime in self.runtime_registry.runtimes() {
+            let runtime_kind = runtime.definition().kind().as_str().to_string();
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "Stopping pending {runtime_kind} runtime startup processes"
+            );
             if let Err(error) = runtime.terminate_tracked_processes(self) {
                 cleanup_errors.push(format!(
                     "Failed terminating pending {} runtime processes: {error:#}",
-                    runtime.definition().kind().as_str()
+                    runtime_kind
                 ));
             }
         }
+        tracing::info!(target: "openducktor.lifecycle", "Stopping dev servers");
         if let Err(error) = self.stop_all_dev_servers() {
             cleanup_errors.push(format!("Failed stopping dev servers: {error:#}"));
         }
 
         match self.agent_runtimes.lock() {
             Ok(mut runtimes) => {
+                tracing::info!(
+                    target: "openducktor.lifecycle",
+                    "Stopping {} active agent runtime(s)",
+                    runtimes.len()
+                );
                 for (_, mut runtime) in runtimes.drain() {
+                    let task_label = runtime.summary.task_id.as_deref().unwrap_or("workspace");
+                    tracing::info!(
+                        target: "openducktor.lifecycle",
+                        "Stopping {} runtime {} for task {task_label} ({:?})",
+                        runtime.summary.kind.as_str(),
+                        runtime.summary.runtime_id,
+                        runtime.summary.role
+                    );
                     if let Err(error) =
                         self.clear_runtime_startup_status_for_runtime(&runtime.summary)
                     {
@@ -231,19 +254,38 @@ impl AppService {
             Err(_) => cleanup_errors.push("Agent runtime state lock poisoned".to_string()),
         }
 
+        tracing::info!(target: "openducktor.lifecycle", "Stopping MCP host bridge");
         if let Err(error) = self.stop_mcp_bridge_process() {
             cleanup_errors.push(format!("Failed shutting down MCP host bridge: {error:#}"));
         }
 
-        if let Err(error) = stop_shared_dolt_server_for_current_owner(self.instance_pid) {
-            cleanup_errors.push(format!(
+        tracing::info!(target: "openducktor.lifecycle", "Stopping shared Dolt server");
+        match stop_shared_dolt_server_for_current_owner(self.instance_pid) {
+            Ok(true) => tracing::info!(
+                target: "openducktor.lifecycle",
+                "Shared Dolt server stopped"
+            ),
+            Ok(false) => tracing::info!(
+                target: "openducktor.lifecycle",
+                "No shared Dolt server owned by this OpenDucktor process"
+            ),
+            Err(error) => cleanup_errors.push(format!(
                 "Failed shutting down shared Dolt server: {error:#}"
-            ));
+            )),
         }
 
         if cleanup_errors.is_empty() {
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "OpenDucktor host services stopped"
+            );
             Ok(())
         } else {
+            tracing::error!(
+                target: "openducktor.lifecycle",
+                "OpenDucktor host services stopped with {} cleanup error(s)",
+                cleanup_errors.len()
+            );
             Err(anyhow!(cleanup_errors.join("\n")))
         }
     }

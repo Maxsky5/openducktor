@@ -11,11 +11,11 @@ const __dirname = path.dirname(__filename);
 function getAppVersion(): string | null {
   try {
     const conf = JSON.parse(
-      readFileSync(path.resolve(__dirname, "src-tauri/tauri.conf.json"), "utf-8"),
+      readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
     );
     return conf.version ?? null;
   } catch (error) {
-    console.warn("Could not read app version from tauri.conf.json:", error);
+    console.warn("Could not read app version from package.json:", error);
     return null;
   }
 }
@@ -162,7 +162,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(__dirname, "../../packages/frontend/src"),
     },
   },
   build: {

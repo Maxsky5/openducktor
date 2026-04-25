@@ -1,0 +1,52 @@
+[
+  {
+    "name": "ipv4 loopback origin",
+    "input": "http://127.0.0.1:14327",
+    "expected": "http://127.0.0.1:14327"
+  },
+  {
+    "name": "localhost origin",
+    "input": "http://localhost:14327",
+    "expected": "http://localhost:14327"
+  },
+  {
+    "name": "ipv6 loopback origin",
+    "input": "http://[::1]:14327",
+    "expected": "http://[::1]:14327"
+  },
+  {
+    "name": "trimmed loopback origin",
+    "input": " http://127.0.0.1:14327 ",
+    "expected": "http://127.0.0.1:14327"
+  },
+  {
+    "name": "https origin is rejected",
+    "input": "https://127.0.0.1:14327",
+    "errorIncludes": "must use http"
+  },
+  {
+    "name": "remote host is rejected",
+    "input": "http://example.com:14327",
+    "errorIncludes": "must target"
+  },
+  {
+    "name": "missing port is rejected",
+    "input": "http://127.0.0.1",
+    "errorIncludes": "explicit port"
+  },
+  {
+    "name": "path is rejected",
+    "input": "http://127.0.0.1:14327/app",
+    "errorIncludes": "path"
+  },
+  {
+    "name": "query string is rejected",
+    "input": "http://127.0.0.1:14327?token=abc",
+    "errorIncludes": "query"
+  },
+  {
+    "name": "credentials are rejected",
+    "input": "http://user:pass@127.0.0.1:14327",
+    "errorIncludes": "credentials"
+  }
+]

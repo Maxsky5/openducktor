@@ -1,0 +1,158 @@
+name: Publish Web Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (for example v0.1.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: 1.3.11
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-web-host:
+    name: Build ${{ matrix.label }} web host
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS Apple Silicon
+            runner: macos-15
+            target: aarch64-apple-darwin
+            artifact: openducktor-web-host-darwin-arm64
+          - label: macOS Intel
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            artifact: openducktor-web-host-darwin-x64
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: |
+            apps/desktop/src-tauri
+          shared-key: web-host-release-${{ matrix.target }}
+
+      - name: Build web host binary
+        working-directory: apps/desktop/src-tauri
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --bin openducktor-web-host --target "$TARGET"
+
+      - name: Stage web host artifact and checksum
+        env:
+          TARGET: ${{ matrix.target }}
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-web-host
+          cp "apps/desktop/src-tauri/target/$TARGET/release/openducktor-web-host" "release-web-host/$ARTIFACT"
+          chmod +x "release-web-host/$ARTIFACT"
+          shasum -a 256 "release-web-host/$ARTIFACT" | awk '{print $1}' > "release-web-host/$ARTIFACT.sha256"
+
+      - name: Upload web host artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release-web-host/${{ matrix.artifact }}
+            release-web-host/${{ matrix.artifact }}.sha256
+          if-no-files-found: error
+
+  publish-web:
+    name: Publish @openducktor/web
+    permissions:
+      contents: read
+      id-token: write
+    needs:
+      - build-web-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node for npm trusted publishing
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.2
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Resolve release metadata
+        id: release_meta
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected release tag like v0.1.0 or v0.1.0-rc.1." >&2
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify repository version matches tag
+        run: bun run release:version:check "${{ steps.release_meta.outputs.version }}"
+
+      - name: Build @openducktor/web
+        run: bun run --filter @openducktor/web build
+
+      - name: Download web host artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: openducktor-web-host-darwin-*
+          path: packages/openducktor-web/bin
+          merge-multiple: true
+
+      - name: Verify web package contents
+        run: bun run scripts/prepare-web-publish-packages.ts "${{ steps.release_meta.outputs.version }}"
+
+      - name: Dry-run web package publishing
+        working-directory: packages/openducktor-web
+        run: npm publish --dry-run --access public
+
+      - name: Publish web package
+        working-directory: packages/openducktor-web
+        run: npm publish --access public
+
+      - name: Publish workflow summary
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          {
+            echo "## Web package published"
+            echo
+            echo "- Tag: $TAG"
+            echo "- Package: @openducktor/web"
+            echo "- Web host artifacts: openducktor-web-host-darwin-arm64, openducktor-web-host-darwin-x64"
+          } >> "$GITHUB_STEP_SUMMARY"

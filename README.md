@@ -48,6 +48,16 @@ If macOS blocks the first launch, use Finder's standard `Open` action once to co
 
 Homebrew installs the same signed and notarized desktop app that is published on GitHub Releases.
 
+### Local Web Runner
+
+If you prefer to use OpenDucktor in a browser instead of a desktop window:
+
+```sh
+bunx @openducktor/web
+```
+
+The web runner opens OpenDucktor in your browser. Choose the desktop app or the web runner based on what best fits your workflow.
+
 ## User Prerequisites
 
 OpenDucktor is currently intended for local macOS use.
@@ -69,6 +79,7 @@ OpenDucktor currently supports the OpenCode runtime only. It checks common local
 - A dedicated Git worktree for each Builder task, with in-app tools to inspect diffs, track Git state, and run dev servers while implementation is in progress.
 - Global and repository-level prompt customization for adapting agent behavior to your workflow.
 - A built-in OpenDucktor MCP server used internally by the desktop app and available externally through `@openducktor/mcp`.
+- A local web runner available through `@openducktor/web` for running the shared frontend without Tauri.
 
 ## How It Works
 
@@ -103,6 +114,7 @@ That keeps the workflow task-centric and auditable: agents act through a control
 - [docs/README.md](docs/README.md)
 - [docs/architecture-overview.md](docs/architecture-overview.md)
 - [docs/runtime-integration-guide.md](docs/runtime-integration-guide.md)
+- [docs/web-runner.md](docs/web-runner.md)
 - [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
 
 ## Contributing

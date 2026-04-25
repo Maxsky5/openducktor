@@ -24,16 +24,22 @@ use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
+use url::Url;
 
 const DEFAULT_BROWSER_BACKEND_HOST: &str = "127.0.0.1";
-const DEFAULT_BROWSER_FRONTEND_ORIGINS: [&str; 3] = [
-    "http://localhost:1420",
-    "http://127.0.0.1:1420",
-    "http://[::1]:1420",
-];
-const BROWSER_FRONTEND_ORIGIN_ENV: &str = "ODT_BROWSER_FRONTEND_ORIGIN";
 const LAST_EVENT_ID_HEADER: &str = "last-event-id";
+const CONTROL_TOKEN_HEADER: &str = "x-openducktor-control-token";
+const APP_TOKEN_HEADER: &str = "x-openducktor-app-token";
+const APP_SESSION_COOKIE_NAME: &str = "openducktor_web_session";
 pub(super) const EVENT_BUFFER_CAPACITY: usize = 256;
+
+#[derive(Debug, Clone)]
+pub struct BrowserBackendOptions {
+    pub port: u16,
+    pub frontend_origin: String,
+    pub control_token: String,
+    pub app_token: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShutdownRequestAction {
@@ -70,7 +76,9 @@ fn reject_when_shutting_down(state: &HeadlessState) -> Result<(), HeadlessComman
     }
 }
 
-pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
+pub async fn run_browser_backend_with_options(
+    options: BrowserBackendOptions,
+) -> anyhow::Result<()> {
     startup_phase_tracing();
     let service = startup_phase_service_bootstrap()?;
     let registry =
@@ -85,11 +93,15 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
         shutdown_started.clone(),
         Some(shutdown_signal.clone()),
     );
-    let cors_layer = browser_backend_cors_layer()?;
-    let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
+    let frontend_origin = validate_web_frontend_origin(&options.frontend_origin)?;
+    let cors_layer = browser_backend_cors_layer(&frontend_origin)?;
+    let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, options.port))
         .await
         .with_context(|| {
-            format!("failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{port}")
+            format!(
+                "failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{}",
+                options.port
+            )
         })?;
     let pull_request_sync_stop_requested = start_pull_request_sync_loop(service.clone(), {
         let task_events = task_events.clone();
@@ -106,6 +118,7 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
     });
     let app = Router::new()
         .route("/health", get(health_handler))
+        .route("/session", post(session_handler))
         .route("/shutdown", post(shutdown_handler))
         .route("/events", get(events_handler))
         .route("/dev-server-events", get(dev_server_events_handler))
@@ -125,13 +138,14 @@ pub(super) async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
             registry,
             shutdown_signal: shutdown_signal.clone(),
             shutdown_started: shutdown_started.clone(),
+            control_token: Some(options.control_token.clone()),
+            app_token: Some(options.app_token.clone()),
         });
 
     tracing::info!(
         target: "openducktor.browser-backend",
-        host = DEFAULT_BROWSER_BACKEND_HOST,
-        port,
-        "OpenDucktor browser backend listening"
+        "OpenDucktor Rust host is listening at http://{DEFAULT_BROWSER_BACKEND_HOST}:{}",
+        options.port
     );
 
     serve_browser_backend(
@@ -164,12 +178,150 @@ async fn health_handler() -> impl IntoResponse {
     Json(json!({ "ok": true }))
 }
 
-async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoResponse {
+fn validate_expected_token(
+    received_token: Option<&str>,
+    expected_token: Option<&str>,
+    missing_message: &'static str,
+    invalid_message: &'static str,
+) -> Result<(), HeadlessCommandError> {
+    let Some(expected_token) = expected_token else {
+        return Ok(());
+    };
+
+    let Some(received_token) = received_token else {
+        return Err(HeadlessCommandError {
+            message: missing_message.to_string(),
+            status: StatusCode::UNAUTHORIZED,
+            failure_kind: None,
+        });
+    };
+
+    if received_token != expected_token {
+        return Err(HeadlessCommandError {
+            message: invalid_message.to_string(),
+            status: StatusCode::FORBIDDEN,
+            failure_kind: None,
+        });
+    }
+
+    Ok(())
+}
+
+fn validate_control_token(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    validate_expected_token(
+        headers
+            .get(CONTROL_TOKEN_HEADER)
+            .and_then(|value| value.to_str().ok()),
+        expected_token,
+        "Missing OpenDucktor web host control token.",
+        "Invalid OpenDucktor web host control token.",
+    )
+}
+
+fn validate_app_token(
+    received_token: Option<&str>,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    validate_expected_token(
+        received_token,
+        expected_token,
+        "Missing OpenDucktor web host app token.",
+        "Invalid OpenDucktor web host app token.",
+    )
+}
+
+fn validate_app_token_header(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    validate_app_token(
+        headers
+            .get(APP_TOKEN_HEADER)
+            .and_then(|value| value.to_str().ok()),
+        expected_token,
+    )
+}
+
+fn read_app_session_cookie(headers: &HeaderMap) -> Option<String> {
+    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
+    for part in cookie_header.split(';') {
+        let trimmed = part.trim();
+        if let Some((name, value)) = trimmed.split_once('=') {
+            if name == APP_SESSION_COOKIE_NAME && !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn validate_app_token_cookie(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    let received_token = read_app_session_cookie(headers);
+    validate_app_token(received_token.as_deref(), expected_token)
+}
+
+fn validate_app_token_cookie_or_header(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    let received_token = read_app_session_cookie(headers).or_else(|| {
+        headers
+            .get(APP_TOKEN_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .map(ToOwned::to_owned)
+    });
+    validate_app_token(received_token.as_deref(), expected_token)
+}
+
+async fn session_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<Response, HeadlessCommandError> {
+    validate_app_token_header(&headers, state.app_token.as_deref())?;
+
+    let mut response = Json(json!({ "ok": true })).into_response();
+    if let Some(app_token) = state.app_token.as_deref() {
+        let cookie =
+            format!("{APP_SESSION_COOKIE_NAME}={app_token}; HttpOnly; SameSite=Strict; Path=/");
+        let cookie_value =
+            HeaderValue::from_str(&cookie).map_err(|error| HeadlessCommandError {
+                message: format!("Failed to build OpenDucktor web session cookie: {error}"),
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                failure_kind: None,
+            })?;
+        response
+            .headers_mut()
+            .append(header::SET_COOKIE, cookie_value);
+    }
+    Ok(response)
+}
+
+async fn shutdown_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_control_token(&headers, state.control_token.as_deref())?;
+
     if classify_shutdown_request(state.shutdown_started.swap(true, Ordering::SeqCst))
         == ShutdownRequestAction::AlreadyStarted
     {
-        return (StatusCode::ACCEPTED, Json(json!({ "ok": true })));
+        tracing::info!(
+            target: "openducktor.browser-backend",
+            "OpenDucktor web host shutdown is already in progress"
+        );
+        return Ok((StatusCode::ACCEPTED, Json(json!({ "ok": true }))));
     }
+
+    tracing::info!(
+        target: "openducktor.browser-backend",
+        "OpenDucktor web host shutdown requested"
+    );
 
     let service = state.service.clone();
     let shutdown_signal = state.shutdown_signal.clone();
@@ -179,7 +331,13 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
     tokio::spawn(async move {
         shutdown_signal.notify_waiters();
         let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
-            Ok(Ok(())) => shutdown_exit_code(true),
+            Ok(Ok(())) => {
+                tracing::info!(
+                    target: "openducktor.browser-backend",
+                    "OpenDucktor web host shutdown complete"
+                );
+                shutdown_exit_code(true)
+            }
             Ok(Err(error)) => {
                 tracing::error!(
                     target: "openducktor.browser-backend",
@@ -201,13 +359,14 @@ async fn shutdown_handler(State(state): State<HeadlessState>) -> impl IntoRespon
         std::process::exit(exit_code);
     });
 
-    (StatusCode::ACCEPTED, Json(json!({ "ok": true })))
+    Ok((StatusCode::ACCEPTED, Json(json!({ "ok": true }))))
 }
 
 async fn events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -221,6 +380,7 @@ async fn dev_server_events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -234,6 +394,7 @@ async fn task_events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -246,8 +407,12 @@ async fn task_events_handler(
 async fn invoke_handler(
     Path(command): Path<String>,
     State(state): State<HeadlessState>,
+    headers: HeaderMap,
     args: Result<Json<Value>, JsonRejection>,
 ) -> impl IntoResponse {
+    if let Err(error) = validate_app_token_header(&headers, state.app_token.as_deref()) {
+        return error.into_response();
+    }
     if let Err(error) = reject_when_shutting_down(&state) {
         return error.into_response();
     }
@@ -269,8 +434,11 @@ struct LocalAttachmentPreviewQuery {
 }
 
 async fn local_attachment_preview_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
     Query(query): Query<LocalAttachmentPreviewQuery>,
 ) -> Result<Response, HeadlessCommandError> {
+    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
     let path = PathBuf::from(&query.path);
     let metadata = tokio::fs::metadata(&path)
         .await
@@ -332,42 +500,70 @@ fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
     }
 }
 
-fn browser_backend_cors_layer() -> anyhow::Result<CorsLayer> {
-    let layer = if let Ok(origin) = std::env::var(BROWSER_FRONTEND_ORIGIN_ENV) {
-        let origin = origin.trim();
-        if origin.is_empty() {
-            CorsLayer::new()
-                .allow_origin(parse_default_frontend_origins()?)
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(browser_backend_allowed_headers())
-        } else {
-            CorsLayer::new()
-                .allow_origin(parse_origin_header(origin)?)
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(browser_backend_allowed_headers())
-        }
-    } else {
-        CorsLayer::new()
-            .allow_origin(parse_default_frontend_origins()?)
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers(browser_backend_allowed_headers())
-    };
-
-    Ok(layer)
+fn browser_backend_cors_layer(frontend_origin: &str) -> anyhow::Result<CorsLayer> {
+    Ok(CorsLayer::new()
+        .allow_origin(loopback_frontend_origin_headers(frontend_origin)?)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(browser_backend_allowed_headers())
+        .allow_credentials(true))
 }
 
-fn browser_backend_allowed_headers() -> [header::HeaderName; 2] {
+fn loopback_frontend_origin_headers(frontend_origin: &str) -> anyhow::Result<Vec<HeaderValue>> {
+    let origin = validate_web_frontend_origin(frontend_origin)?;
+    let url = Url::parse(&origin)
+        .with_context(|| format!("invalid browser frontend origin configured: {origin}"))?;
+    let port = url
+        .port()
+        .ok_or_else(|| anyhow::anyhow!("browser frontend origin must include an explicit port"))?;
+
+    [
+        format!("http://127.0.0.1:{port}"),
+        format!("http://localhost:{port}"),
+        format!("http://[::1]:{port}"),
+    ]
+    .into_iter()
+    .map(|candidate| parse_origin_header(&candidate))
+    .collect()
+}
+
+fn browser_backend_allowed_headers() -> [header::HeaderName; 4] {
     [
         header::CONTENT_TYPE,
         header::HeaderName::from_static(LAST_EVENT_ID_HEADER),
+        header::HeaderName::from_static(CONTROL_TOKEN_HEADER),
+        header::HeaderName::from_static(APP_TOKEN_HEADER),
     ]
 }
 
-fn parse_default_frontend_origins() -> anyhow::Result<Vec<HeaderValue>> {
-    DEFAULT_BROWSER_FRONTEND_ORIGINS
-        .iter()
-        .map(|origin| parse_origin_header(origin))
-        .collect()
+pub fn validate_web_frontend_origin(origin: &str) -> anyhow::Result<String> {
+    let trimmed = origin.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("browser frontend origin cannot be empty");
+    }
+
+    let url = Url::parse(trimmed)
+        .with_context(|| format!("invalid browser frontend origin configured: {trimmed}"))?;
+    if url.scheme() != "http" {
+        anyhow::bail!("browser frontend origin must use http");
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        anyhow::bail!("browser frontend origin must not include credentials");
+    }
+    if url.port().is_none() {
+        anyhow::bail!("browser frontend origin must include an explicit port");
+    }
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        anyhow::bail!("browser frontend origin must not include a path, query string, or fragment");
+    }
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("browser frontend origin must include a host"))?;
+    if !matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]") {
+        anyhow::bail!("browser frontend origin must target 127.0.0.1, localhost, or [::1]");
+    }
+
+    Ok(url.origin().ascii_serialization())
 }
 
 fn parse_origin_header(origin: &str) -> anyhow::Result<HeaderValue> {
@@ -820,7 +1016,7 @@ mod tests {
         let fixture = test_state_fixture();
         fixture.state.shutdown_started.store(true, Ordering::SeqCst);
 
-        let response = shutdown_handler(State(fixture.state.clone()))
+        let response = shutdown_handler(State(fixture.state.clone()), HeaderMap::new())
             .await
             .into_response();
         let status = response.status();
@@ -835,6 +1031,155 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn shutdown_handler_requires_matching_control_token_when_configured() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            control_token: Some("expected-token".to_string()),
+            ..fixture.state.clone()
+        };
+
+        let missing_response = shutdown_handler(State(state.clone()), HeaderMap::new())
+            .await
+            .into_response();
+        let missing_status = missing_response.status();
+        let missing_body = to_bytes(missing_response.into_body(), usize::MAX)
+            .await
+            .expect("missing token response body should collect");
+        let missing_payload: Value = serde_json::from_slice(&missing_body)
+            .expect("missing token response body should deserialize");
+
+        assert_eq!(missing_status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            missing_payload,
+            json!({ "error": "Missing OpenDucktor web host control token." })
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTROL_TOKEN_HEADER,
+            HeaderValue::from_static("expected-token"),
+        );
+        let accepted_response = shutdown_handler(State(state), headers)
+            .await
+            .into_response();
+
+        assert_eq!(accepted_response.status(), StatusCode::ACCEPTED);
+    }
+
+    #[tokio::test]
+    async fn invoke_handler_requires_matching_app_token_when_configured() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+
+        let missing_response = invoke_handler(
+            Path("workspace_list".to_string()),
+            State(state.clone()),
+            HeaderMap::new(),
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+        let missing_status = missing_response.status();
+        let missing_body = to_bytes(missing_response.into_body(), usize::MAX)
+            .await
+            .expect("missing app token response body should collect");
+        let missing_payload: Value = serde_json::from_slice(&missing_body)
+            .expect("missing app token response body should deserialize");
+
+        assert_eq!(missing_status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            missing_payload,
+            json!({ "error": "Missing OpenDucktor web host app token." })
+        );
+
+        let mut invalid_headers = HeaderMap::new();
+        invalid_headers.insert(APP_TOKEN_HEADER, HeaderValue::from_static("wrong-token"));
+        let invalid_response = invoke_handler(
+            Path("workspace_list".to_string()),
+            State(state),
+            invalid_headers,
+            Ok(Json(json!({}))),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(invalid_response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn session_handler_sets_http_only_app_session_cookie() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            APP_TOKEN_HEADER,
+            HeaderValue::from_static("expected-app-token"),
+        );
+
+        let response = session_handler(State(state), headers)
+            .await
+            .expect("session should be accepted");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let cookie = response
+            .headers()
+            .get(header::SET_COOKIE)
+            .expect("session response should set cookie")
+            .to_str()
+            .expect("cookie should be a string");
+        assert_eq!(
+            cookie,
+            "openducktor_web_session=expected-app-token; HttpOnly; SameSite=Strict; Path=/"
+        );
+    }
+
+    #[tokio::test]
+    async fn event_stream_handlers_require_matching_app_session_cookie_or_header_when_configured() {
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+
+        let missing_response = events_handler(State(state.clone()), HeaderMap::new())
+            .await
+            .into_response();
+
+        assert_eq!(missing_response.status(), StatusCode::UNAUTHORIZED);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("openducktor_web_session=expected-app-token"),
+        );
+        let accepted_response = events_handler(State(state), headers).await.into_response();
+
+        assert_eq!(accepted_response.status(), StatusCode::OK);
+
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            APP_TOKEN_HEADER,
+            HeaderValue::from_static("expected-app-token"),
+        );
+        let accepted_response = task_events_handler(State(state), headers)
+            .await
+            .into_response();
+
+        assert_eq!(accepted_response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn invoke_handler_rejects_new_work_when_shutdown_started() {
         let fixture = test_state_fixture();
         fixture.state.shutdown_started.store(true, Ordering::SeqCst);
@@ -842,6 +1187,7 @@ mod tests {
         let response = invoke_handler(
             Path("workspace_list".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({}))),
         )
         .await
@@ -906,6 +1252,8 @@ mod tests {
                 registry,
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
+                control_token: None,
+                app_token: None,
             },
             root,
         }
@@ -965,6 +1313,8 @@ mod tests {
                     registry,
                     shutdown_signal: Arc::new(Notify::new()),
                     shutdown_started: Arc::new(AtomicBool::new(false)),
+                    control_token: None,
+                    app_token: None,
                 },
                 root,
             },
@@ -986,6 +1336,7 @@ mod tests {
         let response = invoke_handler(
             Path("workspace_list".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             args,
         )
         .await
@@ -1008,9 +1359,91 @@ mod tests {
     fn browser_backend_allowed_headers_include_last_event_id_for_sse_replay() {
         let headers = browser_backend_allowed_headers();
 
-        assert_eq!(headers.len(), 2);
+        assert_eq!(headers.len(), 4);
         assert!(headers.contains(&header::CONTENT_TYPE));
         assert!(headers.contains(&header::HeaderName::from_static(LAST_EVENT_ID_HEADER)));
+        assert!(headers.contains(&header::HeaderName::from_static(CONTROL_TOKEN_HEADER)));
+        assert!(headers.contains(&header::HeaderName::from_static(APP_TOKEN_HEADER)));
+    }
+
+    #[test]
+    fn loopback_frontend_origin_headers_allow_equivalent_loopback_hosts_on_same_port() {
+        let expected = vec![
+            HeaderValue::from_static("http://127.0.0.1:1420"),
+            HeaderValue::from_static("http://localhost:1420"),
+            HeaderValue::from_static("http://[::1]:1420"),
+        ];
+
+        assert_eq!(
+            loopback_frontend_origin_headers("http://127.0.0.1:1420")
+                .expect("127.0.0.1 origin should produce equivalent loopback origins"),
+            expected
+        );
+        assert_eq!(
+            loopback_frontend_origin_headers("http://localhost:1420")
+                .expect("localhost origin should produce equivalent loopback origins"),
+            expected
+        );
+        assert_eq!(
+            loopback_frontend_origin_headers("http://[::1]:1420")
+                .expect("IPv6 loopback origin should produce equivalent loopback origins"),
+            expected
+        );
+    }
+
+    #[test]
+    fn loopback_frontend_origin_headers_reject_remote_origins() {
+        let error = loopback_frontend_origin_headers("http://192.168.1.10:1420")
+            .expect_err("remote frontend origins must not be allowed")
+            .to_string();
+
+        assert!(
+            error.contains("must target"),
+            "expected loopback validation error, got `{error}`"
+        );
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OriginValidationCase {
+        name: String,
+        input: String,
+        expected: Option<String>,
+        #[serde(rename = "errorIncludes")]
+        error_includes: Option<String>,
+    }
+
+    #[test]
+    fn validate_web_frontend_origin_matches_shared_cases() {
+        let cases: Vec<OriginValidationCase> = serde_json::from_str(include_str!(
+            "../../../../../packages/openducktor-web/src/browser-origin-validation-cases.json"
+        ))
+        .expect("shared web origin validation cases should parse");
+
+        for test_case in cases {
+            let result = validate_web_frontend_origin(&test_case.input);
+            match (test_case.expected, test_case.error_includes) {
+                (Some(expected), None) => {
+                    assert_eq!(
+                        result.expect(&test_case.name),
+                        expected,
+                        "{}",
+                        test_case.name
+                    );
+                }
+                (None, Some(error_includes)) => {
+                    let error = result.expect_err(&test_case.name).to_string();
+                    assert!(
+                        error.contains(&error_includes),
+                        "{}: expected `{error}` to contain `{error_includes}`",
+                        test_case.name
+                    );
+                }
+                _ => panic!(
+                    "{} must specify exactly one of expected or errorIncludes",
+                    test_case.name
+                ),
+            }
+        }
     }
 
     #[tokio::test]
@@ -1021,6 +1454,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_get_workspaces".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({}))),
         )
         .await
@@ -1054,6 +1488,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_create_task".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({
                 "workspaceId": workspace_id,
                 "title": "Bridge task",
@@ -1108,6 +1543,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_search_tasks".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({
                 "workspaceId": workspace_id,
                 "status": "open",
@@ -1145,6 +1581,7 @@ mod tests {
         let response = invoke_handler(
             Path("odt_read_task_documents".to_string()),
             State(fixture.state.clone()),
+            HeaderMap::new(),
             Ok(Json(json!({
                 "workspaceId": workspace_id,
                 "taskId": "task-1",
@@ -1171,13 +1608,17 @@ mod tests {
 
     #[tokio::test]
     async fn local_attachment_preview_handler_returns_file_bytes() {
-        let _fixture = test_state_fixture();
+        let fixture = test_state_fixture();
         let preview_path = stage_local_attachment_to_temp("preview.png", "cHJldmlldy1ieXRlcw==")
             .expect("preview fixture should stage");
 
-        let response = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
-            path: preview_path.to_string_lossy().into_owned(),
-        }))
+        let response = local_attachment_preview_handler(
+            State(fixture.state.clone()),
+            HeaderMap::new(),
+            Query(LocalAttachmentPreviewQuery {
+                path: preview_path.to_string_lossy().into_owned(),
+            }),
+        )
         .await
         .expect("preview request should succeed");
 
@@ -1198,14 +1639,18 @@ mod tests {
 
     #[tokio::test]
     async fn local_attachment_preview_handler_returns_not_found_for_missing_files() {
-        let _fixture = test_state_fixture();
+        let fixture = test_state_fixture();
         let preview_path = std::env::temp_dir()
             .join("openducktor-local-attachments")
             .join("missing.png");
 
-        let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
-            path: preview_path.to_string_lossy().into_owned(),
-        }))
+        let error = local_attachment_preview_handler(
+            State(fixture.state.clone()),
+            HeaderMap::new(),
+            Query(LocalAttachmentPreviewQuery {
+                path: preview_path.to_string_lossy().into_owned(),
+            }),
+        )
         .await
         .expect_err("missing preview path should fail");
 
@@ -1221,9 +1666,13 @@ mod tests {
         let preview_path = fixture.root.join("outside-staging.png");
         fs::write(&preview_path, b"preview-bytes").expect("preview fixture should write");
 
-        let error = local_attachment_preview_handler(Query(LocalAttachmentPreviewQuery {
-            path: preview_path.to_string_lossy().into_owned(),
-        }))
+        let error = local_attachment_preview_handler(
+            State(fixture.state.clone()),
+            HeaderMap::new(),
+            Query(LocalAttachmentPreviewQuery {
+                path: preview_path.to_string_lossy().into_owned(),
+            }),
+        )
         .await
         .expect_err("non-staged preview path should fail");
 

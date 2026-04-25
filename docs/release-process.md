@@ -1,14 +1,15 @@
-# Desktop and MCP release process
+# Desktop, Web, and MCP release process
 
 OpenDucktor releases are now owned by GitHub Actions. Maintainers do not need to run local release commands or create tags by hand.
 
 ## Workflow layout
 
-The release flow is split into three workflows:
+The release flow is split into these workflows:
 
 - `.github/workflows/release-prep.yml`
 - `.github/workflows/release-desktop.yml`
 - `.github/workflows/publish-mcp.yml`
+- `.github/workflows/publish-web.yml`
 - `.github/workflows/publish-homebrew-tap.yml`
 
 ### 1. Prepare Release
@@ -27,7 +28,9 @@ It does all release preparation work:
 - creates one tag:
   - `v0.1.0` for the desktop release and MCP publish
 - creates the draft GitHub release with generated notes after the commit and tag are pushed
-- dispatches the desktop and MCP publish workflows explicitly after the draft exists
+- dispatches the desktop, MCP, and web publish workflows explicitly after the draft exists
+
+The same release version applies to the web runner package. A publishable `@openducktor/web` build must include macOS web-host binaries for Apple Silicon and Intel plus `.sha256` checksum files under the package's `bin/` directory before npm publication.
 
 ### 2. Release Desktop
 
@@ -57,7 +60,25 @@ It:
 - verifies the MCP package
 - publishes `@openducktor/mcp` to npmjs
 
-### 4. Publish Homebrew Tap
+### 4. Publish Web Package
+
+`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only Rust host, waits for readiness, serves the built web frontend, and shuts the host down with a control-token-protected `/shutdown` request.
+
+`Publish Web Package` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
+
+It:
+
+- builds `openducktor-web-host` for `aarch64-apple-darwin` and `x86_64-apple-darwin`
+- uploads the binaries and `.sha256` checksums as GitHub Actions artifacts
+- builds the self-contained `@openducktor/web` package, including the static web frontend
+- downloads the host artifacts into `packages/openducktor-web/bin/` for npm packaging
+- verifies package contents, executable bits, and checksums
+- runs `npm publish --dry-run` for `@openducktor/web`
+- publishes `@openducktor/web`
+
+The launcher refuses unsupported platforms and refuses packaged host binaries without matching checksums. Development mode (`bun run browser:dev`) uses Cargo and Vite directly; published installs serve the built frontend from the `@openducktor/web` package and do not require publishing internal workspace packages.
+
+### 5. Publish Homebrew Tap
 
 `Publish Homebrew Tap` runs when a GitHub release is published and can also be rerun manually with the same tag if needed.
 
@@ -159,9 +180,10 @@ The helper script remains useful because this repo spans three version domains:
 4. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
 5. Wait for `Release Desktop` to finish uploading desktop assets.
 6. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
-7. Open the draft GitHub release and smoke-test the desktop assets.
-8. Publish the draft release when the assets and notes look correct.
-9. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
+7. Wait for `Publish Web Package` to finish uploading web-host binaries and publishing `@openducktor/web` plus its runtime packages.
+8. Open the draft GitHub release and smoke-test the desktop and web-host assets.
+9. Publish the draft release when the assets and notes look correct.
+10. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
 
 ## Homebrew tap setup
 
@@ -184,6 +206,6 @@ brew install --cask openducktor
 
 OpenDucktor is currently macOS-first, so the desktop workflow publishes macOS artifacts only.
 
-The workflow does **not** generate a public updater channel yet. That should wait until the in-app updater flow is explicitly wired and tested. The current release pipeline is focused on reliable GitHub Releases distribution first, plus npm publishing for `@openducktor/mcp`.
+The workflow does **not** generate a public updater channel yet. That should wait until the in-app updater flow is explicitly wired and tested. The current release pipeline is focused on reliable GitHub Releases distribution first, plus npm publishing for `@openducktor/mcp` and the local web runner package.
 
 Homebrew distribution also stays GitHub Releases based. The cask generator fails if the desktop asset naming stops being architecture-derivable, so maintainers update the generator at the same time the bundle naming changes instead of silently publishing a broken cask.

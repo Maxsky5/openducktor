@@ -40,6 +40,12 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
       continue;
     }
 
+    if (current === "--host-token") {
+      next.hostToken = value;
+      index += 1;
+      continue;
+    }
+
     if (current === "--dolt-host") {
       next.doltHost = value;
       index += 1;

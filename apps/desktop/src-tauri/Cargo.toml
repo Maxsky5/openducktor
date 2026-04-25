@@ -35,6 +35,10 @@ path = "src/main.rs"
 name = "openducktor-desktop-helper"
 path = "src/bin/openducktor_desktop_helper.rs"
 
+[[bin]]
+name = "openducktor-web-host"
+path = "src/bin/openducktor_web_host.rs"
+
 [features]
 default = [ "wry" ]
 wry = [ "tauri/wry" ]
@@ -56,6 +60,7 @@ tauri-plugin-dialog = "2"
 thiserror = "2"
 tracing = "0.1"
 ctrlc = "3"
+url = "2"
 
   [dependencies.axum]
   version = "0.8"

@@ -134,6 +134,8 @@ mod tests {
                 registry: Arc::new(registry),
                 shutdown_signal: Arc::new(Notify::new()),
                 shutdown_started: Arc::new(AtomicBool::new(false)),
+                control_token: None,
+                app_token: None,
             },
             root,
         }
