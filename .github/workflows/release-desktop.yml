@@ -152,24 +152,27 @@ jobs:
             apps/desktop/src-tauri
           shared-key: desktop-release-${{ matrix.target }}
 
-      - name: Cache OpenDucktor CEF toolchain and runtime
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      - name: Restore OpenDucktor CEF toolchain cache
+        id: cef_toolchain_cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-
 
-      - name: Cache export-cef-dir tool
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      - name: Restore export-cef-dir tool cache
+        id: export_cef_tool_cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.cef_cache.outputs.export_cef_tool_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-export-cef-dir-${{ steps.cef_cache.outputs.cef_version }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-export-cef-dir-
 
-      - name: Cache exported CEF bundle
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      - name: Restore exported CEF bundle cache
+        id: cef_bundle_cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.cef_cache.outputs.cef_path }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cef-runtime-${{ steps.cef_cache.outputs.cef_version }}
@@ -213,6 +216,27 @@ jobs:
 
       - name: Prime CEF toolchain
         run: bun run tauri:setup:cef
+
+      - name: Save OpenDucktor CEF toolchain cache
+        if: steps.cef_toolchain_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
+          key: ${{ steps.cef_toolchain_cache.outputs.cache-primary-key }}
+
+      - name: Save export-cef-dir tool cache
+        if: steps.export_cef_tool_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ steps.cef_cache.outputs.export_cef_tool_root }}
+          key: ${{ steps.export_cef_tool_cache.outputs.cache-primary-key }}
+
+      - name: Save exported CEF bundle cache
+        if: steps.cef_bundle_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ steps.cef_cache.outputs.cef_path }}
+          key: ${{ steps.cef_bundle_cache.outputs.cache-primary-key }}
 
       - name: Resolve CEF build paths
         id: cef
