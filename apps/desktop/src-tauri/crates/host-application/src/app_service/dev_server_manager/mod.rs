@@ -71,6 +71,11 @@ impl AppService {
             .working_directory;
         validate_hook_trust(repo_path.as_str(), &repo_config)?;
         let key = dev_server_group_key(repo_path.as_str(), task_id);
+        tracing::info!(
+            target: "openducktor.lifecycle",
+            "Starting {} dev server script(s) for task {task_id} in {repo_path}",
+            repo_config.dev_servers.len()
+        );
 
         {
             let mut groups = self
@@ -107,6 +112,11 @@ impl AppService {
 
         let mut errors = Vec::new();
         for script in repo_config.dev_servers.iter().cloned() {
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "Starting dev server script {} for task {task_id} in {repo_path}",
+                script.id
+            );
             match self.start_dev_server_script(
                 key.as_str(),
                 repo_path.as_str(),
@@ -132,6 +142,10 @@ impl AppService {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let repo_config = self.workspace_get_repo_config_by_repo_path(repo_path.as_str())?;
         let key = dev_server_group_key(repo_path.as_str(), task_id);
+        tracing::info!(
+            target: "openducktor.lifecycle",
+            "Stopping dev servers for task {task_id} in {repo_path}"
+        );
         {
             let mut groups = self
                 .dev_server_groups
@@ -161,6 +175,10 @@ impl AppService {
 
         let mut errors = Vec::new();
         for (script_id, pid) in targets {
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "Stopping dev server script {script_id} for task {task_id} (pid {pid})"
+            );
             if let Err(error) = stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT) {
                 self.mark_dev_server_stop_failed(key.as_str(), &script_id, pid, &error.to_string());
                 errors.push(format!("Failed stopping dev server {script_id}: {error}"));
@@ -201,6 +219,11 @@ impl AppService {
             .values()
             .map(|group| (group.state.repo_path.clone(), group.state.task_id.clone()))
             .collect::<Vec<_>>();
+        tracing::info!(
+            target: "openducktor.lifecycle",
+            "Stopping {} tracked dev server group(s)",
+            targets.len()
+        );
         let mut errors = Vec::new();
         for (repo_path, task_id) in targets {
             if let Err(error) = self.stop_dev_servers_for_task(repo_path.as_str(), task_id.as_str())

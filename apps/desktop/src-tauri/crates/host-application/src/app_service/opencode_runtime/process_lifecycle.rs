@@ -118,12 +118,21 @@ fn terminate_process_group_if_owned(_child: &Child) {}
 fn terminate_process_group_if_owned_pid(_pid: u32) {}
 
 pub(crate) fn terminate_child_process(child: &mut Child) {
+    tracing::info!(
+        target: "openducktor.lifecycle",
+        "Stopping OpenCode process {}",
+        child.id()
+    );
     terminate_process_group_if_owned(child);
     let _ = child.kill();
     let _ = child.wait();
 }
 
 pub(crate) fn terminate_process_by_pid(pid: u32) {
+    tracing::info!(
+        target: "openducktor.lifecycle",
+        "Stopping orphaned OpenCode process {pid}"
+    );
     terminate_process_group_if_owned_pid(pid);
     #[cfg(unix)]
     {
@@ -264,6 +273,11 @@ fn spawn_opencode_server_with_binary(
     port: u16,
 ) -> Result<Child> {
     let mut command = Command::new(opencode_binary);
+    tracing::info!(
+        target: "openducktor.lifecycle",
+        "Starting OpenCode runtime for {} at http://127.0.0.1:{port}",
+        working_directory.display()
+    );
     command
         .arg("serve")
         .arg("--hostname")

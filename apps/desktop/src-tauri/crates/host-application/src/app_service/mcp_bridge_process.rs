@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 const MCP_BRIDGE_READY_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_BRIDGE_BINARY_ENV: &str = "OPENDUCKTOR_MCP_BRIDGE_BINARY";
 const MCP_BRIDGE_FALLBACK_BINARY_NAME: &str = "openducktor-desktop";
+const HOST_OWNER_PID_ENV: &str = "OPENDUCKTOR_HOST_OWNER_PID";
 
 fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
     let Some(mut reader) = pipe.take() else {
@@ -42,6 +43,10 @@ fn wait_for_bridge_ready(child: &mut Child, port: u16) -> Result<()> {
         }
 
         if health_check(port)? {
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "OpenDucktor MCP host bridge is ready at http://127.0.0.1:{port}"
+            );
             return Ok(());
         }
 
@@ -76,8 +81,13 @@ fn spawn_parent_death_watcher(_parent_pid: u32, _child_pid: u32) -> Result<()> {
     Ok(())
 }
 
-fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
+fn spawn_mcp_bridge_process(port: u16, owner_pid: u32) -> Result<(Child, String)> {
     let bridge_binary = resolve_mcp_bridge_binary_path()?;
+    tracing::info!(
+        target: "openducktor.lifecycle",
+        "Starting OpenDucktor MCP host bridge at http://127.0.0.1:{port} with {}",
+        bridge_binary.display()
+    );
     let frontend_origin = format!("http://127.0.0.1:{port}");
     let control_token = uuid::Uuid::new_v4().to_string();
     let app_token = uuid::Uuid::new_v4().to_string();
@@ -91,7 +101,8 @@ fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
         .arg("--control-token")
         .arg(control_token)
         .arg("--app-token")
-        .arg(app_token)
+        .arg(&app_token)
+        .env(HOST_OWNER_PID_ENV, owner_pid.to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -104,7 +115,7 @@ fn spawn_mcp_bridge_process(port: u16) -> Result<Child> {
             child.id()
         );
     }
-    Ok(child)
+    Ok((child, app_token))
 }
 
 fn mcp_bridge_fallback_binary_path(parent: &Path) -> PathBuf {
@@ -153,7 +164,16 @@ impl AppService {
         self.ensure_mcp_bridge_url()
     }
 
+    pub fn mcp_bridge_connection(&self) -> Result<(String, String)> {
+        self.ensure_mcp_bridge_connection()
+    }
+
     pub(crate) fn ensure_mcp_bridge_url(&self) -> Result<String> {
+        self.ensure_mcp_bridge_connection()
+            .map(|(base_url, _app_token)| base_url)
+    }
+
+    pub(crate) fn ensure_mcp_bridge_connection(&self) -> Result<(String, String)> {
         let mut bridge = self
             .mcp_bridge_process
             .lock()
@@ -166,14 +186,19 @@ impl AppService {
                 .context("Failed checking MCP bridge process state")?
                 .is_none()
             {
+                tracing::info!(
+                    target: "openducktor.lifecycle",
+                    "Reusing running OpenDucktor MCP host bridge at http://127.0.0.1:{}",
+                    process.port
+                );
                 self.register_mcp_bridge_port(process.port)?;
-                return Ok(process.base_url.clone());
+                return Ok((process.base_url.clone(), process.app_token.clone()));
             }
             *bridge = None;
         }
 
         let port = pick_free_port()?;
-        let mut child = spawn_mcp_bridge_process(port)?;
+        let (mut child, app_token) = spawn_mcp_bridge_process(port, self.instance_pid)?;
         if let Err(error) = wait_for_bridge_ready(&mut child, port) {
             terminate_child_process(&mut child);
             return Err(error);
@@ -186,10 +211,11 @@ impl AppService {
         }
         *bridge = Some(McpBridgeProcess {
             base_url: base_url.clone(),
+            app_token: app_token.clone(),
             port,
             child,
         });
-        Ok(base_url)
+        Ok((base_url, app_token))
     }
 
     pub(crate) fn stop_mcp_bridge_process(&self) -> Result<()> {
@@ -201,8 +227,11 @@ impl AppService {
             let port = process.port;
             tracing::debug!(
                 target: "openducktor.mcp-bridge",
-                port,
-                "Stopping MCP host bridge process"
+                "Stopping MCP host bridge process on port {port}"
+            );
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "Stopping OpenDucktor MCP host bridge at http://127.0.0.1:{port}"
             );
             terminate_child_process(&mut process.child);
             self.unregister_mcp_bridge_port(port)?;

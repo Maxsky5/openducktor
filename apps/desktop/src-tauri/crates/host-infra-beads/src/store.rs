@@ -82,9 +82,36 @@ impl BeadsTaskStore {
         config_store: Option<AppConfigStore>,
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
+        Self::with_metadata_namespace_runner_and_owner_pid(
+            namespace,
+            config_store,
+            command_runner,
+            std::process::id(),
+        )
+    }
+
+    pub fn with_metadata_namespace_config_and_owner_pid(
+        namespace: &str,
+        config_store: AppConfigStore,
+        owner_pid: u32,
+    ) -> Self {
+        Self::with_metadata_namespace_runner_and_owner_pid(
+            namespace,
+            Some(config_store),
+            Arc::new(ProcessCommandRunner),
+            owner_pid,
+        )
+    }
+
+    fn with_metadata_namespace_runner_and_owner_pid(
+        namespace: &str,
+        config_store: Option<AppConfigStore>,
+        command_runner: Arc<dyn CommandRunner>,
+        owner_pid: u32,
+    ) -> Self {
         Self {
             metadata_namespace: Mutex::new(Self::normalize_metadata_namespace(namespace)),
-            lifecycle: BeadsLifecycle::new(command_runner),
+            lifecycle: BeadsLifecycle::with_owner_pid(command_runner, owner_pid),
             config_store,
             task_list_cache: Mutex::new(HashMap::new()),
             kanban_task_list_cache: Mutex::new(HashMap::new()),
@@ -98,6 +125,20 @@ impl BeadsTaskStore {
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
         Self::with_metadata_namespace_and_runner(namespace, None, command_runner)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_runner_and_owner_pid(
+        namespace: &str,
+        command_runner: Arc<dyn CommandRunner>,
+        owner_pid: u32,
+    ) -> Self {
+        Self::with_metadata_namespace_runner_and_owner_pid(
+            namespace,
+            None,
+            command_runner,
+            owner_pid,
+        )
     }
 
     #[cfg(test)]

@@ -182,6 +182,7 @@ pub(crate) struct AgentRuntimeProcess {
 
 pub(crate) struct McpBridgeProcess {
     pub(super) base_url: String,
+    pub(super) app_token: String,
     pub(super) port: u16,
     pub(super) child: Child,
 }
@@ -226,6 +227,21 @@ impl AppService {
         Self::with_git_port(task_store, config_store, Arc::new(GitCliPort::new()))
     }
 
+    pub fn with_instance_pid(
+        task_store: Arc<dyn TaskStore>,
+        config_store: AppConfigStore,
+        instance_pid: u32,
+    ) -> Self {
+        Self::with_git_port_allowlist_and_runtime_registry(
+            task_store,
+            config_store,
+            Arc::new(GitCliPort::new()),
+            AppRuntimeRegistry::builtin_for_service(),
+            true,
+            instance_pid,
+        )
+    }
+
     pub fn with_git_port(
         task_store: Arc<dyn TaskStore>,
         config_store: AppConfigStore,
@@ -246,6 +262,7 @@ impl AppService {
             git_port,
             AppRuntimeRegistry::builtin_for_service(),
             enforce_repo_allowlist,
+            std::process::id(),
         )
     }
 
@@ -255,6 +272,7 @@ impl AppService {
         git_port: Arc<dyn GitPort>,
         runtime_registry: AppRuntimeRegistry,
         enforce_repo_allowlist: bool,
+        instance_pid: u32,
     ) -> Self {
         let runtime_config_store =
             RuntimeConfigStore::from_user_settings_store_with_runtime_registry(
@@ -262,7 +280,6 @@ impl AppService {
                 runtime_registry.runtime_definitions().clone(),
             );
         let mcp_bridge_registry_path = Self::mcp_bridge_registry_path(&config_store);
-        let instance_pid = std::process::id();
         let service = Self {
             task_store,
             git_port,
@@ -329,6 +346,7 @@ impl AppService {
             git_port,
             runtime_registry,
             false,
+            std::process::id(),
         )
     }
 

@@ -55,9 +55,14 @@ where
                 }
                 app_token = Some(value);
             }
+            "--web-host" | "--browser-backend" => {
+                // The dedicated binary is already the web host. Accept the desktop
+                // executable's mode selectors so internal bridge spawns can reuse
+                // the same argument vector regardless of which binary is current.
+            }
             "-h" | "--help" => {
                 return Err(
-                    "Usage: openducktor-web-host --frontend-origin <origin> --control-token <token> --app-token <token> [--port <port>]"
+                    "Usage: openducktor-web-host [--web-host] --frontend-origin <origin> --control-token <token> --app-token <token> [--port <port>]"
                         .to_string(),
                 );
             }
@@ -169,6 +174,50 @@ mod tests {
             ])),
             Ok(WebHostArgs {
                 port: 2345,
+                frontend_origin: "http://127.0.0.1:1420".to_string(),
+                control_token: "token".to_string(),
+                app_token: "app-token".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn parse_web_host_args_accepts_desktop_mode_selector_for_bridge_spawns() {
+        assert_eq!(
+            parse_web_host_args_from(args(&[
+                "--web-host",
+                "--frontend-origin",
+                "http://127.0.0.1:1420",
+                "--control-token",
+                "token",
+                "--app-token",
+                "app-token",
+                "--port",
+                "2345",
+            ])),
+            Ok(WebHostArgs {
+                port: 2345,
+                frontend_origin: "http://127.0.0.1:1420".to_string(),
+                control_token: "token".to_string(),
+                app_token: "app-token".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn parse_web_host_args_accepts_legacy_browser_backend_selector_for_bridge_spawns() {
+        assert_eq!(
+            parse_web_host_args_from(args(&[
+                "--browser-backend",
+                "--frontend-origin",
+                "http://127.0.0.1:1420",
+                "--control-token",
+                "token",
+                "--app-token",
+                "app-token",
+            ])),
+            Ok(WebHostArgs {
+                port: 14327,
                 frontend_origin: "http://127.0.0.1:1420".to_string(),
                 control_token: "token".to_string(),
                 app_token: "app-token".to_string(),

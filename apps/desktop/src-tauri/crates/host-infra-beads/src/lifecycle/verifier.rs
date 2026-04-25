@@ -582,7 +582,7 @@ impl BeadsLifecycle {
 
     fn repo_store_shared_server_snapshot(&self) -> Result<SharedServerSnapshot> {
         if let Some(server_state) = read_shared_dolt_server_state()? {
-            let owner_pid = (server_state.owner_pid == std::process::id()
+            let owner_pid = (server_state.owner_pid == self.owner_pid()
                 || is_process_alive(server_state.owner_pid))
             .then_some(server_state.owner_pid);
 
@@ -622,7 +622,7 @@ impl BeadsLifecycle {
     ) -> RepoStoreHealth {
         let ownership_state = match shared_server.owner_pid {
             Some(owner_pid)
-                if owner_pid != std::process::id()
+                if owner_pid != self.owner_pid()
                     && !matches!(
                         category,
                         RepoStoreHealthCategory::SharedServerUnavailable
@@ -631,7 +631,7 @@ impl BeadsLifecycle {
             {
                 RepoStoreSharedServerOwnershipState::ReusedExistingServer
             }
-            Some(owner_pid) if owner_pid == std::process::id() => match shared_server.acquisition {
+            Some(owner_pid) if owner_pid == self.owner_pid() => match shared_server.acquisition {
                 Some(SharedDoltServerAcquisition::AdoptedOrphanedServer) => {
                     RepoStoreSharedServerOwnershipState::AdoptedOrphanedServer
                 }

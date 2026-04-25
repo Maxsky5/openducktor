@@ -330,6 +330,79 @@ fn diagnose_repo_store_does_not_report_reused_owner_for_dead_foreign_pid() -> Re
 }
 
 #[test]
+fn diagnose_repo_store_uses_configured_owner_pid_for_shared_dolt_ownership() -> Result<()> {
+    let repo = RepoFixture::new("diagnose-configured-owner");
+    let _env_lock = lock_env();
+    let config_root = repo.path().join("config-root");
+    let _config_dir_guard = EnvVarGuard::set_os(
+        "OPENDUCKTOR_CONFIG_DIR",
+        config_root.clone().into_os_string(),
+    );
+
+    let beads_dir = resolve_repo_beads_attachment_dir(repo.path())?;
+    let database_name = compute_beads_database_name(repo.path())?;
+    fs::create_dir_all(&beads_dir)?;
+    fs::write(
+        beads_dir.join("metadata.json"),
+        json!({
+            "backend": "dolt",
+            "dolt_mode": "server",
+            "dolt_server_host": "127.0.0.1",
+            "dolt_server_port": 3307,
+            "dolt_server_user": "root",
+            "dolt_database": database_name,
+        })
+        .to_string(),
+    )?;
+
+    let configured_owner_pid = u32::MAX - 1;
+    assert!(!is_process_alive(configured_owner_pid));
+    let state_file = resolve_server_state_file()?;
+    if let Some(parent) = state_file.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(
+        &state_file,
+        serde_json::to_string(&SharedDoltServerState {
+            pid: std::process::id(),
+            owner_pid: configured_owner_pid,
+            acquisition: SharedDoltServerAcquisition::StartedByOwner,
+            host: "127.0.0.1".to_string(),
+            user: "root".to_string(),
+            port: 3307,
+            shared_server_root: config_root.join("shared-server"),
+            dolt_data_dir: config_root.join("dolt-data"),
+            started_at: "2026-02-20T12:00:00Z".to_string(),
+        })?,
+    )?;
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::AllowFailureWithEnv(Ok((true, format!("| {database_name} |"), String::new()))),
+        MockStep::AllowFailureWithEnv(Ok((
+            true,
+            json!({
+                "path": beads_dir,
+                "prefix": "openducktor"
+            })
+            .to_string(),
+            String::new(),
+        ))),
+    ]);
+    let store =
+        BeadsTaskStore::with_test_runner_and_owner_pid("openducktor", runner, configured_owner_pid);
+
+    let health = store.diagnose_repo_store(repo.path())?;
+
+    assert_eq!(health.category, RepoStoreHealthCategory::Healthy);
+    assert_eq!(health.status, RepoStoreHealthStatus::Ready);
+    assert_eq!(
+        health.shared_server.ownership_state,
+        RepoStoreSharedServerOwnershipState::OwnedByCurrentProcess
+    );
+    Ok(())
+}
+
+#[test]
 fn diagnose_repo_store_reports_restore_needed_when_shared_database_is_missing() -> Result<()> {
     let repo = RepoFixture::new("diagnose-restore-needed");
     let _env_lock = lock_env();

@@ -28,9 +28,12 @@ impl AppService {
         workspace_id_for_mcp: &str,
         port: u16,
     ) -> Result<Child> {
-        let host_url = self.ensure_mcp_bridge_url()?;
-        let config_content =
-            mcp_config::build_opencode_config_content(workspace_id_for_mcp, host_url.as_str())?;
+        let (host_url, host_token) = self.ensure_mcp_bridge_connection()?;
+        let config_content = mcp_config::build_opencode_config_content(
+            workspace_id_for_mcp,
+            host_url.as_str(),
+            host_token.as_str(),
+        )?;
         process_lifecycle::spawn_opencode_server_with_config(
             working_directory,
             config_content.as_str(),

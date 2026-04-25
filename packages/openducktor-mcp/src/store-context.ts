@@ -3,16 +3,19 @@ import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeRegistryPath } from "./path-utils";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
+const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
 
 export type OdtStoreOptions = {
   workspaceId?: string;
   hostUrl: string;
+  hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
 };
 
 export type OdtStoreContext = {
   workspaceId?: string;
   hostUrl?: string;
+  hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
   beadsAttachmentDir?: string;
   doltHost?: string;
@@ -56,14 +59,14 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
   );
 };
 
-const validateExplicitHostUrl = async (hostUrl: string): Promise<string> => {
+const validateExplicitHostUrl = async (hostUrl: string, hostToken?: string): Promise<string> => {
   try {
     new URL(hostUrl);
   } catch {
     throw new Error(`Invalid ODT_HOST_URL for OpenDucktor MCP: ${hostUrl}`);
   }
 
-  await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
+  await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken }).ready();
   return hostUrl;
 };
 
@@ -82,8 +85,15 @@ const readBooleanEnv = (name: string): boolean | undefined => {
   throw new Error(`${name} must be true, false, 1, or 0.`);
 };
 
-const validateConfiguredWorkspace = async (hostUrl: string, workspaceId: string): Promise<void> => {
-  const workspaces = await new OdtHostBridgeClient({ baseUrl: hostUrl }).getWorkspaces();
+const validateConfiguredWorkspace = async (
+  hostUrl: string,
+  workspaceId: string,
+  hostToken?: string,
+): Promise<void> => {
+  const workspaces = await new OdtHostBridgeClient({
+    baseUrl: hostUrl,
+    appToken: hostToken,
+  }).getWorkspaces();
   if (workspaces.workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
     return;
   }
@@ -143,7 +153,7 @@ const parseDiscoveredPorts = (payload: string, registryPath: string): number[] =
   return discoveredPorts;
 };
 
-const discoverHostUrl = async (workspaceId?: string): Promise<string> => {
+const discoverHostUrl = async (workspaceId?: string, hostToken?: string): Promise<string> => {
   const registryPath = resolveMcpBridgeRegistryPath();
 
   let registryPayload: string;
@@ -173,9 +183,9 @@ const discoverHostUrl = async (workspaceId?: string): Promise<string> => {
   for (const port of discoveredPorts) {
     const hostUrl = `http://127.0.0.1:${port}`;
     try {
-      await new OdtHostBridgeClient({ baseUrl: hostUrl }).ready();
+      await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken }).ready();
       if (workspaceId) {
-        await validateConfiguredWorkspace(hostUrl, workspaceId);
+        await validateConfiguredWorkspace(hostUrl, workspaceId, hostToken);
       }
       return hostUrl;
     } catch (error) {
@@ -200,26 +210,31 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
 
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
+  const hostToken =
+    normalizeOptionalInput(context.hostToken) ??
+    normalizeOptionalInput(process.env[HOST_TOKEN_ENV]);
   const hostUrl = explicitHostUrl
-    ? await validateExplicitHostUrl(explicitHostUrl)
-    : await discoverHostUrl(workspaceId);
+    ? await validateExplicitHostUrl(explicitHostUrl, hostToken)
+    : await discoverHostUrl(workspaceId, hostToken);
   const workspaceIdInputMode =
     forbidWorkspaceIdInput !== undefined ? { forbidWorkspaceIdInput } : {};
 
   if (!workspaceId) {
     return {
       hostUrl,
+      ...(hostToken ? { hostToken } : {}),
       ...workspaceIdInputMode,
     };
   }
 
   if (explicitHostUrl) {
-    await validateConfiguredWorkspace(hostUrl, workspaceId);
+    await validateConfiguredWorkspace(hostUrl, workspaceId, hostToken);
   }
 
   return {
     workspaceId,
     hostUrl,
+    ...(hostToken ? { hostToken } : {}),
     ...workspaceIdInputMode,
   };
 };

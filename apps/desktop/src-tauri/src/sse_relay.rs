@@ -4,6 +4,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT};
 use std::io::BufRead;
 
 const LAST_EVENT_ID_HEADER: HeaderName = HeaderName::from_static("last-event-id");
+const APP_TOKEN_HEADER: HeaderName = HeaderName::from_static("x-openducktor-app-token");
 
 pub(crate) type SseEventId = u64;
 
@@ -18,6 +19,7 @@ pub(crate) fn build_sse_stream_request<'a>(
     client: &'a Client,
     stream_url: &'a str,
     last_event_id: Option<SseEventId>,
+    app_token: Option<&str>,
 ) -> reqwest::blocking::RequestBuilder {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
@@ -25,6 +27,12 @@ pub(crate) fn build_sse_stream_request<'a>(
     if let Some(last_event_id) = last_event_id {
         if let Ok(value) = HeaderValue::from_str(&last_event_id.to_string()) {
             headers.insert(LAST_EVENT_ID_HEADER.clone(), value);
+        }
+    }
+
+    if let Some(app_token) = app_token {
+        if let Ok(value) = HeaderValue::from_str(app_token) {
+            headers.insert(APP_TOKEN_HEADER.clone(), value);
         }
     }
 
@@ -126,7 +134,7 @@ mod tests {
     fn build_sse_stream_request_includes_last_event_id_for_resume() {
         let client = Client::builder().build().expect("client should build");
         let request =
-            build_sse_stream_request(&client, "http://127.0.0.1:1234/task-events", Some(42))
+            build_sse_stream_request(&client, "http://127.0.0.1:1234/task-events", Some(42), None)
                 .build()
                 .expect("request should build");
 
@@ -137,6 +145,24 @@ mod tests {
         assert_eq!(
             request.headers().get(ACCEPT),
             Some(&HeaderValue::from_static("text/event-stream"))
+        );
+    }
+
+    #[test]
+    fn build_sse_stream_request_includes_app_token_for_internal_relay() {
+        let client = Client::builder().build().expect("client should build");
+        let request = build_sse_stream_request(
+            &client,
+            "http://127.0.0.1:1234/task-events",
+            None,
+            Some("app-token"),
+        )
+        .build()
+        .expect("request should build");
+
+        assert_eq!(
+            request.headers().get(APP_TOKEN_HEADER.clone()),
+            Some(&HeaderValue::from_static("app-token"))
         );
     }
 

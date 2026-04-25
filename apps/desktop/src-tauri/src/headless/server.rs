@@ -144,9 +144,8 @@ pub async fn run_browser_backend_with_options(
 
     tracing::info!(
         target: "openducktor.browser-backend",
-        host = DEFAULT_BROWSER_BACKEND_HOST,
-        port = options.port,
-        "OpenDucktor browser backend listening"
+        "OpenDucktor Rust host is listening at http://{DEFAULT_BROWSER_BACKEND_HOST}:{}",
+        options.port
     );
 
     serve_browser_backend(
@@ -267,6 +266,19 @@ fn validate_app_token_cookie(
     validate_app_token(received_token.as_deref(), expected_token)
 }
 
+fn validate_app_token_cookie_or_header(
+    headers: &HeaderMap,
+    expected_token: Option<&str>,
+) -> Result<(), HeadlessCommandError> {
+    let received_token = read_app_session_cookie(headers).or_else(|| {
+        headers
+            .get(APP_TOKEN_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .map(ToOwned::to_owned)
+    });
+    validate_app_token(received_token.as_deref(), expected_token)
+}
+
 async fn session_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
@@ -299,8 +311,17 @@ async fn shutdown_handler(
     if classify_shutdown_request(state.shutdown_started.swap(true, Ordering::SeqCst))
         == ShutdownRequestAction::AlreadyStarted
     {
+        tracing::info!(
+            target: "openducktor.browser-backend",
+            "OpenDucktor web host shutdown is already in progress"
+        );
         return Ok((StatusCode::ACCEPTED, Json(json!({ "ok": true }))));
     }
+
+    tracing::info!(
+        target: "openducktor.browser-backend",
+        "OpenDucktor web host shutdown requested"
+    );
 
     let service = state.service.clone();
     let shutdown_signal = state.shutdown_signal.clone();
@@ -310,7 +331,13 @@ async fn shutdown_handler(
     tokio::spawn(async move {
         shutdown_signal.notify_waiters();
         let exit_code = match tokio::task::spawn_blocking(move || service.shutdown()).await {
-            Ok(Ok(())) => shutdown_exit_code(true),
+            Ok(Ok(())) => {
+                tracing::info!(
+                    target: "openducktor.browser-backend",
+                    "OpenDucktor web host shutdown complete"
+                );
+                shutdown_exit_code(true)
+            }
             Ok(Err(error)) => {
                 tracing::error!(
                     target: "openducktor.browser-backend",
@@ -339,7 +366,7 @@ async fn events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
-    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -353,7 +380,7 @@ async fn dev_server_events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
-    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -367,7 +394,7 @@ async fn task_events_handler(
     State(state): State<HeadlessState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, HeadlessCommandError> {
-    validate_app_token_cookie(&headers, state.app_token.as_deref())?;
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
     reject_when_shutting_down(&state)?;
     let last_event_id = parse_last_event_id(&headers)?;
     Ok(build_sse_response(
@@ -474,13 +501,29 @@ fn json_rejection_error(error: JsonRejection) -> HeadlessCommandError {
 }
 
 fn browser_backend_cors_layer(frontend_origin: &str) -> anyhow::Result<CorsLayer> {
-    let origin = validate_web_frontend_origin(frontend_origin)?;
-
     Ok(CorsLayer::new()
-        .allow_origin(parse_origin_header(&origin)?)
+        .allow_origin(loopback_frontend_origin_headers(frontend_origin)?)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers(browser_backend_allowed_headers())
         .allow_credentials(true))
+}
+
+fn loopback_frontend_origin_headers(frontend_origin: &str) -> anyhow::Result<Vec<HeaderValue>> {
+    let origin = validate_web_frontend_origin(frontend_origin)?;
+    let url = Url::parse(&origin)
+        .with_context(|| format!("invalid browser frontend origin configured: {origin}"))?;
+    let port = url
+        .port()
+        .ok_or_else(|| anyhow::anyhow!("browser frontend origin must include an explicit port"))?;
+
+    [
+        format!("http://127.0.0.1:{port}"),
+        format!("http://localhost:{port}"),
+        format!("http://[::1]:{port}"),
+    ]
+    .into_iter()
+    .map(|candidate| parse_origin_header(&candidate))
+    .collect()
 }
 
 fn browser_backend_allowed_headers() -> [header::HeaderName; 4] {
@@ -1097,7 +1140,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn event_stream_handlers_require_matching_app_session_cookie_when_configured() {
+    async fn event_stream_handlers_require_matching_app_session_cookie_or_header_when_configured() {
         let fixture = test_state_fixture();
         let state = HeadlessState {
             app_token: Some("expected-app-token".to_string()),
@@ -1116,6 +1159,22 @@ mod tests {
             HeaderValue::from_static("openducktor_web_session=expected-app-token"),
         );
         let accepted_response = events_handler(State(state), headers).await.into_response();
+
+        assert_eq!(accepted_response.status(), StatusCode::OK);
+
+        let fixture = test_state_fixture();
+        let state = HeadlessState {
+            app_token: Some("expected-app-token".to_string()),
+            ..fixture.state.clone()
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            APP_TOKEN_HEADER,
+            HeaderValue::from_static("expected-app-token"),
+        );
+        let accepted_response = task_events_handler(State(state), headers)
+            .await
+            .into_response();
 
         assert_eq!(accepted_response.status(), StatusCode::OK);
     }
@@ -1305,6 +1364,43 @@ mod tests {
         assert!(headers.contains(&header::HeaderName::from_static(LAST_EVENT_ID_HEADER)));
         assert!(headers.contains(&header::HeaderName::from_static(CONTROL_TOKEN_HEADER)));
         assert!(headers.contains(&header::HeaderName::from_static(APP_TOKEN_HEADER)));
+    }
+
+    #[test]
+    fn loopback_frontend_origin_headers_allow_equivalent_loopback_hosts_on_same_port() {
+        let expected = vec![
+            HeaderValue::from_static("http://127.0.0.1:1420"),
+            HeaderValue::from_static("http://localhost:1420"),
+            HeaderValue::from_static("http://[::1]:1420"),
+        ];
+
+        assert_eq!(
+            loopback_frontend_origin_headers("http://127.0.0.1:1420")
+                .expect("127.0.0.1 origin should produce equivalent loopback origins"),
+            expected
+        );
+        assert_eq!(
+            loopback_frontend_origin_headers("http://localhost:1420")
+                .expect("localhost origin should produce equivalent loopback origins"),
+            expected
+        );
+        assert_eq!(
+            loopback_frontend_origin_headers("http://[::1]:1420")
+                .expect("IPv6 loopback origin should produce equivalent loopback origins"),
+            expected
+        );
+    }
+
+    #[test]
+    fn loopback_frontend_origin_headers_reject_remote_origins() {
+        let error = loopback_frontend_origin_headers("http://192.168.1.10:1420")
+            .expect_err("remote frontend origins must not be allowed")
+            .to_string();
+
+        assert!(
+            error.contains("must target"),
+            "expected loopback validation error, got `{error}`"
+        );
     }
 
     #[derive(serde::Deserialize)]

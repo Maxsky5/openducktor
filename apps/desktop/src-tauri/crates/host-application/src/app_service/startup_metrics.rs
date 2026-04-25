@@ -187,6 +187,14 @@ impl<'a> StartupEventPayload<'a> {
                 )
             })
     }
+
+    fn human_log_message(&self) -> &'static str {
+        match self.kind {
+            StartupEventKind::WaitBegin => "OpenCode runtime startup: waiting for readiness",
+            StartupEventKind::Ready(_) => "OpenCode runtime startup: ready",
+            StartupEventKind::Failed { .. } => "OpenCode runtime startup: failed",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -420,7 +428,7 @@ impl AppService {
         let port = event.context.port;
         let report = event.report();
         let failure_reason = event.failure_reason();
-        let (correlation_type, correlation_id) = event.correlation_parts();
+        let (_correlation_type, _correlation_id) = event.correlation_parts();
 
         let (metrics, alerts) = match report {
             Some(report) if matches!(event_name, "startup_ready" | "startup_failed") => {
@@ -440,47 +448,46 @@ impl AppService {
             }
             _ => (OpencodeStartupMetricsSnapshot::default(), Vec::new()),
         };
+        let startup_ms = report.map(|entry| entry.startup_ms()).unwrap_or_default();
+        let attempts = report.map(|entry| entry.attempts()).unwrap_or_default();
         let include_metrics = matches!(event_name, "startup_ready" | "startup_failed");
-        let payload = build_opencode_startup_event_payload(
+        let _payload = build_opencode_startup_event_payload(
             &event,
             include_metrics.then_some(metrics),
             alerts.clone(),
         );
-        let payload_json = serde_json::to_string(&payload)
-            .unwrap_or_else(|_| "{\"serializationError\":\"startup-event\"}".to_string());
-        let startup_ms = report.map(|entry| entry.startup_ms()).unwrap_or_default();
-        let attempts = report.map(|entry| entry.attempts()).unwrap_or_default();
-        tracing::info!(
-            target: "openducktor.opencode.startup",
-            event = event_name,
-            scope = runtime_type,
-            repo_path,
-            task_id = task_id.unwrap_or(""),
-            role,
-            port,
-            correlation_type = correlation_type.unwrap_or(""),
-            correlation_id = correlation_id.unwrap_or(""),
-            reason = failure_reason.map(|entry| entry.as_str()).unwrap_or(""),
-            startup_ms,
-            attempts,
-            payload = %payload_json,
-        );
+        let task_label = task_id.unwrap_or("workspace");
+        let port_label = port
+            .map(|port| port.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        match event_name {
+            "startup_wait_begin" => tracing::info!(
+                target: "openducktor.opencode.startup",
+                "{} for task {task_label} ({role}) at http://127.0.0.1:{port_label} in {repo_path}",
+                event.human_log_message()
+            ),
+            "startup_ready" => tracing::info!(
+                target: "openducktor.opencode.startup",
+                "{} for task {task_label} ({role}) after {startup_ms}ms and {attempts} checks at http://127.0.0.1:{port_label}",
+                event.human_log_message()
+            ),
+            "startup_failed" => tracing::error!(
+                target: "openducktor.opencode.startup",
+                "{} for task {task_label} ({role}) after {startup_ms}ms and {attempts} checks: {}",
+                event.human_log_message(),
+                failure_reason
+                    .map(|entry| entry.as_str())
+                    .unwrap_or("unknown reason")
+            ),
+            _ => tracing::info!(
+                target: "openducktor.opencode.startup",
+                "OpenCode runtime startup event {event_name} for task {task_label} ({role})"
+            ),
+        }
         for alert in alerts {
             tracing::warn!(
                 target: "openducktor.opencode.startup.alert",
-                alert = %alert,
-                event = event_name,
-                scope = runtime_type,
-                repo_path,
-                task_id = task_id.unwrap_or(""),
-                role,
-                port,
-                correlation_type = correlation_type.unwrap_or(""),
-                correlation_id = correlation_id.unwrap_or(""),
-                reason = failure_reason.map(|entry| entry.as_str()).unwrap_or(""),
-                startup_ms,
-                attempts,
-                "OpenCode startup threshold exceeded"
+                "OpenCode startup threshold exceeded for task {task_label} ({role}): {alert}"
             );
         }
     }

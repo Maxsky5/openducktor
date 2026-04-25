@@ -31,15 +31,17 @@ impl Drop for RepoInitializingGuard<'_> {
 
 pub(crate) struct BeadsLifecycle {
     command_runner: Arc<dyn CommandRunner>,
+    owner_pid: u32,
     init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     initializing_repos: Mutex<HashSet<String>>,
     initialized_repos: Mutex<HashSet<String>>,
 }
 
 impl BeadsLifecycle {
-    pub(crate) fn new(command_runner: Arc<dyn CommandRunner>) -> Self {
+    pub(crate) fn with_owner_pid(command_runner: Arc<dyn CommandRunner>, owner_pid: u32) -> Self {
         Self {
             command_runner,
+            owner_pid,
             init_locks: Mutex::new(HashMap::new()),
             initializing_repos: Mutex::new(HashSet::new()),
             initialized_repos: Mutex::new(HashSet::new()),
@@ -48,6 +50,10 @@ impl BeadsLifecycle {
 
     pub(crate) fn command_runner(&self) -> &dyn CommandRunner {
         self.command_runner.as_ref()
+    }
+
+    pub(crate) fn owner_pid(&self) -> u32 {
+        self.owner_pid
     }
 
     pub(crate) fn repo_key(repo_path: &Path) -> String {

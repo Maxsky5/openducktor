@@ -28,6 +28,7 @@ export type OdtHostBridgeClientPort = {
 
 export type OdtHostBridgeClientOptions = {
   baseUrl: string;
+  appToken?: string | undefined;
 };
 
 export type OdtHostBridgeClientDeps = {
@@ -61,10 +62,12 @@ const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
 
 export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   private readonly baseUrl: string;
+  private readonly appToken: string | undefined;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OdtHostBridgeClientOptions, deps: OdtHostBridgeClientDeps = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
+    this.appToken = options.appToken;
     this.fetchImpl = deps.fetchImpl ?? fetch;
   }
 
@@ -113,6 +116,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        ...(this.appToken ? { "x-openducktor-app-token": this.appToken } : {}),
       },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
