@@ -16,8 +16,15 @@ fn parse_port_value(raw: &str, source: &str) -> Result<u16, String> {
 }
 
 fn require_value(args: &mut VecDeque<String>, flag: &str) -> Result<String, String> {
-    args.pop_front()
-        .ok_or_else(|| format!("Missing value for {flag}."))
+    let value = args
+        .pop_front()
+        .ok_or_else(|| format!("Missing value for {flag}."))?;
+
+    if value.starts_with("--") {
+        return Err(format!("Missing value for {flag}."));
+    }
+
+    Ok(value)
 }
 
 fn parse_web_host_args_from<I>(values: I) -> Result<WebHostArgs, String>
@@ -157,6 +164,61 @@ mod tests {
         .expect_err("missing app token should fail");
 
         assert!(error.contains("Missing required --app-token"));
+    }
+
+    #[test]
+    fn parse_web_host_args_rejects_flag_like_required_values() {
+        let frontend_origin_error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "--control-token",
+            "token",
+            "--app-token",
+            "app-token",
+        ]))
+        .expect_err("flag-like frontend origin should fail");
+
+        assert!(frontend_origin_error.contains("Missing value for --frontend-origin"));
+
+        let control_token_error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "http://127.0.0.1:1420",
+            "--control-token",
+            "--app-token",
+            "app-token",
+        ]))
+        .expect_err("flag-like control token should fail");
+
+        assert!(control_token_error.contains("Missing value for --control-token"));
+
+        let app_token_error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "http://127.0.0.1:1420",
+            "--control-token",
+            "token",
+            "--app-token",
+            "--port",
+            "2345",
+        ]))
+        .expect_err("flag-like app token should fail");
+
+        assert!(app_token_error.contains("Missing value for --app-token"));
+    }
+
+    #[test]
+    fn parse_web_host_args_rejects_flag_like_port_value() {
+        let error = parse_web_host_args_from(args(&[
+            "--frontend-origin",
+            "http://127.0.0.1:1420",
+            "--control-token",
+            "token",
+            "--app-token",
+            "app-token",
+            "--port",
+            "--web-host",
+        ]))
+        .expect_err("flag-like port should fail");
+
+        assert!(error.contains("Missing value for --port"));
     }
 
     #[test]

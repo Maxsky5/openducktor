@@ -53,14 +53,28 @@ fn parse_port_value(raw: &str, source: &str) -> Result<u16, String> {
         .map_err(|_| format!("Invalid {source} value for {WEB_HOST_FLAG_LABEL}: `{raw}`"))
 }
 
-fn arg_value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
-    args.windows(2)
-        .find(|pair| pair[0] == flag)
-        .map(|pair| pair[1].as_str())
+fn arg_value<'a>(args: &'a [String], flag: &str) -> Result<Option<&'a str>, String> {
+    let Some(index) = args.iter().position(|arg| arg == flag) else {
+        return Ok(None);
+    };
+
+    let Some(value) = args.get(index + 1) else {
+        return Err(format!(
+            "Missing value for {flag} with {WEB_HOST_FLAG_LABEL}."
+        ));
+    };
+
+    if value.starts_with("--") {
+        return Err(format!(
+            "Missing value for {flag} with {WEB_HOST_FLAG_LABEL}."
+        ));
+    }
+
+    Ok(Some(value.as_str()))
 }
 
 fn parse_required_non_empty_arg(args: &[String], flag: &str) -> Result<String, String> {
-    let raw = arg_value(args, flag)
+    let raw = arg_value(args, flag)?
         .ok_or_else(|| format!("Missing required {flag} value with {WEB_HOST_FLAG_LABEL}."))?;
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -92,7 +106,7 @@ fn parse_browser_backend_config_from_sources(
     }
 
     let port = if args.iter().any(|arg| arg == "--port") {
-        let raw = arg_value(args, "--port")
+        let raw = arg_value(args, "--port")?
             .ok_or_else(|| format!("Missing value for --port with {WEB_HOST_FLAG_LABEL}."))?;
         parse_port_value(raw, "--port")?
     } else if let Some(raw) = env_port {
@@ -202,6 +216,26 @@ mod tests {
     }
 
     #[test]
+    fn parse_browser_backend_config_rejects_missing_flag_like_port_value() {
+        let error = parse_browser_backend_config_from_sources(
+            &args(&[
+                "--web-host",
+                "--port",
+                "--frontend-origin",
+                "http://127.0.0.1:1420",
+                "--control-token",
+                "token-1",
+                "--app-token",
+                "app-token-1",
+            ]),
+            None,
+        )
+        .expect_err("flag-like port value should fail");
+
+        assert!(error.contains("Missing value for --port"));
+    }
+
+    #[test]
     fn parse_browser_backend_config_applies_default_when_no_override_is_provided() {
         assert_eq!(
             parse_browser_backend_config_from_sources(
@@ -243,6 +277,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_browser_backend_config_rejects_missing_flag_like_frontend_origin_value() {
+        let error = parse_browser_backend_config_from_sources(
+            &args(&[
+                "--browser-backend",
+                "--frontend-origin",
+                "--control-token",
+                "token-1",
+                "--app-token",
+                "app-token-1",
+            ]),
+            None,
+        )
+        .expect_err("flag-like frontend origin value should fail");
+
+        assert!(error.contains("Missing value for --frontend-origin"));
+    }
+
+    #[test]
     fn parse_browser_backend_config_requires_control_token() {
         let error = parse_browser_backend_config_from_sources(
             &args(&[
@@ -260,6 +312,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_browser_backend_config_rejects_missing_flag_like_control_token_value() {
+        let error = parse_browser_backend_config_from_sources(
+            &args(&[
+                "--browser-backend",
+                "--frontend-origin",
+                "http://127.0.0.1:1420",
+                "--control-token",
+                "--app-token",
+                "app-token-1",
+            ]),
+            None,
+        )
+        .expect_err("flag-like control token value should fail");
+
+        assert!(error.contains("Missing value for --control-token"));
+    }
+
+    #[test]
     fn parse_browser_backend_config_requires_app_token() {
         let error = parse_browser_backend_config_from_sources(
             &args(&[
@@ -274,6 +344,26 @@ mod tests {
         .expect_err("missing app token should fail");
 
         assert!(error.contains("Missing required --app-token value"));
+    }
+
+    #[test]
+    fn parse_browser_backend_config_rejects_missing_flag_like_app_token_value() {
+        let error = parse_browser_backend_config_from_sources(
+            &args(&[
+                "--browser-backend",
+                "--frontend-origin",
+                "http://127.0.0.1:1420",
+                "--control-token",
+                "token-1",
+                "--app-token",
+                "--port",
+                "2345",
+            ]),
+            None,
+        )
+        .expect_err("flag-like app token value should fail");
+
+        assert!(error.contains("Missing value for --app-token"));
     }
 
     #[test]
