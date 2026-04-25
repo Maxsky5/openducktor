@@ -6,23 +6,50 @@ const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
 };
 
 describe("launcher internals", () => {
-  test("waits for the fake host health endpoint before starting the web shell", async () => {
-    const requests: string[] = [];
-    let attempts = 0;
-    const fetchImpl = (async (url: string | URL | Request) => {
-      requests.push(String(url));
-      attempts += 1;
-      return new Response(null, { status: attempts === 1 ? 503 : 200 });
+  test("waits for the fake host health and token-authenticated session endpoints", async () => {
+    const requests: Array<{ url: string; method: string | undefined; token: string | null }> = [];
+    let healthAttempts = 0;
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        url: String(url),
+        method: init?.method,
+        token: headers.get("x-openducktor-app-token"),
+      });
+      if (String(url).endsWith("/health")) {
+        healthAttempts += 1;
+        return new Response(null, { status: healthAttempts === 1 ? 503 : 200 });
+      }
+      return new Response(null, { status: 200 });
     }) as typeof fetch;
 
     await __launcherTestInternals.waitForBackend(
       "http://127.0.0.1:14327",
+      "app-token",
       1_000,
       createHostProcess(new Promise<number>(() => {})),
       { fetch: fetchImpl, sleep: async () => {} },
     );
 
-    expect(requests).toEqual(["http://127.0.0.1:14327/health", "http://127.0.0.1:14327/health"]);
+    expect(requests).toEqual([
+      { url: "http://127.0.0.1:14327/health", method: undefined, token: null },
+      { url: "http://127.0.0.1:14327/health", method: undefined, token: null },
+      { url: "http://127.0.0.1:14327/session", method: "POST", token: "app-token" },
+    ]);
+  });
+
+  test("rejects stale hosts that do not know the launcher app token", async () => {
+    const fetchImpl = (async (url: string | URL | Request) => {
+      return new Response(null, { status: String(url).endsWith("/session") ? 403 : 200 });
+    }) as typeof fetch;
+
+    await expect(
+      __launcherTestInternals.verifyBackendReadiness(
+        "http://127.0.0.1:14327",
+        "fresh-app-token",
+        fetchImpl,
+      ),
+    ).rejects.toThrow("Session endpoint rejected the launcher app token with status 403.");
   });
 
   test("fails fast when the fake host exits before readiness", async () => {
@@ -32,6 +59,7 @@ describe("launcher internals", () => {
     await expect(
       __launcherTestInternals.waitForBackend(
         "http://127.0.0.1:14327",
+        "app-token",
         1_000,
         createHostProcess(exited),
         {
@@ -69,11 +97,30 @@ describe("launcher internals", () => {
     ]);
   });
 
-  test("injects the browser host URL and app token into the web shell", () => {
-    expect(__launcherTestInternals.buildViteDefine("http://127.0.0.1:14327", "app-token")).toEqual({
-      "import.meta.env.VITE_ODT_APP_MODE": JSON.stringify("browser"),
-      "import.meta.env.VITE_ODT_BROWSER_AUTH_TOKEN": JSON.stringify("app-token"),
-      "import.meta.env.VITE_ODT_BROWSER_BACKEND_URL": JSON.stringify("http://127.0.0.1:14327"),
-    });
+  test("builds runtime config JSON for the browser shell", () => {
+    expect(
+      __launcherTestInternals.buildBrowserRuntimeConfigJson("http://127.0.0.1:14327", "app-token"),
+    ).toBe('{"backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n');
+  });
+
+  test("prints localhost first in the frontend availability URLs", () => {
+    expect(__launcherTestInternals.buildFrontendDisplayUrls(1420)).toEqual([
+      "http://localhost:1420/",
+      "http://127.0.0.1:1420/",
+    ]);
+  });
+
+  test("keeps graceful shutdown alive for immediate duplicate signals", () => {
+    expect(__launcherTestInternals.shouldForceExitForRepeatedSignal(1_000, 2_000)).toBe(false);
+    expect(__launcherTestInternals.shouldForceExitForRepeatedSignal(1_000, 2_500)).toBe(true);
+  });
+
+  test("rejects static asset paths that escape the web shell root", () => {
+    expect(__launcherTestInternals.resolveStaticAssetPath("/web-shell", "/assets/app.js")).toBe(
+      "/web-shell/assets/app.js",
+    );
+    expect(
+      __launcherTestInternals.resolveStaticAssetPath("/web-shell", "/../secret.txt"),
+    ).toBeNull();
   });
 });

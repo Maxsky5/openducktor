@@ -17,7 +17,7 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@openducktor/adapters-tauri-host": "workspace:*",
         "@openducktor/frontend": "workspace:*",
@@ -43,7 +43,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@opencode-ai/sdk": "^1.14.18",
         "@openducktor/contracts": "workspace:*",
@@ -52,7 +52,7 @@
     },
     "packages/adapters-tauri-host": {
       "name": "@openducktor/adapters-tauri-host",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -60,14 +60,14 @@
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
       },
@@ -127,7 +127,7 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "openducktor-mcp": "./dist/index.js",
       },
@@ -146,20 +146,18 @@
         "web": "dist/cli.js",
         "openducktor-web": "dist/cli.js",
       },
-      "dependencies": {
+      "devDependencies": {
         "@openducktor/adapters-tauri-host": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@tailwindcss/vite": "^4.2.2",
-        "@vitejs/plugin-react": "^6.0.1",
-        "react": "^19.2.5",
-        "react-dom": "^19.2.5",
-        "vite": "^8.0.9",
-      },
-      "devDependencies": {
         "@types/node": "^25.6.0",
         "@types/react": "^19.0.1",
         "@types/react-dom": "^19.0.1",
+        "@vitejs/plugin-react": "^6.0.1",
         "bun-types": "^1.3.12",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+        "vite": "^8.0.9",
       },
     },
   },

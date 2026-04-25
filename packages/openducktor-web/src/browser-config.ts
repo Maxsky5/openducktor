@@ -1,10 +1,36 @@
 type BrowserEnv = Record<string, string | undefined> | undefined;
+export type BrowserRuntimeConfig = {
+  backendUrl?: string;
+  appToken?: string;
+};
+
+let browserRuntimeConfig: BrowserRuntimeConfig | undefined;
+
+export const configureBrowserRuntimeConfig = (config: BrowserRuntimeConfig): void => {
+  browserRuntimeConfig = config;
+};
+
+export const resetBrowserRuntimeConfig = (): void => {
+  browserRuntimeConfig = undefined;
+};
 
 const readBrowserEnv = (): BrowserEnv =>
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ??
   (typeof process !== "undefined" ? process.env : undefined);
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+const readBrowserLocationOrigin = (): string | undefined => {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  return window.location.origin;
+};
+
+const readBrowserRuntimeConfig = (): BrowserRuntimeConfig | undefined => {
+  return browserRuntimeConfig;
+};
 
 const requireBrowserEnvValue = (env: BrowserEnv, key: string, description: string): string => {
   const value = env?.[key]?.trim();
@@ -17,7 +43,7 @@ const requireBrowserEnvValue = (env: BrowserEnv, key: string, description: strin
   return value;
 };
 
-const normalizeLoopbackHttpUrl = (rawUrl: string): string => {
+const parseLoopbackHttpOrigin = (rawUrl: string): URL => {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -49,13 +75,57 @@ const normalizeLoopbackHttpUrl = (rawUrl: string): string => {
     );
   }
 
-  return parsed.origin;
+  return parsed;
 };
 
-export const getBrowserBackendUrl = (env: BrowserEnv = readBrowserEnv()): string =>
+const hostForOrigin = (hostname: string): string => {
+  if (hostname === "::1" || hostname === "[::1]") {
+    return "[::1]";
+  }
+
+  return hostname;
+};
+
+const alignBackendOriginWithBrowserOrigin = (
+  backendOrigin: URL,
+  browserOrigin?: string,
+): string => {
+  if (!browserOrigin) {
+    return backendOrigin.origin;
+  }
+
+  let frontendOrigin: URL;
+  try {
+    frontendOrigin = new URL(browserOrigin);
+  } catch {
+    return backendOrigin.origin;
+  }
+
+  if (frontendOrigin.protocol !== "http:" || !LOOPBACK_HOSTS.has(frontendOrigin.hostname)) {
+    return backendOrigin.origin;
+  }
+
+  return new URL(
+    `${frontendOrigin.protocol}//${hostForOrigin(frontendOrigin.hostname)}:${backendOrigin.port}`,
+  ).origin;
+};
+
+const normalizeLoopbackHttpUrl = (rawUrl: string, browserOrigin?: string): string => {
+  const parsed = parseLoopbackHttpOrigin(rawUrl);
+
+  return alignBackendOriginWithBrowserOrigin(parsed, browserOrigin);
+};
+
+export const getBrowserBackendUrl = (
+  env: BrowserEnv = readBrowserEnv(),
+  browserOrigin: string | undefined = readBrowserLocationOrigin(),
+): string =>
   normalizeLoopbackHttpUrl(
-    requireBrowserEnvValue(env, "VITE_ODT_BROWSER_BACKEND_URL", "the local web host URL"),
+    readBrowserRuntimeConfig()?.backendUrl?.trim() ||
+      requireBrowserEnvValue(env, "VITE_ODT_BROWSER_BACKEND_URL", "the local web host URL"),
+    browserOrigin,
   );
 
 export const getBrowserAuthToken = (env: BrowserEnv = readBrowserEnv()): string =>
+  readBrowserRuntimeConfig()?.appToken?.trim() ||
   requireBrowserEnvValue(env, "VITE_ODT_BROWSER_AUTH_TOKEN", "the local web host app token");

@@ -129,6 +129,10 @@ export function TaskDetailsSheet({
         visualOverlay
         className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
       >
+        <SheetTitle className="sr-only">{task.title}</SheetTitle>
+        <SheetDescription className="sr-only">
+          Inspect task details and workflow actions.
+        </SheetDescription>
         <SheetHeader className="border-b border-border bg-card px-5 py-4">
           <TaskDetailsSheetHeader
             task={task}

@@ -71,6 +71,26 @@ describe("artifact resolver", () => {
     }
   });
 
+  test("normalizes explicit host binary paths before spawning with a custom cwd", () => {
+    const packageRoot = createTempPackageRoot();
+    const previousCwd = process.cwd();
+    try {
+      const relativePackageRoot = path.relative(previousCwd, packageRoot);
+      const binaryPath = writeArtifact(packageRoot, "explicit-host", "host-binary");
+      const relativeBinaryPath = path.join(relativePackageRoot, "bin", "explicit-host");
+
+      expect(
+        resolveHostBinary({
+          packageRoot,
+          workspaceMode: false,
+          explicitBinaryPath: relativeBinaryPath,
+        }),
+      ).toEqual({ kind: "artifact", path: binaryPath });
+    } finally {
+      cleanup(packageRoot);
+    }
+  });
+
   test("rejects packaged host artifacts with missing checksums", () => {
     const packageRoot = createTempPackageRoot();
     try {

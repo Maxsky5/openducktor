@@ -4,7 +4,7 @@ OpenDucktor releases are now owned by GitHub Actions. Maintainers do not need to
 
 ## Workflow layout
 
-The release flow is split into three workflows:
+The release flow is split into these workflows:
 
 - `.github/workflows/release-prep.yml`
 - `.github/workflows/release-desktop.yml`
@@ -62,21 +62,21 @@ It:
 
 ### 4. Publish Web Package
 
-`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only Rust host, waits for `/health`, serves the shared frontend with Vite, and shuts the host down with a control-token-protected `/shutdown` request.
+`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only Rust host, waits for readiness, serves the built web frontend, and shuts the host down with a control-token-protected `/shutdown` request.
 
 `Publish Web Package` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
 
 It:
 
-- build `openducktor-web-host` for `aarch64-apple-darwin` and `x86_64-apple-darwin`
-- upload the binaries and `.sha256` checksums to the draft GitHub release
-- download the artifacts into `packages/openducktor-web/bin/` for npm packaging
-- rewrite local `workspace:*` dependencies to the release version in the npm publish job
-- run `bun run --filter @openducktor/web build`
-- run `npm publish --dry-run` for the web runtime packages
-- publish `@openducktor/contracts`, `@openducktor/core`, `@openducktor/adapters-tauri-host`, `@openducktor/adapters-opencode-sdk`, `@openducktor/frontend`, and `@openducktor/web` in dependency order
+- builds `openducktor-web-host` for `aarch64-apple-darwin` and `x86_64-apple-darwin`
+- uploads the binaries and `.sha256` checksums as GitHub Actions artifacts
+- builds the self-contained `@openducktor/web` package, including the static web frontend
+- downloads the host artifacts into `packages/openducktor-web/bin/` for npm packaging
+- verifies package contents, executable bits, and checksums
+- runs `npm publish --dry-run` for `@openducktor/web`
+- publishes `@openducktor/web`
 
-The launcher refuses unsupported platforms and refuses packaged host binaries without matching checksums. Development mode (`bun run browser:dev`) uses Cargo directly and does not bypass these packaged-install checks.
+The launcher refuses unsupported platforms and refuses packaged host binaries without matching checksums. Development mode (`bun run browser:dev`) uses Cargo and Vite directly; published installs serve the built frontend from the `@openducktor/web` package and do not require publishing internal workspace packages.
 
 ### 5. Publish Homebrew Tap
 

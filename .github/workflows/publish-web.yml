@@ -19,8 +19,6 @@ env:
 jobs:
   build-web-host:
     name: Build ${{ matrix.label }} web host
-    permissions:
-      contents: write
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -41,33 +39,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.tag }}
-
-      - name: Validate release tag
-        env:
-          TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Release tag must look like v0.1.0 or v0.1.0-rc.1." >&2
-            exit 1
-          fi
-
-      - name: Verify draft release exists
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Draft release $TAG was not found. Run Prepare Release first or rerun this workflow manually with the correct tag." >&2
-            exit 1
-          fi
-
-          IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
-          if [[ "$IS_DRAFT" != "true" ]]; then
-            echo "Release $TAG already exists and is not a draft. Web host artifacts should only attach to a draft release." >&2
-            exit 1
-          fi
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -96,17 +67,20 @@ jobs:
           set -euo pipefail
           mkdir -p release-web-host
           cp "apps/desktop/src-tauri/target/$TARGET/release/openducktor-web-host" "release-web-host/$ARTIFACT"
+          chmod +x "release-web-host/$ARTIFACT"
           shasum -a 256 "release-web-host/$ARTIFACT" | awk '{print $1}' > "release-web-host/$ARTIFACT.sha256"
 
-      - name: Upload web host artifact to draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-          ARTIFACT: ${{ matrix.artifact }}
-        run: gh release upload "$TAG" "release-web-host/$ARTIFACT" "release-web-host/$ARTIFACT.sha256" --clobber
+      - name: Upload web host artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release-web-host/${{ matrix.artifact }}
+            release-web-host/${{ matrix.artifact }}.sha256
+          if-no-files-found: error
 
   publish-web:
-    name: Publish web npm packages
+    name: Publish @openducktor/web
     permissions:
       contents: read
       id-token: write
@@ -150,70 +124,35 @@ jobs:
       - name: Verify repository version matches tag
         run: bun run release:version:check "${{ steps.release_meta.outputs.version }}"
 
-      - name: Build web runtime packages
-        run: |
-          set -euo pipefail
-          bun run --filter @openducktor/contracts build
-          bun run --filter @openducktor/core build
-          bun run --filter @openducktor/adapters-tauri-host build
-          bun run --filter @openducktor/adapters-opencode-sdk build
-          bun run --filter @openducktor/frontend build
-          bun run --filter @openducktor/web build
+      - name: Build @openducktor/web
+        run: bun run --filter @openducktor/web build
 
-      - name: Download web host artifacts from draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          mkdir -p packages/openducktor-web/bin
-          gh release download "$TAG" --pattern 'openducktor-web-host-darwin-*' --dir packages/openducktor-web/bin
-          test -f packages/openducktor-web/bin/openducktor-web-host-darwin-arm64
-          test -f packages/openducktor-web/bin/openducktor-web-host-darwin-arm64.sha256
-          test -f packages/openducktor-web/bin/openducktor-web-host-darwin-x64
-          test -f packages/openducktor-web/bin/openducktor-web-host-darwin-x64.sha256
-          chmod +x packages/openducktor-web/bin/openducktor-web-host-darwin-arm64
-          chmod +x packages/openducktor-web/bin/openducktor-web-host-darwin-x64
+      - name: Download web host artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: openducktor-web-host-darwin-*
+          path: packages/openducktor-web/bin
+          merge-multiple: true
 
-      - name: Prepare npm package manifests
+      - name: Verify web package contents
         run: bun run scripts/prepare-web-publish-packages.ts "${{ steps.release_meta.outputs.version }}"
 
       - name: Dry-run web package publishing
-        run: |
-          set -euo pipefail
-          for package_dir in \
-            packages/contracts \
-            packages/core \
-            packages/adapters-tauri-host \
-            packages/adapters-opencode-sdk \
-            packages/frontend \
-            packages/openducktor-web
-          do
-            (cd "$package_dir" && npm publish --dry-run --access public)
-          done
+        working-directory: packages/openducktor-web
+        run: npm publish --dry-run --access public
 
-      - name: Publish web runtime packages
-        run: |
-          set -euo pipefail
-          for package_dir in \
-            packages/contracts \
-            packages/core \
-            packages/adapters-tauri-host \
-            packages/adapters-opencode-sdk \
-            packages/frontend \
-            packages/openducktor-web
-          do
-            (cd "$package_dir" && npm publish --access public)
-          done
+      - name: Publish web package
+        working-directory: packages/openducktor-web
+        run: npm publish --access public
 
       - name: Publish workflow summary
         env:
           TAG: ${{ inputs.tag }}
         run: |
           {
-            echo "## Web packages published"
+            echo "## Web package published"
             echo
             echo "- Tag: $TAG"
-            echo "- Packages: @openducktor/contracts, @openducktor/core, @openducktor/adapters-tauri-host, @openducktor/adapters-opencode-sdk, @openducktor/frontend, @openducktor/web"
+            echo "- Package: @openducktor/web"
             echo "- Web host artifacts: openducktor-web-host-darwin-arm64, openducktor-web-host-darwin-x64"
           } >> "$GITHUB_STEP_SUMMARY"

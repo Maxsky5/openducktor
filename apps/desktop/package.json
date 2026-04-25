@@ -9,7 +9,7 @@
     "tauri:dev": "tauri dev -- --bin openducktor-desktop",
     "tauri:build": "bun run scripts/tauri-build.ts",
     "tauri:setup:cef": "bun run scripts/setup-cef.ts",
-    "tauri:dev:cef": "bun run scripts/tauri-cef-dev.ts",
+    "tauri:dev:cef": "FORCE_COLOR=1 bun run scripts/tauri-cef-dev.ts",
     "tauri:build:cef": "bun run scripts/tauri-cef-build.ts",
     "build": "vite build",
     "preview": "vite preview",

@@ -1,6 +1,6 @@
 # OpenDucktor Web Runner
 
-The web runner lets OpenDucktor run without a Tauri window while preserving the desktop app. It is intended for local browser use, browser automation, and agent-driven UI validation.
+The web runner lets OpenDucktor run in a browser without a Tauri window while preserving the desktop app. It is a regular supported way to run OpenDucktor locally.
 
 ## Command
 
@@ -47,7 +47,7 @@ Published installs resolve a platform-specific host binary from `packages/opendu
 
 Each binary must have a sibling `.sha256` file. The launcher fails before startup if the current platform is unsupported, the binary is missing, or the checksum does not match.
 
-Release automation owns those artifacts in `.github/workflows/publish-web.yml`. The workflow builds `openducktor-web-host` for both macOS targets, uploads the binaries and checksums to the draft GitHub release, downloads them into `packages/openducktor-web/bin/`, rewrites local `workspace:*` dependencies to the release version for npm packaging, runs `npm publish --dry-run`, and then publishes the web runtime packages in dependency order.
+Release automation owns those artifacts in `.github/workflows/publish-web.yml`. The workflow builds `openducktor-web-host` for both macOS targets, passes the binaries to the publish job as GitHub Actions artifacts, copies them into `packages/openducktor-web/bin/`, verifies package contents and checksums, runs `npm publish --dry-run`, and publishes the single self-contained `@openducktor/web` package.
 
 Workspace development mode (`bun run browser:dev`) resolves the host through Cargo instead:
 

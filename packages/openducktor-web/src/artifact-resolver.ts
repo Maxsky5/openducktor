@@ -85,8 +85,9 @@ const verifyChecksum = (binaryPath: string): void => {
 
 export const resolveHostBinary = (options: ResolveHostBinaryOptions): ResolvedHostBinary => {
   if (options.explicitBinaryPath) {
-    assertExecutableFile(options.explicitBinaryPath);
-    return { kind: "artifact", path: options.explicitBinaryPath };
+    const binaryPath = path.resolve(options.explicitBinaryPath);
+    assertExecutableFile(binaryPath);
+    return { kind: "artifact", path: binaryPath };
   }
 
   if (options.workspaceMode) {

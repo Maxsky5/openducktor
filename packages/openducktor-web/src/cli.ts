@@ -2,6 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLauncher } from "./launcher";
+import { logError } from "./logger";
 
 type CliOptions = {
   workspaceMode: boolean;
@@ -98,7 +99,7 @@ const runCli = async (): Promise<void> => {
     );
     process.exit(exitCode);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    logError(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 };

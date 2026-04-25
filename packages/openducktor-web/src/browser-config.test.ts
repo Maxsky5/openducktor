@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test";
-import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  getBrowserAuthToken,
+  getBrowserBackendUrl,
+  resetBrowserRuntimeConfig,
+} from "./browser-config";
 
 type OriginValidationCase = {
   name: string;
@@ -14,6 +18,10 @@ const loadOriginValidationCases = async (): Promise<OriginValidationCase[]> =>
   ).json()) as OriginValidationCase[];
 
 describe("browser web host config", () => {
+  beforeEach(() => {
+    resetBrowserRuntimeConfig();
+  });
+
   test("requires the launcher-injected backend URL", () => {
     expect(() => getBrowserBackendUrl({ VITE_ODT_BROWSER_AUTH_TOKEN: "token" })).toThrow(
       "OpenDucktor web is missing the local web host URL",
@@ -38,5 +46,30 @@ describe("browser web host config", () => {
         expect(validate, testCase.name).toThrow(testCase.errorIncludes);
       }
     }
+  });
+
+  test("uses the browser loopback hostname for backend requests", () => {
+    expect(
+      getBrowserBackendUrl(
+        { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" },
+        "http://localhost:1420",
+      ),
+    ).toBe("http://localhost:14327");
+
+    expect(
+      getBrowserBackendUrl(
+        { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" },
+        "http://[::1]:1420",
+      ),
+    ).toBe("http://[::1]:14327");
+  });
+
+  test("keeps the injected backend hostname when the page origin is not loopback", () => {
+    expect(
+      getBrowserBackendUrl(
+        { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" },
+        "https://example.com",
+      ),
+    ).toBe("http://127.0.0.1:14327");
   });
 });

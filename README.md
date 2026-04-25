@@ -50,13 +50,13 @@ Homebrew installs the same signed and notarized desktop app that is published on
 
 ### Local Web Runner
 
-For browser-based local use or agent-driven UI validation, run OpenDucktor without the Tauri window:
+If you prefer to use OpenDucktor in a browser instead of a desktop window:
 
 ```sh
 bunx @openducktor/web
 ```
 
-The web runner starts the same Rust host on loopback, serves the shared OpenDucktor frontend with Vite, and opens a browser-facing URL. The desktop app remains the recommended end-user install path.
+The web runner opens OpenDucktor in your browser. Choose the desktop app or the web runner based on what best fits your workflow.
 
 ## User Prerequisites
 
