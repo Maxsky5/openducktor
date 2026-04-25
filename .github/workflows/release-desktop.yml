@@ -269,7 +269,11 @@ jobs:
             local entitlement="$1"
             local value
 
-            value="$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$entitlements_file")"
+            if ! value="$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$entitlements_file" 2>&1)"; then
+              echo "Expected entitlement $entitlement=true on bundled CEF helper, but PlistBuddy failed: $value" >&2
+              exit 1
+            fi
+
             if [[ "$value" != "true" ]]; then
               echo "Expected entitlement $entitlement=true on bundled CEF helper, got: $value" >&2
               exit 1

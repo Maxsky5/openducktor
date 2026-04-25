@@ -9,6 +9,7 @@ if [[ -z "${CEF_PATH:-}" || -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
   exit 0
 fi
 
+# Expects CWD = apps/desktop, set by tauri.conf.json beforeBundleCommand.
 target_root="${CARGO_TARGET_DIR:-src-tauri/target}"
 helper_path="${target_root}/release/openducktor-desktop-helper"
 entitlements_path="src-tauri/entitlements/macos-cef-helper.plist"
