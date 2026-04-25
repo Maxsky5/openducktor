@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "cd .. && bun run dev",
     "beforeBuildCommand": "cd .. && bun run build",
-    "beforeBundleCommand": "cd .. && bash scripts/sign-macos-cef-helper.sh",
+    "beforeBundleCommand": "cd .. && bun -e \"const isDarwin = (process.env.TAURI_ENV_PLATFORM ?? process.platform) === 'darwin'; if (isDarwin) { const p = Bun.spawnSync(['bash', 'scripts/sign-macos-cef-helper.sh'], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }); process.exit(p.exitCode ?? 1); }\"",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },

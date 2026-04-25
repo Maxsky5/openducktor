@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  exit 0
+fi
+
 if [[ -z "${CEF_PATH:-}" || -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
   exit 0
 fi
 
-helper_path="src-tauri/target/release/openducktor-desktop-helper"
+target_root="${CARGO_TARGET_DIR:-src-tauri/target}"
+helper_path="${target_root}/release/openducktor-desktop-helper"
+entitlements_path="src-tauri/entitlements/macos-cef-helper.plist"
 
 if [[ -n "${OPENDUCKTOR_TAURI_TARGET:-}" ]]; then
-  helper_path="src-tauri/target/${OPENDUCKTOR_TAURI_TARGET}/release/openducktor-desktop-helper"
+  helper_path="${target_root}/${OPENDUCKTOR_TAURI_TARGET}/release/openducktor-desktop-helper"
 fi
 
 if [[ ! -f "$helper_path" ]]; then
@@ -17,5 +23,10 @@ if [[ ! -f "$helper_path" ]]; then
   exit 1
 fi
 
-codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp "$helper_path"
+if [[ ! -f "$entitlements_path" ]]; then
+  echo "macOS CEF helper entitlements file was not found at $entitlements_path" >&2
+  exit 1
+fi
+
+codesign --force --sign "$APPLE_SIGNING_IDENTITY" --options runtime --timestamp --entitlements "$entitlements_path" "$helper_path"
 codesign --verify --verbose=4 "$helper_path"

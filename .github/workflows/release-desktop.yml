@@ -248,6 +248,37 @@ jobs:
           uploadUpdaterSignatures: false
           retryAttempts: 2
 
+      - name: Verify signed CEF helper in app bundle
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          helper="apps/desktop/src-tauri/target/$TARGET/release/bundle/macos/OpenDucktor.app/Contents/MacOS/openducktor-desktop-helper"
+
+          if [[ ! -f "$helper" ]]; then
+            echo "Bundled CEF helper was not found at $helper" >&2
+            exit 1
+          fi
+
+          codesign --verify --verbose=4 "$helper"
+          codesign -dvvv "$helper"
+          entitlements_file="$(mktemp)"
+          codesign -d --entitlements :- "$helper" > "$entitlements_file"
+
+          require_entitlement() {
+            local entitlement="$1"
+            local value
+
+            value="$(/usr/libexec/PlistBuddy -c "Print :$entitlement" "$entitlements_file")"
+            if [[ "$value" != "true" ]]; then
+              echo "Expected entitlement $entitlement=true on bundled CEF helper, got: $value" >&2
+              exit 1
+            fi
+          }
+
+          require_entitlement "com.apple.security.cs.allow-jit"
+          require_entitlement "com.apple.security.cs.allow-unsigned-executable-memory"
+
   finalize-release:
     name: Summarize release draft
     if: ${{ always() }}
