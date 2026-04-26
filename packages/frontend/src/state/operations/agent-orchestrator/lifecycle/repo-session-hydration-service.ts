@@ -9,6 +9,7 @@ import type {
   AgentRuntimeConnection,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
+import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
 import { host } from "../../shared/host";
@@ -59,8 +60,12 @@ type ReconcilePreloadMetadata = {
 
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
-const invalidateRuntimeList = async (runtimeKind: RuntimeKind, repoPath: string): Promise<void> => {
-  await appQueryClient.invalidateQueries({
+const invalidateRuntimeList = async (
+  queryClient: QueryClient,
+  runtimeKind: RuntimeKind,
+  repoPath: string,
+): Promise<void> => {
+  await queryClient.invalidateQueries({
     queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
     exact: true,
     refetchType: "none",
@@ -190,6 +195,9 @@ export const createRepoSessionHydrationService = ({
   sessionHydration,
   liveAgentSessionStore,
   onRetryRequested,
+  queryClient = appQueryClient,
+  runtimeEnsure = (nextRepoPath, nextRuntimeKind) =>
+    host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
 }: {
   agentEngine: Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
   sessionHydration: Pick<
@@ -198,6 +206,11 @@ export const createRepoSessionHydrationService = ({
   >;
   liveAgentSessionStore: LiveAgentSessionStore;
   onRetryRequested: () => void;
+  queryClient?: QueryClient;
+  runtimeEnsure?: (
+    nextRepoPath: string,
+    nextRuntimeKind: RuntimeKind,
+  ) => Promise<RuntimeInstanceSummary>;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
   const reconciledTasksByRepo: Record<string, Set<string>> = {};
@@ -260,7 +273,7 @@ export const createRepoSessionHydrationService = ({
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>();
     for (const runtimeKind of runtimeKinds) {
-      const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
+      const runtimes = await loadRuntimeListFromQuery(queryClient, runtimeKind, repoPath);
       if (isCancelled()) {
         return {
           persistedByTask,
@@ -284,10 +297,9 @@ export const createRepoSessionHydrationService = ({
         const ensuredRuntime = await ensureRuntimeAndInvalidateReadinessQueries({
           repoPath,
           runtimeKind,
-          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+          ensureRuntime: runtimeEnsure,
         });
-        await invalidateRuntimeList(runtimeKind, repoPath);
+        await invalidateRuntimeList(queryClient, runtimeKind, repoPath);
         if (isCancelled()) {
           return {
             persistedByTask,
@@ -353,8 +365,7 @@ export const createRepoSessionHydrationService = ({
           ? await ensureRuntimeAndInvalidateReadinessQueries({
               repoPath,
               runtimeKind,
-              ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-                host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+              ensureRuntime: runtimeEnsure,
             })
           : null);
       if (!routeSourceRuntime) {
@@ -362,7 +373,7 @@ export const createRepoSessionHydrationService = ({
       }
 
       if (!runtimeEntries.includes(routeSourceRuntime)) {
-        await invalidateRuntimeList(runtimeKind, repoPath);
+        await invalidateRuntimeList(queryClient, runtimeKind, repoPath);
         if (isCancelled()) {
           return {
             persistedByTask,
