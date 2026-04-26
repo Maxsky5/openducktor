@@ -9,7 +9,6 @@ import {
   type TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
-import { host } from "../../shared/host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
   createEnsureRuntime,
@@ -93,19 +92,6 @@ describe("agent-orchestrator-runtime", () => {
     restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
       createRepoConfig(),
     );
-    host.workspaceList = async () => [
-      {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/tmp/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: "/tmp/worktrees/repo",
-        effectiveWorktreeBasePath: "/tmp/worktrees/repo",
-      },
-    ];
-    host.workspaceGetRepoConfig = async () => createRepoConfig();
     runtimeHost = {
       runtimeEnsure: async () => sharedRuntimeFixture,
       buildStart: async () => buildBootstrapFixture,

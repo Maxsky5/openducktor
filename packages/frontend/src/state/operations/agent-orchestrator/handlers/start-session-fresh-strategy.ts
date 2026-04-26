@@ -1,4 +1,8 @@
-import { requireConfiguredRuntimeKind, resolveRuntimeConnection } from "../runtime/runtime";
+import { resolveRuntimeConnection } from "../runtime/runtime";
+import {
+  assertSelectedModelRuntimeKindMatchesEnsuredRuntime,
+  requireSelectedModelRuntimeKindForStart,
+} from "../support/session-runtime-metadata";
 import type {
   StartOrReuseResult,
   StartSessionContext,
@@ -26,10 +30,7 @@ export const executeFreshStart = async ({
 }: FreshStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
-  const selectedModelRuntimeKind = requireConfiguredRuntimeKind(
-    selectedModel.runtimeKind,
-    `Runtime kind is required to start ${ctx.role} sessions. Select an explicit runtime before starting a session.`,
-  );
+  const selectedModelRuntimeKind = requireSelectedModelRuntimeKindForStart(ctx.role, selectedModel);
   const selectedModelWithRuntime = {
     ...selectedModel,
     runtimeKind: selectedModelRuntimeKind,
@@ -56,11 +57,10 @@ export const executeFreshStart = async ({
     scenario: resolved.resolvedScenario,
     startMode: input.startMode,
   });
-  if (resolved.runtime.runtimeKind && resolved.runtime.runtimeKind !== selectedModelRuntimeKind) {
-    throw new Error(
-      `Selected model runtime kind '${selectedModelRuntimeKind}' does not match ensured runtime kind '${resolved.runtime.runtimeKind}'.`,
-    );
-  }
+  assertSelectedModelRuntimeKindMatchesEnsuredRuntime({
+    selectedModelRuntimeKind,
+    ensuredRuntimeKind: resolved.runtime.runtimeKind,
+  });
   const runtimeKind = resolved.runtime.runtimeKind ?? selectedModelRuntimeKind;
 
   const summary = await deps.runtime.adapter.startSession({
