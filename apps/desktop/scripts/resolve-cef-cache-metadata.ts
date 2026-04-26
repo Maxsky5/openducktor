@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 
 import {
+  CARGO_TAURI_CEF_TOOLCHAIN_PATCH,
   readCefVersion,
   readTauriCefRevision,
   resolveCargoTauriToolsRoot,
@@ -18,6 +19,7 @@ const exportCefToolRoot = resolveExportCefToolsRoot(tauriRoot);
 
 console.log(`tauri_revision=${tauriRevision}`);
 console.log(`tauri_revision_short=${tauriRevision.slice(0, 12)}`);
+console.log(`tauri_toolchain_patch=${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}`);
 console.log(`cef_version=${cefVersion}`);
 console.log(`cargo_tauri_root=${cargoTauriRoot}`);
 console.log(`cargo_tauri_path=${resolve(cargoTauriRoot, "bin", `cargo-tauri${binaryExtension}`)}`);

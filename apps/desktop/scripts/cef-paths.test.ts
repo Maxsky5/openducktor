@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
+  CARGO_TAURI_CEF_TOOLCHAIN_PATCH,
   readCefVersion,
   readTauriCefRevision,
   resolveCargoTauriToolsRoot,
@@ -54,7 +55,7 @@ afterEach(() => {
 describe("cef-paths", () => {
   test("reads the cef crate version from Cargo.lock", () => {
     const tauriRoot = withTempTauriRoot(
-      '[package]\nname = "root"\n\n[[package]]\nname = "serde"\nversion = "1.0.0"\n\n[[package]]\nname = "cef"\nversion = "135.0.0"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#1234567890abcdef1234567890abcdef12345678"\n',
+      '[[package]]\nname = "serde"\nversion = "1.0.0"\n\n[[package]]\nname = "cef"\nversion = "135.0.0"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#1234567890abcdef1234567890abcdef12345678"\n',
     );
 
     try {
@@ -78,7 +79,7 @@ describe("cef-paths", () => {
           "cache",
           "cargo-tools",
           "tauri-feat-cef",
-          "1234567890ab",
+          `1234567890ab-${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}`,
         ),
       );
       expect(resolveCargoTauriToolsRoot(tauriRoot)).toBe(
@@ -88,7 +89,7 @@ describe("cef-paths", () => {
           "cache",
           "cargo-tools",
           "tauri-feat-cef",
-          "1234567890ab",
+          `1234567890ab-${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}`,
         ),
       );
       expect(resolveExportCefToolsRoot(tauriRoot)).toBe(

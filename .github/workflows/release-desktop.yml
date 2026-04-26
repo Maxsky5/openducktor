@@ -157,9 +157,9 @@ jobs:
         uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}-${{ steps.cef_cache.outputs.tauri_toolchain_patch }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-
+            ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}-${{ steps.cef_cache.outputs.tauri_toolchain_patch }}
 
       - name: Restore export-cef-dir tool cache
         id: export_cef_tool_cache
@@ -293,6 +293,27 @@ jobs:
           codesign -dvvv "$helper"
           codesign --verify --verbose=4 "$web_host"
           codesign -dvvv "$web_host"
+          app_bundle="apps/desktop/src-tauri/target/$TARGET/release/bundle/macos/OpenDucktor.app"
+          codesign --verify --verbose=4 "$app_bundle"
+
+          helper_app_count=0
+          while IFS= read -r -d '' helper_app; do
+            helper_app_count=$((helper_app_count + 1))
+            codesign --verify --verbose=4 "$helper_app"
+          done < <(find "$app_bundle/Contents/Frameworks" -maxdepth 1 -type d -name 'openducktor-desktop Helper*.app' -print0)
+
+          if [[ "$helper_app_count" -eq 0 ]]; then
+            echo "No bundled CEF helper apps were found under $app_bundle/Contents/Frameworks" >&2
+            exit 1
+          fi
+
+          plugin_helper_app="$app_bundle/Contents/Frameworks/openducktor-desktop Helper (Plugin).app"
+          if [[ ! -d "$plugin_helper_app" ]]; then
+            echo "Bundled CEF plugin helper app was not found at $plugin_helper_app" >&2
+            exit 1
+          fi
+          codesign --verify --verbose=4 "$plugin_helper_app"
+
           entitlements_file="$(mktemp)"
           codesign -d --entitlements :- "$helper" > "$entitlements_file"
 
