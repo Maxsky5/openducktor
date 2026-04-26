@@ -105,7 +105,7 @@ export function PromptOverrideCard({
   onResetToBuiltin,
 }: PromptOverrideCardProps): ReactElement {
   const isOverrideEnabled = Boolean(override && override.enabled !== false);
-  const editorValue = override?.template ?? inheritedPreview?.template ?? "";
+  const editorValue = override?.template ?? "";
   const [isInheritedPromptExpanded, setIsInheritedPromptExpanded] = useState(false);
 
   return (
@@ -179,7 +179,7 @@ export function PromptOverrideCard({
           disabled={disabled || !canResetToBuiltin}
           onClick={onResetToBuiltin}
         >
-          Reset to Builtin
+          Clear override
         </Button>
       </div>
     </div>

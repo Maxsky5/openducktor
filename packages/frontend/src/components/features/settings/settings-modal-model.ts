@@ -168,38 +168,23 @@ export const getNeededCatalogRuntimeKinds = (
   return [...runtimeKinds];
 };
 
-const normalizeTemplateForComparison = (value: string | undefined): string =>
-  (value ?? "").replaceAll("\r\n", "\n").trim();
-
 export const canResetPromptOverrideToBuiltin = (
   override: RepoPromptOverrides[AgentPromptTemplateId] | undefined,
-  builtinTemplate: string,
-): boolean =>
-  Boolean(
-    override &&
-      normalizeTemplateForComparison(override.template) !==
-        normalizeTemplateForComparison(builtinTemplate),
-  );
+  _builtinTemplate: string,
+): boolean => Boolean(override);
 
 export const resetPromptOverrideToBuiltin = (
   overrides: RepoPromptOverrides,
   templateId: AgentPromptTemplateId,
-  builtinTemplate: string,
-  builtinVersion: number,
 ): RepoPromptOverrides => {
   const existing = overrides[templateId];
   if (!existing) {
     return overrides;
   }
 
-  return {
-    ...overrides,
-    [templateId]: {
-      ...existing,
-      template: builtinTemplate,
-      baseVersion: builtinVersion,
-    },
-  };
+  const next = { ...overrides };
+  delete next[templateId];
+  return next;
 };
 
 export const togglePromptOverrideEnabled = (

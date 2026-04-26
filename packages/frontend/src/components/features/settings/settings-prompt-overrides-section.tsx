@@ -116,12 +116,7 @@ export function PromptOverridesSection({
               }}
               onResetToBuiltin={() => {
                 onUpdateOverrides((currentOverrides) =>
-                  resetPromptOverrideToBuiltin(
-                    currentOverrides,
-                    templateId,
-                    builtin.template,
-                    builtin.builtinVersion,
-                  ),
+                  resetPromptOverrideToBuiltin(currentOverrides, templateId),
                 );
               }}
             />

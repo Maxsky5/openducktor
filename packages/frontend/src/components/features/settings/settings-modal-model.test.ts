@@ -218,7 +218,7 @@ describe("settings-modal-model", () => {
     ).toEqual([]);
   });
 
-  test("resets prompt override only when it exists and preserves enabled flag", () => {
+  test("resets prompt override by removing the stored value", () => {
     const overrides: RepoPromptOverrides = {
       "kickoff.spec_initial": {
         template: "custom",
@@ -227,28 +227,14 @@ describe("settings-modal-model", () => {
       },
     };
 
-    const unchanged = resetPromptOverrideToBuiltin(
-      overrides,
-      "kickoff.planner_initial",
-      "builtin planner",
-      4,
-    );
+    const unchanged = resetPromptOverrideToBuiltin(overrides, "kickoff.planner_initial");
     expect(unchanged).toBe(overrides);
 
-    const reset = resetPromptOverrideToBuiltin(
-      overrides,
-      "kickoff.spec_initial",
-      "builtin spec",
-      5,
-    );
-    expect(reset["kickoff.spec_initial"]).toEqual({
-      template: "builtin spec",
-      baseVersion: 5,
-      enabled: false,
-    });
+    const reset = resetPromptOverrideToBuiltin(overrides, "kickoff.spec_initial");
+    expect(reset["kickoff.spec_initial"]).toBeUndefined();
   });
 
-  test("computes reset eligibility from override diff against builtin", () => {
+  test("enables reset whenever a stored prompt override exists", () => {
     expect(canResetPromptOverrideToBuiltin(undefined, "builtin")).toBe(false);
     expect(
       canResetPromptOverrideToBuiltin(
@@ -259,7 +245,7 @@ describe("settings-modal-model", () => {
         },
         "builtin",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canResetPromptOverrideToBuiltin(
         {
