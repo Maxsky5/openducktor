@@ -17,7 +17,7 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "dependencies": {
         "@openducktor/adapters-tauri-host": "workspace:*",
         "@openducktor/frontend": "workspace:*",
@@ -34,7 +34,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "dependencies": {
         "@opencode-ai/sdk": "^1.14.18",
         "@openducktor/contracts": "workspace:*",
@@ -43,7 +43,7 @@
     },
     "packages/adapters-tauri-host": {
       "name": "@openducktor/adapters-tauri-host",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -51,21 +51,21 @@
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "dependencies": {
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
       },
     },
     "packages/frontend": {
       "name": "@openducktor/frontend",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -91,7 +91,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
-        "lucide-react": "^0.577.0",
+        "lucide-react": "^1.11.0",
         "react": "^19.2.5",
         "react-dom": "^19.2.5",
         "react-markdown": "^10.1.0",
@@ -118,7 +118,7 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "bin": {
         "openducktor-mcp": "./dist/index.js",
       },
@@ -132,7 +132,7 @@
     },
     "packages/openducktor-web": {
       "name": "@openducktor/web",
-      "version": "0.1.1",
+      "version": "0.2.3",
       "bin": {
         "web": "dist/cli.js",
         "openducktor-web": "dist/cli.js",
@@ -926,7 +926,7 @@
 
     "lru_map": ["lru_map@0.4.1", "", {}, "sha512-I+lBvqMMFfqaV8CJCISjI3wbjmwVu/VyOoU7+qtu9d7ioW5klMgsTTiUOUp+DJvfTTzKXoPbyC6YfgkNcyPSOg=="],
 
-    "lucide-react": ["lucide-react@0.577.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-4LjoFv2eEPwYDPg/CUdBJQSDfPyzXCRrVW1X7jrx/trgxnxkHFjnVZINbzvzxjN70dxychOfg+FTYwBiS3pQ5A=="],
+    "lucide-react": ["lucide-react@1.11.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-UOhjdztXCgdBReRcIhsvz2siIBogfv/lhJEIViCpLt924dO+GDms9T7DNoucI23s6kEPpe988m5N0D2ajnzb2g=="],
 
     "lz-string": ["lz-string@1.5.0", "", { "bin": { "lz-string": "bin/bin.js" } }, "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ=="],
 
