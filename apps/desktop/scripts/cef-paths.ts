@@ -7,6 +7,9 @@ const OPENDUCKTOR_CARGO_TOOLS_ROOT_ENV = "OPENDUCKTOR_CARGO_TOOLS_ROOT";
 const OPENDUCKTOR_CEF_PATH_ENV = "OPENDUCKTOR_CEF_PATH";
 const UPSTREAM_CEF_PATH_ENV = "CEF_PATH";
 
+// Bump this whenever setup-cef.ts changes the local Tauri bundler patch.
+export const CARGO_TAURI_CEF_TOOLCHAIN_PATCH = "cef-helper-sign-order-v2";
+
 function readTauriRevisionPrefix(tauriRoot: string): string {
   return readTauriCefRevision(tauriRoot).slice(0, 12);
 }
@@ -120,7 +123,7 @@ export function resolveCargoTauriToolsRoot(tauriRoot: string): string {
       "cache",
       "cargo-tools",
       "tauri-feat-cef",
-      readTauriRevisionPrefix(tauriRoot),
+      `${readTauriRevisionPrefix(tauriRoot)}-${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}`,
     )
   );
 }

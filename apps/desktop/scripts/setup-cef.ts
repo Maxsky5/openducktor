@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, rmSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 
 import {
+  CARGO_TAURI_CEF_TOOLCHAIN_PATCH,
   readCefVersion,
   readTauriCefRevision,
   resolveCargoTauriToolsRoot,
@@ -19,10 +20,20 @@ const exportCefToolRoot = resolveExportCefToolsRoot(tauriRoot);
 const exportCefToolBinRoot = resolve(exportCefToolRoot, "bin");
 const cefPath = resolveCefPath(tauriRoot);
 const tauriRevision = readTauriCefRevision(tauriRoot);
+const SUPPORTED_TAURI_CEF_PATCH_REVISION = "a94e1b8595d9bb49328451dfe151d8499c712d44";
 const binaryExtension = process.platform === "win32" ? ".exe" : "";
 const cargoTauriPath = resolve(cargoTauriBinRoot, `cargo-tauri${binaryExtension}`);
 const exportCefDirPath = resolve(exportCefToolBinRoot, `export-cef-dir${binaryExtension}`);
 const cefVersion = readCefVersion(tauriRoot);
+const cargoTauriPatchMarkerPath = resolve(cargoTauriRoot, ".openducktor-toolchain-patch");
+
+function expectedCargoTauriPatchMarker(): string {
+  return `${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}\n${tauriRevision}`;
+}
+
+function tauriBundlerPatchContext(): string {
+  return `patch=${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}, expected tauri=${SUPPORTED_TAURI_CEF_PATCH_REVISION}, actual tauri=${tauriRevision}`;
+}
 
 function cargoHomeBinPath(): string {
   return resolve(process.env.CARGO_HOME ?? join(homedir(), ".cargo"), "bin");
@@ -38,10 +49,15 @@ function commandEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   };
 }
 
-function run(command: string, args: string[], env = commandEnv()): Promise<void> {
+function run(
+  command: string,
+  args: string[],
+  env = commandEnv(),
+  cwd = desktopRoot,
+): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {
-      cwd: desktopRoot,
+      cwd,
       env,
       stdio: "inherit",
     });
@@ -70,6 +86,84 @@ function run(command: string, args: string[], env = commandEnv()): Promise<void>
       rejectPromise(new Error(`${command} ${args.join(" ")} exited with code ${code ?? 1}`));
     });
   });
+}
+
+function hasExpectedCargoTauriToolchain(): boolean {
+  if (!isRunnableBinary(cargoTauriPath, ["--version"])) {
+    return false;
+  }
+
+  try {
+    return (
+      readFileSync(cargoTauriPatchMarkerPath, "utf8").trim() === expectedCargoTauriPatchMarker()
+    );
+  } catch {
+    return false;
+  }
+}
+
+function patchTauriBundlerSignOrder(sourceRoot: string): void {
+  if (tauriRevision !== SUPPORTED_TAURI_CEF_PATCH_REVISION) {
+    throw new Error(
+      `Unable to patch Tauri bundler: unsupported pinned revision (${tauriBundlerPatchContext()}).`,
+    );
+  }
+
+  const bundlerAppPath = resolve(sourceRoot, "crates/tauri-bundler/src/bundle/macos/app.rs");
+  const source = readFileSync(bundlerAppPath, "utf8");
+  const mainBinarySignBlock = `  let bin_paths = copy_binaries_to_bundle(&bundle_directory, settings)?;\n  sign_paths.extend(bin_paths.into_iter().map(|path| SignTarget {\n    path,\n    is_an_executable: true,\n  }));\n\n  copy_custom_files_to_bundle(&bundle_directory, settings)?;`;
+  const deferredMainBinarySignBlock = `  let app_binary_paths = copy_binaries_to_bundle(&bundle_directory, settings)?;\n\n  copy_custom_files_to_bundle(&bundle_directory, settings)?;`;
+  const cefSignBlock = `  // Handle CEF support if cef_path is set\n  if let Some(cef_path) = settings.bundle_settings().cef_path.as_ref() {\n    let helper_paths = create_cef_helpers(&bundle_directory, settings, cef_path)?;\n    // Add helper apps to sign paths\n    sign_paths.extend(helper_paths.into_iter().map(|path| SignTarget {\n      path,\n      is_an_executable: true,\n    }));\n    let cef_framework_path = copy_cef_framework(&bundle_directory, cef_path)?;\n    // Add CEF framework to sign paths\n    add_framework_sign_path(\n      &cef_path.join(CEF_FRAMEWORK),\n      &cef_framework_path,\n      &mut sign_paths,\n    );\n  }`;
+  const cefThenMainSignBlock = `${cefSignBlock}\n\n  // The CEF helper .app bundles must be signed before the containing app's\n  // main executable. On macOS Intel, codesign rejects the main executable when\n  // unsigned CEF helper apps are already present under Contents/Frameworks.\n  sign_paths.extend(app_binary_paths.into_iter().map(|path| SignTarget {\n    path,\n    is_an_executable: true,\n  }));`;
+
+  if (!source.includes(mainBinarySignBlock)) {
+    throw new Error(
+      `Unable to patch Tauri bundler: main binary signing block was not found (${tauriBundlerPatchContext()}).`,
+    );
+  }
+  if (!source.includes(cefSignBlock)) {
+    throw new Error(
+      `Unable to patch Tauri bundler: CEF signing block was not found (${tauriBundlerPatchContext()}).`,
+    );
+  }
+
+  writeFileSync(
+    bundlerAppPath,
+    source
+      .replace(mainBinarySignBlock, deferredMainBinarySignBlock)
+      .replace(cefSignBlock, cefThenMainSignBlock),
+  );
+}
+
+async function installPatchedCargoTauri(): Promise<void> {
+  const sourceRoot = mkdtempSync(join(tmpdir(), "openducktor-tauri-cli-"));
+
+  try {
+    await run("git", ["init"], commandEnv(), sourceRoot);
+    await run(
+      "git",
+      ["remote", "add", "origin", "https://github.com/tauri-apps/tauri"],
+      commandEnv(),
+      sourceRoot,
+    );
+    await run("git", ["fetch", "--depth", "1", "origin", tauriRevision], commandEnv(), sourceRoot);
+    await run("git", ["checkout", "--detach", "FETCH_HEAD"], commandEnv(), sourceRoot);
+    patchTauriBundlerSignOrder(sourceRoot);
+    await run("rustup", [
+      "run",
+      "stable",
+      "cargo",
+      "install",
+      "--locked",
+      "--root",
+      cargoTauriRoot,
+      "--path",
+      resolve(sourceRoot, "crates/tauri-cli"),
+    ]);
+    writeFileSync(cargoTauriPatchMarkerPath, `${expectedCargoTauriPatchMarker()}\n`);
+  } finally {
+    rmSync(sourceRoot, { force: true, recursive: true });
+  }
 }
 
 function isRunnableBinary(binaryPath: string, args: string[]): boolean {
@@ -117,22 +211,9 @@ await (async () => {
     await run("rustup", ["target", "add", "x86_64-apple-darwin", "aarch64-apple-darwin"]);
   }
 
-  if (!isRunnableBinary(cargoTauriPath, ["--version"])) {
+  if (!hasExpectedCargoTauriToolchain()) {
     rmSync(cargoTauriRoot, { force: true, recursive: true });
-    await run("rustup", [
-      "run",
-      "stable",
-      "cargo",
-      "install",
-      "--locked",
-      "--root",
-      cargoTauriRoot,
-      "tauri-cli",
-      "--git",
-      "https://github.com/tauri-apps/tauri",
-      "--rev",
-      tauriRevision,
-    ]);
+    await installPatchedCargoTauri();
   }
 
   if (!isRunnableBinary(exportCefDirPath, ["--help"])) {
