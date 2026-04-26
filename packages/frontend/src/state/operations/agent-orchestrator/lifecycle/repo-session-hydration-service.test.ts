@@ -12,6 +12,7 @@ import {
 } from "@/state/operations/agent-orchestrator/test-utils";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { host } from "../../shared/host";
+import { runtimeConnectionPreloadKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createRuntimeResolutionPlannerStage } from "./load-sessions-stages";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
@@ -537,6 +538,112 @@ describe("repo-session-hydration-service", () => {
         externalSessionId: "external-2",
       })?.externalSessionId,
     ).toBe("external-2");
+    service.dispose();
+  });
+
+  test("reconcile keeps same-directory stdio runtimes under identity-aware preload keys", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const reconcilePreloadKeys: string[][] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const runtimeConnectionA = stdioRuntimeConnection(worktreePath, "runtime-stdio-a");
+    const runtimeConnectionB = stdioRuntimeConnection(worktreePath, "runtime-stdio-b");
+
+    host.runtimeList = async () => [
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-a",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-a" },
+      }),
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-b",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-b" },
+      }),
+    ];
+
+    const service = createRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            {
+              externalSessionId:
+                input.runtimeConnection.type === "stdio" &&
+                input.runtimeConnection.identity === "runtime-stdio-a"
+                  ? "external-a"
+                  : "external-b",
+              title: "Task",
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ preloadedRuntimeConnectionsByKey }) => {
+          reconcilePreloadKeys.push(Array.from(preloadedRuntimeConnectionsByKey?.keys() ?? []));
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-a", "external-a", worktreePath),
+        taskWithSessionAt("task-b", "external-b", worktreePath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: runtimeConnectionA,
+        directories: [worktreePath],
+      },
+      {
+        runtimeConnection: runtimeConnectionB,
+        directories: [worktreePath],
+      },
+    ]);
+    expect(reconcilePreloadKeys).toEqual([
+      [
+        runtimeConnectionPreloadKey("opencode", runtimeConnectionA),
+        runtimeConnectionPreloadKey("opencode", runtimeConnectionB),
+      ],
+      [
+        runtimeConnectionPreloadKey("opencode", runtimeConnectionA),
+        runtimeConnectionPreloadKey("opencode", runtimeConnectionB),
+      ],
+    ]);
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: runtimeConnectionA,
+        workingDirectory: worktreePath,
+        externalSessionId: "external-a",
+      })?.externalSessionId,
+    ).toBe("external-a");
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: runtimeConnectionB,
+        workingDirectory: worktreePath,
+        externalSessionId: "external-b",
+      })?.externalSessionId,
+    ).toBe("external-b");
     service.dispose();
   });
 

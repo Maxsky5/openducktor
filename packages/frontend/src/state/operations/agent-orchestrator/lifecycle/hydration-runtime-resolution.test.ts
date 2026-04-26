@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
 import { createHydrationRuntimeResolver } from "./hydration-runtime-resolution";
-import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
+import { runtimeConnectionPreloadKey } from "./live-agent-session-cache";
 
 const createRecord = (
   role: AgentSessionRecord["role"],
@@ -53,14 +53,15 @@ const createStdioRuntime = (
 describe("createHydrationRuntimeResolver", () => {
   test("prefers live runtime resolution over preloaded runtime connections", async () => {
     const workingDirectory = "/tmp/repo/worktree";
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:9999",
+      workingDirectory,
+    };
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
       [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:9999",
-          workingDirectory,
-        },
+        runtimeConnectionPreloadKey("opencode", preloadedRuntimeConnection),
+        preloadedRuntimeConnection,
       ],
     ]);
 
@@ -169,14 +170,15 @@ describe("createHydrationRuntimeResolver", () => {
 
   test("falls back to preloaded runtime connection when no run or runtime exists", async () => {
     const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:9999",
+      workingDirectory,
+    };
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
       [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:9999",
-          workingDirectory,
-        },
+        runtimeConnectionPreloadKey("opencode", preloadedRuntimeConnection),
+        preloadedRuntimeConnection,
       ],
     ]);
     let ensureCalls = 0;
@@ -206,14 +208,15 @@ describe("createHydrationRuntimeResolver", () => {
 
   test("preserves stdio preloaded runtime connections during hydration fallback", async () => {
     const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio",
+      workingDirectory,
+    };
     const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
       [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory,
-        },
+        runtimeConnectionPreloadKey("opencode", preloadedRuntimeConnection),
+        preloadedRuntimeConnection,
       ],
     ]);
 
@@ -263,6 +266,45 @@ describe("createHydrationRuntimeResolver", () => {
       ok: false,
       runtimeKind: "opencode",
       reason: `Multiple live stdio runtimes found for working directory ${workingDirectory}.`,
+    });
+  });
+
+  test("fails fast when multiple preloaded stdio connections match the same working directory", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
+      [
+        runtimeConnectionPreloadKey("opencode", preloadedRuntimeConnectionA),
+        preloadedRuntimeConnectionA,
+      ],
+      [
+        runtimeConnectionPreloadKey("opencode", preloadedRuntimeConnectionB),
+        preloadedRuntimeConnectionB,
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnectionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    await expect(
+      resolveHydrationRuntime(createRecord("planner", workingDirectory)),
+    ).resolves.toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: `Multiple preloaded runtime connections found for working directory ${workingDirectory}.`,
     });
   });
 

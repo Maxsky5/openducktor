@@ -42,9 +42,10 @@ export const createLocalHttpRuntimeConnection = ({
 
 export const createStdioRuntimeConnection = (
   workingDirectory = "/tmp/runtime-root",
+  { identity = "runtime-stdio" }: { identity?: string } = {},
 ): AgentRuntimeConnection => ({
   type: "stdio",
-  identity: "runtime-stdio",
+  identity,
   workingDirectory,
 });
 

@@ -21,6 +21,32 @@ export const getLiveAgentSessionCacheKey = (
 export const runtimeWorkingDirectoryKey = (runtimeKind: string, workingDirectory: string): string =>
   `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
 
+export const runtimeConnectionPreloadKey = (
+  runtimeKind: string,
+  runtimeConnection: AgentRuntimeConnection,
+): string =>
+  `${runtimeKind}::${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(
+    runtimeConnection.workingDirectory,
+  )}`;
+
+export const findRuntimeConnectionPreloadCandidates = (
+  preloadedRuntimeConnectionsByKey: Map<string, AgentRuntimeConnection>,
+  runtimeKind: string,
+  workingDirectory: string,
+): AgentRuntimeConnection[] => {
+  const runtimeKindPrefix = `${runtimeKind}::`;
+  const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+
+  return Array.from(preloadedRuntimeConnectionsByKey.entries())
+    .filter(
+      ([key, runtimeConnection]) =>
+        key.startsWith(runtimeKindPrefix) &&
+        normalizeWorkingDirectory(runtimeConnection.workingDirectory) ===
+          normalizedWorkingDirectory,
+    )
+    .map(([, runtimeConnection]) => runtimeConnection);
+};
+
 export const liveAgentSessionLookupKey = (
   runtimeKind: string,
   runtimeConnection: AgentRuntimeConnection,

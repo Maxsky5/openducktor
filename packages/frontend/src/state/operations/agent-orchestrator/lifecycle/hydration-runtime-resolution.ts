@@ -5,11 +5,15 @@ import type {
   RuntimeRoute,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
-import { resolveRuntimeRouteConnection, runtimeConnectionToRoute } from "../runtime/runtime";
+import {
+  resolveRuntimeRouteConnection,
+  runtimeConnectionToRoute,
+  runtimeConnectionTransportKey,
+} from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
-import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
+import { findRuntimeConnectionPreloadCandidates } from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
   | {
@@ -27,6 +31,10 @@ export type ResolvedHydrationRuntime =
 
 type RuntimeLookupResult =
   | { ok: true; runtime: RuntimeInstanceSummary | null }
+  | { ok: false; reason: string };
+
+type PreloadedRuntimeConnectionLookupResult =
+  | { ok: true; runtimeConnection: AgentRuntimeConnection | null }
   | { ok: false; reason: string };
 
 const hasAmbiguousStdioRoutes = (runtimes: RuntimeInstanceSummary[]): boolean => {
@@ -89,6 +97,38 @@ export const createHydrationRuntimeResolver = ({
     return { ok: true, runtime: matches[0] ?? null };
   };
 
+  const findPreloadedRuntimeConnection = (
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ): PreloadedRuntimeConnectionLookupResult => {
+    if (!preloadedRuntimeConnectionsByKey) {
+      return { ok: true, runtimeConnection: null };
+    }
+
+    const candidates = findRuntimeConnectionPreloadCandidates(
+      preloadedRuntimeConnectionsByKey,
+      runtimeKind,
+      workingDirectory,
+    );
+    const candidatesByTransportKey = new Map(
+      candidates.map((runtimeConnection) => [
+        runtimeConnectionTransportKey(runtimeConnection),
+        runtimeConnection,
+      ]),
+    );
+    if (candidatesByTransportKey.size > 1) {
+      return {
+        ok: false,
+        reason: `Multiple preloaded runtime connections found for working directory ${workingDirectory}.`,
+      };
+    }
+
+    return {
+      ok: true,
+      runtimeConnection: Array.from(candidatesByTransportKey.values())[0] ?? null,
+    };
+  };
+
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
@@ -128,16 +168,24 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
-    const preloadedRuntimeConnection = preloadedRuntimeConnectionsByKey?.get(
-      runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
+    const preloadedRuntimeConnection = findPreloadedRuntimeConnection(
+      runtimeKind,
+      workingDirectory,
     );
-    if (preloadedRuntimeConnection) {
+    if (!preloadedRuntimeConnection.ok) {
+      return {
+        ok: false,
+        runtimeKind,
+        reason: preloadedRuntimeConnection.reason,
+      };
+    }
+    if (preloadedRuntimeConnection.runtimeConnection) {
       return {
         ok: true,
         runtimeKind,
         runtimeId: null,
-        runtimeRoute: runtimeConnectionToRoute(preloadedRuntimeConnection),
-        runtimeConnection: preloadedRuntimeConnection,
+        runtimeRoute: runtimeConnectionToRoute(preloadedRuntimeConnection.runtimeConnection),
+        runtimeConnection: preloadedRuntimeConnection.runtimeConnection,
       };
     }
 

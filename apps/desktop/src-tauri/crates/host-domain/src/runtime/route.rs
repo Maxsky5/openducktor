@@ -155,11 +155,13 @@ mod tests {
         for payload in [
             serde_json::json!({ "type": "stdio" }),
             serde_json::json!({ "type": "stdio", "identity": "   " }),
+            serde_json::json!({ "type": "stdio", "identity": "runtime-stdio", "unexpected": true }),
             serde_json::json!({
                 "type": "stdio",
                 "identity": "runtime-stdio",
                 "endpoint": "http://127.0.0.1:4444"
             }),
+            serde_json::json!({ "type": "websocket", "identity": "runtime-stdio" }),
         ] {
             let result = serde_json::from_value::<RuntimeRoute>(payload);
             assert!(result.is_err(), "invalid stdio route should fail");

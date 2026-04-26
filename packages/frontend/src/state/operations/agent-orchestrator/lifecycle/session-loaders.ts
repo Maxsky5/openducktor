@@ -6,7 +6,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { runtimeConnectionTransportKey } from "../runtime/runtime";
+import { normalizeStdioRuntimeIdentity, runtimeConnectionTransportKey } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import {
   coerceSessionSelectionToCatalog,
@@ -35,15 +35,6 @@ const validateLocalHttpRuntimeEndpoint = (runtimeEndpoint: string): string => {
   }
 
   return trimmedEndpoint;
-};
-
-const validateStdioRuntimeIdentity = (identity: string): string => {
-  const trimmedIdentity = identity.trim();
-  if (trimmedIdentity.length === 0) {
-    throw new Error("Session runtime stdio identity is required.");
-  }
-
-  return trimmedIdentity;
 };
 
 const validateWorkingDirectory = (workingDirectory: string): string => {
@@ -85,7 +76,10 @@ const validateRuntimeConnection = (
     case "stdio":
       return {
         type: "stdio",
-        identity: validateStdioRuntimeIdentity(runtimeConnection.identity),
+        identity: normalizeStdioRuntimeIdentity(
+          runtimeConnection.identity,
+          "Session runtime stdio identity",
+        ),
         workingDirectory,
       };
   }

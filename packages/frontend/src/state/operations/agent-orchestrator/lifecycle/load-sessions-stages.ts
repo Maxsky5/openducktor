@@ -163,6 +163,7 @@ export type HistoryHydrationStageInput = {
   isStaleRepoOperation: () => boolean;
   recordsToHydrate: AgentSessionRecord[];
   historyHydrationSessionIds: Set<string>;
+  failOnRuntimeResolutionError?: boolean;
   runtimePlanner: HydrationRuntimePlanner;
   promptAssembler: HydrationPromptAssembler;
   getRepoPromptOverrides: () => Promise<RepoPromptOverrides>;
@@ -907,6 +908,7 @@ export const hydrateSessionRecordsStage = async ({
   isStaleRepoOperation,
   recordsToHydrate,
   historyHydrationSessionIds,
+  failOnRuntimeResolutionError = false,
   runtimePlanner,
   promptAssembler,
   getRepoPromptOverrides,
@@ -945,13 +947,16 @@ export const hydrateSessionRecordsStage = async ({
       return;
     }
     if (!runtimeResolution.ok) {
-      if (shouldHydrateHistory) {
+      if (shouldHydrateHistory || failOnRuntimeResolutionError) {
         updateSession(
           record.sessionId,
-          (current) => ({
-            ...current,
-            historyHydrationState: "failed",
-          }),
+          (current) =>
+            shouldHydrateHistory
+              ? {
+                  ...current,
+                  historyHydrationState: "failed",
+                }
+              : current,
           { persist: false },
         );
         throw new Error(runtimeResolution.reason);

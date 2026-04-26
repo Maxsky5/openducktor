@@ -21,10 +21,11 @@ import {
 } from "../support/session-runtime-metadata";
 import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 import {
+  findRuntimeConnectionPreloadCandidates,
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
-  runtimeWorkingDirectoryKey,
+  runtimeConnectionPreloadKey,
 } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
@@ -311,7 +312,7 @@ export const createRepoSessionHydrationService = ({
           runtime.workingDirectory,
         );
         preloadedRuntimeConnectionsByKey.set(
-          runtimeWorkingDirectoryKey(runtimeKind, runtime.workingDirectory),
+          runtimeConnectionPreloadKey(runtimeKind, runtimeConnection),
           runtimeConnection,
         );
         if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
@@ -381,7 +382,7 @@ export const createRepoSessionHydrationService = ({
           workingDirectory,
         );
         preloadedRuntimeConnectionsByKey.set(
-          runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
+          runtimeConnectionPreloadKey(runtimeKind, runtimeConnection),
           runtimeConnection,
         );
         const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
@@ -402,10 +403,13 @@ export const createRepoSessionHydrationService = ({
         continue;
       }
 
-      const hasResolvableHydrationRuntime = records.some((record) =>
-        preloadedRuntimeConnectionsByKey.has(
-          runtimeWorkingDirectoryKey(readPersistedRuntimeKind(record), record.workingDirectory),
-        ),
+      const hasResolvableHydrationRuntime = records.some(
+        (record) =>
+          findRuntimeConnectionPreloadCandidates(
+            preloadedRuntimeConnectionsByKey,
+            readPersistedRuntimeKind(record),
+            record.workingDirectory,
+          ).length > 0,
       );
       if (hasResolvableHydrationRuntime) {
         taskIdsToReconcile.add(taskId);

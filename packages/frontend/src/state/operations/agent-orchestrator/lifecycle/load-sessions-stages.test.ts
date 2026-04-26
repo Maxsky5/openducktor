@@ -699,6 +699,63 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
   });
 
+  test("throws runtime resolution failures for reconcile hydration without marking the task reconciled", async () => {
+    const initialSession = createSession();
+    const stateHarness = createStateHarness({ "session-1": initialSession });
+
+    await expect(
+      hydrateSessionRecordsStage({
+        adapter: {
+          hasSession: () => false,
+          listLiveAgentSessionSnapshots: async () => [],
+          loadSessionHistory: async () => [],
+          attachSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
+          resumeSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
+        },
+        setSessionsById: stateHarness.setSessionsById,
+        updateSession: stateHarness.updateSession,
+        isStaleRepoOperation: () => false,
+        recordsToHydrate: [createRecord()],
+        historyHydrationSessionIds: new Set(),
+        failOnRuntimeResolutionError: true,
+        runtimePlanner: {
+          readCurrentHydratedRuntimeResolution: () => null,
+          resolveHydrationRuntime: async () => ({
+            ok: false,
+            runtimeKind: "opencode",
+            reason: "Multiple live stdio runtimes found for working directory /tmp/repo/worktree.",
+          }),
+          loadLiveAgentSessionSnapshot: async () => null,
+        },
+        promptAssembler: {
+          buildHydrationPreludeMessages: async () => [],
+          buildHydrationSystemPrompt: async () => "",
+        },
+        getRepoPromptOverrides: async () => ({}),
+      }),
+    ).rejects.toThrow(
+      "Multiple live stdio runtimes found for working directory /tmp/repo/worktree.",
+    );
+
+    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+  });
+
   test("fails requested-history hydration before adapter history loads for unsupported stdio OpenCode runtimes", async () => {
     const stateHarness = createStateHarness({ "session-1": createSession() });
     let historyLoads = 0;
