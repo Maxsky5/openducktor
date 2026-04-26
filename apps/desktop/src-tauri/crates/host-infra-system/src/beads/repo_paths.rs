@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::env;
-use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -26,7 +25,7 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
 
     let mut hasher = Sha256::new();
     hasher.update(canonical_string.as_bytes());
-    let digest = format!("{:x}", hasher.finalize());
+    let digest = hex_encode(hasher.finalize().as_ref());
     let short_hash = &digest[..8];
 
     Ok(format!("{slug}-{short_hash}"))
@@ -36,17 +35,17 @@ pub fn compute_beads_database_name(repo_path: &Path) -> Result<String> {
     let resolved_repo_path = canonical_or_absolute(repo_path)?;
     let slug = sanitize_database_identifier(&compute_repo_slug(&resolved_repo_path));
     let digest = Sha256::digest(resolved_repo_path.to_string_lossy().as_bytes());
-    build_database_name(slug.as_str(), &digest)
+    build_database_name(slug.as_str(), digest.as_ref())
 }
 
 pub fn compute_beads_database_name_for_workspace(workspace_id: &str) -> Result<String> {
     let slug = sanitize_database_identifier(workspace_id.trim());
     let digest = Sha256::digest(workspace_id.trim().as_bytes());
-    build_database_name(slug.as_str(), &digest)
+    build_database_name(slug.as_str(), digest.as_ref())
 }
 
-fn build_database_name(slug: &str, digest: &impl fmt::LowerHex) -> Result<String> {
-    let hash_suffix = format!("{digest:x}");
+fn build_database_name(slug: &str, digest: &[u8]) -> Result<String> {
+    let hash_suffix = hex_encode(digest);
     let hash_suffix = &hash_suffix[..12];
     let max_slug_len = 64usize.saturating_sub("odt__".len() + hash_suffix.len());
     let truncated_slug = if slug.len() > max_slug_len {
@@ -56,6 +55,10 @@ fn build_database_name(slug: &str, digest: &impl fmt::LowerHex) -> Result<String
     };
 
     Ok(format!("odt_{truncated_slug}_{hash_suffix}"))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub fn resolve_beads_root() -> Result<PathBuf> {
