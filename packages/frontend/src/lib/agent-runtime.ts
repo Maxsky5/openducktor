@@ -13,6 +13,8 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
+const agentRoles = Object.keys(runtimeRequiredScopesByRole) as AgentRole[];
+
 export const toAgentRuntimeOptions = (
   runtimeDefinitions: RuntimeDescriptor[],
 ): ComboboxOption[] => {
@@ -125,17 +127,30 @@ export const getMissingMandatoryRuntimeCapabilities = (
   );
 };
 
+const supportedScopesSatisfyRole = (
+  supportedScopes: readonly string[],
+  role: AgentRole,
+): boolean => {
+  return runtimeRequiredScopesByRole[role].every((scope) => supportedScopes.includes(scope));
+};
+
+const roleScopeRequirementsDescription = (): string => {
+  return agentRoles
+    .map((role) => `${role} requires ${runtimeRequiredScopesByRole[role].join(", ")}`)
+    .join("; ");
+};
+
 export const getRuntimeDescriptorCapabilityConfigErrors = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
-  const missingSupportedScopes = getMissingRequiredRuntimeSupportedScopes(
-    runtimeDescriptor.capabilities.supportedScopes,
+  const supportsAtLeastOneRole = agentRoles.some((role) =>
+    supportedScopesSatisfyRole(runtimeDescriptor.capabilities.supportedScopes, role),
   );
-  if (missingSupportedScopes.length === 0) {
+  if (supportsAtLeastOneRole) {
     return [];
   }
 
-  return [`missing required workflow scopes: ${missingSupportedScopes.join(", ")}`];
+  return [`missing workflow scopes for every agent role: ${roleScopeRequirementsDescription()}`];
 };
 
 export const validateRuntimeDefinitionForOpenDucktor = (
@@ -168,8 +183,7 @@ export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
   role: AgentRole,
 ): boolean => {
-  const supportedScopes = runtimeDescriptor.capabilities.supportedScopes;
-  return runtimeRequiredScopesByRole[role].every((scope) => supportedScopes.includes(scope));
+  return supportedScopesSatisfyRole(runtimeDescriptor.capabilities.supportedScopes, role);
 };
 
 export const filterRuntimeDefinitionsForRole = (

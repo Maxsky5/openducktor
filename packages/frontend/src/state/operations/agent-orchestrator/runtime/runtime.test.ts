@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
   type BuildSessionBootstrap,
@@ -47,9 +47,7 @@ const taskWorktreeFixture: TaskWorktreeSummary = {
   workingDirectory: "/tmp/repo/worktree",
 };
 
-const createPromptOverrideRepoConfig = (
-  promptOverrides: RepoConfig["promptOverrides"],
-): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/tmp/repo",
@@ -61,9 +59,17 @@ const createPromptOverrideRepoConfig = (
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeFileCopies: [],
-  promptOverrides,
+  promptOverrides: {},
   agentDefaults: {},
+  ...overrides,
 });
+
+const createPromptOverrideRepoConfig = (
+  promptOverrides: RepoConfig["promptOverrides"],
+): RepoConfig =>
+  createRepoConfig({
+    promptOverrides,
+  });
 
 const createPromptOverrideSettingsSnapshot = (
   globalPromptOverrides: SettingsSnapshot["globalPromptOverrides"],
@@ -84,21 +90,9 @@ describe("agent-orchestrator-runtime", () => {
   beforeEach(async () => {
     restoreRuntimeRepoConfigLoader?.();
     await clearAppQueryClient();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () => ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      trustedHooks: false,
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeFileCopies: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
+    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+      createRepoConfig(),
+    );
     host.workspaceList = async () => [
       {
         workspaceId: "repo",
@@ -111,21 +105,7 @@ describe("agent-orchestrator-runtime", () => {
         effectiveWorktreeBasePath: "/tmp/worktrees/repo",
       },
     ];
-    host.workspaceGetRepoConfig = async () => ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      trustedHooks: false,
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeFileCopies: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    });
+    host.workspaceGetRepoConfig = async () => createRepoConfig();
     runtimeHost = {
       runtimeEnsure: async () => sharedRuntimeFixture,
       buildStart: async () => buildBootstrapFixture,
@@ -239,6 +219,64 @@ describe("agent-orchestrator-runtime", () => {
     ).rejects.toThrow("Runtime build session startup requires a local_http runtime route");
   });
 
+  test("fails before build start when repo and role runtime defaults are missing", async () => {
+    restoreRuntimeRepoConfigLoader?.();
+    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+      createRepoConfig({
+        defaultRuntimeKind: undefined as never,
+        agentDefaults: {},
+      }),
+    );
+    runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
+    runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
+    runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
+
+    const ensureRuntime = createEnsureRuntime({
+      hostClient: runtimeHost,
+      refreshTaskData: async () => {},
+    });
+
+    await expect(
+      ensureRuntime("/tmp/repo", "task-1", "build", {
+        workspaceId: "workspace-1",
+      }),
+    ).rejects.toThrow(
+      "Runtime kind is not configured for build sessions. Select a build agent runtime or repository default runtime before starting a session.",
+    );
+    expect(runtimeHost.buildStart).not.toHaveBeenCalled();
+    expect(runtimeHost.runtimeEnsure).not.toHaveBeenCalled();
+    expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
+  });
+
+  test("fails before runtime ensure when repo default runtime is blank", async () => {
+    restoreRuntimeRepoConfigLoader?.();
+    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+      createRepoConfig({
+        defaultRuntimeKind: " " as never,
+        agentDefaults: {},
+      }),
+    );
+    runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
+    runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
+    runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
+
+    const ensureRuntime = createEnsureRuntime({
+      hostClient: runtimeHost,
+      refreshTaskData: async () => {},
+    });
+
+    await expect(
+      ensureRuntime("/tmp/repo", "task-1", "spec", {
+        workspaceId: "workspace-1",
+      }),
+    ).rejects.toThrow(
+      "Runtime kind is not configured for spec sessions. Select a spec agent runtime or repository default runtime before starting a session.",
+    );
+    expect(runtimeHost.buildStart).not.toHaveBeenCalled();
+    expect(runtimeHost.runtimeEnsure).not.toHaveBeenCalled();
+    expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
+  });
+
   test("uses shared repo runtime for build role when a target working directory is provided", async () => {
     let buildStartCalls = 0;
     let repoRuntimeEnsureCalls = 0;
@@ -340,29 +378,19 @@ describe("agent-orchestrator-runtime", () => {
 
   test("maps repo role defaults into model selection", async () => {
     restoreRuntimeRepoConfigLoader?.();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () => ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      trustedHooks: false,
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeFileCopies: [],
-      promptOverrides: {},
-      agentDefaults: {
-        build: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-          profileId: "builder",
+    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+      createRepoConfig({
+        agentDefaults: {
+          build: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "builder",
+          },
         },
-      },
-    }));
+      }),
+    );
 
     const selection = await loadRepoDefaultModel("/tmp/repo", "build");
     expect(selection).toEqual({
