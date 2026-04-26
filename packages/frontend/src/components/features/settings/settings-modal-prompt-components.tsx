@@ -105,7 +105,7 @@ export function PromptOverrideCard({
   onClearOverride,
 }: PromptOverrideCardProps): ReactElement {
   const isOverrideEnabled = Boolean(override && override.enabled !== false);
-  const editorValue = override?.template ?? "";
+  const editorValue = override?.template ?? inheritedPreview?.template ?? "";
   const [isInheritedPromptExpanded, setIsInheritedPromptExpanded] = useState(false);
 
   return (

@@ -5,7 +5,7 @@ import { PromptOverrideCard } from "./settings-modal-prompt-components";
 const noop = () => undefined;
 
 describe("PromptOverrideCard", () => {
-  test("renders an empty editor when only an inherited prompt is available", () => {
+  test("renders the inherited prompt in the editor when no override exists", () => {
     const markup = renderToStaticMarkup(
       <PromptOverrideCard
         label="Spec kickoff"
@@ -21,7 +21,7 @@ describe("PromptOverrideCard", () => {
 
     expect(markup).toContain("builtin prompt");
     expect(markup).toContain("Clear override");
-    expect(markup).toMatch(/<textarea[^>]*><\/textarea>/);
+    expect(markup).toContain(">builtin prompt</textarea>");
   });
 
   test("renders the stored override value in the editor", () => {
