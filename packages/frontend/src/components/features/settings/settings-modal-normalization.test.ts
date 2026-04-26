@@ -225,7 +225,9 @@ describe("settings-modal-normalization", () => {
         ...createRepoConfig(),
         defaultRuntimeKind: "   ",
       }),
-    ).toThrow("Default runtime kind cannot be blank.");
+    ).toThrow(
+      "Default runtime kind is required. Select a repository default runtime before saving.",
+    );
   });
 
   test("normalizes autopilot settings into canonical event order", () => {

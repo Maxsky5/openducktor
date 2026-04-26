@@ -9,6 +9,8 @@ import {
   filterRuntimeDefinitionsForRole,
   getMissingMandatoryRuntimeCapabilities,
   getRuntimeDescriptorCapabilityConfigErrors,
+  resolveRuntimeKindSelection,
+  resolveRuntimeKindSelectionState,
   runtimeSupportsRole,
   validateRuntimeDefinitionForOpenDucktor,
   validateRuntimeDefinitionsForOpenDucktor,
@@ -79,7 +81,50 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
-  test("only fully supported runtimes remain eligible for role and default selection", () => {
+  test("runtime selection resolution never falls back to OpenCode implicitly", () => {
+    const codex = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      kind: "codex",
+      label: "Codex",
+    } satisfies RuntimeDescriptor;
+
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, codex],
+        requestedRuntimeKind: "codex",
+      }),
+    ).toEqual({
+      status: "resolved",
+      runtimeKind: "codex",
+      requestedRuntimeKind: "codex",
+    });
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        requestedRuntimeKind: null,
+      }),
+    ).toEqual({ status: "missing-request", runtimeKind: null });
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        requestedRuntimeKind: "codex",
+      }),
+    ).toEqual({ status: "unknown-request", runtimeKind: null, requestedRuntimeKind: "codex" });
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [],
+        requestedRuntimeKind: "codex",
+      }),
+    ).toEqual({ status: "no-definitions", runtimeKind: null, requestedRuntimeKind: "codex" });
+    expect(
+      resolveRuntimeKindSelection({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        requestedRuntimeKind: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("uses role-specific scopes for role selection while defaults require all scopes", () => {
     const workspaceOnly = withCapabilities({
       supportedScopes: ["workspace"],
     });
@@ -89,11 +134,13 @@ describe("agent-runtime capability policies", () => {
 
     expect(runtimeSupportsRole(OPENCODE_RUNTIME_DESCRIPTOR, "planner")).toBe(true);
     expect(runtimeSupportsRole(OPENCODE_RUNTIME_DESCRIPTOR, "qa")).toBe(true);
+    expect(runtimeSupportsRole(workspaceOnly, "spec")).toBe(true);
+    expect(runtimeSupportsRole(workspaceOnly, "planner")).toBe(true);
     expect(runtimeSupportsRole(workspaceOnly, "qa")).toBe(false);
-    expect(runtimeSupportsRole(buildAndWorkspace, "build")).toBe(false);
-    expect(filterRuntimeDefinitionsForRole([workspaceOnly, buildAndWorkspace], "build")).toEqual(
-      [],
-    );
+    expect(runtimeSupportsRole(buildAndWorkspace, "build")).toBe(true);
+    expect(filterRuntimeDefinitionsForRole([workspaceOnly, buildAndWorkspace], "build")).toEqual([
+      buildAndWorkspace,
+    ]);
     expect(filterRuntimeDefinitionsForDefaultSelection([workspaceOnly, buildAndWorkspace])).toEqual(
       [],
     );

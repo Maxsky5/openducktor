@@ -1,7 +1,7 @@
 import type { AgentModelSelection } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
@@ -32,7 +32,10 @@ export const buildInitialSession = ({
       sessionId: startedCtx.summary.sessionId,
       externalSessionId: startedCtx.summary.externalSessionId,
       taskId: startedCtx.taskId,
-      runtimeKind: runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeKind: requireConfiguredRuntimeKind(
+        runtime.runtimeKind ?? selectedModel?.runtimeKind,
+        `Runtime kind is required to initialize ${startedCtx.role} sessions.`,
+      ),
       role: startedCtx.role,
       scenario: startedCtx.resolvedScenario,
       status: "starting",

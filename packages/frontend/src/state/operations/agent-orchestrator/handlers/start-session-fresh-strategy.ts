@@ -1,5 +1,4 @@
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import { resolveRuntimeConnection } from "../runtime/runtime";
+import { requireConfiguredRuntimeKind, resolveRuntimeConnection } from "../runtime/runtime";
 import type {
   StartOrReuseResult,
   StartSessionContext,
@@ -49,10 +48,14 @@ export const executeFreshStart = async ({
     scenario: resolved.resolvedScenario,
     startMode: input.startMode,
   });
+  const runtimeKind = requireConfiguredRuntimeKind(
+    resolved.runtime.runtimeKind ?? selectedModel.runtimeKind,
+    `Runtime kind is required to start ${ctx.role} sessions. Select an explicit runtime before starting a session.`,
+  );
 
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
-    runtimeKind: resolved.runtime.runtimeKind ?? selectedModel.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     runtimeConnection: resolveRuntimeConnection(resolved.runtime),
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,

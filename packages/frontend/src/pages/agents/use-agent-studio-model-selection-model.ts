@@ -1,5 +1,4 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import {
   getSessionMessageAt,
   getSessionMessageCount,
@@ -36,8 +35,11 @@ export const toRoleDefaultSelection = (
   if (!roleDefault?.providerId || !roleDefault.modelId) {
     return null;
   }
+  if (!roleDefault.runtimeKind) {
+    return null;
+  }
   return {
-    runtimeKind: roleDefault.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind: roleDefault.runtimeKind,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),

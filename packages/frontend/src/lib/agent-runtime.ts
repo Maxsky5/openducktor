@@ -4,6 +4,7 @@ import {
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
+  runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
@@ -29,23 +30,74 @@ export const findRuntimeDefinition = (
   return runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
 };
 
-export const resolveRuntimeKindSelection = ({
+export type RuntimeKindSelectionResolution =
+  | {
+      status: "resolved";
+      runtimeKind: RuntimeKind;
+      requestedRuntimeKind: RuntimeKind;
+    }
+  | {
+      status: "missing-request";
+      runtimeKind: null;
+    }
+  | {
+      status: "unknown-request";
+      runtimeKind: null;
+      requestedRuntimeKind: RuntimeKind;
+    }
+  | {
+      status: "no-definitions";
+      runtimeKind: null;
+      requestedRuntimeKind: RuntimeKind | null;
+    };
+
+const normalizeRequestedRuntimeKind = (
+  runtimeKind: RuntimeKind | null | undefined,
+): RuntimeKind | null => {
+  const trimmed = runtimeKind?.trim();
+  return trimmed ? trimmed : null;
+};
+
+export const resolveRuntimeKindSelectionState = ({
   runtimeDefinitions,
   requestedRuntimeKind,
-  fallbackRuntimeKind = DEFAULT_RUNTIME_KIND,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   requestedRuntimeKind?: RuntimeKind | null;
-  fallbackRuntimeKind?: RuntimeKind;
-}): RuntimeKind => {
-  if (requestedRuntimeKind) {
-    const matching = findRuntimeDefinition(runtimeDefinitions, requestedRuntimeKind);
-    if (matching) {
-      return matching.kind;
-    }
+}): RuntimeKindSelectionResolution => {
+  const normalizedRequestedRuntimeKind = normalizeRequestedRuntimeKind(requestedRuntimeKind);
+  if (runtimeDefinitions.length === 0) {
+    return {
+      status: "no-definitions",
+      runtimeKind: null,
+      requestedRuntimeKind: normalizedRequestedRuntimeKind,
+    };
   }
 
-  return runtimeDefinitions[0]?.kind ?? requestedRuntimeKind ?? fallbackRuntimeKind;
+  if (!normalizedRequestedRuntimeKind) {
+    return { status: "missing-request", runtimeKind: null };
+  }
+
+  const matching = findRuntimeDefinition(runtimeDefinitions, normalizedRequestedRuntimeKind);
+  if (!matching) {
+    return {
+      status: "unknown-request",
+      runtimeKind: null,
+      requestedRuntimeKind: normalizedRequestedRuntimeKind,
+    };
+  }
+
+  return {
+    status: "resolved",
+    runtimeKind: matching.kind,
+    requestedRuntimeKind: normalizedRequestedRuntimeKind,
+  };
+};
+
+export const resolveRuntimeKindSelection = (
+  input: Parameters<typeof resolveRuntimeKindSelectionState>[0],
+): RuntimeKind | null => {
+  return resolveRuntimeKindSelectionState(input).runtimeKind;
 };
 
 export const runtimeLabelFor = ({
@@ -114,9 +166,10 @@ export const validateRuntimeDefinitionsForOpenDucktor = (
 
 export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
-  _role: AgentRole,
+  role: AgentRole,
 ): boolean => {
-  return runtimeSupportsAllRoles(runtimeDescriptor);
+  const supportedScopes = runtimeDescriptor.capabilities.supportedScopes;
+  return runtimeRequiredScopesByRole[role].every((scope) => supportedScopes.includes(scope));
 };
 
 export const filterRuntimeDefinitionsForRole = (

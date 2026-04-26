@@ -490,7 +490,9 @@ describe("useSettingsModalController", () => {
       });
 
       expect(didSave).toBe(false);
-      expect(harness.getLatest().saveError).toBe("Default runtime kind cannot be blank.");
+      expect(harness.getLatest().saveError).toBe(
+        "Default runtime kind is required. Select a repository default runtime before saving.",
+      );
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();

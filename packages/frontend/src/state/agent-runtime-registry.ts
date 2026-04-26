@@ -60,8 +60,7 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
     registeredRuntimeKinds,
     getAdapter,
     getRuntimeDefinition,
-    createAgentEngine: () =>
-      new RuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds, DEFAULT_RUNTIME_KIND),
+    createAgentEngine: () => new RuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds),
   };
 };
 
@@ -71,7 +70,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   constructor(
     private readonly getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
     private readonly registeredRuntimeKinds: RuntimeKind[],
-    private readonly defaultRuntimeKind: RuntimeKind,
   ) {}
 
   async startSession(input: Parameters<AgentEnginePort["startSession"]>[0]) {
@@ -240,12 +238,16 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     model: AgentModelSelection | undefined,
     sessionId?: string,
   ): RuntimeKind {
-    return (
-      runtimeKind ??
-      model?.runtimeKind ??
-      (sessionId ? this.runtimeKindsBySessionId.get(sessionId) : undefined) ??
-      this.defaultRuntimeKind
-    );
+    if (runtimeKind) {
+      return runtimeKind;
+    }
+    if (model?.runtimeKind) {
+      return model.runtimeKind;
+    }
+    if (sessionId) {
+      return this.requireSessionRuntimeKind(sessionId);
+    }
+    throw new Error("Runtime kind is required to select an agent runtime adapter.");
   }
 
   private requireSessionRuntimeKind(sessionId: string): RuntimeKind {

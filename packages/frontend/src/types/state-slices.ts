@@ -40,7 +40,7 @@ export type WorkspaceSelectionOperationsInput = {
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
 
 export type RepoAgentDefaultInput = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind?: RuntimeKind | null;
   providerId: string;
   modelId: string;
   variant: string;

@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   loadRepoConfigFromQuery,
@@ -284,10 +283,15 @@ export function useWorkspaceSelectionOperations({
             if (workspaceSwitchVersionRef.current !== switchVersion) {
               return;
             }
+            if (!repoConfig?.defaultRuntimeKind?.trim()) {
+              throw new Error(
+                "Repository default runtime is not configured. Select a repository default runtime before switching repositories.",
+              );
+            }
 
             return ensureRuntimeAndInvalidateReadinessQueries({
               repoPath: selectedWorkspace.repoPath,
-              runtimeKind: repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
+              runtimeKind: repoConfig.defaultRuntimeKind,
               ensureRuntime: (repoPath, runtimeKind) =>
                 hostClient.runtimeEnsure(repoPath, runtimeKind),
               queryClient,

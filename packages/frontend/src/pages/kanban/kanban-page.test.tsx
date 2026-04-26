@@ -11,7 +11,6 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -24,10 +23,6 @@ import {
 enableReactActEnvironment();
 
 const originalConsoleError = console.error;
-const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-const originalTasksList = host.tasksList;
-const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
@@ -310,22 +305,73 @@ const confirmSessionStartModal = async (input?: {
 }): Promise<void> => {
   await waitForSessionStartModalReady();
 
-  await act(async () => {
-    if (input?.modelId) {
-      (latestSessionStartModalModel?.onSelectModel as ((value: string) => void) | undefined)?.(
-        input.modelId,
-      );
-    }
-    if (input?.profileId) {
+  const expectedStoredModelId = input?.modelId?.includes("/")
+    ? input.modelId.split("/").at(-1)
+    : input?.modelId;
+  const profileId = input?.profileId;
+  const modelId = input?.modelId;
+  const variant = input?.variant;
+
+  if (profileId) {
+    await act(async () => {
       (latestSessionStartModalModel?.onSelectAgent as ((value: string) => void) | undefined)?.(
-        input.profileId,
+        profileId,
       );
-    }
-    if (input?.variant) {
+      await Promise.resolve();
+    });
+  }
+
+  if (modelId) {
+    await waitFor(() => {
+      expect(latestSessionStartModalModel?.isSelectionCatalogLoading).not.toBe(true);
+      const modelOptions = latestSessionStartModalModel?.modelOptions as
+        | Array<{ value?: string }>
+        | undefined;
+      expect(modelOptions?.some((option) => option.value === modelId)).toBe(true);
+    });
+    await act(async () => {
+      (latestSessionStartModalModel?.onSelectModel as ((value: string) => void) | undefined)?.(
+        modelId,
+      );
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      const selection = latestSessionStartModalModel?.selectedModelSelection as
+        | { modelId?: string; profileId?: string }
+        | null
+        | undefined;
+      expect(selection?.modelId).toBe(expectedStoredModelId);
+      if (profileId) {
+        expect(selection?.profileId).toBe(profileId);
+      }
+    });
+  } else if (profileId) {
+    await waitFor(() => {
+      const selection = latestSessionStartModalModel?.selectedModelSelection as
+        | { profileId?: string }
+        | null
+        | undefined;
+      expect(selection?.profileId).toBe(profileId);
+    });
+  }
+
+  if (variant) {
+    await act(async () => {
       (latestSessionStartModalModel?.onSelectVariant as ((value: string) => void) | undefined)?.(
-        input.variant,
+        variant,
       );
-    }
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      const selection = latestSessionStartModalModel?.selectedModelSelection as
+        | { variant?: string }
+        | null
+        | undefined;
+      expect(selection?.variant).toBe(variant);
+    });
+  }
+
+  await act(async () => {
     (
       latestSessionStartModalModel?.onConfirm as
         | ((value: {
@@ -370,6 +416,10 @@ describe("KanbanPage session start modal flow", () => {
         latestSessionStartModalModel = model;
         return null;
       },
+    }));
+
+    mock.module("../agents/use-agent-studio-repo-settings", () => ({
+      useAgentStudioRepoSettings: () => ({ repoSettings: REPO_SETTINGS_FIXTURE }),
     }));
 
     mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
@@ -474,15 +524,18 @@ describe("KanbanPage session start modal flow", () => {
       useSpecState: () => ({}),
     };
     mock.module("@/state/app-state-provider", () => stateModule);
+    mock.module("@/lib/host-client", () => ({
+      hostClient: {
+        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+        tasksList: tasksListMock,
+        taskWorktreeGet: taskWorktreeGetMock,
+      },
+    }));
   });
 
   beforeEach(async () => {
     await clearAppQueryClient();
-    host.workspaceGetRepoConfig = workspaceGetRepoConfigMock as typeof host.workspaceGetRepoConfig;
-    host.workspaceGetSettingsSnapshot =
-      workspaceGetSettingsSnapshotMock as typeof host.workspaceGetSettingsSnapshot;
-    host.tasksList = tasksListMock as typeof host.tasksList;
-    host.taskWorktreeGet = taskWorktreeGetMock as typeof host.taskWorktreeGet;
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
     currentSessionsFixture = [
       {
@@ -574,10 +627,6 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   afterEach(async () => {
-    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    host.tasksList = originalTasksList;
-    host.taskWorktreeGet = originalBuildContinuationTargetGet;
     await restoreMockedModules([
       ["sonner", () => import("sonner")],
       [
@@ -585,6 +634,10 @@ describe("KanbanPage session start modal flow", () => {
         () => import("@/components/features/kanban/kanban-column"),
       ],
       ["./kanban-session-start-modal", () => import("./kanban-session-start-modal")],
+      [
+        "../agents/use-agent-studio-repo-settings",
+        () => import("../agents/use-agent-studio-repo-settings"),
+      ],
       [
         "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
         () => import("@/components/features/pull-requests/merged-pull-request-confirm-dialog"),
@@ -594,6 +647,7 @@ describe("KanbanPage session start modal flow", () => {
         "@/features/human-review-feedback/human-review-feedback-modal",
         () => import("@/features/human-review-feedback/human-review-feedback-modal"),
       ],
+      ["@/lib/host-client", () => import("@/lib/host-client")],
       ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
   });

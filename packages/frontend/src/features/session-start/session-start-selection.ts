@@ -7,7 +7,6 @@ import {
   pickVisibleCatalogDefaultProfileId,
   runtimeKindForCatalog,
 } from "@/lib/model-catalog-selection";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export const roleDefaultSelectionFor = (
@@ -19,9 +18,13 @@ export const roleDefaultSelectionFor = (
     return null;
   }
 
+  const runtimeKind = roleDefault.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? null;
+  if (!runtimeKind) {
+    return null;
+  }
+
   return {
-    runtimeKind:
-      roleDefault.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
@@ -42,9 +45,13 @@ export const pickDefaultVisibleSelectionForCatalog = (
   }
   const profileId = pickVisibleCatalogDefaultProfileId(catalog);
   const variant = normalizeCatalogVariant(defaultModel, undefined);
+  const runtimeKind = runtimeKindForCatalog(catalog);
+  if (!runtimeKind) {
+    return null;
+  }
 
   return {
-    runtimeKind: runtimeKindForCatalog(catalog),
+    runtimeKind,
     providerId: defaultModel.providerId,
     modelId: defaultModel.modelId,
     ...(variant ? { variant } : {}),
@@ -67,9 +74,13 @@ export const coerceVisibleSelectionToCatalog = (
 
   const variant = normalizeCatalogVariant(model, selection.variant);
   const profileId = normalizeVisibleCatalogProfileId(catalog, selection.profileId);
+  const runtimeKind = selection.runtimeKind ?? runtimeKindForCatalog(catalog);
+  if (!runtimeKind) {
+    return null;
+  }
 
   return {
-    runtimeKind: selection.runtimeKind ?? runtimeKindForCatalog(catalog),
+    runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
     ...(variant ? { variant } : {}),

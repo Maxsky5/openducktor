@@ -32,6 +32,7 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
 });
 
 const CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",
@@ -71,6 +72,7 @@ const CATALOG: AgentModelCatalog = {
 };
 
 const ALTERNATE_CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "anthropic/claude-opus",
@@ -101,6 +103,7 @@ const CATALOG_WITHOUT_PROFILES: AgentModelCatalog = {
 };
 
 const EMPTY_CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [],
   defaultModelsByProvider: {},
   profiles: [],
@@ -152,7 +155,7 @@ const createHookHarness = (
   initialProps: LegacyHookArgs,
   options: { runtimeDefinitions?: RuntimeDescriptor[] } = {},
 ) => {
-  const runtimeDefinitions = options.runtimeDefinitions ?? [];
+  const runtimeDefinitions = options.runtimeDefinitions ?? [OPENCODE_RUNTIME_DESCRIPTOR];
   const runtimeDefinitionsContext = {
     runtimeDefinitions,
     isLoadingRuntimeDefinitions: false,
@@ -213,7 +216,7 @@ const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArg
   activeSession: null,
   activeSessionSummary: null,
   role: "spec",
-  repoSettings: null,
+  repoSettings: createRepoSettings(null),
   updateAgentSessionModel: () => {},
   loadCatalog: async () => CATALOG,
   ...overrides,

@@ -21,7 +21,7 @@ const runtimeCatalogQueryKeys = {
 
 export const repoRuntimeCatalogQueryOptions = (
   repoPath: string,
-  runtimeKind: RuntimeKind,
+  runtimeKind: RuntimeKind | "",
   loadRepoRuntimeCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -29,13 +29,18 @@ export const repoRuntimeCatalogQueryOptions = (
 ) =>
   queryOptions({
     queryKey: runtimeCatalogQueryKeys.repo(repoPath, runtimeKind),
-    queryFn: (): Promise<AgentModelCatalog> => loadRepoRuntimeCatalog(repoPath, runtimeKind),
+    queryFn: (): Promise<AgentModelCatalog> => {
+      if (!runtimeKind) {
+        throw new Error("Runtime kind is required to load the model catalog.");
+      }
+      return loadRepoRuntimeCatalog(repoPath, runtimeKind);
+    },
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
 export const repoRuntimeSlashCommandsQueryOptions = (
   repoPath: string,
-  runtimeKind: RuntimeKind,
+  runtimeKind: RuntimeKind | "",
   loadRepoRuntimeSlashCommands: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -44,13 +49,15 @@ export const repoRuntimeSlashCommandsQueryOptions = (
   queryOptions({
     queryKey: runtimeCatalogQueryKeys.repoSlashCommands(repoPath, runtimeKind),
     queryFn: (): Promise<AgentSlashCommandCatalog> =>
-      loadRepoRuntimeSlashCommands(repoPath, runtimeKind),
+      runtimeKind
+        ? loadRepoRuntimeSlashCommands(repoPath, runtimeKind)
+        : Promise.reject(new Error("Runtime kind is required to load slash commands.")),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
 export const repoRuntimeFileSearchQueryOptions = (
   repoPath: string,
-  runtimeKind: RuntimeKind,
+  runtimeKind: RuntimeKind | "",
   query: string,
   loadRepoRuntimeFileSearch: (
     repoPath: string,
@@ -61,6 +68,8 @@ export const repoRuntimeFileSearchQueryOptions = (
   queryOptions({
     queryKey: runtimeCatalogQueryKeys.repoFileSearch(repoPath, runtimeKind, query),
     queryFn: (): Promise<AgentFileSearchResult[]> =>
-      loadRepoRuntimeFileSearch(repoPath, runtimeKind, query),
+      runtimeKind
+        ? loadRepoRuntimeFileSearch(repoPath, runtimeKind, query)
+        : Promise.reject(new Error("Runtime kind is required to search files.")),
     staleTime: RUNTIME_FILE_SEARCH_STALE_TIME_MS,
   });

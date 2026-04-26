@@ -34,7 +34,7 @@ export type SessionStartModalModel = {
   backgroundConfirmLabel?: string;
   cancelLabel?: string;
   selectedModelSelection: AgentModelSelection | null;
-  selectedRuntimeKind: RuntimeKind;
+  selectedRuntimeKind: RuntimeKind | null;
   runtimeOptions: ComboboxOption[];
   supportsProfiles: boolean;
   supportsVariants: boolean;
@@ -114,7 +114,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   );
   const confirmDisabled =
     isStarting ||
-    (!isReuseMode && (isSelectionCatalogLoading || !selectedModelSelection)) ||
+    (!isReuseMode &&
+      (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
     (requiresExistingSession && !hasExistingSessionSelection);
   const runtimeDisabled = isSelectionCatalogLoading || isReuseMode;
   const agentDisabled =
@@ -245,7 +246,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                   Agent Runtime
                 </label>
                 <AgentRuntimeCombobox
-                  value={selectedRuntimeKind}
+                  value={selectedRuntimeKind ?? ""}
                   runtimeOptions={runtimeOptions}
                   disabled={runtimeDisabled}
                   className="sm:min-w-[20rem]"

@@ -23,4 +23,21 @@ describe("agent-runtime-registry", () => {
       "Unsupported agent runtime 'test-runtime'.",
     );
   });
+
+  test("requires an explicit runtime for adapter selection", async () => {
+    const engine = createAgentRuntimeRegistry().createAgentEngine();
+
+    const missingRuntimeInput = {
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "spec",
+      scenario: "spec_initial",
+      systemPrompt: "Prompt",
+    } as unknown as Parameters<typeof engine.startSession>[0];
+
+    await expect(engine.startSession(missingRuntimeInput)).rejects.toThrow(
+      "Runtime kind is required to select an agent runtime adapter.",
+    );
+  });
 });

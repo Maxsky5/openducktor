@@ -46,7 +46,7 @@ type RepositoryAgentsSectionProps = {
 };
 
 type RepositoryAgentRoleViewModel = {
-  runtimeKind: RuntimeKind;
+  runtimeKind: RuntimeKind | null;
   value: ReturnType<typeof ensureDraftAgentDefault>;
   runtimeDescriptor: RuntimeDescriptor | null;
   catalog: AgentModelCatalog | null;
@@ -80,16 +80,18 @@ const buildRepositoryAgentRoleViewModel = ({
     runtimeDefinitions,
     role,
   });
-  const runtimeDescriptor = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
-  const catalog = getCatalogForRuntime(runtimeKind);
+  const runtimeDescriptor = runtimeKind
+    ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
+    : null;
+  const catalog = runtimeKind ? getCatalogForRuntime(runtimeKind) : null;
 
   return {
     runtimeKind,
     value,
     runtimeDescriptor,
     catalog,
-    catalogError: getCatalogErrorForRuntime(runtimeKind),
-    isCatalogLoading: isCatalogLoadingForRuntime(runtimeKind),
+    catalogError: runtimeKind ? getCatalogErrorForRuntime(runtimeKind) : null,
+    isCatalogLoading: runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false,
     agentOptions: toPrimaryAgentOptions(catalog),
     modelOptions: toModelOptions(catalog),
     modelGroups: toModelGroupsByProvider(catalog) as ComboboxGroup[],
@@ -126,10 +128,11 @@ export function RepositoryAgentsSection({
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const modelDropdownClassName = "sm:min-w-[26rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
-  const selectedDefaultRuntimeKind = resolveRuntimeKindSelection({
-    runtimeDefinitions,
-    requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
-  });
+  const selectedDefaultRuntimeKind =
+    resolveRuntimeKindSelection({
+      runtimeDefinitions,
+      requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
+    }) ?? "";
   const missingRoleLabels = ROLE_DEFAULTS.filter(({ role }) => {
     const value = selectedRepoConfig.agentDefaults[role];
     const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
@@ -137,7 +140,9 @@ export function RepositoryAgentsSection({
       runtimeDefinitions,
       role,
     });
-    const runtimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+    const runtimeDefinition = runtimeKind
+      ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
+      : null;
     return !(
       value &&
       runtimeDefinition &&
@@ -241,7 +246,7 @@ export function RepositoryAgentsSection({
                 <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Agent Runtime</Label>
                   <AgentRuntimeCombobox
-                    value={runtimeKind}
+                    value={runtimeKind ?? ""}
                     runtimeOptions={roleRuntimeOptions}
                     disabled={
                       isSaving || isLoadingRuntimeDefinitions || roleRuntimeOptions.length === 0
@@ -253,7 +258,7 @@ export function RepositoryAgentsSection({
                         agentDefaults: {
                           ...repoConfig.agentDefaults,
                           [role]: {
-                            runtimeKind,
+                            runtimeKind: runtimeKind ?? "",
                             providerId: "",
                             modelId: "",
                             variant: "",
@@ -292,6 +297,9 @@ export function RepositoryAgentsSection({
                     disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
                     className={modelDropdownClassName}
                     onValueChange={(selectedModelKey) => {
+                      if (!runtimeKind) {
+                        return;
+                      }
                       const model = findCatalogModel(catalog, selectedModelKey);
                       if (!model) {
                         return;

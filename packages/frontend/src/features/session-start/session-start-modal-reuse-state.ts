@@ -14,7 +14,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveScenarioStartMode } from "./session-start-mode";
 import { coerceVisibleSelectionToCatalog, isSameSelection } from "./session-start-selection";
@@ -89,16 +89,16 @@ const buildReuseSelectionDraft = ({
   runtimeDefinitions: RuntimeDescriptor[];
   sourceSessionId: string;
 }): {
-  runtimeKind: RuntimeKind;
+  runtimeKind: RuntimeKind | null;
   selection: AgentModelSelection | null;
 } => {
   const sourceSelection = resolveSourceSelection(options, sourceSessionId);
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions,
-    requestedRuntimeKind: sourceSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    requestedRuntimeKind: sourceSelection?.runtimeKind ?? null,
   });
 
-  if (!sourceSelection) {
+  if (!sourceSelection || !runtimeKind) {
     return {
       runtimeKind,
       selection: null,
@@ -121,7 +121,7 @@ type UseSessionStartModalReuseStateArgs = {
   catalog: AgentModelCatalog | null;
   intent: SessionStartModalIntent | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  setRequestedRuntimeKind: (runtimeKind: RuntimeKind) => void;
+  setRequestedRuntimeKind: (runtimeKind: RuntimeKind | null) => void;
   setSelection: Dispatch<SetStateAction<AgentModelSelection | null>>;
 };
 

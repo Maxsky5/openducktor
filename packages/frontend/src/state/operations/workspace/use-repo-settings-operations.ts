@@ -87,10 +87,7 @@ export function useRepoSettingsOperations({
       const plannerDefault = toConfigDefault("planner", input.agentDefaults.planner);
       const buildDefault = toConfigDefault("build", input.agentDefaults.build);
       const qaDefault = toConfigDefault("qa", input.agentDefaults.qa);
-      const defaultRuntimeKind = normalizeRepoDefaultRuntimeKindForSave(
-        input.defaultRuntimeKind,
-        input.defaultRuntimeKind,
-      );
+      const defaultRuntimeKind = normalizeRepoDefaultRuntimeKindForSave(input.defaultRuntimeKind);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);

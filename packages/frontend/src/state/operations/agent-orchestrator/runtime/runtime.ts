@@ -16,7 +16,6 @@ import {
   requireRuntimeConnection,
 } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
@@ -165,12 +164,27 @@ export type TaskDocuments = {
 
 type EnsureRuntimeDependencies = {
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  hostClient?: Pick<typeof host, "buildStart" | "runtimeEnsure" | "taskWorktreeGet">;
 };
 
 type RuntimeWorkspaceQueryHost = Pick<
   typeof host,
   "workspaceGetRepoConfig" | "workspaceGetSettingsSnapshot"
 >;
+
+type RepoConfigLoader = (workspaceId: string) => Promise<RepoConfig>;
+
+let repoConfigLoader: RepoConfigLoader = (workspaceId: string): Promise<RepoConfig> => {
+  return loadRepoConfigFromQuery(appQueryClient, workspaceId);
+};
+
+export const setRuntimeRepoConfigLoaderForTest = (loader: RepoConfigLoader): (() => void) => {
+  const previousLoader = repoConfigLoader;
+  repoConfigLoader = loader;
+  return () => {
+    repoConfigLoader = previousLoader;
+  };
+};
 
 export const loadTaskDocuments = async (
   repoPath: string,
@@ -189,14 +203,10 @@ export const loadTaskDocuments = async (
   };
 };
 
-const loadRepoConfig = (workspaceId: string): Promise<RepoConfig> => {
-  return loadRepoConfigFromQuery(appQueryClient, workspaceId);
-};
-
 export const loadRepoDefaultTargetBranch = async (
   workspaceId: string,
 ): Promise<GitTargetBranch | null> => {
-  const config = await loadRepoConfig(workspaceId);
+  const config = await repoConfigLoader(workspaceId);
   return config.defaultTargetBranch ?? null;
 };
 
@@ -204,7 +214,7 @@ export const loadRepoDefaultModel = async (
   workspaceId: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await loadRepoConfig(workspaceId);
+  const config = await repoConfigLoader(workspaceId);
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -256,12 +266,29 @@ export const loadRepoDefaultRuntimeKind = async (
   workspaceId: string,
   role: AgentRole,
 ): Promise<RuntimeKind> => {
-  const config = await loadRepoConfig(workspaceId);
+  const config = await repoConfigLoader(workspaceId);
   const roleDefault = config?.agentDefaults?.[role];
-  return roleDefault?.runtimeKind ?? config?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND;
+  return requireConfiguredRuntimeKind(
+    roleDefault?.runtimeKind ?? config?.defaultRuntimeKind,
+    `Runtime kind is not configured for ${role} sessions. Select a ${role} agent runtime or repository default runtime before starting a session.`,
+  );
 };
 
-export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependencies) => {
+export const requireConfiguredRuntimeKind = (
+  runtimeKind: RuntimeKind | string | null | undefined,
+  contextMessage: string,
+): RuntimeKind => {
+  const normalized = runtimeKind?.trim() ?? "";
+  if (!normalized) {
+    throw new Error(contextMessage);
+  }
+  return normalized;
+};
+
+export const createEnsureRuntime = ({
+  refreshTaskData,
+  hostClient = host,
+}: EnsureRuntimeDependencies) => {
   return async (
     repoPath: string,
     taskId: string,
@@ -274,13 +301,18 @@ export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependenci
   ): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
     const workspaceId = options?.workspaceId?.trim() ?? "";
-    const runtimeKind = options?.runtimeKind?.trim()
-      ? options.runtimeKind
-      : workspaceId
-        ? await loadRepoDefaultRuntimeKind(workspaceId, role)
-        : (() => {
-            throw new Error("Active workspace is required to resolve the default runtime.");
-          })();
+    let runtimeKind: RuntimeKind;
+    if (options?.runtimeKind?.trim()) {
+      runtimeKind = requireConfiguredRuntimeKind(
+        options.runtimeKind,
+        `Runtime kind is required to start ${role} sessions.`,
+      );
+    } else {
+      if (!workspaceId) {
+        throw new Error("Active workspace is required to resolve the default runtime.");
+      }
+      runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, role);
+    }
     const toRuntimeInfo = (input: {
       runtimeId: string | null;
       runtimeRoute: RuntimeRoute;
@@ -304,7 +336,7 @@ export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependenci
           repoPath,
           runtimeKind,
           ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+            hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
         });
         const { runtimeConnection } = resolveRuntimeRouteConnection(
           runtime.runtimeRoute,
@@ -318,7 +350,11 @@ export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependenci
         });
       }
 
-      const bootstrap: BuildSessionBootstrap = await host.buildStart(repoPath, taskId, runtimeKind);
+      const bootstrap: BuildSessionBootstrap = await hostClient.buildStart(
+        repoPath,
+        taskId,
+        runtimeKind,
+      );
       runOrchestratorSideEffect(
         "runtime-refresh-task-data-after-build-start",
         refreshTaskData(repoPath),
@@ -340,7 +376,9 @@ export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependenci
 
     if (role === "qa") {
       const continuationTarget =
-        targetWorkingDirectory.length === 0 ? await host.taskWorktreeGet(repoPath, taskId) : null;
+        targetWorkingDirectory.length === 0
+          ? await hostClient.taskWorktreeGet(repoPath, taskId)
+          : null;
       const workingDirectory = targetWorkingDirectory || continuationTarget?.workingDirectory;
       if (!workingDirectory) {
         throw new Error(MISSING_BUILD_TARGET_ERROR);
@@ -349,7 +387,7 @@ export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependenci
         repoPath,
         runtimeKind,
         ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+          hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
       });
       const { runtimeConnection } = resolveRuntimeRouteConnection(
         runtime.runtimeRoute,
@@ -367,7 +405,7 @@ export const createEnsureRuntime = ({ refreshTaskData }: EnsureRuntimeDependenci
       repoPath,
       runtimeKind,
       ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-        host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+        hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
     });
     const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
     const { runtimeConnection } = resolveRuntimeRouteConnection(
