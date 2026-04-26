@@ -132,7 +132,7 @@ jobs:
         run: bun run --cwd apps/desktop scripts/resolve-cef-cache-metadata.ts >> "$GITHUB_OUTPUT"
 
       - name: Cache Bun download cache
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
@@ -154,14 +154,14 @@ jobs:
 
       - name: Restore OpenDucktor CEF toolchain cache
         id: cef_toolchain_cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}-${{ steps.cef_cache.outputs.tauri_toolchain_patch }}
 
       - name: Restore export-cef-dir tool cache
         id: export_cef_tool_cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.cef_cache.outputs.export_cef_tool_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-export-cef-dir-${{ steps.cef_cache.outputs.cef_version }}
@@ -170,7 +170,7 @@ jobs:
 
       - name: Restore exported CEF bundle cache
         id: cef_bundle_cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.cef_cache.outputs.cef_path }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cef-runtime-${{ steps.cef_cache.outputs.cef_version }}
@@ -217,21 +217,21 @@ jobs:
 
       - name: Save OpenDucktor CEF toolchain cache
         if: steps.cef_toolchain_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
           key: ${{ steps.cef_toolchain_cache.outputs.cache-primary-key }}
 
       - name: Save export-cef-dir tool cache
         if: steps.export_cef_tool_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.cef_cache.outputs.export_cef_tool_root }}
           key: ${{ steps.export_cef_tool_cache.outputs.cache-primary-key }}
 
       - name: Save exported CEF bundle cache
         if: steps.cef_bundle_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.cef_cache.outputs.cef_path }}
           key: ${{ steps.cef_bundle_cache.outputs.cache-primary-key }}
