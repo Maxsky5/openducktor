@@ -314,6 +314,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -908,6 +909,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree/"),
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -1455,9 +1457,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         repoPath: "/tmp/repo",
         role: "build",
         scenario: "build_after_human_request_changes",
-        status: "idle",
         startedAt: "2026-02-22T08:20:00.000Z",
-        updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -2429,9 +2429,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         repoPath: "/tmp/repo",
         role: "build",
         scenario: "build_implementation_start",
-        status: "idle",
         startedAt: "2026-02-22T08:20:00.000Z",
-        updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -2545,14 +2543,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       {
         sessionId: "persisted-claude",
         externalSessionId: "external-claude",
-        taskId: "task-1",
+        runtimeKind: "claude-code",
         role: "build",
         scenario: "build_after_human_request_changes",
-        status: "idle",
         startedAt: "2026-02-22T08:20:00.000Z",
-        updatedAt: "2026-02-22T08:20:00.000Z",
-        runtimeId: "runtime-1",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
         selectedModel: {
           runtimeKind: "claude-code",
@@ -2560,7 +2554,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           modelId: "claude-3-7-sonnet",
           profileId: "Hephaestus",
         },
-      } as unknown as AgentSessionRecord,
+      },
     ]);
 
     const sessionsRef = { current: {} };

@@ -25,7 +25,7 @@ export const resolveInitialModalSelection = ({
   }
   const requestedSelection =
     selectedModel?.runtimeKind === runtimeKind
-      ? coerceVisibleSelectionToCatalog(catalog, selectedModel)
+      ? (coerceVisibleSelectionToCatalog(catalog, selectedModel) ?? selectedModel)
       : null;
   const roleDefault = roleDefaultSelectionFor(repoSettings, role);
   const runtimeRoleDefault = roleDefault?.runtimeKind === runtimeKind ? roleDefault : null;

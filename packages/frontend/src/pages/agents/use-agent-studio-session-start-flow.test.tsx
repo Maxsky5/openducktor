@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import * as sonnerActual from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -19,15 +20,6 @@ import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-age
 enableReactActEnvironment();
 
 const toastErrorMock = mock(() => {});
-
-beforeEach(() => {
-  mock.module("sonner", () => ({
-    toast: {
-      error: toastErrorMock,
-    },
-  }));
-  toastErrorMock.mockClear();
-});
 
 type HookArgs = Parameters<typeof useSessionStartFlow>[0];
 
@@ -274,6 +266,12 @@ describe("useAgentStudioSessionStartFlow", () => {
   const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
   beforeEach(() => {
+    mock.module("sonner", () => ({
+      toast: {
+        error: toastErrorMock,
+      },
+    }));
+    toastErrorMock.mockClear();
     host.workspaceList = async () => [
       {
         workspaceId: "repo",
@@ -339,7 +337,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   afterEach(async () => {
-    await restoreMockedModules([["sonner", () => import("sonner")]]);
+    await restoreMockedModules([["sonner", async () => sonnerActual]]);
   });
 
   test("startSession starts a fresh session even when another session is active", async () => {

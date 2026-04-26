@@ -57,11 +57,10 @@ export const executeFreshStart = async ({
     scenario: resolved.resolvedScenario,
     startMode: input.startMode,
   });
-  assertSelectedModelRuntimeKindMatchesEnsuredRuntime({
+  const runtimeKind = assertSelectedModelRuntimeKindMatchesEnsuredRuntime({
     selectedModelRuntimeKind,
     ensuredRuntimeKind: resolved.runtime.runtimeKind,
   });
-  const runtimeKind = resolved.runtime.runtimeKind ?? selectedModelRuntimeKind;
 
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,

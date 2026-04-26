@@ -167,7 +167,8 @@ export const createEnsureSessionReady = ({
         attachSessionListener(repoPath, sessionId);
       }
       if (session.status !== "error") {
-        let attachedRuntimeKind = session.runtimeKind;
+        let attachedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]> =
+          session.runtimeKind ?? requireSessionRuntimeKind(session);
         let attachedRuntimeId = session.runtimeId;
         let attachedRuntimeRoute = session.runtimeRoute;
         let attachedWorkingDirectory = session.workingDirectory;
@@ -180,13 +181,12 @@ export const createEnsureSessionReady = ({
             runtimeKind: requestedRuntimeKind,
           });
           assertNotStale();
-          assertSessionRuntimeKindMatchesEnsuredRuntime({
+          attachedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
             sessionId: session.sessionId,
             requestedRuntimeKind,
             ensuredRuntimeKind: runtime.runtimeKind,
           });
 
-          attachedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
           attachedRuntimeId = runtime.runtimeId;
           attachedRuntimeRoute = runtime.runtimeRoute;
           attachedWorkingDirectory = runtime.workingDirectory;
@@ -198,7 +198,7 @@ export const createEnsureSessionReady = ({
               runtimeId: attachedRuntimeId,
               runtimeRoute: attachedRuntimeRoute,
               workingDirectory: attachedWorkingDirectory,
-              ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
+              runtimeKind: attachedRuntimeKind,
             }),
             { persist: false },
           );
@@ -228,7 +228,7 @@ export const createEnsureSessionReady = ({
             ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
             pendingPermissions,
             pendingQuestions,
-            ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
+            runtimeKind: attachedRuntimeKind,
           }),
           { persist: false },
         );
@@ -272,12 +272,11 @@ export const createEnsureSessionReady = ({
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    assertSessionRuntimeKindMatchesEnsuredRuntime({
+    const resolvedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
       sessionId: session.sessionId,
       requestedRuntimeKind,
       ensuredRuntimeKind: runtime.runtimeKind,
     });
-    const resolvedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
     const runtimeConnection = requireRuntimeConnectionSupport(
       resolvedRuntimeKind,
       resolveRuntimeConnection(runtime),

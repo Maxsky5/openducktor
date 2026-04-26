@@ -167,7 +167,7 @@ let currentSessionsFixture = [
   },
 ];
 
-const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
+const createRepoSettingsFixture = (): RepoSettingsInput => ({
   defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "",
   branchPrefix: "codex/",
@@ -195,7 +195,7 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
     },
     qa: null,
   },
-};
+});
 
 const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): RepoConfig => ({
   workspaceId: "repo",
@@ -419,7 +419,7 @@ describe("KanbanPage session start modal flow", () => {
     }));
 
     mock.module("../agents/use-agent-studio-repo-settings", () => ({
-      useAgentStudioRepoSettings: () => ({ repoSettings: REPO_SETTINGS_FIXTURE }),
+      useAgentStudioRepoSettings: () => ({ repoSettings: createRepoSettingsFixture() }),
     }));
 
     mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
@@ -470,7 +470,7 @@ describe("KanbanPage session start modal flow", () => {
           repoPath: "/repo",
         },
         isSwitchingWorkspace: false,
-        loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
+        loadRepoSettings: async () => createRepoSettingsFixture(),
       }),
       useAgentSessionSummaries: () => currentSessionsFixture,
       useAgentActivitySessions: () => [],

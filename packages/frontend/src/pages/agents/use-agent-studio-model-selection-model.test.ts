@@ -115,6 +115,23 @@ describe("use-agent-studio-model-selection-model", () => {
       providerId: "anthropic",
       modelId: "claude-sonnet",
     });
+
+    expect(
+      toRoleDefaultSelection(
+        {
+          runtimeKind: "  ",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "",
+          profileId: "",
+        },
+        "opencode",
+      ),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    });
   });
 
   test("resolves draft selection by normalizing existing selection then falling back", () => {

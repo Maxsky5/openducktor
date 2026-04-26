@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
   type BuildSessionBootstrap,
@@ -15,7 +15,6 @@ import {
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   resolveRuntimeRouteConnection,
-  setRuntimeRepoConfigLoaderForTest,
 } from "./runtime";
 
 const buildBootstrapFixture: BuildSessionBootstrap = {
@@ -83,25 +82,17 @@ const createPromptOverrideSettingsSnapshot = (
 });
 
 describe("agent-orchestrator-runtime", () => {
-  let restoreRuntimeRepoConfigLoader: (() => void) | null = null;
   let runtimeHost: NonNullable<Parameters<typeof createEnsureRuntime>[0]["hostClient"]>;
+  let repoConfigLoader: NonNullable<Parameters<typeof createEnsureRuntime>[0]["repoConfigLoader"]>;
 
   beforeEach(async () => {
-    restoreRuntimeRepoConfigLoader?.();
     await clearAppQueryClient();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
-      createRepoConfig(),
-    );
+    repoConfigLoader = async () => createRepoConfig();
     runtimeHost = {
       runtimeEnsure: async () => sharedRuntimeFixture,
       buildStart: async () => buildBootstrapFixture,
       taskWorktreeGet: async () => taskWorktreeFixture,
     };
-  });
-
-  afterEach(() => {
-    restoreRuntimeRepoConfigLoader?.();
-    restoreRuntimeRepoConfigLoader = null;
   });
 
   test("resolves runtime route connections through one shared boundary helper", () => {
@@ -133,6 +124,7 @@ describe("agent-orchestrator-runtime", () => {
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {
         refreshCalls += 1;
       },
@@ -162,6 +154,7 @@ describe("agent-orchestrator-runtime", () => {
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => refreshDeferred.promise,
     });
 
@@ -195,6 +188,7 @@ describe("agent-orchestrator-runtime", () => {
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {},
     });
 
@@ -206,19 +200,18 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("fails before build start when repo and role runtime defaults are missing", async () => {
-    restoreRuntimeRepoConfigLoader?.();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+    repoConfigLoader = async () =>
       createRepoConfig({
         defaultRuntimeKind: undefined as never,
         agentDefaults: {},
-      }),
-    );
+      });
     runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
     runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
     runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {},
     });
 
@@ -235,19 +228,18 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("fails before runtime ensure when repo default runtime is blank", async () => {
-    restoreRuntimeRepoConfigLoader?.();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+    repoConfigLoader = async () =>
       createRepoConfig({
         defaultRuntimeKind: " " as never,
         agentDefaults: {},
-      }),
-    );
+      });
     runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
     runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
     runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {},
     });
 
@@ -278,6 +270,7 @@ describe("agent-orchestrator-runtime", () => {
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {},
     });
 
@@ -316,6 +309,7 @@ describe("agent-orchestrator-runtime", () => {
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {},
     });
 
@@ -343,6 +337,7 @@ describe("agent-orchestrator-runtime", () => {
 
     const ensureRuntime = createEnsureRuntime({
       hostClient: runtimeHost,
+      repoConfigLoader,
       refreshTaskData: async () => {},
     });
 
@@ -354,17 +349,17 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("propagates repo config loading errors when default model lookup fails", async () => {
-    restoreRuntimeRepoConfigLoader?.();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () => {
+    const failingRepoConfigLoader = async () => {
       throw new Error("missing config");
-    });
+    };
 
-    await expect(loadRepoDefaultModel("/tmp/repo", "build")).rejects.toThrow("missing config");
+    await expect(
+      loadRepoDefaultModel("/tmp/repo", "build", failingRepoConfigLoader),
+    ).rejects.toThrow("missing config");
   });
 
   test("maps repo role defaults into model selection", async () => {
-    restoreRuntimeRepoConfigLoader?.();
-    restoreRuntimeRepoConfigLoader = setRuntimeRepoConfigLoaderForTest(async () =>
+    const selection = await loadRepoDefaultModel("/tmp/repo", "build", async () =>
       createRepoConfig({
         agentDefaults: {
           build: {
@@ -377,8 +372,6 @@ describe("agent-orchestrator-runtime", () => {
         },
       }),
     );
-
-    const selection = await loadRepoDefaultModel("/tmp/repo", "build");
     expect(selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",

@@ -458,11 +458,11 @@ export function useAgentStudioModelSelection({
   const searchFiles = useCallback(
     async (query: string): Promise<AgentFileSearchResult[]> => {
       if (hasActiveSession) {
-        if (!supportsFileSearch) {
-          return [];
-        }
         if (activeSessionRuntimeQueryError) {
           throw new Error(activeSessionRuntimeQueryError);
+        }
+        if (!supportsFileSearch) {
+          return [];
         }
         if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
           throw new Error(

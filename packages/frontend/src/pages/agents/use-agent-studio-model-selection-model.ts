@@ -29,6 +29,11 @@ type ResolvedContextUsageParts = {
 
 type CatalogModelDescriptor = AgentModelCatalog["models"][number];
 
+const normalizeRuntimeKind = (runtimeKind: string | null | undefined): string | null => {
+  const normalized = runtimeKind?.trim() ?? "";
+  return normalized.length > 0 ? normalized : null;
+};
+
 export const toRoleDefaultSelection = (
   roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,
   repoDefaultRuntimeKind?: RepoSettingsInput["defaultRuntimeKind"] | null,
@@ -36,7 +41,8 @@ export const toRoleDefaultSelection = (
   if (!roleDefault?.providerId || !roleDefault.modelId) {
     return null;
   }
-  const runtimeKind = roleDefault.runtimeKind ?? repoDefaultRuntimeKind ?? null;
+  const runtimeKind =
+    normalizeRuntimeKind(roleDefault.runtimeKind) ?? normalizeRuntimeKind(repoDefaultRuntimeKind);
   if (!runtimeKind) {
     return null;
   }

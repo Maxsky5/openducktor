@@ -72,6 +72,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -113,6 +114,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -201,6 +203,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -308,6 +311,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -380,6 +384,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -505,6 +510,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => unsubscribe,
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -605,6 +611,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -684,6 +691,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -773,6 +781,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -868,6 +877,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -1141,6 +1151,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -1238,6 +1249,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",
@@ -1355,6 +1367,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo",

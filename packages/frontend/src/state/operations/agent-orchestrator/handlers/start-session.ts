@@ -226,7 +226,7 @@ export const createStartAgentSession = ({
       resolveStartTask({ ctx: startCtx, task });
     }
     if (input.startMode === "fresh") {
-      requireSelectedModelRuntimeKindForStart(role, input.selectedModel);
+      void requireSelectedModelRuntimeKindForStart(role, input.selectedModel);
     }
 
     const normalizedSourceSessionId =

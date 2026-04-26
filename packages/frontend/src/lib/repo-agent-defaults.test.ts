@@ -61,6 +61,9 @@ describe("repo-agent-defaults", () => {
     expect(() => normalizeRepoDefaultRuntimeKindForSave(undefined)).toThrow(
       repoDefaultRuntimeKindError(),
     );
+    expect(() => normalizeRepoDefaultRuntimeKindForSave(null)).toThrow(
+      repoDefaultRuntimeKindError(),
+    );
     expect(() => normalizeRepoDefaultRuntimeKindForSave("   ")).toThrow(
       repoDefaultRuntimeKindError(),
     );
