@@ -207,8 +207,11 @@ export function useAgentStudioModelSelection({
   const activeSessionMessages = activeSessionSelection.messages;
   const hasActiveSession = activeSessionSelection.hasSelection;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
-  }, [repoSettings?.agentDefaults, role]);
+    return toRoleDefaultSelection(
+      repoSettings?.agentDefaults[role],
+      repoSettings?.defaultRuntimeKind,
+    );
+  }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role]);
   const composerRuntimeKind = useMemo<RuntimeKind | null>(() => {
     return (
       activeSessionSelectedModel?.runtimeKind ??

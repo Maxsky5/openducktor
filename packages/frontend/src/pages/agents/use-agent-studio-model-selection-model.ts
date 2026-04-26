@@ -31,15 +31,17 @@ type CatalogModelDescriptor = AgentModelCatalog["models"][number];
 
 export const toRoleDefaultSelection = (
   roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,
+  repoDefaultRuntimeKind?: RepoSettingsInput["defaultRuntimeKind"] | null,
 ): AgentModelSelection | null => {
   if (!roleDefault?.providerId || !roleDefault.modelId) {
     return null;
   }
-  if (!roleDefault.runtimeKind) {
+  const runtimeKind = roleDefault.runtimeKind ?? repoDefaultRuntimeKind ?? null;
+  if (!runtimeKind) {
     return null;
   }
   return {
-    runtimeKind: roleDefault.runtimeKind,
+    runtimeKind,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
