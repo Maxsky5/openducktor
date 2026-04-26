@@ -100,11 +100,11 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Setup Node for npm trusted publishing
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.2
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
+      # - name: Setup Node for npm trusted publishing
+      #   uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.2
+      #   with:
+      #     node-version: 24
+      #     registry-url: https://registry.npmjs.org
 
       - name: Resolve release metadata
         id: release_meta
@@ -146,10 +146,17 @@ jobs:
       - name: Dry-run web package publishing
         working-directory: packages/openducktor-web
         run: npm publish --dry-run --access public
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+
 
       - name: Publish web package
         working-directory: packages/openducktor-web
         run: npm publish --access public
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
 
       - name: Publish workflow summary
         env:
