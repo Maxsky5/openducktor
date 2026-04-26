@@ -272,20 +272,27 @@ jobs:
           uploadUpdaterSignatures: false
           retryAttempts: 2
 
-      - name: Verify signed CEF helper in app bundle
+      - name: Verify signed CEF binaries in app bundle
         env:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           helper="apps/desktop/src-tauri/target/$TARGET/release/bundle/macos/OpenDucktor.app/Contents/MacOS/openducktor-desktop-helper"
+          web_host="apps/desktop/src-tauri/target/$TARGET/release/bundle/macos/OpenDucktor.app/Contents/MacOS/openducktor-web-host"
 
           if [[ ! -f "$helper" ]]; then
             echo "Bundled CEF helper was not found at $helper" >&2
             exit 1
           fi
+          if [[ ! -f "$web_host" ]]; then
+            echo "Bundled web host was not found at $web_host" >&2
+            exit 1
+          fi
 
           codesign --verify --verbose=4 "$helper"
           codesign -dvvv "$helper"
+          codesign --verify --verbose=4 "$web_host"
+          codesign -dvvv "$web_host"
           entitlements_file="$(mktemp)"
           codesign -d --entitlements :- "$helper" > "$entitlements_file"
 
