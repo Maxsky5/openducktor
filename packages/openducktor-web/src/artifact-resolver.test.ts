@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getHostArtifactName, resolveHostBinary } from "./artifact-resolver";
+import {
+  getHostArtifactName,
+  getMcpSidecarArtifactName,
+  resolveHostBinary,
+} from "./artifact-resolver";
 
 const createTempPackageRoot = (): string => {
   const root = path.join(
@@ -57,6 +61,8 @@ describe("artifact resolver", () => {
     try {
       const artifactName = getHostArtifactName({ platform: "darwin", arch: "arm64" });
       const binaryPath = writeArtifact(packageRoot, artifactName, "host-binary");
+      const mcpArtifactName = getMcpSidecarArtifactName({ platform: "darwin", arch: "arm64" });
+      const mcpSidecarPath = writeArtifact(packageRoot, mcpArtifactName, "mcp-sidecar");
 
       expect(
         resolveHostBinary({
@@ -65,7 +71,7 @@ describe("artifact resolver", () => {
           platform: "darwin",
           arch: "arm64",
         }),
-      ).toEqual({ kind: "artifact", path: binaryPath });
+      ).toEqual({ kind: "artifact", path: binaryPath, mcpSidecarPath });
     } finally {
       cleanup(packageRoot);
     }
@@ -98,6 +104,8 @@ describe("artifact resolver", () => {
       const binaryPath = path.join(packageRoot, "bin", artifactName);
       writeFileSync(binaryPath, "host-binary");
       chmodSync(binaryPath, 0o755);
+      const mcpArtifactName = getMcpSidecarArtifactName({ platform: "darwin", arch: "x64" });
+      writeArtifact(packageRoot, mcpArtifactName, "mcp-sidecar");
 
       expect(() =>
         resolveHostBinary({
@@ -106,20 +114,17 @@ describe("artifact resolver", () => {
           platform: "darwin",
           arch: "x64",
         }),
-      ).toThrow("OpenDucktor web host checksum not found");
+      ).toThrow("OpenDucktor web host binary checksum not found");
     } finally {
       cleanup(packageRoot);
     }
   });
 
-  test("rejects packaged host artifacts with mismatched checksums", () => {
+  test("rejects packaged host artifacts without the MCP sidecar", () => {
     const packageRoot = createTempPackageRoot();
     try {
       const artifactName = getHostArtifactName({ platform: "darwin", arch: "x64" });
-      const binaryPath = path.join(packageRoot, "bin", artifactName);
-      writeFileSync(binaryPath, "host-binary");
-      chmodSync(binaryPath, 0o755);
-      writeFileSync(`${binaryPath}.sha256`, "deadbeef\n");
+      writeArtifact(packageRoot, artifactName, "host-binary");
 
       expect(() =>
         resolveHostBinary({
@@ -128,7 +133,31 @@ describe("artifact resolver", () => {
           platform: "darwin",
           arch: "x64",
         }),
-      ).toThrow("OpenDucktor web host checksum mismatch");
+      ).toThrow("OpenDucktor MCP sidecar not found");
+    } finally {
+      cleanup(packageRoot);
+    }
+  });
+
+  test("rejects packaged MCP sidecars with mismatched checksums", () => {
+    const packageRoot = createTempPackageRoot();
+    try {
+      const artifactName = getHostArtifactName({ platform: "darwin", arch: "x64" });
+      writeArtifact(packageRoot, artifactName, "host-binary");
+      const mcpArtifactName = getMcpSidecarArtifactName({ platform: "darwin", arch: "x64" });
+      const mcpSidecarPath = path.join(packageRoot, "bin", mcpArtifactName);
+      writeFileSync(mcpSidecarPath, "mcp-sidecar");
+      chmodSync(mcpSidecarPath, 0o755);
+      writeFileSync(`${mcpSidecarPath}.sha256`, "deadbeef\n");
+
+      expect(() =>
+        resolveHostBinary({
+          packageRoot,
+          workspaceMode: false,
+          platform: "darwin",
+          arch: "x64",
+        }),
+      ).toThrow("OpenDucktor MCP sidecar checksum mismatch");
     } finally {
       cleanup(packageRoot);
     }

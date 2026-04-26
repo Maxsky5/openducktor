@@ -31,9 +31,18 @@ const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const VITE_CLOSE_TIMEOUT_MS = 3_000;
 const HOST_GRACEFUL_EXIT_TIMEOUT_MS = 2_000;
 const FORCE_EXIT_SIGNAL_GRACE_MS = 1_500;
+const MCP_SIDECAR_PATH_ENV = "OPENDUCKTOR_OPENDUCKTOR_MCP_PATH";
 
 const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
 const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
+
+const buildArtifactHostEnv = (resolved: ResolvedHostBinary): NodeJS.ProcessEnv => {
+  if (resolved.kind !== "artifact" || !resolved.mcpSidecarPath) {
+    return process.env;
+  }
+
+  return { ...process.env, [MCP_SIDECAR_PATH_ENV]: resolved.mcpSidecarPath };
+};
 
 const buildFrontendDisplayUrls = (port: number): string[] => [
   `http://localhost:${port}/`,
@@ -82,7 +91,7 @@ const spawnHost = (
     detached: true,
     stdout: "inherit",
     stderr: "inherit",
-    env: process.env,
+    env: buildArtifactHostEnv(resolved),
   });
 };
 
@@ -261,6 +270,7 @@ const shouldForceExitForRepeatedSignal = (
 export const __launcherTestInternals = {
   buildFrontendDisplayUrls,
   buildBrowserRuntimeConfigJson,
+  buildArtifactHostEnv,
   resolveStaticAssetPath,
   requestHostShutdown,
   shouldForceExitForRepeatedSignal,

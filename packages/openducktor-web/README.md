@@ -16,7 +16,7 @@ From the OpenDucktor repository root:
 bun run browser:dev
 ```
 
-That workspace mode runs the Rust host through Cargo and serves the frontend with Vite. Published installs use bundled static frontend assets plus a packaged macOS host binary and `.sha256` checksum file. Missing or mismatched packaged artifacts fail startup before any fallback is attempted.
+That workspace mode runs the Rust host through Cargo and serves the frontend with Vite. Published installs use bundled static frontend assets plus packaged macOS host and MCP sidecar binaries with `.sha256` checksum files. Missing or mismatched packaged artifacts fail startup before any fallback is attempted.
 
 ## Options
 
@@ -36,8 +36,12 @@ The npm package must include:
 
 - `bin/openducktor-web-host-darwin-arm64`
 - `bin/openducktor-web-host-darwin-arm64.sha256`
+- `bin/openducktor-mcp-darwin-arm64`
+- `bin/openducktor-mcp-darwin-arm64.sha256`
 - `bin/openducktor-web-host-darwin-x64`
 - `bin/openducktor-web-host-darwin-x64.sha256`
+- `bin/openducktor-mcp-darwin-x64`
+- `bin/openducktor-mcp-darwin-x64.sha256`
 - `dist/cli.js`
 - `dist/web-shell/**`
 

@@ -103,6 +103,16 @@ describe("launcher internals", () => {
     ).toBe('{"backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n');
   });
 
+  test("points packaged hosts at the packaged MCP sidecar", () => {
+    const env = __launcherTestInternals.buildArtifactHostEnv({
+      kind: "artifact",
+      path: "/package/bin/openducktor-web-host-darwin-arm64",
+      mcpSidecarPath: "/package/bin/openducktor-mcp-darwin-arm64",
+    });
+
+    expect(env.OPENDUCKTOR_OPENDUCKTOR_MCP_PATH).toBe("/package/bin/openducktor-mcp-darwin-arm64");
+  });
+
   test("prints localhost first in the frontend availability URLs", () => {
     expect(__launcherTestInternals.buildFrontendDisplayUrls(1420)).toEqual([
       "http://localhost:1420/",

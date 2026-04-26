@@ -158,3 +158,44 @@ pub(crate) fn build_opencode_config_content(
     });
     serde_json::to_string(&config).context("Failed to serialize OpenCode MCP config")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app_service::test_support::{
+        lock_env, remove_env_var, set_env_var, unique_temp_path, write_executable_script,
+    };
+    use anyhow::Result;
+    use std::fs;
+
+    #[test]
+    fn resolve_mcp_command_uses_packaged_sidecar_env_override() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("mcp-sidecar-env-override");
+        let workspace = root.join("workspace");
+        fs::create_dir_all(workspace.join("apps"))?;
+        fs::create_dir_all(workspace.join("packages"))?;
+        fs::write(workspace.join("bun.lock"), "")?;
+        fs::write(workspace.join("package.json"), r#"{"name":"openducktor"}"#)?;
+
+        let sidecar = root.join("bin").join("openducktor-mcp-darwin-arm64");
+        fs::create_dir_all(sidecar.parent().expect("sidecar parent should exist"))?;
+        write_executable_script(sidecar.as_path(), "#!/bin/sh\nexit 0\n")?;
+
+        let _mcp_command_guard = remove_env_var("OPENDUCKTOR_MCP_COMMAND_JSON");
+        let _workspace_guard = set_env_var(
+            "OPENDUCKTOR_WORKSPACE_ROOT",
+            workspace.to_string_lossy().as_ref(),
+        );
+        let _mcp_sidecar_guard = set_env_var(
+            "OPENDUCKTOR_OPENDUCKTOR_MCP_PATH",
+            sidecar.to_string_lossy().as_ref(),
+        );
+
+        let command = resolve_mcp_command()?;
+        assert_eq!(command, vec![sidecar.to_string_lossy().to_string()]);
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+}

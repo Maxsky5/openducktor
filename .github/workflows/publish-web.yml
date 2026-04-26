@@ -29,16 +29,28 @@ jobs:
             runner: macos-15
             target: aarch64-apple-darwin
             artifact: openducktor-web-host-darwin-arm64
+            mcp_artifact: openducktor-mcp-darwin-arm64
+            mcp_arch_marker: arm64
           - label: macOS Intel
             runner: macos-15-intel
             target: x86_64-apple-darwin
             artifact: openducktor-web-host-darwin-x64
+            mcp_artifact: openducktor-mcp-darwin-x64
+            mcp_arch_marker: x86_64
 
     steps:
       - name: Checkout release tag
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -63,12 +75,22 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           ARTIFACT: ${{ matrix.artifact }}
+          MCP_ARTIFACT: ${{ matrix.mcp_artifact }}
+          MCP_ARCH_MARKER: ${{ matrix.mcp_arch_marker }}
         run: |
           set -euo pipefail
           mkdir -p release-web-host
           cp "apps/desktop/src-tauri/target/$TARGET/release/openducktor-web-host" "release-web-host/$ARTIFACT"
           chmod +x "release-web-host/$ARTIFACT"
+          bun build packages/openducktor-mcp/src/index.ts --compile --outfile "release-web-host/$MCP_ARTIFACT"
+          chmod +x "release-web-host/$MCP_ARTIFACT"
+          mcp_file_info="$(file "release-web-host/$MCP_ARTIFACT")"
+          if [[ "$mcp_file_info" != *"$MCP_ARCH_MARKER"* ]]; then
+            echo "Expected $MCP_ARTIFACT to contain architecture marker $MCP_ARCH_MARKER, got: $mcp_file_info" >&2
+            exit 1
+          fi
           shasum -a 256 "release-web-host/$ARTIFACT" | awk '{print $1}' > "release-web-host/$ARTIFACT.sha256"
+          shasum -a 256 "release-web-host/$MCP_ARTIFACT" | awk '{print $1}' > "release-web-host/$MCP_ARTIFACT.sha256"
 
       - name: Upload web host artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -77,6 +99,8 @@ jobs:
           path: |
             release-web-host/${{ matrix.artifact }}
             release-web-host/${{ matrix.artifact }}.sha256
+            release-web-host/${{ matrix.mcp_artifact }}
+            release-web-host/${{ matrix.mcp_artifact }}.sha256
           if-no-files-found: error
 
   publish-web:
@@ -139,6 +163,8 @@ jobs:
           set -euo pipefail
           chmod 755 packages/openducktor-web/bin/openducktor-web-host-darwin-arm64
           chmod 755 packages/openducktor-web/bin/openducktor-web-host-darwin-x64
+          chmod 755 packages/openducktor-web/bin/openducktor-mcp-darwin-arm64
+          chmod 755 packages/openducktor-web/bin/openducktor-mcp-darwin-x64
 
       - name: Verify web package contents
         run: bun run scripts/prepare-web-publish-packages.ts "${{ steps.release_meta.outputs.version }}"
@@ -161,4 +187,5 @@ jobs:
             echo "- Tag: $TAG"
             echo "- Package: @openducktor/web"
             echo "- Web host artifacts: openducktor-web-host-darwin-arm64, openducktor-web-host-darwin-x64"
+            echo "- MCP sidecars: openducktor-mcp-darwin-arm64, openducktor-mcp-darwin-x64"
           } >> "$GITHUB_STEP_SUMMARY"
