@@ -26,6 +26,14 @@ export const executeFreshStart = async ({
 }: FreshStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
+  const selectedModelRuntimeKind = requireConfiguredRuntimeKind(
+    selectedModel.runtimeKind,
+    `Runtime kind is required to start ${ctx.role} sessions. Select an explicit runtime before starting a session.`,
+  );
+  const selectedModelWithRuntime = {
+    ...selectedModel,
+    runtimeKind: selectedModelRuntimeKind,
+  };
   const targetWorkingDirectory =
     input.targetWorkingDirectory !== undefined
       ? input.targetWorkingDirectory
@@ -37,7 +45,7 @@ export const executeFreshStart = async ({
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
-    requestedRuntimeKind: selectedModel.runtimeKind,
+    requestedRuntimeKind: selectedModelRuntimeKind,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     taskCard,
     deps,
@@ -48,10 +56,12 @@ export const executeFreshStart = async ({
     scenario: resolved.resolvedScenario,
     startMode: input.startMode,
   });
-  const runtimeKind = requireConfiguredRuntimeKind(
-    resolved.runtime.runtimeKind ?? selectedModel.runtimeKind,
-    `Runtime kind is required to start ${ctx.role} sessions. Select an explicit runtime before starting a session.`,
-  );
+  if (resolved.runtime.runtimeKind && resolved.runtime.runtimeKind !== selectedModelRuntimeKind) {
+    throw new Error(
+      `Selected model runtime kind '${selectedModelRuntimeKind}' does not match ensured runtime kind '${resolved.runtime.runtimeKind}'.`,
+    );
+  }
+  const runtimeKind = resolved.runtime.runtimeKind ?? selectedModelRuntimeKind;
 
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
@@ -62,7 +72,7 @@ export const executeFreshStart = async ({
     role: ctx.role,
     scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
-    model: selectedModel,
+    model: selectedModelWithRuntime,
   });
 
   const startedCtx = {
@@ -85,7 +95,7 @@ export const executeFreshStart = async ({
     runtimeInfo: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
     promptOverrides: resolved.promptOverrides,
-    selectedModel,
+    selectedModel: selectedModelWithRuntime,
     deps,
     taskCard: resolved.taskCard,
   });

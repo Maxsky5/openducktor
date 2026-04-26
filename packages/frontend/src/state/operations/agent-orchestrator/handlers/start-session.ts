@@ -6,6 +6,7 @@ import {
 } from "@openducktor/core";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
+import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { kickoffPromptWithTaskContext } from "../support/scenario";
@@ -223,6 +224,12 @@ export const createStartAgentSession = ({
 
     if (input.startMode === "fresh" && role === "qa") {
       resolveStartTask({ ctx: startCtx, task });
+    }
+    if (input.startMode === "fresh") {
+      requireConfiguredRuntimeKind(
+        input.selectedModel.runtimeKind,
+        `Runtime kind is required to start ${role} sessions. Select an explicit runtime before starting a session.`,
+      );
     }
 
     const normalizedSourceSessionId =
