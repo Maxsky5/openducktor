@@ -336,7 +336,7 @@ jobs:
     name: Summarize release draft
     if: ${{ always() }}
     permissions:
-      contents: read
+      contents: write
     needs:
       - build-macos
     runs-on: ubuntu-latest
