@@ -12,10 +12,10 @@ describe("PromptOverrideCard", () => {
         description="Prompt used to start spec sessions."
         inheritedPreview={{ sourceLabel: "Builtin prompt", template: "builtin prompt" }}
         disabled={false}
-        canResetToBuiltin={false}
+        canClearOverride={false}
         onToggleEnabled={noop}
         onTemplateChange={noop}
-        onResetToBuiltin={noop}
+        onClearOverride={noop}
       />,
     );
 
@@ -31,10 +31,10 @@ describe("PromptOverrideCard", () => {
         description="Prompt used to start spec sessions."
         override={{ template: "custom prompt", baseVersion: 2, enabled: true }}
         disabled={false}
-        canResetToBuiltin
+        canClearOverride
         onToggleEnabled={noop}
         onTemplateChange={noop}
-        onResetToBuiltin={noop}
+        onClearOverride={noop}
       />,
     );
 

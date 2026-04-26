@@ -168,12 +168,11 @@ export const getNeededCatalogRuntimeKinds = (
   return [...runtimeKinds];
 };
 
-export const canResetPromptOverrideToBuiltin = (
+export const canClearPromptOverride = (
   override: RepoPromptOverrides[AgentPromptTemplateId] | undefined,
-  _builtinTemplate: string,
 ): boolean => Boolean(override);
 
-export const resetPromptOverrideToBuiltin = (
+export const clearPromptOverride = (
   overrides: RepoPromptOverrides,
   templateId: AgentPromptTemplateId,
 ): RepoPromptOverrides => {
@@ -239,19 +238,6 @@ export const updatePromptOverrideTemplate = (
       enabled: existing ? existing.enabled !== false : false,
     },
   };
-};
-
-export const removePromptOverride = (
-  overrides: RepoPromptOverrides,
-  templateId: AgentPromptTemplateId,
-): RepoPromptOverrides => {
-  if (!overrides[templateId]) {
-    return overrides;
-  }
-
-  const next = { ...overrides };
-  delete next[templateId];
-  return next;
 };
 
 type PromptOverrideValidationErrors = Partial<Record<AgentPromptTemplateId, string>>;

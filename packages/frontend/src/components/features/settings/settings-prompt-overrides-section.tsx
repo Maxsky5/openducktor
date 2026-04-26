@@ -1,8 +1,8 @@
 import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import {
-  canResetPromptOverrideToBuiltin,
-  resetPromptOverrideToBuiltin,
+  canClearPromptOverride,
+  clearPromptOverride,
   resolvePromptOverrideFallbackTemplate,
   togglePromptOverrideEnabled,
   updatePromptOverrideTemplate,
@@ -77,7 +77,7 @@ export function PromptOverridesSection({
           const builtin = BUILTIN_PROMPTS_BY_ID[templateId];
           const override = overrides[templateId];
           const inheritedPreview = resolveInheritedPreview(templateId, builtin.template, override);
-          const canResetToBuiltin = canResetPromptOverrideToBuiltin(override, builtin.template);
+          const canClearOverride = canClearPromptOverride(override);
           const enableFallbackTemplate = resolvePromptOverrideFallbackTemplate(
             inheritedPreview?.template,
             builtin.template,
@@ -91,7 +91,7 @@ export function PromptOverridesSection({
               override={override}
               inheritedPreview={inheritedPreview}
               disabled={disabled}
-              canResetToBuiltin={canResetToBuiltin}
+              canClearOverride={canClearOverride}
               validationError={validationErrors[templateId]}
               onToggleEnabled={(nextEnabled) => {
                 onUpdateOverrides((currentOverrides) =>
@@ -114,9 +114,9 @@ export function PromptOverridesSection({
                   ),
                 );
               }}
-              onResetToBuiltin={() => {
+              onClearOverride={() => {
                 onUpdateOverrides((currentOverrides) =>
-                  resetPromptOverrideToBuiltin(currentOverrides, templateId),
+                  clearPromptOverride(currentOverrides, templateId),
                 );
               }}
             />
