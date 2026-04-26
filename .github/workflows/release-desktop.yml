@@ -158,8 +158,6 @@ jobs:
         with:
           path: ${{ steps.cef_cache.outputs.cargo_tauri_root }}
           key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}-${{ steps.cef_cache.outputs.tauri_toolchain_patch }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-cargo-tauri-${{ steps.cef_cache.outputs.tauri_revision_short }}-${{ steps.cef_cache.outputs.tauri_toolchain_patch }}
 
       - name: Restore export-cef-dir tool cache
         id: export_cef_tool_cache
@@ -312,7 +310,6 @@ jobs:
             echo "Bundled CEF plugin helper app was not found at $plugin_helper_app" >&2
             exit 1
           fi
-          codesign --verify --verbose=4 "$plugin_helper_app"
 
           entitlements_file="$(mktemp)"
           codesign -d --entitlements :- "$helper" > "$entitlements_file"

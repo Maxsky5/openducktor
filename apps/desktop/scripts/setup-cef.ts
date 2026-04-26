@@ -20,6 +20,7 @@ const exportCefToolRoot = resolveExportCefToolsRoot(tauriRoot);
 const exportCefToolBinRoot = resolve(exportCefToolRoot, "bin");
 const cefPath = resolveCefPath(tauriRoot);
 const tauriRevision = readTauriCefRevision(tauriRoot);
+const SUPPORTED_TAURI_CEF_PATCH_REVISION = "a94e1b8595d9bb49328451dfe151d8499c712d44";
 const binaryExtension = process.platform === "win32" ? ".exe" : "";
 const cargoTauriPath = resolve(cargoTauriBinRoot, `cargo-tauri${binaryExtension}`);
 const exportCefDirPath = resolve(exportCefToolBinRoot, `export-cef-dir${binaryExtension}`);
@@ -28,6 +29,10 @@ const cargoTauriPatchMarkerPath = resolve(cargoTauriRoot, ".openducktor-toolchai
 
 function expectedCargoTauriPatchMarker(): string {
   return `${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}\n${tauriRevision}`;
+}
+
+function tauriBundlerPatchContext(): string {
+  return `patch=${CARGO_TAURI_CEF_TOOLCHAIN_PATCH}, expected tauri=${SUPPORTED_TAURI_CEF_PATCH_REVISION}, actual tauri=${tauriRevision}`;
 }
 
 function cargoHomeBinPath(): string {
@@ -98,28 +103,35 @@ function hasExpectedCargoTauriToolchain(): boolean {
 }
 
 function patchTauriBundlerSignOrder(sourceRoot: string): void {
+  if (tauriRevision !== SUPPORTED_TAURI_CEF_PATCH_REVISION) {
+    throw new Error(
+      `Unable to patch Tauri bundler: unsupported pinned revision (${tauriBundlerPatchContext()}).`,
+    );
+  }
+
   const bundlerAppPath = resolve(sourceRoot, "crates/tauri-bundler/src/bundle/macos/app.rs");
   const source = readFileSync(bundlerAppPath, "utf8");
   const mainBinarySignBlock = `  let bin_paths = copy_binaries_to_bundle(&bundle_directory, settings)?;\n  sign_paths.extend(bin_paths.into_iter().map(|path| SignTarget {\n    path,\n    is_an_executable: true,\n  }));\n\n  copy_custom_files_to_bundle(&bundle_directory, settings)?;`;
   const deferredMainBinarySignBlock = `  let app_binary_paths = copy_binaries_to_bundle(&bundle_directory, settings)?;\n\n  copy_custom_files_to_bundle(&bundle_directory, settings)?;`;
-  const cefHelperSignBlock = `  // Handle CEF support if cef_path is set\n  if let Some(cef_path) = settings.bundle_settings().cef_path.as_ref() {\n    let helper_paths = create_cef_helpers(&bundle_directory, settings, cef_path)?;\n    // Add helper apps to sign paths\n    sign_paths.extend(helper_paths.into_iter().map(|path| SignTarget {\n      path,\n      is_an_executable: true,\n    }));`;
-  const beforeSigningBlock = `  }\n\n  if settings.no_sign() {`;
-  const signMainAfterCefBlock = `  }\n\n  // The CEF helper .app bundles must be signed before the containing app's\n  // main executable. On macOS Intel, codesign rejects the main executable when\n  // unsigned CEF helper apps are already present under Contents/Frameworks.\n  sign_paths.extend(app_binary_paths.into_iter().map(|path| SignTarget {\n    path,\n    is_an_executable: true,\n  }));\n\n  if settings.no_sign() {`;
-  const cefHelperSignBoundaryBlock = `${cefHelperSignBlock}${beforeSigningBlock}`;
-  const cefHelperThenMainSignBlock = `${cefHelperSignBlock}${signMainAfterCefBlock}`;
+  const cefSignBlock = `  // Handle CEF support if cef_path is set\n  if let Some(cef_path) = settings.bundle_settings().cef_path.as_ref() {\n    let helper_paths = create_cef_helpers(&bundle_directory, settings, cef_path)?;\n    // Add helper apps to sign paths\n    sign_paths.extend(helper_paths.into_iter().map(|path| SignTarget {\n      path,\n      is_an_executable: true,\n    }));\n    let cef_framework_path = copy_cef_framework(&bundle_directory, cef_path)?;\n    // Add CEF framework to sign paths\n    add_framework_sign_path(\n      &cef_path.join(CEF_FRAMEWORK),\n      &cef_framework_path,\n      &mut sign_paths,\n    );\n  }`;
+  const cefThenMainSignBlock = `${cefSignBlock}\n\n  // The CEF helper .app bundles must be signed before the containing app's\n  // main executable. On macOS Intel, codesign rejects the main executable when\n  // unsigned CEF helper apps are already present under Contents/Frameworks.\n  sign_paths.extend(app_binary_paths.into_iter().map(|path| SignTarget {\n    path,\n    is_an_executable: true,\n  }));`;
 
   if (!source.includes(mainBinarySignBlock)) {
-    throw new Error("Unable to patch Tauri bundler: main binary signing block was not found.");
+    throw new Error(
+      `Unable to patch Tauri bundler: main binary signing block was not found (${tauriBundlerPatchContext()}).`,
+    );
   }
-  if (!source.includes(cefHelperSignBoundaryBlock)) {
-    throw new Error("Unable to patch Tauri bundler: CEF helper signing boundary was not found.");
+  if (!source.includes(cefSignBlock)) {
+    throw new Error(
+      `Unable to patch Tauri bundler: CEF signing block was not found (${tauriBundlerPatchContext()}).`,
+    );
   }
 
   writeFileSync(
     bundlerAppPath,
     source
       .replace(mainBinarySignBlock, deferredMainBinarySignBlock)
-      .replace(cefHelperSignBoundaryBlock, cefHelperThenMainSignBlock),
+      .replace(cefSignBlock, cefThenMainSignBlock),
   );
 }
 
