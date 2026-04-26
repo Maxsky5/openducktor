@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createSessionMessageOwner } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
@@ -11,6 +12,7 @@ import {
 } from "./use-agent-studio-model-selection-model";
 
 const CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",
@@ -96,6 +98,39 @@ describe("use-agent-studio-model-selection-model", () => {
       modelId: "gpt-5",
       variant: "high",
       profileId: "spec-agent",
+    });
+
+    expect(
+      toRoleDefaultSelection(
+        {
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "",
+          profileId: "",
+        },
+        "opencode",
+      ),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+    });
+
+    expect(
+      toRoleDefaultSelection(
+        {
+          runtimeKind: "  ",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "",
+          profileId: "",
+        },
+        "opencode",
+      ),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
     });
   });
 

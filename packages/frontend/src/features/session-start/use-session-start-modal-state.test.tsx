@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -452,6 +452,51 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
+
+    await harness.unmount();
+  });
+
+  test("recovers requested runtime selection after runtime definitions load", async () => {
+    const loadCatalog = mock(async () => CATALOG);
+    const baseProps = createBaseProps({
+      loadCatalog,
+      runtimeDefinitions: [],
+    });
+    const { initialCatalog: _initialCatalog, ...initialProps } = baseProps;
+    const harness = createHookHarness(initialProps);
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-5B",
+        role: "spec",
+        scenario: "spec_initial",
+        postStartAction: "none",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBeNull();
+    expect(loadCatalog).not.toHaveBeenCalled();
+
+    await harness.update({
+      ...initialProps,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+
+    await harness.waitFor((state) => state.selectedRuntimeKind === "opencode");
+    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+    expect(loadCatalog).toHaveBeenCalledWith("/repo", "opencode");
 
     await harness.unmount();
   });

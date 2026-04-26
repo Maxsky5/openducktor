@@ -574,7 +574,9 @@ describe("use-repo-settings-operations", () => {
           ...inputFixture,
           defaultRuntimeKind: "   " as RepoSettingsInput["defaultRuntimeKind"],
         }),
-      ).rejects.toThrow("Default runtime kind cannot be blank.");
+      ).rejects.toThrow(
+        "Default runtime kind is required. Select a repository default runtime before saving.",
+      );
       expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();

@@ -54,12 +54,17 @@ describe("repo-agent-defaults", () => {
   });
 
   test("normalizes repo default runtime kinds for save", () => {
-    expect(normalizeRepoDefaultRuntimeKindForSave(" opencode ", "codex")).toBe("opencode");
-    expect(normalizeRepoDefaultRuntimeKindForSave(undefined, "codex")).toBe("codex");
+    expect(normalizeRepoDefaultRuntimeKindForSave(" opencode ")).toBe("opencode");
   });
 
-  test("rejects blank repo default runtime kinds", () => {
-    expect(() => normalizeRepoDefaultRuntimeKindForSave("   ", "opencode")).toThrow(
+  test("rejects missing or blank repo default runtime kinds", () => {
+    expect(() => normalizeRepoDefaultRuntimeKindForSave(undefined)).toThrow(
+      repoDefaultRuntimeKindError(),
+    );
+    expect(() => normalizeRepoDefaultRuntimeKindForSave(null)).toThrow(
+      repoDefaultRuntimeKindError(),
+    );
+    expect(() => normalizeRepoDefaultRuntimeKindForSave("   ")).toThrow(
       repoDefaultRuntimeKindError(),
     );
   });

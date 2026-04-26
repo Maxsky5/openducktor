@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
@@ -32,6 +33,7 @@ const resolveAgentStudioActiveSession = (args: {
 };
 
 const catalogFixture: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",
@@ -89,6 +91,7 @@ describe("agents-page-selection", () => {
 
   test("matches provider defaults by provider and model id", () => {
     const providerCollisionCatalog: AgentModelCatalog = {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
       models: [
         {
           id: "openai/shared-model",

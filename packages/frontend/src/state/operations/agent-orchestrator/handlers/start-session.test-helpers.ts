@@ -1,4 +1,32 @@
+import type { RuntimeInfo } from "../runtime/runtime";
 import type { StartSessionDependencies } from "./start-session";
+
+const ensureRuntimeWithKind = async (
+  ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
+): Promise<RuntimeInfo> => {
+  const [, , , options] = args;
+  const runtimeKind = options?.runtimeKind ?? "opencode";
+  const workingDirectory = options?.targetWorkingDirectory ?? "/tmp/repo";
+
+  return {
+    kind: runtimeKind,
+    runtimeKind,
+    runtimeId: "runtime-1",
+    runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+    workingDirectory,
+  };
+};
+
+const withRuntimeKind = async (
+  ensureRuntime: StartSessionDependencies["runtime"]["ensureRuntime"],
+  ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
+): Promise<RuntimeInfo> => {
+  const [, , , options] = args;
+  const runtime = await ensureRuntime(...args);
+  const runtimeKind = runtime.runtimeKind ?? options?.runtimeKind ?? runtime.kind;
+
+  return runtimeKind ? { ...runtime, runtimeKind } : runtime;
+};
 
 export type FlatStartSessionDependencies = Omit<
   StartSessionDependencies["repo"],
@@ -49,7 +77,8 @@ export const toStartSessionDependencies = (
           workingDirectory: "/tmp/repo/worktree",
           source: "active_build_run",
         })),
-      ensureRuntime: deps.ensureRuntime,
+      ensureRuntime: (...args) =>
+        withRuntimeKind(deps.ensureRuntime ?? ensureRuntimeWithKind, ...args),
     },
     task: {
       taskRef: deps.taskRef,

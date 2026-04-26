@@ -9,6 +9,7 @@ import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { kickoffPromptWithTaskContext } from "../support/scenario";
+import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
 import type {
   ResolvedRuntimeAndModel,
   RuntimeDependencies,
@@ -223,6 +224,9 @@ export const createStartAgentSession = ({
 
     if (input.startMode === "fresh" && role === "qa") {
       resolveStartTask({ ctx: startCtx, task });
+    }
+    if (input.startMode === "fresh") {
+      void requireSelectedModelRuntimeKindForStart(role, input.selectedModel);
     }
 
     const normalizedSourceSessionId =

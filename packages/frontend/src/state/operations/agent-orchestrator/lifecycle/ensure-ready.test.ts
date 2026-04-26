@@ -102,6 +102,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -172,6 +173,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -188,6 +190,118 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("uses top-level session runtime metadata when refreshing an attached session", async () => {
+    let capturedRuntimeKind: string | null | undefined = null;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => true;
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({
+          runtimeKind: "claude-code",
+          runtimeRoute: null,
+          selectedModel: null,
+          status: "idle",
+        }),
+      },
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: (_sessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async (_repoPath, _taskId, _role, options) => {
+        capturedRuntimeKind = options?.runtimeKind;
+        return {
+          kind: "claude-code",
+          runtimeKind: "claude-code",
+          runtimeId: "runtime-claude",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await ensureReady("session-1");
+
+      expect(String(capturedRuntimeKind)).toBe("claude-code");
+      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("claude-code");
+      expect(sessionsRef.current["session-1"]?.runtimeRoute).toEqual({
+        type: "local_http",
+        endpoint: "http://127.0.0.1:5555",
+      });
+    } finally {
+      adapter.hasSession = originalHasSession;
+    }
+  });
+
+  test("rejects attached session runtime mismatches instead of using repo defaults", async () => {
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => true;
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef: {
+        current: {
+          "session-1": buildSession({
+            runtimeKind: "claude-code",
+            runtimeRoute: null,
+            selectedModel: null,
+            status: "idle",
+          }),
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: () => {},
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: null,
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Session 'session-1' runtime kind metadata 'claude-code' does not match ensured runtime kind 'opencode'.",
+      );
+    } finally {
+      adapter.hasSession = originalHasSession;
     }
   });
 
@@ -264,6 +378,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -373,6 +488,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -460,6 +576,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -538,6 +655,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -609,6 +727,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -702,6 +821,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: null,
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -726,6 +846,88 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
       adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+    }
+  });
+
+  test("passes top-level session runtime metadata when resuming a detached session", async () => {
+    let ensuredRuntimeKind: string | null | undefined = null;
+    let resumedInput:
+      | Parameters<InstanceType<typeof OpencodeSdkAdapter>["resumeSession"]>[0]
+      | null = null;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => false;
+    adapter.resumeSession = async (input) => {
+      resumedInput = input;
+      return {
+        runtimeKind: "claude-code",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({
+          runtimeKind: "claude-code",
+          runtimeRoute: null,
+          selectedModel: null,
+          status: "idle",
+        }),
+      },
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: (_sessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async (_repoPath, _taskId, _role, options) => {
+        ensuredRuntimeKind = options?.runtimeKind;
+        return {
+          kind: "claude-code",
+          runtimeKind: "claude-code",
+          runtimeId: "runtime-claude",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await ensureReady("session-1");
+
+      expect(String(ensuredRuntimeKind)).toBe("claude-code");
+      expect(resumedInput).toMatchObject({
+        runtimeKind: "claude-code",
+        runtimeConnection: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
+      });
+      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("claude-code");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.resumeSession = originalResumeSession;
     }
   });
 
@@ -758,6 +960,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeCalls += 1;
         return {
           kind: "opencode",
+          runtimeKind: "opencode",
           runtimeId: null,
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
@@ -808,6 +1011,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeCalls += 1;
         return {
           kind: "opencode",
+          runtimeKind: "opencode",
           runtimeId: null,
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",

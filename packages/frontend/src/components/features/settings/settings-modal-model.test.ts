@@ -84,7 +84,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 describe("settings-modal-model", () => {
   test("normalizes null defaults to empty values", () => {
     expect(ensureDraftAgentDefault(null)).toEqual({
-      runtimeKind: "opencode",
+      runtimeKind: "",
       providerId: "",
       modelId: "",
       variant: "",
@@ -195,7 +195,7 @@ describe("settings-modal-model", () => {
     expect(getNeededCatalogRuntimeKinds(createRepoConfig(), [])).toEqual([]);
   });
 
-  test("resolves missing stored runtime kinds through existing runtime resolution", () => {
+  test("skips unknown stored runtime kinds instead of resolving to another runtime", () => {
     expect(
       getNeededCatalogRuntimeKinds(
         createRepoConfig({
@@ -215,7 +215,7 @@ describe("settings-modal-model", () => {
         }),
         [CODEX_DESCRIPTOR],
       ),
-    ).toEqual(["codex"]);
+    ).toEqual([]);
   });
 
   test("resets prompt override only when it exists and preserves enabled flag", () => {

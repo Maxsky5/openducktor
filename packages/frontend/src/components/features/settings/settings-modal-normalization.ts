@@ -19,7 +19,6 @@ import {
   normalizeRepoDefaultRuntimeKindForSave,
 } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
 const trimNonEmpty = (value: string): string | null => {
   const trimmed = value.trim();
@@ -67,10 +66,7 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName.trim(),
     repoPath: repo.repoPath.trim(),
-    defaultRuntimeKind: normalizeRepoDefaultRuntimeKindForSave(
-      repo.defaultRuntimeKind,
-      DEFAULT_RUNTIME_KIND,
-    ),
+    defaultRuntimeKind: normalizeRepoDefaultRuntimeKindForSave(repo.defaultRuntimeKind),
     worktreeBasePath: trimNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),

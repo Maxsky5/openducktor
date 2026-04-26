@@ -9,6 +9,8 @@ import {
   filterRuntimeDefinitionsForRole,
   getMissingMandatoryRuntimeCapabilities,
   getRuntimeDescriptorCapabilityConfigErrors,
+  resolveRuntimeKindSelection,
+  resolveRuntimeKindSelectionState,
   runtimeSupportsRole,
   validateRuntimeDefinitionForOpenDucktor,
   validateRuntimeDefinitionsForOpenDucktor,
@@ -55,16 +57,33 @@ describe("agent-runtime capability policies", () => {
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([]);
   });
 
-  test("reports runtimes that do not cover every workflow scope", () => {
+  test("accepts runtimes that cover at least one role-specific workflow scope set", () => {
     const workspaceOnly = withCapabilities({
       supportedScopes: ["workspace"],
     });
+    const taskOnly = withCapabilities({
+      supportedScopes: ["task"],
+    });
+    const buildAndWorkspace = withCapabilities({
+      supportedScopes: ["build", "workspace"],
+    });
 
-    expect(getRuntimeDescriptorCapabilityConfigErrors(workspaceOnly)).toEqual([
-      "missing required workflow scopes: task, build",
+    expect(getRuntimeDescriptorCapabilityConfigErrors(workspaceOnly)).toEqual([]);
+    expect(validateRuntimeDefinitionForOpenDucktor(workspaceOnly)).toEqual([]);
+    expect(validateRuntimeDefinitionForOpenDucktor(taskOnly)).toEqual([]);
+    expect(validateRuntimeDefinitionForOpenDucktor(buildAndWorkspace)).toEqual([]);
+  });
+
+  test("reports runtimes that cannot satisfy any agent role", () => {
+    const descriptor = withCapabilities({
+      supportedScopes: ["build"],
+    });
+
+    expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toEqual([
+      "missing workflow scopes for every agent role: spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace",
     ]);
-    expect(validateRuntimeDefinitionForOpenDucktor(workspaceOnly)).toEqual([
-      "missing required workflow scopes: task, build",
+    expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
+      "missing workflow scopes for every agent role: spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace",
     ]);
   });
 
@@ -75,25 +94,76 @@ describe("agent-runtime capability policies", () => {
     });
 
     expect(validateRuntimeDefinitionsForOpenDucktor([descriptor])).toEqual([
-      "Runtime 'opencode' is incompatible with OpenDucktor: missing mandatory capabilities: supportsOdtWorkflowTools; missing required workflow scopes: task, build",
+      "Runtime 'opencode' is incompatible with OpenDucktor: missing mandatory capabilities: supportsOdtWorkflowTools",
     ]);
   });
 
-  test("only fully supported runtimes remain eligible for role and default selection", () => {
+  test("runtime selection resolution never falls back to OpenCode implicitly", () => {
+    const codex = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      kind: "codex",
+      label: "Codex",
+    } satisfies RuntimeDescriptor;
+
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, codex],
+        requestedRuntimeKind: "codex",
+      }),
+    ).toEqual({
+      status: "resolved",
+      runtimeKind: "codex",
+      requestedRuntimeKind: "codex",
+    });
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        requestedRuntimeKind: null,
+      }),
+    ).toEqual({ status: "missing-request", runtimeKind: null });
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        requestedRuntimeKind: "codex",
+      }),
+    ).toEqual({ status: "unknown-request", runtimeKind: null, requestedRuntimeKind: "codex" });
+    expect(
+      resolveRuntimeKindSelectionState({
+        runtimeDefinitions: [],
+        requestedRuntimeKind: "codex",
+      }),
+    ).toEqual({ status: "no-definitions", runtimeKind: null, requestedRuntimeKind: "codex" });
+    expect(
+      resolveRuntimeKindSelection({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        requestedRuntimeKind: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("uses role-specific scopes for role selection while defaults require all scopes", () => {
     const workspaceOnly = withCapabilities({
       supportedScopes: ["workspace"],
     });
     const buildAndWorkspace = withCapabilities({
       supportedScopes: ["build", "workspace"],
     });
+    const taskOnly = withCapabilities({
+      supportedScopes: ["task"],
+    });
 
     expect(runtimeSupportsRole(OPENCODE_RUNTIME_DESCRIPTOR, "planner")).toBe(true);
     expect(runtimeSupportsRole(OPENCODE_RUNTIME_DESCRIPTOR, "qa")).toBe(true);
+    expect(runtimeSupportsRole(workspaceOnly, "spec")).toBe(true);
+    expect(runtimeSupportsRole(workspaceOnly, "planner")).toBe(true);
     expect(runtimeSupportsRole(workspaceOnly, "qa")).toBe(false);
-    expect(runtimeSupportsRole(buildAndWorkspace, "build")).toBe(false);
-    expect(filterRuntimeDefinitionsForRole([workspaceOnly, buildAndWorkspace], "build")).toEqual(
-      [],
-    );
+    expect(runtimeSupportsRole(taskOnly, "qa")).toBe(true);
+    expect(runtimeSupportsRole(taskOnly, "build")).toBe(false);
+    expect(runtimeSupportsRole(buildAndWorkspace, "build")).toBe(true);
+    expect(filterRuntimeDefinitionsForRole([workspaceOnly, taskOnly], "qa")).toEqual([taskOnly]);
+    expect(filterRuntimeDefinitionsForRole([workspaceOnly, buildAndWorkspace], "build")).toEqual([
+      buildAndWorkspace,
+    ]);
     expect(filterRuntimeDefinitionsForDefaultSelection([workspaceOnly, buildAndWorkspace])).toEqual(
       [],
     );

@@ -8,13 +8,13 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
 type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
 type RepoAgentDefaultLike = {
-  runtimeKind?: string;
+  runtimeKind?: string | null;
   providerId: string;
   modelId: string;
   variant?: string | undefined;
@@ -40,7 +40,7 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
 export const ensureDraftAgentDefault = (
   value:
     | {
-        runtimeKind?: string;
+        runtimeKind?: string | null;
         providerId: string;
         modelId: string;
         variant?: string | undefined;
@@ -49,7 +49,7 @@ export const ensureDraftAgentDefault = (
     | null
     | undefined,
 ): RepoAgentDefaultInput => ({
-  runtimeKind: value?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+  runtimeKind: value?.runtimeKind ?? "",
   providerId: value?.providerId ?? "",
   modelId: value?.modelId ?? "",
   variant: value?.variant ?? "",
@@ -135,14 +135,13 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   selectedRepoConfig: RepoConfig;
   runtimeDefinitions: RuntimeDescriptor[];
   role: RepoDefaultRole;
-}): RuntimeKind => {
+}): RuntimeKind | null => {
   const requestedRuntimeKind =
     selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
 
   return resolveRuntimeKindSelection({
     runtimeDefinitions,
     requestedRuntimeKind,
-    fallbackRuntimeKind: DEFAULT_RUNTIME_KIND,
   });
 };
 
@@ -161,7 +160,9 @@ export const getNeededCatalogRuntimeKinds = (
       runtimeDefinitions,
       role,
     });
-    runtimeKinds.add(resolvedRuntimeKind);
+    if (resolvedRuntimeKind) {
+      runtimeKinds.add(resolvedRuntimeKind);
+    }
   }
 
   return [...runtimeKinds];

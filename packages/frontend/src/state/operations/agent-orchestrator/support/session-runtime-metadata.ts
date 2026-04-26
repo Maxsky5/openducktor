@@ -12,17 +12,47 @@ const throwSessionRuntimeMetadataError = (message: string): never => {
   throw new SessionRuntimeMetadataError(message);
 };
 
+const requireRuntimeKindMetadata = (
+  runtimeKind: string | null | undefined,
+  message: string,
+): RuntimeKind => {
+  const trimmedRuntimeKind = runtimeKind?.trim();
+  if (!trimmedRuntimeKind) {
+    throwSessionRuntimeMetadataError(message);
+  }
+
+  return trimmedRuntimeKind as RuntimeKind;
+};
+
+const missingPersistedSessionRuntimeKindMessage = (sessionId: string): string =>
+  `Persisted session '${sessionId}' is missing runtime kind metadata.`;
+
+const missingPersistedSelectedModelRuntimeKindMessage = (sessionId: string): string =>
+  `Persisted session '${sessionId}' selected model is missing runtime kind metadata.`;
+
+const missingSessionRuntimeKindMessage = (sessionId: string): string =>
+  `Session '${sessionId}' is missing runtime kind metadata.`;
+
+const missingEnsuredSessionRuntimeKindMessage = (sessionId: string): string =>
+  `Session '${sessionId}' ensured runtime is missing runtime kind metadata.`;
+
+const missingEnsuredSelectedModelRuntimeKindMessage = (): string =>
+  "Selected model ensured runtime is missing runtime kind metadata.";
+
+const missingSelectedModelRuntimeKindMessage = (sessionId: string): string =>
+  `Session '${sessionId}' selected model is missing runtime kind metadata.`;
+
+export const startSessionRuntimeKindRequiredMessage = (role: AgentSessionState["role"]): string =>
+  `Runtime kind is required to start ${role} sessions. Select an explicit runtime before starting a session.`;
+
 export const readPersistedRuntimeKind = ({
   sessionId,
   runtimeKind,
 }: Pick<AgentSessionRecord, "sessionId" | "runtimeKind">): RuntimeKind => {
-  if (!runtimeKind) {
-    throwSessionRuntimeMetadataError(
-      `Persisted session '${sessionId}' is missing runtime kind metadata.`,
-    );
-  }
-
-  return runtimeKind;
+  return requireRuntimeKindMetadata(
+    runtimeKind,
+    missingPersistedSessionRuntimeKindMessage(sessionId),
+  );
 };
 
 export const requirePersistedSelectedModelRuntimeKind = (
@@ -30,32 +60,90 @@ export const requirePersistedSelectedModelRuntimeKind = (
   sessionRuntimeKind: NonNullable<AgentSessionRecord["runtimeKind"]>,
   selectedModel: NonNullable<AgentSessionRecord["selectedModel"]>,
 ): NonNullable<typeof selectedModel.runtimeKind> => {
-  if (!selectedModel.runtimeKind) {
-    throwSessionRuntimeMetadataError(
-      `Persisted session '${sessionId}' selected model is missing runtime kind metadata.`,
-    );
-  }
+  const runtimeKind = requireRuntimeKindMetadata(
+    selectedModel.runtimeKind,
+    missingPersistedSelectedModelRuntimeKindMessage(sessionId),
+  );
 
-  if (selectedModel.runtimeKind !== sessionRuntimeKind) {
+  if (runtimeKind !== sessionRuntimeKind) {
     throwSessionRuntimeMetadataError(
       `Persisted session '${sessionId}' selected model runtime kind does not match session runtime kind.`,
     );
   }
 
-  return selectedModel.runtimeKind as NonNullable<typeof selectedModel.runtimeKind>;
+  return runtimeKind as NonNullable<typeof selectedModel.runtimeKind>;
 };
 
 export const requireSessionRuntimeKindForPersistence = (
   session: Pick<AgentSessionState, "sessionId" | "runtimeKind">,
 ): NonNullable<AgentSessionState["runtimeKind"]> => {
-  const runtimeKind = session.runtimeKind;
-  if (!runtimeKind) {
-    throwSessionRuntimeMetadataError(
-      `Session '${session.sessionId}' is missing runtime kind metadata.`,
-    );
+  return requireRuntimeKindMetadata(
+    session.runtimeKind,
+    missingSessionRuntimeKindMessage(session.sessionId),
+  ) as NonNullable<AgentSessionState["runtimeKind"]>;
+};
+
+export const requireSessionRuntimeKind = (
+  session: Pick<AgentSessionState, "sessionId" | "runtimeKind" | "selectedModel">,
+): NonNullable<AgentSessionState["runtimeKind"]> => {
+  return requireRuntimeKindMetadata(
+    session.runtimeKind ?? session.selectedModel?.runtimeKind,
+    missingSessionRuntimeKindMessage(session.sessionId),
+  ) as NonNullable<AgentSessionState["runtimeKind"]>;
+};
+
+export const requireSelectedModelRuntimeKindForStart = (
+  role: AgentSessionState["role"],
+  selectedModel: Pick<NonNullable<AgentSessionState["selectedModel"]>, "runtimeKind">,
+): NonNullable<NonNullable<AgentSessionState["selectedModel"]>["runtimeKind"]> => {
+  return requireRuntimeKindMetadata(
+    selectedModel.runtimeKind,
+    startSessionRuntimeKindRequiredMessage(role),
+  ) as NonNullable<NonNullable<AgentSessionState["selectedModel"]>["runtimeKind"]>;
+};
+
+export const assertSessionRuntimeKindMatchesEnsuredRuntime = ({
+  sessionId,
+  requestedRuntimeKind,
+  ensuredRuntimeKind,
+}: {
+  sessionId: string;
+  requestedRuntimeKind: RuntimeKind;
+  ensuredRuntimeKind: RuntimeKind | string | null | undefined;
+}): RuntimeKind => {
+  const normalizedEnsuredRuntimeKind = requireRuntimeKindMetadata(
+    ensuredRuntimeKind,
+    missingEnsuredSessionRuntimeKindMessage(sessionId),
+  );
+  if (normalizedEnsuredRuntimeKind === requestedRuntimeKind) {
+    return normalizedEnsuredRuntimeKind;
   }
 
-  return runtimeKind as NonNullable<AgentSessionState["runtimeKind"]>;
+  throwSessionRuntimeMetadataError(
+    `Session '${sessionId}' runtime kind metadata '${requestedRuntimeKind}' does not match ensured runtime kind '${normalizedEnsuredRuntimeKind}'.`,
+  );
+  throw new Error("unreachable");
+};
+
+export const assertSelectedModelRuntimeKindMatchesEnsuredRuntime = ({
+  selectedModelRuntimeKind,
+  ensuredRuntimeKind,
+}: {
+  selectedModelRuntimeKind: RuntimeKind;
+  ensuredRuntimeKind: RuntimeKind | string | null | undefined;
+}): RuntimeKind => {
+  const normalizedEnsuredRuntimeKind = requireRuntimeKindMetadata(
+    ensuredRuntimeKind,
+    missingEnsuredSelectedModelRuntimeKindMessage(),
+  );
+  if (normalizedEnsuredRuntimeKind === selectedModelRuntimeKind) {
+    return normalizedEnsuredRuntimeKind;
+  }
+
+  throwSessionRuntimeMetadataError(
+    `Selected model runtime kind '${selectedModelRuntimeKind}' does not match ensured runtime kind '${normalizedEnsuredRuntimeKind}'.`,
+  );
+  throw new Error("unreachable");
 };
 
 export const requireSelectedModelRuntimeKindForPersistence = (
@@ -63,12 +151,10 @@ export const requireSelectedModelRuntimeKindForPersistence = (
   sessionRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
   selectedModel: NonNullable<AgentSessionState["selectedModel"]>,
 ): NonNullable<typeof selectedModel.runtimeKind> => {
-  const runtimeKind = selectedModel.runtimeKind;
-  if (!runtimeKind) {
-    throwSessionRuntimeMetadataError(
-      `Session '${sessionId}' selected model is missing runtime kind metadata.`,
-    );
-  }
+  const runtimeKind = requireRuntimeKindMetadata(
+    selectedModel.runtimeKind,
+    missingSelectedModelRuntimeKindMessage(sessionId),
+  );
 
   if (runtimeKind !== sessionRuntimeKind) {
     throwSessionRuntimeMetadataError(

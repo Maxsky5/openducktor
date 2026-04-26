@@ -1,6 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   coerceVisibleSelectionToCatalog,
@@ -18,25 +17,24 @@ export const resolveInitialModalSelection = ({
   catalog: AgentModelCatalog | null;
   repoSettings: RepoSettingsInput | null;
   role: AgentRole;
-  runtimeKind: RuntimeKind;
+  runtimeKind: RuntimeKind | null;
   selectedModel: AgentModelSelection | null;
 }): AgentModelSelection | null => {
+  if (!runtimeKind) {
+    return null;
+  }
   const requestedSelection =
-    selectedModel && (selectedModel.runtimeKind ?? DEFAULT_RUNTIME_KIND) === runtimeKind
-      ? coerceVisibleSelectionToCatalog(catalog, selectedModel)
+    selectedModel?.runtimeKind === runtimeKind
+      ? (coerceVisibleSelectionToCatalog(catalog, selectedModel) ?? selectedModel)
       : null;
   const roleDefault = roleDefaultSelectionFor(repoSettings, role);
-  const runtimeRoleDefault =
-    roleDefault && (roleDefault.runtimeKind ?? DEFAULT_RUNTIME_KIND) === runtimeKind
-      ? roleDefault
-      : null;
+  const runtimeRoleDefault = roleDefault?.runtimeKind === runtimeKind ? roleDefault : null;
   const catalogDefault = pickDefaultVisibleSelectionForCatalog(catalog);
 
   return (
     requestedSelection ??
     coerceVisibleSelectionToCatalog(catalog, runtimeRoleDefault) ??
     (catalogDefault ? { ...catalogDefault, runtimeKind } : null) ??
-    selectedModel ??
     runtimeRoleDefault
   );
 };

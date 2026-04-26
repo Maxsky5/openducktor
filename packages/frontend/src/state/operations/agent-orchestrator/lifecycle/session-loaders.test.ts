@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -19,6 +20,7 @@ const createDeferred = <T>() => {
 };
 
 const catalogFixture: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",

@@ -104,6 +104,30 @@ describe("session-start-modal-selection", () => {
     });
   });
 
+  test("resolveInitialModalSelection preserves requested selection when it is missing from the catalog", () => {
+    expect(
+      resolveInitialModalSelection({
+        catalog: CATALOG,
+        repoSettings: REPO_SETTINGS,
+        role: "spec",
+        runtimeKind: "opencode",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "stale-claude",
+          variant: "legacy",
+          profileId: "custom-agent",
+        },
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "stale-claude",
+      variant: "legacy",
+      profileId: "custom-agent",
+    });
+  });
+
   test("resolveInitialModalSelection falls back to normalized role defaults", () => {
     expect(
       resolveInitialModalSelection({

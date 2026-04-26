@@ -13,7 +13,7 @@ import {
 } from "@/components/features/agents/catalog-select-options";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { DEFAULT_RUNTIME_KIND, resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import {
   canonicalTargetBranch,
   effectiveTaskTargetBranch,
@@ -49,7 +49,7 @@ type UseSessionStartModalStateResult = {
   intent: SessionStartModalIntent | null;
   isOpen: boolean;
   selection: AgentModelSelection | null;
-  selectedRuntimeKind: RuntimeKind;
+  selectedRuntimeKind: RuntimeKind | null;
   runtimeOptions: ComboboxOption[];
   supportsProfiles: boolean;
   supportsVariants: boolean;
@@ -146,15 +146,16 @@ export function useSessionStartModalState({
 
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
+      const requestedRuntimeKind =
+        nextIntent.selectedModel?.runtimeKind ??
+        roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
+        repoSettings?.defaultRuntimeKind ??
+        null;
       const initialRuntimeKind = resolveRuntimeKindSelection({
         runtimeDefinitions,
-        requestedRuntimeKind:
-          nextIntent.selectedModel?.runtimeKind ??
-          roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
-          repoSettings?.defaultRuntimeKind ??
-          DEFAULT_RUNTIME_KIND,
+        requestedRuntimeKind,
       });
-      setRequestedRuntimeKind(initialRuntimeKind);
+      setRequestedRuntimeKind(requestedRuntimeKind);
       setIntent(nextIntent);
       setSelectedTargetBranch(
         targetBranchSelectionValue(
@@ -183,9 +184,13 @@ export function useSessionStartModalState({
         requestedRuntimeKind: runtimeKindValue,
       });
       setRequestedRuntimeKind(runtimeKindValue);
-      handleSelectionRuntimeChange(runtimeKind);
+      if (runtimeKind) {
+        handleSelectionRuntimeChange(runtimeKind);
+      } else {
+        resetSelection();
+      }
     },
-    [handleSelectionRuntimeChange, runtimeDefinitions, setRequestedRuntimeKind],
+    [handleSelectionRuntimeChange, resetSelection, runtimeDefinitions, setRequestedRuntimeKind],
   );
 
   const selectedModelEntry = useMemo(() => {

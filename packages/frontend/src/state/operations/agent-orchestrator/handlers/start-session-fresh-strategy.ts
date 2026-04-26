@@ -1,5 +1,8 @@
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { resolveRuntimeConnection } from "../runtime/runtime";
+import {
+  assertSelectedModelRuntimeKindMatchesEnsuredRuntime,
+  requireSelectedModelRuntimeKindForStart,
+} from "../support/session-runtime-metadata";
 import type {
   StartOrReuseResult,
   StartSessionContext,
@@ -27,6 +30,11 @@ export const executeFreshStart = async ({
 }: FreshStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
+  const selectedModelRuntimeKind = requireSelectedModelRuntimeKindForStart(ctx.role, selectedModel);
+  const selectedModelWithRuntime = {
+    ...selectedModel,
+    runtimeKind: selectedModelRuntimeKind,
+  };
   const targetWorkingDirectory =
     input.targetWorkingDirectory !== undefined
       ? input.targetWorkingDirectory
@@ -38,7 +46,7 @@ export const executeFreshStart = async ({
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
-    requestedRuntimeKind: selectedModel.runtimeKind,
+    requestedRuntimeKind: selectedModelRuntimeKind,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     taskCard,
     deps,
@@ -49,17 +57,21 @@ export const executeFreshStart = async ({
     scenario: resolved.resolvedScenario,
     startMode: input.startMode,
   });
+  const runtimeKind = assertSelectedModelRuntimeKindMatchesEnsuredRuntime({
+    selectedModelRuntimeKind,
+    ensuredRuntimeKind: resolved.runtime.runtimeKind,
+  });
 
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
-    runtimeKind: resolved.runtime.runtimeKind ?? selectedModel.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     runtimeConnection: resolveRuntimeConnection(resolved.runtime),
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
     scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
-    model: selectedModel,
+    model: selectedModelWithRuntime,
   });
 
   const startedCtx = {
@@ -82,7 +94,7 @@ export const executeFreshStart = async ({
     runtimeInfo: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
     promptOverrides: resolved.promptOverrides,
-    selectedModel,
+    selectedModel: selectedModelWithRuntime,
     deps,
     taskCard: resolved.taskCard,
   });

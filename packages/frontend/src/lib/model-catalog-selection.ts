@@ -1,5 +1,4 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
 type CatalogProfile = NonNullable<AgentModelCatalog["profiles"]>[number];
 type CatalogModel = AgentModelCatalog["models"][number];
@@ -40,8 +39,8 @@ export const pickCatalogDefaultModel = (catalog: AgentModelCatalog): CatalogMode
   return catalog.models[0] ?? null;
 };
 
-export const runtimeKindForCatalog = (catalog: AgentModelCatalog): string => {
-  return catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND;
+export const runtimeKindForCatalog = (catalog: AgentModelCatalog): string | null => {
+  return catalog.runtime?.kind ?? null;
 };
 
 export const normalizeCatalogVariant = (

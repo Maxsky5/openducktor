@@ -4,6 +4,7 @@ import {
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
+  runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
@@ -11,6 +12,8 @@ import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-ico
 import type { ComboboxOption } from "@/components/ui/combobox";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
+
+const agentRoles = Object.keys(runtimeRequiredScopesByRole) as AgentRole[];
 
 export const toAgentRuntimeOptions = (
   runtimeDefinitions: RuntimeDescriptor[],
@@ -29,23 +32,74 @@ export const findRuntimeDefinition = (
   return runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
 };
 
-export const resolveRuntimeKindSelection = ({
+export type RuntimeKindSelectionResolution =
+  | {
+      status: "resolved";
+      runtimeKind: RuntimeKind;
+      requestedRuntimeKind: RuntimeKind;
+    }
+  | {
+      status: "missing-request";
+      runtimeKind: null;
+    }
+  | {
+      status: "unknown-request";
+      runtimeKind: null;
+      requestedRuntimeKind: RuntimeKind;
+    }
+  | {
+      status: "no-definitions";
+      runtimeKind: null;
+      requestedRuntimeKind: RuntimeKind | null;
+    };
+
+const normalizeRequestedRuntimeKind = (
+  runtimeKind: RuntimeKind | null | undefined,
+): RuntimeKind | null => {
+  const trimmed = runtimeKind?.trim();
+  return trimmed ? trimmed : null;
+};
+
+export const resolveRuntimeKindSelectionState = ({
   runtimeDefinitions,
   requestedRuntimeKind,
-  fallbackRuntimeKind = DEFAULT_RUNTIME_KIND,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   requestedRuntimeKind?: RuntimeKind | null;
-  fallbackRuntimeKind?: RuntimeKind;
-}): RuntimeKind => {
-  if (requestedRuntimeKind) {
-    const matching = findRuntimeDefinition(runtimeDefinitions, requestedRuntimeKind);
-    if (matching) {
-      return matching.kind;
-    }
+}): RuntimeKindSelectionResolution => {
+  const normalizedRequestedRuntimeKind = normalizeRequestedRuntimeKind(requestedRuntimeKind);
+  if (runtimeDefinitions.length === 0) {
+    return {
+      status: "no-definitions",
+      runtimeKind: null,
+      requestedRuntimeKind: normalizedRequestedRuntimeKind,
+    };
   }
 
-  return runtimeDefinitions[0]?.kind ?? requestedRuntimeKind ?? fallbackRuntimeKind;
+  if (!normalizedRequestedRuntimeKind) {
+    return { status: "missing-request", runtimeKind: null };
+  }
+
+  const matching = findRuntimeDefinition(runtimeDefinitions, normalizedRequestedRuntimeKind);
+  if (!matching) {
+    return {
+      status: "unknown-request",
+      runtimeKind: null,
+      requestedRuntimeKind: normalizedRequestedRuntimeKind,
+    };
+  }
+
+  return {
+    status: "resolved",
+    runtimeKind: matching.kind,
+    requestedRuntimeKind: normalizedRequestedRuntimeKind,
+  };
+};
+
+export const resolveRuntimeKindSelection = (
+  input: Parameters<typeof resolveRuntimeKindSelectionState>[0],
+): RuntimeKind | null => {
+  return resolveRuntimeKindSelectionState(input).runtimeKind;
 };
 
 export const runtimeLabelFor = ({
@@ -73,17 +127,30 @@ export const getMissingMandatoryRuntimeCapabilities = (
   );
 };
 
+const supportedScopesSatisfyRole = (
+  supportedScopes: readonly string[],
+  role: AgentRole,
+): boolean => {
+  return runtimeRequiredScopesByRole[role].every((scope) => supportedScopes.includes(scope));
+};
+
+const roleScopeRequirementsDescription = (): string => {
+  return agentRoles
+    .map((role) => `${role} requires ${runtimeRequiredScopesByRole[role].join(", ")}`)
+    .join("; ");
+};
+
 export const getRuntimeDescriptorCapabilityConfigErrors = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
-  const missingSupportedScopes = getMissingRequiredRuntimeSupportedScopes(
-    runtimeDescriptor.capabilities.supportedScopes,
+  const supportsAtLeastOneRole = agentRoles.some((role) =>
+    supportedScopesSatisfyRole(runtimeDescriptor.capabilities.supportedScopes, role),
   );
-  if (missingSupportedScopes.length === 0) {
+  if (supportsAtLeastOneRole) {
     return [];
   }
 
-  return [`missing required workflow scopes: ${missingSupportedScopes.join(", ")}`];
+  return [`missing workflow scopes for every agent role: ${roleScopeRequirementsDescription()}`];
 };
 
 export const validateRuntimeDefinitionForOpenDucktor = (
@@ -114,9 +181,9 @@ export const validateRuntimeDefinitionsForOpenDucktor = (
 
 export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
-  _role: AgentRole,
+  role: AgentRole,
 ): boolean => {
-  return runtimeSupportsAllRoles(runtimeDescriptor);
+  return supportedScopesSatisfyRole(runtimeDescriptor.capabilities.supportedScopes, role);
 };
 
 export const filterRuntimeDefinitionsForRole = (

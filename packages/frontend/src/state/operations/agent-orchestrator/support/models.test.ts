@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   coerceSessionSelectionToCatalog,
@@ -7,6 +8,7 @@ import {
 } from "./models";
 
 const catalogFixture: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",

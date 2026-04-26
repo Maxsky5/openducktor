@@ -16,9 +16,13 @@ export const pickDefaultSessionSelectionForCatalog = (
     return null;
   }
   const variant = normalizeCatalogVariant(model, undefined);
+  const runtimeKind = runtimeKindForCatalog(catalog);
+  if (!runtimeKind) {
+    return null;
+  }
 
   return {
-    runtimeKind: runtimeKindForCatalog(catalog),
+    runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
     ...(variant ? { variant } : {}),
@@ -40,9 +44,13 @@ export const coerceSessionSelectionToCatalog = (
 
   const variant = normalizeCatalogVariant(model, selection.variant);
   const profileId = normalizeKnownCatalogProfileId(catalog, selection.profileId);
+  const runtimeKind = selection.runtimeKind ?? runtimeKindForCatalog(catalog);
+  if (!runtimeKind) {
+    return null;
+  }
 
   return {
-    runtimeKind: selection.runtimeKind ?? runtimeKindForCatalog(catalog),
+    runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
     ...(variant ? { variant } : {}),

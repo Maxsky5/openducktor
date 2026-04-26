@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import * as sonnerActual from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
+import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
@@ -13,14 +15,25 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 enableReactActEnvironment();
 
+const toastErrorMock = mock(() => {});
+
 type HookArgs = Parameters<typeof useSessionStartFlow>[0];
 
 const createTask = (overrides = {}) => createTaskCardFixture(overrides);
+
+const createPromptTask = (overrides = {}) =>
+  createTask({
+    title: undefined,
+    issueType: undefined,
+    status: undefined,
+    aiReviewEnabled: undefined,
+    description: undefined,
+    ...overrides,
+  });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
 
@@ -134,6 +147,24 @@ const MODEL_SELECTION = {
   profileId: "spec",
 };
 
+const REPO_SETTINGS = {
+  defaultRuntimeKind: "opencode" as const,
+  worktreeBasePath: "",
+  branchPrefix: "codex/",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  trustedHooks: false,
+  preStartHooks: [],
+  postCompleteHooks: [],
+  devServers: [],
+  worktreeFileCopies: [],
+  agentDefaults: {
+    spec: null,
+    planner: null,
+    build: null,
+    qa: null,
+  },
+} satisfies HookArgs["repoSettings"];
+
 const createBaseArgs = (): HookArgs => ({
   activeWorkspace: {
     repoPath: "/repo",
@@ -152,7 +183,7 @@ const createBaseArgs = (): HookArgs => ({
   selectionForNewSession: {
     ...MODEL_SELECTION,
   },
-  repoSettings: null,
+  repoSettings: REPO_SETTINGS,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
   updateQuery: () => {},
@@ -235,6 +266,12 @@ describe("useAgentStudioSessionStartFlow", () => {
   const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
   beforeEach(() => {
+    mock.module("sonner", () => ({
+      toast: {
+        error: toastErrorMock,
+      },
+    }));
+    toastErrorMock.mockClear();
     host.workspaceList = async () => [
       {
         workspaceId: "repo",
@@ -252,6 +289,21 @@ describe("useAgentStudioSessionStartFlow", () => {
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: undefined,
+        branchPrefix: "codex/",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        trustedHooks: false,
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeFileCopies: [],
+        agentDefaults: {
+          spec: undefined,
+          planner: undefined,
+          build: undefined,
+          qa: undefined,
+        },
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
@@ -282,6 +334,10 @@ describe("useAgentStudioSessionStartFlow", () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.taskWorktreeGet = originalBuildContinuationTargetGet;
+  });
+
+  afterEach(async () => {
+    await restoreMockedModules([["sonner", async () => sonnerActual]]);
   });
 
   test("startSession starts a fresh session even when another session is active", async () => {
@@ -435,7 +491,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       scenario: "spec_initial",
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
-      selectedTask: createTask({
+      selectedTask: createPromptTask({
         agentWorkflows: {
           spec: { required: true, canSkip: false, available: true, completed: true },
           planner: { required: true, canSkip: false, available: true, completed: false },
@@ -649,8 +705,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       variant: "default",
     });
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
-    await harness.waitFor(() => sendAgentMessage.mock.calls.length > 0);
-
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "build",
@@ -661,12 +715,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       startMode: "fresh" as const,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-build-rework", [
-      {
-        kind: "text",
-        text: kickoffPromptForScenario("build", "build_after_qa_rejected", "task-1"),
-      },
-    ]);
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-build-rework",

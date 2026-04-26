@@ -16,7 +16,7 @@ type UseSessionStartModalSelectionStateArgs = {
   catalog: AgentModelCatalog | null;
   intentSelectedModel: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
-  selectedRuntimeKind: RuntimeKind;
+  selectedRuntimeKind: RuntimeKind | null;
   selectedStartMode: "fresh" | "reuse" | "fork";
   setSelection: Dispatch<SetStateAction<AgentModelSelection | null>>;
 };
@@ -25,7 +25,7 @@ type UseSessionStartModalSelectionStateResult = {
   resetSelection: () => void;
   initializeSelection: (
     role: AgentRole,
-    runtimeKind: RuntimeKind,
+    runtimeKind: RuntimeKind | null,
     selectedModel: AgentModelSelection | null,
   ) => void;
   handleSelectAgent: (profileId: string) => void;
@@ -50,7 +50,7 @@ export function useSessionStartModalSelectionState({
   const initializeSelection = useCallback(
     (
       role: AgentRole,
-      runtimeKind: RuntimeKind,
+      runtimeKind: RuntimeKind | null,
       selectedModel: AgentModelSelection | null,
     ): void => {
       setSelection(
@@ -70,7 +70,7 @@ export function useSessionStartModalSelectionState({
     if (!activeRole) {
       return;
     }
-    if (selectedStartMode === "reuse") {
+    if (selectedStartMode === "reuse" || !selectedRuntimeKind) {
       return;
     }
 
@@ -113,6 +113,9 @@ export function useSessionStartModalSelectionState({
 
   const handleSelectAgent = useCallback(
     (profileId: string): void => {
+      if (!selectedRuntimeKind) {
+        return;
+      }
       setSelection((current) =>
         resolveSelectionForAgentChange({
           activeRole,
@@ -130,6 +133,9 @@ export function useSessionStartModalSelectionState({
 
   const handleSelectModel = useCallback(
     (modelKey: string): void => {
+      if (!selectedRuntimeKind) {
+        return;
+      }
       setSelection((current) =>
         resolveSelectionForModelChange({
           catalog,

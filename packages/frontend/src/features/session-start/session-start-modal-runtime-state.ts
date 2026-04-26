@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
-  DEFAULT_RUNTIME_KIND,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
@@ -25,8 +24,8 @@ type UseSessionStartModalRuntimeStateResult = {
   isCatalogLoading: boolean;
   runtimeOptions: ComboboxOption[];
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
-  selectedRuntimeKind: RuntimeKind;
-  setRequestedRuntimeKind: (runtimeKind: RuntimeKind) => void;
+  selectedRuntimeKind: RuntimeKind | null;
+  setRequestedRuntimeKind: (runtimeKind: RuntimeKind | null) => void;
 };
 
 export function useSessionStartModalRuntimeState({
@@ -37,8 +36,7 @@ export function useSessionStartModalRuntimeState({
   runtimeDefinitions,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const [requestedRuntimeKind, setRequestedRuntimeKindState] =
-    useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
+  const [requestedRuntimeKind, setRequestedRuntimeKindState] = useState<RuntimeKind | null>(null);
 
   const runtimeOptions = useMemo(
     () => toAgentRuntimeOptions(runtimeDefinitions),
@@ -55,22 +53,43 @@ export function useSessionStartModalRuntimeState({
   );
 
   const selectedRuntimeDescriptor = useMemo(
-    () => findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind),
+    () =>
+      selectedRuntimeKind ? findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind) : null,
     [runtimeDefinitions, selectedRuntimeKind],
   );
 
-  const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind): void => {
+  const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind | null): void => {
     setRequestedRuntimeKindState(runtimeKind);
   }, []);
 
   const catalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(workspaceRepoPath ?? "", selectedRuntimeKind, loadCatalog),
-    enabled: initialCatalog === undefined && Boolean(workspaceRepoPath) && isOpen,
+    ...repoRuntimeCatalogQueryOptions(
+      workspaceRepoPath ?? "",
+      selectedRuntimeKind ?? "",
+      loadCatalog,
+    ),
+    enabled:
+      initialCatalog === undefined &&
+      Boolean(workspaceRepoPath) &&
+      isOpen &&
+      selectedRuntimeKind !== null,
+    queryFn: async (): Promise<AgentModelCatalog> => {
+      if (!workspaceRepoPath) {
+        throw new Error("No repository selected.");
+      }
+      if (!selectedRuntimeKind) {
+        throw new Error("Select a runtime before loading model catalogs.");
+      }
+      return loadCatalog(workspaceRepoPath, selectedRuntimeKind);
+    },
   });
 
   const catalog = initialCatalog ?? catalogQuery.data ?? null;
   const isCatalogLoading =
-    initialCatalog === undefined && isOpen && workspaceRepoPath !== null
+    initialCatalog === undefined &&
+    isOpen &&
+    workspaceRepoPath !== null &&
+    selectedRuntimeKind !== null
       ? catalogQuery.isLoading
       : false;
 

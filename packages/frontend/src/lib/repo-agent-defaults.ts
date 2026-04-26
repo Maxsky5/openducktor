@@ -25,20 +25,15 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
 };
 
 export const repoDefaultRuntimeKindError = (): string => {
-  return "Default runtime kind cannot be blank.";
+  return "Default runtime kind is required. Select a repository default runtime before saving.";
 };
 
 export const normalizeRepoDefaultRuntimeKindForSave = (
   runtimeKind: string | null | undefined,
-  fallbackRuntimeKind: string,
 ): string => {
   const normalizedRuntimeKind = trimNonEmpty(runtimeKind);
   if (normalizedRuntimeKind) {
     return normalizedRuntimeKind;
-  }
-
-  if (runtimeKind == null) {
-    return fallbackRuntimeKind;
   }
 
   throw new Error(repoDefaultRuntimeKindError());

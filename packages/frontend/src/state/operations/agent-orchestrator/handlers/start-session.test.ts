@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import {
   sessionMessageAt,
   sessionMessagesToArray,
@@ -65,6 +66,14 @@ const withCapturedConsoleError = async (
   } finally {
     console.error = originalError;
   }
+};
+
+const setPersistedSessionListFixture = (
+  repoPath: string,
+  taskId: string,
+  sessions: AgentSessionRecord[],
+): void => {
+  appQueryClient.setQueryData(agentSessionQueryKeys.list(repoPath, taskId), sessions);
 };
 
 const taskFixture = createTaskCardFixture({
@@ -305,6 +314,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -899,6 +909,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree/"),
       ensureRuntime: async () => ({
         kind: "opencode",
+        runtimeKind: "opencode",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -1437,8 +1448,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("returns the requested persisted session for the same role and hydrates when missing from memory", async () => {
     let loadAgentSessionsCalls = 0;
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [
+    setPersistedSessionListFixture("/tmp/repo", "task-1", [
       persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "persisted-2",
@@ -1447,9 +1457,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         repoPath: "/tmp/repo",
         role: "build",
         scenario: "build_after_human_request_changes",
-        status: "idle",
         startedAt: "2026-02-22T08:20:00.000Z",
-        updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -1484,7 +1492,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
-    ];
+    ]);
 
     const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
@@ -1542,19 +1550,15 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sendAgentMessage: async () => {},
     });
 
-    try {
-      const sessionId = await start({
-        taskId: "task-1",
-        role: "build",
-        scenario: "build_after_human_request_changes",
-        startMode: "reuse",
-        sourceSessionId: "persisted-build-newer",
-      });
-      expect(sessionId).toBe("persisted-build-newer");
-      expect(loadAgentSessionsCalls).toBe(1);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
+    const sessionId = await start({
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_after_human_request_changes",
+      startMode: "reuse",
+      sourceSessionId: "persisted-build-newer",
+    });
+    expect(sessionId).toBe("persisted-build-newer");
+    expect(loadAgentSessionsCalls).toBe(1);
   });
 
   test("forks from the selected source session for pull request generation", async () => {
@@ -2416,8 +2420,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       };
     };
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [
+    setPersistedSessionListFixture("/tmp/repo", "task-1", [
       persistedSessionRecord({
         runtimeKind: "opencode",
         sessionId: "persisted-opencode",
@@ -2426,9 +2429,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         repoPath: "/tmp/repo",
         role: "build",
         scenario: "build_implementation_start",
-        status: "idle",
         startedAt: "2026-02-22T08:20:00.000Z",
-        updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
@@ -2439,7 +2440,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           profileId: "Ares",
         },
       }),
-    ];
+    ]);
 
     const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
@@ -2516,7 +2517,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
@@ -2539,29 +2539,23 @@ describe("agent-orchestrator/handlers/start-session", () => {
       };
     };
 
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () =>
-      [
-        {
-          sessionId: "persisted-claude",
-          externalSessionId: "external-claude",
-          taskId: "task-1",
-          role: "build",
-          scenario: "build_after_human_request_changes",
-          status: "idle",
-          startedAt: "2026-02-22T08:20:00.000Z",
-          updatedAt: "2026-02-22T08:20:00.000Z",
-          runtimeId: "runtime-1",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-          workingDirectory: "/tmp/repo/worktree",
-          selectedModel: {
-            runtimeKind: "claude-code",
-            providerId: "anthropic",
-            modelId: "claude-3-7-sonnet",
-            profileId: "Hephaestus",
-          },
+    setPersistedSessionListFixture("/tmp/repo", "task-1", [
+      {
+        sessionId: "persisted-claude",
+        externalSessionId: "external-claude",
+        runtimeKind: "claude-code",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        workingDirectory: "/tmp/repo/worktree",
+        selectedModel: {
+          runtimeKind: "claude-code",
+          providerId: "anthropic",
+          modelId: "claude-3-7-sonnet",
+          profileId: "Hephaestus",
         },
-      ] as unknown as Awaited<ReturnType<typeof host.agentSessionsList>>;
+      },
+    ]);
 
     const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
@@ -2637,7 +2631,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
@@ -3381,6 +3374,83 @@ describe("agent-orchestrator/handlers/start-session", () => {
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
+
+  for (const runtimeKind of [undefined, "", "  "] as const) {
+    const caseLabel = runtimeKind === undefined ? "missing" : "blank";
+
+    test(`does not start a fresh session when selected model runtime kind is ${caseLabel}`, async () => {
+      let runtimeCalls = 0;
+      let startCalls = 0;
+      let persistCalls = 0;
+
+      const adapter = new OpencodeSdkAdapter();
+      const originalStartSession = adapter.startSession;
+      adapter.startSession = async () => {
+        startCalls += 1;
+        throw new Error("startSession should not be reached");
+      };
+
+      const selectedModel = (() => {
+        if (runtimeKind === undefined) {
+          const { runtimeKind: _runtimeKind, ...selectionWithoutRuntime } = BUILD_SELECTION;
+          return selectionWithoutRuntime as AgentModelSelection;
+        }
+        return { ...BUILD_SELECTION, runtimeKind } as AgentModelSelection;
+      })();
+
+      const start = createStartAgentSessionWithFlatDeps({
+        activeRepo: "/tmp/repo",
+        adapter,
+        setSessionsById: () => {},
+        sessionsRef: { current: {} },
+        taskRef: { current: [taskFixture] },
+        repoEpochRef: { current: 1 },
+        currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+        inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+        attachSessionListener: () => {},
+        resolveTaskWorktree: async () => ({
+          workingDirectory: "/tmp/repo/worktree",
+          source: "active_build_run",
+        }),
+        ensureRuntime: async () => {
+          runtimeCalls += 1;
+          return {
+            kind: "opencode",
+            runtimeId: null,
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+            workingDirectory: "/tmp/repo/worktree",
+          };
+        },
+        loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+        loadRepoDefaultModel: async () => null,
+        loadRepoPromptOverrides: async () => ({}),
+        loadAgentSessions: async () => {},
+        refreshTaskData: async () => {},
+        persistSessionRecord: async () => {
+          persistCalls += 1;
+        },
+        sendAgentMessage: async () => {},
+      });
+
+      try {
+        await expect(
+          start({
+            taskId: "task-1",
+            role: "build",
+            startMode: "fresh",
+            selectedModel,
+          }),
+        ).rejects.toThrow(
+          "Runtime kind is required to start build sessions. Select an explicit runtime before starting a session.",
+        );
+        expect(runtimeCalls).toBe(0);
+        expect(startCalls).toBe(0);
+        expect(persistCalls).toBe(0);
+      } finally {
+        adapter.startSession = originalStartSession;
+      }
+    });
+  }
 
   test("does not block start completion on kickoff refresh", async () => {
     const refreshDeferred = createDeferred<void>();

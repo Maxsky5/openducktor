@@ -1,5 +1,4 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import {
   getSessionMessageAt,
   getSessionMessageCount,
@@ -30,14 +29,25 @@ type ResolvedContextUsageParts = {
 
 type CatalogModelDescriptor = AgentModelCatalog["models"][number];
 
+const normalizeRuntimeKind = (runtimeKind: string | null | undefined): string | null => {
+  const normalized = runtimeKind?.trim() ?? "";
+  return normalized.length > 0 ? normalized : null;
+};
+
 export const toRoleDefaultSelection = (
   roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,
+  repoDefaultRuntimeKind?: RepoSettingsInput["defaultRuntimeKind"] | null,
 ): AgentModelSelection | null => {
   if (!roleDefault?.providerId || !roleDefault.modelId) {
     return null;
   }
+  const runtimeKind =
+    normalizeRuntimeKind(roleDefault.runtimeKind) ?? normalizeRuntimeKind(repoDefaultRuntimeKind);
+  if (!runtimeKind) {
+    return null;
+  }
   return {
-    runtimeKind: roleDefault.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),

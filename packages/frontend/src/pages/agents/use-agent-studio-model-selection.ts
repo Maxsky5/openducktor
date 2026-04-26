@@ -16,7 +16,6 @@ import {
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
@@ -208,15 +207,18 @@ export function useAgentStudioModelSelection({
   const activeSessionMessages = activeSessionSelection.messages;
   const hasActiveSession = activeSessionSelection.hasSelection;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
-  }, [repoSettings?.agentDefaults, role]);
-  const composerRuntimeKind = useMemo<RuntimeKind>(() => {
+    return toRoleDefaultSelection(
+      repoSettings?.agentDefaults[role],
+      repoSettings?.defaultRuntimeKind,
+    );
+  }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role]);
+  const composerRuntimeKind = useMemo<RuntimeKind | null>(() => {
     return (
       activeSessionSelectedModel?.runtimeKind ??
       draftSelectionByRole[role]?.runtimeKind ??
       roleDefaultSelection?.runtimeKind ??
       repoSettings?.defaultRuntimeKind ??
-      DEFAULT_RUNTIME_KIND
+      null
     );
   }, [
     activeSessionSelectedModel?.runtimeKind,
@@ -249,6 +251,9 @@ export function useAgentStudioModelSelection({
   const slashCommandRuntimeKind =
     activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
   const supportsSlashCommands = useMemo(() => {
+    if (!slashCommandRuntimeKind) {
+      return false;
+    }
     return (
       runtimeDefinitions.find((definition) => definition.kind === slashCommandRuntimeKind)
         ?.capabilities.supportsSlashCommands ?? false
@@ -256,6 +261,9 @@ export function useAgentStudioModelSelection({
   }, [runtimeDefinitions, slashCommandRuntimeKind]);
   const fileSearchRuntimeKind = activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
   const supportsFileSearch = useMemo(() => {
+    if (!fileSearchRuntimeKind) {
+      return false;
+    }
     return (
       runtimeDefinitions.find((definition) => definition.kind === fileSearchRuntimeKind)
         ?.capabilities.supportsFileSearch ?? false
@@ -295,13 +303,16 @@ export function useAgentStudioModelSelection({
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind,
+      composerRuntimeKind ?? "",
       loadCatalogForRepo,
     ),
-    enabled: workspaceRepoPath !== null && activeSessionId === null,
+    enabled: workspaceRepoPath !== null && activeSessionId === null && composerRuntimeKind !== null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
+      }
+      if (!composerRuntimeKind) {
+        throw new Error("Select a runtime before loading model catalogs.");
       }
       return loadCatalogForRepo(workspaceRepoPath, composerRuntimeKind);
     },
@@ -332,10 +343,14 @@ export function useAgentStudioModelSelection({
   const repoSlashCommandsQuery = useQuery({
     ...repoRuntimeSlashCommandsQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind,
+      composerRuntimeKind ?? "",
       loadSlashCommandsForRepo,
     ),
-    enabled: supportsSlashCommands && workspaceRepoPath !== null && activeSessionId === null,
+    enabled:
+      supportsSlashCommands &&
+      workspaceRepoPath !== null &&
+      activeSessionId === null &&
+      composerRuntimeKind !== null,
   });
   const hasDraftSelectionForWorkspaceRepoPath =
     previousWorkspaceRepoPathRef.current === workspaceRepoPath;
@@ -442,12 +457,12 @@ export function useAgentStudioModelSelection({
     : false;
   const searchFiles = useCallback(
     async (query: string): Promise<AgentFileSearchResult[]> => {
-      if (!supportsFileSearch) {
-        return [];
-      }
       if (hasActiveSession) {
         if (activeSessionRuntimeQueryError) {
           throw new Error(activeSessionRuntimeQueryError);
+        }
+        if (!supportsFileSearch) {
+          return [];
         }
         if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
           throw new Error(
@@ -465,6 +480,12 @@ export function useAgentStudioModelSelection({
       }
       if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
+      }
+      if (!composerRuntimeKind) {
+        throw new Error("Select a runtime before searching files.");
+      }
+      if (!supportsFileSearch) {
+        return [];
       }
       return queryClient.fetchQuery(
         repoRuntimeFileSearchQueryOptions(
@@ -792,6 +813,9 @@ export function useAgentStudioModelSelection({
           if (!firstModel) {
             return null;
           }
+          if (!composerRuntimeKind) {
+            return null;
+          }
           return {
             runtimeKind: composerRuntimeKind,
             providerId: firstModel.providerId,
@@ -813,6 +837,9 @@ export function useAgentStudioModelSelection({
   const handleSelectModel = useCallback(
     (nextValue: string) => {
       if (!selectionCatalog) {
+        return;
+      }
+      if (!composerRuntimeKind) {
         return;
       }
       const model = selectionCatalog.models.find((entry) => entry.id === nextValue);

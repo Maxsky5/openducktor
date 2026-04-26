@@ -13,6 +13,10 @@ import {
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
+import {
+  assertSessionRuntimeKindMatchesEnsuredRuntime,
+  requireSessionRuntimeKind,
+} from "../support/session-runtime-metadata";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
@@ -163,26 +167,26 @@ export const createEnsureSessionReady = ({
         attachSessionListener(repoPath, sessionId);
       }
       if (session.status !== "error") {
-        let attachedRuntimeKind = session.runtimeKind;
+        let attachedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]> =
+          session.runtimeKind ?? requireSessionRuntimeKind(session);
         let attachedRuntimeId = session.runtimeId;
         let attachedRuntimeRoute = session.runtimeRoute;
         let attachedWorkingDirectory = session.workingDirectory;
 
         if (!attachedRuntimeKind || attachedRuntimeRoute === null) {
-          const requestedRuntimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
-          if (!requestedRuntimeKind) {
-            throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
-          }
+          const requestedRuntimeKind = requireSessionRuntimeKind(session);
           const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
             workspaceId,
             targetWorkingDirectory: session.workingDirectory,
-            ...(session.selectedModel?.runtimeKind
-              ? { runtimeKind: session.selectedModel.runtimeKind }
-              : {}),
+            runtimeKind: requestedRuntimeKind,
           });
           assertNotStale();
+          attachedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
+            sessionId: session.sessionId,
+            requestedRuntimeKind,
+            ensuredRuntimeKind: runtime.runtimeKind,
+          });
 
-          attachedRuntimeKind = runtime.runtimeKind ?? requestedRuntimeKind;
           attachedRuntimeId = runtime.runtimeId;
           attachedRuntimeRoute = runtime.runtimeRoute;
           attachedWorkingDirectory = runtime.workingDirectory;
@@ -194,7 +198,7 @@ export const createEnsureSessionReady = ({
               runtimeId: attachedRuntimeId,
               runtimeRoute: attachedRuntimeRoute,
               workingDirectory: attachedWorkingDirectory,
-              ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
+              runtimeKind: attachedRuntimeKind,
             }),
             { persist: false },
           );
@@ -224,7 +228,7 @@ export const createEnsureSessionReady = ({
             ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
             pendingPermissions,
             pendingQuestions,
-            ...(attachedRuntimeKind ? { runtimeKind: attachedRuntimeKind } : {}),
+            runtimeKind: attachedRuntimeKind,
           }),
           { persist: false },
         );
@@ -261,22 +265,18 @@ export const createEnsureSessionReady = ({
       loadRepoPromptOverrides,
     });
     assertNotStale();
+    const requestedRuntimeKind = requireSessionRuntimeKind(session);
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
       workspaceId,
       targetWorkingDirectory: session.workingDirectory,
-      ...(session.selectedModel?.runtimeKind
-        ? { runtimeKind: session.selectedModel.runtimeKind }
-        : {}),
+      runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    const requestedRuntimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
-    let resolvedRuntimeKind = runtime.runtimeKind;
-    if (!resolvedRuntimeKind) {
-      if (!requestedRuntimeKind) {
-        throw new Error(`Session '${session.sessionId}' is missing runtime kind metadata.`);
-      }
-      resolvedRuntimeKind = requestedRuntimeKind;
-    }
+    const resolvedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
+      sessionId: session.sessionId,
+      requestedRuntimeKind,
+      ensuredRuntimeKind: runtime.runtimeKind,
+    });
     const runtimeConnection = requireRuntimeConnectionSupport(
       resolvedRuntimeKind,
       resolveRuntimeConnection(runtime),
