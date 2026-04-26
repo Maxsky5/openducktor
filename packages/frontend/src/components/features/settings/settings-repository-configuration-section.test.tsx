@@ -16,8 +16,6 @@ const baseRepoConfig: RepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: { providers: {} },
-  trustedHooks: false,
-  trustedHooksFingerprint: undefined,
   hooks: {
     preStart: [],
     postComplete: [],
@@ -139,7 +137,6 @@ describe("RepositoryConfigurationSection", () => {
       expect(preStartTextarea.value).toBe("bun install\n");
       expect(getLatestRepoConfig()).toEqual({
         ...baseRepoConfig,
-        trustedHooks: true,
         hooks: {
           preStart: ["bun install", ""],
           postComplete: [],
@@ -158,8 +155,6 @@ describe("RepositoryConfigurationSection", () => {
     const rendered = renderSection(
       {
         ...baseRepoConfig,
-        trustedHooks: true,
-        trustedHooksFingerprint: "fingerprint",
         hooks: {
           preStart: ["bun install"],
           postComplete: [],
@@ -189,8 +184,6 @@ describe("RepositoryConfigurationSection", () => {
       expect(
         updater({
           ...baseRepoConfig,
-          trustedHooks: true,
-          trustedHooksFingerprint: "fingerprint",
           hooks: {
             preStart: ["bun install"],
             postComplete: [],
@@ -199,8 +192,6 @@ describe("RepositoryConfigurationSection", () => {
         }),
       ).toEqual({
         ...baseRepoConfig,
-        trustedHooks: false,
-        trustedHooksFingerprint: undefined,
         hooks: {
           preStart: [""],
           postComplete: [],
@@ -272,7 +263,6 @@ describe("RepositoryConfigurationSection", () => {
         }),
       ).toEqual({
         ...baseRepoConfig,
-        trustedHooks: true,
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
       });
     } finally {
@@ -284,7 +274,7 @@ describe("RepositoryConfigurationSection", () => {
     const rendered = renderSection(
       {
         ...baseRepoConfig,
-        devServers: [{ id: "frontend", name: "", command: "" }],
+        devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
       },
       () => {},
       { showDevServerValidationErrors: true },
@@ -301,20 +291,18 @@ describe("RepositoryConfigurationSection", () => {
       if (!(nameInput instanceof HTMLInputElement) || !(commandInput instanceof HTMLInputElement)) {
         throw new Error("Expected dev server inputs");
       }
-      if (!(nameError instanceof HTMLElement) || !(commandError instanceof HTMLElement)) {
-        throw new Error("Expected dev server inline errors");
+      if (!(nameError instanceof HTMLElement)) {
+        throw new Error("Expected dev server inline error");
       }
 
       expect(nameInput.getAttribute("aria-invalid")).toBe("true");
       expect(nameInput.getAttribute("aria-describedby")).toBe(
         "repo-dev-server-name-frontend-error",
       );
-      expect(commandInput.getAttribute("aria-invalid")).toBe("true");
-      expect(commandInput.getAttribute("aria-describedby")).toBe(
-        "repo-dev-server-command-frontend-error",
-      );
+      expect(commandInput.getAttribute("aria-invalid")).toBeNull();
+      expect(commandInput.getAttribute("aria-describedby")).toBeNull();
       expect(nameError.textContent).toBe("Tab label is required.");
-      expect(commandError.textContent).toBe("Command is required.");
+      expect(commandError).toBeNull();
     } finally {
       rendered.unmount();
     }

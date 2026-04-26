@@ -49,7 +49,6 @@ describe("app-state-context-values", () => {
         worktreeBasePath: "",
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        trustedHooks: false,
         preStartHooks: [],
         postCompleteHooks: [],
         devServers: [],

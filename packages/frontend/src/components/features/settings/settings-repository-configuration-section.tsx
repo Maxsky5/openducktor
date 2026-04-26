@@ -1,5 +1,5 @@
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
-import { ChevronDown, ChevronUp, CircleAlert, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
@@ -9,11 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
-import {
-  buildDevServerDraftValidationMap,
-  hasConfiguredRepoScriptCommands,
-  parseHookLines,
-} from "./settings-model";
+import { buildDevServerDraftValidationMap, parseHookLines } from "./settings-model";
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
@@ -97,19 +93,7 @@ export function RepositoryConfigurationSection({
     defaultTargetBranchPlaceholder = "Branches unavailable";
   }
   const updateScriptDraft = (updater: (repoConfig: RepoConfig) => RepoConfig): void => {
-    onUpdateSelectedRepoConfig((repoConfig) => {
-      const nextRepoConfig = updater(repoConfig);
-      const trustedHooks = hasConfiguredRepoScriptCommands({
-        hooks: nextRepoConfig.hooks,
-        devServers: nextRepoConfig.devServers,
-      });
-
-      return {
-        ...nextRepoConfig,
-        trustedHooks,
-        trustedHooksFingerprint: trustedHooks ? nextRepoConfig.trustedHooksFingerprint : undefined,
-      };
-    });
+    onUpdateSelectedRepoConfig(updater);
   };
   const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
     const nextHookLines = parseHookLines(value);
@@ -175,8 +159,6 @@ export function RepositoryConfigurationSection({
           isDisabled={isLoadingSettings || isSaving}
           updateScriptDraft={updateScriptDraft}
         />
-
-        <RepositoryScriptFingerprintNotice />
 
         <RepositoryWorktreeFileCopiesSection
           isDisabled={isLoadingSettings || isSaving}
@@ -702,21 +684,6 @@ function RepositoryDevServerRow({
           <Trash2 className="size-4" />
         </Button>
       </div>
-    </div>
-  );
-}
-
-function RepositoryScriptFingerprintNotice(): ReactElement {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-info-border bg-info-surface p-3 text-sm text-info-surface-foreground">
-      <CircleAlert className="mt-0.5 size-4 shrink-0 text-info-muted" aria-hidden="true" />
-      <p className="leading-6">
-        OpenDucktor saves a fingerprint of the exact setup, cleanup, and dev server commands you
-        approve. This is a security check: if something changes those scripts later without your
-        consent, the fingerprint no longer matches and OpenDucktor will ask you to confirm the
-        scripts again before they can run. Remove dev server rows and clear every other script
-        command to disable trusted scripts for this repository.
-      </p>
     </div>
   );
 }

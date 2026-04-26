@@ -40,7 +40,6 @@ const createSnapshot = (): SettingsSnapshot => ({
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: { providers: {} },
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeFileCopies: [],

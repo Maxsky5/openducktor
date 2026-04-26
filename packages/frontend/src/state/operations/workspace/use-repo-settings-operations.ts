@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
+import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
 import {
   normalizeRepoAgentDefaultForSave,
   normalizeRepoDefaultRuntimeKindForSave,
@@ -91,16 +91,13 @@ export function useRepoSettingsOperations({
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
-      const { hooks, devServers, trustedHooks } = normalizeRepoScriptsWithTrust(
-        {
-          hooks: {
-            preStart: input.preStartHooks,
-            postComplete: input.postCompleteHooks,
-          },
-          devServers: input.devServers,
+      const { hooks, devServers } = normalizeRepoScripts({
+        hooks: {
+          preStart: input.preStartHooks,
+          postComplete: input.postCompleteHooks,
         },
-        input.trustedHooks,
-      );
+        devServers: input.devServers,
+      });
       const agentDefaults = {
         ...(specDefault ? { spec: specDefault } : {}),
         ...(plannerDefault ? { planner: plannerDefault } : {}),
@@ -113,7 +110,6 @@ export function useRepoSettingsOperations({
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         defaultTargetBranch: normalizedTargetBranch,
-        trustedHooks,
         hooks,
         devServers,
         worktreeFileCopies: input.worktreeFileCopies.map((f) => f.trim()).filter(Boolean),

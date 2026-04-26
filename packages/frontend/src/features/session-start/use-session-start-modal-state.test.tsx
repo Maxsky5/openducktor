@@ -65,7 +65,6 @@ const createRepoSettings = (
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],

@@ -1,8 +1,7 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_path_operation, handle_repo_path_operation_blocking,
-    run_headless_blocking, serialize_value, service_error, CommandResult,
-    HeadlessHookTrustConfirmationPort, HeadlessState,
+    run_headless_blocking, serialize_value, service_error, CommandResult, HeadlessState,
 };
 use crate::commands::workspace::{
     resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
@@ -79,15 +78,6 @@ struct WorkspaceUpdateGlobalGitConfigArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WorkspaceSetTrustedHooksArgs {
-    workspace_id: String,
-    trusted: bool,
-    challenge_nonce: Option<String>,
-    challenge_fingerprint: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct WorkspaceStageLocalAttachmentArgs {
     name: String,
     #[allow(dead_code)]
@@ -145,14 +135,6 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     registry.register("workspace_update_repo_hooks", |state, args| {
         Box::pin(async move { handle_workspace_update_repo_hooks(state, args) })
     })?;
-    registry.register(
-        "workspace_prepare_trusted_hooks_challenge",
-        |state, args| {
-            Box::pin(handle_workspace_prepare_trusted_hooks_challenge(
-                state, args,
-            ))
-        },
-    )?;
     registry.register("workspace_get_repo_config", |state, args| {
         Box::pin(handle_workspace_get_repo_config(state, args))
     })?;
@@ -171,9 +153,6 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("workspace_save_settings_snapshot", |state, args| {
         Box::pin(handle_workspace_save_settings_snapshot(state, args))
-    })?;
-    registry.register("workspace_set_trusted_hooks", |state, args| {
-        Box::pin(handle_workspace_set_trusted_hooks(state, args))
     })?;
     registry.register("workspace_stage_local_attachment", |_state, args| {
         Box::pin(async move { handle_workspace_stage_local_attachment(args).await })
@@ -270,14 +249,12 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
     } = deserialize_args(args)?;
     let service = state.service.clone();
     let workspace_id_for_worker = workspace_id.clone();
-    let confirmation_port = HeadlessHookTrustConfirmationPort;
     let update = RepoSettingsUpdate {
         default_runtime_kind: settings.default_runtime_kind,
         worktree_base_path: settings.worktree_base_path,
         branch_prefix: settings.branch_prefix,
         default_target_branch: settings.default_target_branch,
         git: settings.git,
-        trusted_hooks: settings.trusted_hooks,
         hooks: settings.hooks,
         dev_servers: settings.dev_servers,
         worktree_file_copies: settings.worktree_file_copies,
@@ -285,7 +262,7 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
         agent_defaults: settings.agent_defaults,
     };
     let updated = run_service_blocking_tokio("workspace_save_repo_settings", move || {
-        service.workspace_save_repo_settings(&workspace_id_for_worker, update, &confirmation_port)
+        service.workspace_save_repo_settings(&workspace_id_for_worker, update)
     })
     .await
     .map_err(service_error)?;
@@ -302,19 +279,6 @@ fn handle_workspace_update_repo_hooks(state: &HeadlessState, args: Value) -> Com
         state
             .service
             .workspace_update_repo_hooks(&workspace_id, hooks)
-            .map_err(service_error)?,
-    )
-}
-
-async fn handle_workspace_prepare_trusted_hooks_challenge(
-    state: &HeadlessState,
-    args: Value,
-) -> CommandResult {
-    let WorkspaceIdArgs { workspace_id } = deserialize_args(args)?;
-    serialize_value(
-        state
-            .service
-            .workspace_prepare_trusted_hooks_challenge(&workspace_id)
             .map_err(service_error)?,
     )
 }
@@ -398,7 +362,6 @@ async fn handle_workspace_save_settings_snapshot(
 ) -> CommandResult {
     let WorkspaceSaveSettingsSnapshotArgs { snapshot } = deserialize_args(args)?;
     let service = state.service.clone();
-    let confirmation_port = HeadlessHookTrustConfirmationPort;
     let crate::SettingsSnapshotPayload {
         theme,
         git,
@@ -413,18 +376,15 @@ async fn handle_workspace_save_settings_snapshot(
         .map(|workspace| workspace.repo_path.clone())
         .collect::<Vec<_>>();
     let updated = run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
-        service.workspace_save_settings_snapshot(
-            WorkspaceSettingsSnapshotUpdate {
-                theme,
-                git,
-                chat,
-                kanban,
-                autopilot,
-                workspaces,
-                global_prompt_overrides,
-            },
-            &confirmation_port,
-        )
+        service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
+            theme,
+            git,
+            chat,
+            kanban,
+            autopilot,
+            workspaces,
+            global_prompt_overrides,
+        })
     })
     .await
     .map_err(service_error)?;
@@ -432,30 +392,6 @@ async fn handle_workspace_save_settings_snapshot(
         super::command_support::invalidate_repo_worktree_cache(repo_path)?;
     }
     serialize_value(updated)
-}
-
-async fn handle_workspace_set_trusted_hooks(state: &HeadlessState, args: Value) -> CommandResult {
-    let WorkspaceSetTrustedHooksArgs {
-        workspace_id,
-        trusted,
-        challenge_nonce,
-        challenge_fingerprint,
-    } = deserialize_args(args)?;
-    let service = state.service.clone();
-    let confirmation_port = HeadlessHookTrustConfirmationPort;
-    serialize_value(
-        run_service_blocking_tokio("workspace_set_trusted_hooks", move || {
-            service.workspace_set_trusted_hooks(
-                &workspace_id,
-                trusted,
-                challenge_nonce.as_deref(),
-                challenge_fingerprint.as_deref(),
-                &confirmation_port,
-            )
-        })
-        .await
-        .map_err(service_error)?,
-    )
 }
 
 fn handle_set_theme(state: &HeadlessState, args: Value) -> CommandResult {

@@ -25,7 +25,6 @@ const createRepoConfig = (): RepoConfig => ({
   git: {
     providers: {},
   },
-  trustedHooks: false,
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeFileCopies: [],

@@ -1,8 +1,8 @@
 use super::types::{
-    default_branch_prefix, normalize_git_target_branch_value, repo_script_fingerprint,
-    AgentModelDefault, AutopilotActionId, AutopilotRule, AutopilotSettings, GitProviderConfig,
-    GitProviderRepository, GitTargetBranch, GlobalConfig, HookSet, KanbanSettings, PromptOverrides,
-    RepoConfig, RepoDevServerScript, RuntimeConfig, AUTOPILOT_EVENT_ORDER,
+    default_branch_prefix, normalize_git_target_branch_value, AgentModelDefault, AutopilotActionId,
+    AutopilotRule, AutopilotSettings, GitProviderConfig, GitProviderRepository, GitTargetBranch,
+    GlobalConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig, RepoDevServerScript,
+    RuntimeConfig, AUTOPILOT_EVENT_ORDER,
 };
 use anyhow::{anyhow, Result};
 use host_domain::RuntimeRegistry;
@@ -213,17 +213,6 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
     normalize_repo_dev_servers(&mut repo.dev_servers)?;
     normalize_hook_commands(&mut repo.worktree_file_copies);
-    let current_fingerprint = repo_script_fingerprint(&repo.hooks, &repo.dev_servers);
-    if repo.trusted_hooks {
-        if repo.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
-            repo.trusted_hooks = false;
-            repo.trusted_hooks_fingerprint = None;
-        } else {
-            repo.trusted_hooks_fingerprint = Some(current_fingerprint);
-        }
-    } else {
-        repo.trusted_hooks_fingerprint = None;
-    }
     normalize_prompt_overrides(&mut repo.prompt_overrides);
     normalize_agent_model_default(&mut repo.agent_defaults.spec, "Specification agent default")?;
     normalize_agent_model_default(&mut repo.agent_defaults.planner, "Planner agent default")?;

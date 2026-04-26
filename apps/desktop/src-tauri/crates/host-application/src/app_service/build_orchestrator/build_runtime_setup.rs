@@ -1,6 +1,5 @@
 use super::super::{
-    run_parsed_hook_command_allow_failure, validate_hook_trust,
-    validate_transition_without_related_tasks, AppService,
+    run_parsed_hook_command_allow_failure, validate_transition_without_related_tasks, AppService,
 };
 use crate::app_service::task_workflow::builder_branch_service::BuilderBranchService;
 use anyhow::{anyhow, Context, Result};
@@ -295,8 +294,6 @@ impl AppService {
                 ),
             )
         })?;
-
-        validate_hook_trust(repo_path.as_str(), &repo_config)?;
 
         let task = self
             .task_store

@@ -27,8 +27,6 @@ const WORKSPACE_METHODS = [
   "workspaceUpdateGlobalGitConfig",
   "workspaceDetectGithubRepository",
   "workspaceSaveSettingsSnapshot",
-  "workspacePrepareTrustedHooksChallenge",
-  "workspaceSetTrustedHooks",
   "workspaceStageLocalAttachment",
   "workspaceResolveLocalAttachmentPath",
   "setTheme",

@@ -1,6 +1,6 @@
 use super::{
-    hook_set_fingerprint, touch_recent, AppConfigStore, GlobalConfig, HookSet,
-    OpencodeStartupReadinessConfig, RepoConfig, RuntimeConfig, RuntimeConfigStore,
+    touch_recent, AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
+    RuntimeConfig, RuntimeConfigStore,
 };
 use host_domain::RuntimeRegistry;
 pub(super) use host_test_support::{lock_env, EnvVarGuard};
@@ -12,7 +12,6 @@ mod constructors_and_io;
 mod normalization;
 mod permissions;
 mod runtime_config;
-mod trust_fingerprint;
 mod workspace_config;
 mod workspace_icons;
 

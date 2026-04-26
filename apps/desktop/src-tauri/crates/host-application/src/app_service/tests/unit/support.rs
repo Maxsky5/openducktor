@@ -228,7 +228,6 @@ pub(super) fn build_external_runtime_build_start_harness(
                 remote: None,
                 branch: "main".to_string(),
             },
-            trusted_hooks: true,
             ..Default::default()
         },
     )?;

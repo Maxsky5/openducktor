@@ -3,10 +3,9 @@ import {
   buildDevServerDraftValidationMap,
   countDevServerDraftValidationErrors,
   hasConfiguredHookCommands,
-  hasConfiguredRepoScriptCommands,
   normalizeDevServers,
-  normalizeHooksWithTrust,
-  normalizeRepoScriptsWithTrust,
+  normalizeHooks,
+  normalizeRepoScripts,
   parseHookLines,
 } from "./settings-model";
 
@@ -43,46 +42,25 @@ describe("settings-model", () => {
     ).toBe(false);
   });
 
-  test("hasConfiguredRepoScriptCommands includes dev server commands", () => {
+  test("normalizeHooks trims commands and removes blank rows", () => {
     expect(
-      hasConfiguredRepoScriptCommands({
-        hooks: { preStart: [], postComplete: [] },
-        devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
-      }),
-    ).toBe(true);
-  });
-
-  test("normalizeHooksWithTrust trims commands and disables trust when commands are empty", () => {
-    expect(
-      normalizeHooksWithTrust(
-        {
-          preStart: [" bun install ", " "],
-          postComplete: ["npm test"],
-        },
-        true,
-      ),
-    ).toEqual({
-      hooks: {
-        preStart: ["bun install"],
+      normalizeHooks({
+        preStart: [" bun install ", " "],
         postComplete: ["npm test"],
-      },
-      trustedHooks: true,
+      }),
+    ).toEqual({
+      preStart: ["bun install"],
+      postComplete: ["npm test"],
     });
 
     expect(
-      normalizeHooksWithTrust(
-        {
-          preStart: [" "],
-          postComplete: [""],
-        },
-        true,
-      ),
+      normalizeHooks({
+        preStart: [" "],
+        postComplete: [""],
+      }),
     ).toEqual({
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      trustedHooks: false,
+      preStart: [],
+      postComplete: [],
     });
   });
 
@@ -96,44 +74,38 @@ describe("settings-model", () => {
       frontend: {
         name: "Tab label is required.",
       },
-      backend: {
-        command: "Command is required.",
-      },
     });
     expect(
       countDevServerDraftValidationErrors([
         { id: "frontend", name: "", command: " bun run dev " },
         { id: "backend", name: "Backend", command: "   " },
       ]),
-    ).toBe(2);
+    ).toBe(1);
   });
 
-  test("normalizeDevServers trims entries and rejects blank fields", () => {
+  test("normalizeDevServers trims entries, skips blank commands, and rejects invalid configured rows", () => {
     expect(
       normalizeDevServers([{ id: "frontend", name: " Frontend ", command: " bun run dev " }]),
     ).toEqual([{ id: "frontend", name: "Frontend", command: "bun run dev" }]);
+    expect(normalizeDevServers([{ id: "frontend", name: "Frontend", command: "   " }])).toEqual([]);
 
     expect(() =>
       normalizeDevServers([{ id: "frontend", name: "   ", command: "bun run dev" }]),
     ).toThrow("Dev server tab labels cannot be blank");
     expect(() =>
-      normalizeDevServers([{ id: "frontend", name: "Frontend", command: "   " }]),
-    ).toThrow("Dev server commands cannot be blank");
+      normalizeDevServers([{ id: "   ", name: "Frontend", command: "bun run dev" }]),
+    ).toThrow("Dev server ids cannot be blank.");
   });
 
-  test("normalizeRepoScriptsWithTrust preserves trust while scripts remain configured", () => {
+  test("normalizeRepoScripts normalizes hooks and dev server scripts", () => {
     expect(
-      normalizeRepoScriptsWithTrust(
-        {
-          hooks: { preStart: [], postComplete: [] },
-          devServers: [{ id: "frontend", name: " Frontend ", command: " bun run dev " }],
-        },
-        true,
-      ),
+      normalizeRepoScripts({
+        hooks: { preStart: [" bun install "], postComplete: [] },
+        devServers: [{ id: "frontend", name: " Frontend ", command: " bun run dev " }],
+      }),
     ).toEqual({
-      hooks: { preStart: [], postComplete: [] },
+      hooks: { preStart: ["bun install"], postComplete: [] },
       devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-      trustedHooks: true,
     });
   });
 });

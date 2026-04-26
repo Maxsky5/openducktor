@@ -37,9 +37,8 @@ const createSnapshot = (): SettingsSnapshot => ({
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: { providers: {} },
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
-      devServers: [{ id: "frontend", name: "Frontend", command: "" }],
+      devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},
@@ -52,9 +51,8 @@ const createSnapshot = (): SettingsSnapshot => ({
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: { providers: {} },
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
-      devServers: [{ id: "backend", name: "", command: "" }],
+      devServers: [{ id: "backend", name: "", command: "bun run api" }],
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {},
@@ -75,11 +73,11 @@ describe("useSettingsModalRepoScriptValidation", () => {
 
     expect(latest.selectedRepoDevServerValidationErrors).toEqual({
       frontend: {
-        command: "Command is required.",
+        name: "Tab label is required.",
       },
     });
     expect(latest.invalidRepoPathsWithDevServerErrors).toEqual(["repo-a", "repo-b"]);
-    expect(latest.repoScriptValidationErrorCount).toBe(3);
+    expect(latest.repoScriptValidationErrorCount).toBe(2);
     expect(latest.hasRepoScriptValidationErrors).toBe(true);
 
     await harness.unmount();

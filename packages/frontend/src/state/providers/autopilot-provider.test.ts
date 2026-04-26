@@ -53,8 +53,6 @@ const createRepoConfig = (): RepoConfig => ({
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: { providers: {} },
-  trustedHooks: false,
-  trustedHooksFingerprint: undefined,
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeFileCopies: [],

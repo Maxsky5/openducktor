@@ -70,8 +70,6 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   git: {
     providers: {},
   },
-  trustedHooks: false,
-  trustedHooksFingerprint: undefined,
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeFileCopies: [],

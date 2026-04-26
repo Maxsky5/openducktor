@@ -53,8 +53,6 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       git: {
         providers: {},
       },
-      trustedHooks: false,
-      trustedHooksFingerprint: undefined,
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeFileCopies: [],
@@ -72,8 +70,6 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       git: {
         providers: {},
       },
-      trustedHooks: false,
-      trustedHooksFingerprint: undefined,
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeFileCopies: [],
@@ -400,7 +396,7 @@ describe("useSettingsModalController", () => {
       await harness.run((state) => {
         state.updateSelectedRepoConfig((repoConfig) => ({
           ...repoConfig,
-          devServers: [{ id: "frontend", name: "Frontend", command: "" }],
+          devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
         }));
       });
 
@@ -409,7 +405,7 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().repoScriptValidationErrorCount).toBe(1);
       expect(harness.getLatest().selectedRepoDevServerValidationErrors).toEqual({
         frontend: {
-          command: "Command is required.",
+          name: "Tab label is required.",
         },
       });
 

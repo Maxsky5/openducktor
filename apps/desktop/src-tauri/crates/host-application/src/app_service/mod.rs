@@ -42,7 +42,7 @@ pub(crate) mod test_support;
 mod workflow_rules;
 mod workspace_policy;
 
-pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
+pub(crate) use hook_security::run_parsed_hook_command_allow_failure;
 pub use odt_mcp::{
     OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
@@ -90,10 +90,7 @@ pub use task_workflow::RepoPullRequestSyncResult;
 pub(crate) use workflow_rules::{
     derive_agent_workflows, derive_available_actions, validate_transition_without_related_tasks,
 };
-pub use workspace_policy::{
-    HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
-    RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate,
-};
+pub use workspace_policy::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate};
 
 #[cfg(test)]
 pub(crate) use workflow_rules::{

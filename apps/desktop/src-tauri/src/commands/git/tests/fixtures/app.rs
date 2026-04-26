@@ -109,10 +109,7 @@ pub(crate) fn setup_command_git_fixture_with_summary(
         Arc::new(git_port),
     ));
     let app = mock_builder()
-        .manage(AppState {
-            service,
-            hook_trust_dialog_test_response: Mutex::new(None),
-        })
+        .manage(AppState { service })
         .invoke_handler(tauri::generate_handler![
             super::super::super::command_handlers::git_get_worktree_status,
             super::super::super::command_handlers::git_get_worktree_status_summary,

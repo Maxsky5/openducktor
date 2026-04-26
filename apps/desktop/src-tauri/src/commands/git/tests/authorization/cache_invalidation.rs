@@ -453,7 +453,6 @@ fn workspace_save_repo_settings_invalidates_authorized_worktree_cache() {
 
     tauri::async_runtime::block_on(workspace_save_repo_settings(
         fixture.app.state(),
-        fixture.app.handle().clone(),
         WORKSPACE_ID.to_string(),
         RepoSettingsPayload {
             default_runtime_kind: None,
@@ -467,7 +466,6 @@ fn workspace_save_repo_settings_invalidates_authorized_worktree_cache() {
             branch_prefix: None,
             default_target_branch: None,
             git: None,
-            trusted_hooks: false,
             hooks: None,
             dev_servers: None,
             worktree_file_copies: None,

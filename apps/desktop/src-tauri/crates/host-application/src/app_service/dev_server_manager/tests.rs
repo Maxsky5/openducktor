@@ -12,11 +12,7 @@ use crate::app_service::test_support::{
     repo_config_for_workspace, set_env_var, spawn_sleep_process_group, unique_temp_path,
     wait_for_path_exists, wait_for_process_exit, write_executable_script,
 };
-use crate::app_service::{
-    DevServerEmitter, DevServerGroupRuntime, HookTrustConfirmationPort,
-    HookTrustConfirmationRequest,
-};
-use anyhow::Result;
+use crate::app_service::{DevServerEmitter, DevServerGroupRuntime};
 use host_domain::{
     DevServerEvent, DevServerGroupState, DevServerScriptState, DevServerScriptStatus,
     DevServerTerminalChunk, GitCurrentBranch, TaskStatus,
@@ -29,14 +25,6 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-
-struct AllowHookTrustConfirmationPort;
-
-impl HookTrustConfirmationPort for AllowHookTrustConfirmationPort {
-    fn confirm_trusted_hooks(&self, _request: &HookTrustConfirmationRequest) -> Result<()> {
-        Ok(())
-    }
-}
 
 fn repo_config(dev_servers: Vec<RepoDevServerScript>) -> RepoConfig {
     RepoConfig {
@@ -521,7 +509,7 @@ fn start_dev_server_script_rejects_blank_commands() {
 }
 
 #[test]
-fn dev_server_start_requires_builder_worktree_before_hook_trust() {
+fn dev_server_start_requires_builder_worktree() {
     let root = unique_temp_path("dev-server-start-missing-worktree");
     let repo = root.join("repo");
     init_git_repo(&repo).expect("test repo should initialize");
@@ -552,8 +540,6 @@ fn dev_server_start_requires_builder_worktree_before_hook_trust() {
                         name: "Frontend".to_string(),
                         command: "bun run dev".to_string(),
                     }],
-                    trusted_hooks: false,
-                    trusted_hooks_fingerprint: None,
                     ..Default::default()
                 },
             ),
@@ -563,7 +549,7 @@ fn dev_server_start_requires_builder_worktree_before_hook_trust() {
     let emitter: DevServerEmitter = Arc::new(|_| {});
     let error = service
         .dev_server_start(repo_path.as_str(), "task-1", emitter)
-        .expect_err("missing builder worktree should fail before hook trust");
+        .expect_err("missing builder worktree should fail");
     assert_eq!(
         error.to_string(),
         "Builder continuation cannot start until a builder worktree exists for task task-1. Start Builder first."
@@ -677,7 +663,6 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
                     .expect("workspace should load"),
                 RepoConfig {
                     worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                    trusted_hooks: true,
                     dev_servers: vec![
                         RepoDevServerScript {
                             id: "frontend".to_string(),
@@ -695,19 +680,6 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
             ),
         )
         .expect("repo config should persist");
-    let challenge = service
-        .workspace_prepare_trusted_hooks_challenge(workspace.as_str())
-        .expect("trust challenge should prepare");
-    service
-        .workspace_set_trusted_hooks(
-            workspace.as_str(),
-            true,
-            Some(challenge.nonce.as_str()),
-            Some(challenge.fingerprint.as_str()),
-            &AllowHookTrustConfirmationPort,
-        )
-        .expect("hook trust should persist");
-
     let mut session = crate::app_service::test_support::make_session("task-1", "build-session");
     session.role = "build".to_string();
     session.working_directory = worktree_path;

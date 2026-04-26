@@ -1,5 +1,4 @@
-use anyhow::{anyhow, Result};
-use host_infra_system::{repo_script_fingerprint, run_command_allow_failure, RepoConfig};
+use host_infra_system::run_command_allow_failure;
 use std::path::Path;
 
 pub(crate) fn run_parsed_hook_command_allow_failure(
@@ -36,30 +35,6 @@ pub(crate) fn run_parsed_hook_command_allow_failure(
             format!("Failed to execute hook command: {error:#}"),
         ),
     }
-}
-
-pub(crate) fn validate_hook_trust(repo_path: &str, repo_config: &RepoConfig) -> Result<()> {
-    if repo_config.hooks.pre_start.is_empty()
-        && repo_config.hooks.post_complete.is_empty()
-        && repo_config.dev_servers.is_empty()
-    {
-        return Ok(());
-    }
-
-    if !repo_config.trusted_hooks {
-        return Err(anyhow!(
-            "Scripts are configured but not trusted for {repo_path}. Confirm trust first."
-        ));
-    }
-
-    let current_fingerprint = repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
-    if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
-        return Err(anyhow!(
-            "Scripts changed since last approval for {repo_path}. Reconfirm trust before running scripts."
-        ));
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

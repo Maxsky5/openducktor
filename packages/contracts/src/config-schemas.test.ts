@@ -14,6 +14,17 @@ describe("config-schemas", () => {
     expect(parsed.devServers).toEqual([]);
   });
 
+  test("ignores legacy trusted hook fields", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      trustedHooks: true,
+      trustedHooksFingerprint: "legacy-fingerprint",
+    });
+
+    expect(parsed).not.toHaveProperty("trustedHooks");
+    expect(parsed).not.toHaveProperty("trustedHooksFingerprint");
+  });
+
   test("requires named dev server commands", () => {
     expect(() =>
       repoConfigSchema.parse({

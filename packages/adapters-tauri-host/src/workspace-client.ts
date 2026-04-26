@@ -45,7 +45,6 @@ export type WorkspaceRepoConfigInput = {
 
 export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
   defaultTargetBranch?: GitTargetBranch;
-  trustedHooks: boolean;
   hooks?: WorkspaceRepoHooksInput;
   worktreeFileCopies?: string[];
 };
@@ -55,59 +54,12 @@ export type WorkspaceRepoHooksInput = {
   postComplete?: string[];
 };
 
-export type TrustedHooksChallenge = {
-  nonce: string;
-  workspaceId: string;
-  fingerprint: string;
-  expiresAt: string;
-  preStartCount: number;
-  postCompleteCount: number;
-};
-
-export type TrustedHooksProof = {
-  nonce: string;
-  fingerprint: string;
-};
-
 export type StagedLocalAttachment = {
   path: string;
 };
 
 export type ResolvedLocalAttachment = {
   path: string;
-};
-
-const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("Expected trusted hooks challenge payload from host command");
-  }
-
-  const candidate = payload as Record<string, unknown>;
-  const readString = (key: keyof TrustedHooksChallenge): string => {
-    const value = candidate[key];
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new Error(`Expected string field '${key}' in trusted hooks challenge payload`);
-    }
-    return value;
-  };
-  const readCount = (key: "preStartCount" | "postCompleteCount"): number => {
-    const value = candidate[key];
-    if (!Number.isInteger(value) || (value as number) < 0) {
-      throw new Error(
-        `Expected non-negative integer field '${key}' in trusted hooks challenge payload`,
-      );
-    }
-    return value as number;
-  };
-
-  return {
-    nonce: readString("nonce"),
-    workspaceId: readString("workspaceId"),
-    fingerprint: readString("fingerprint"),
-    expiresAt: readString("expiresAt"),
-    preStartCount: readCount("preStartCount"),
-    postCompleteCount: readCount("postCompleteCount"),
-  };
 };
 
 const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
@@ -235,35 +187,6 @@ const workspaceDetectGithubRepository = async (
   return payload === null ? null : gitProviderRepositorySchema.parse(payload);
 };
 
-const workspaceSetTrustedHooks = async (
-  invokeFn: InvokeFn,
-  workspaceId: string,
-  trusted: boolean,
-  challenge?: TrustedHooksProof,
-): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_set_trusted_hooks", {
-    workspaceId,
-    trusted,
-    ...(challenge
-      ? {
-          challengeNonce: challenge.nonce,
-          challengeFingerprint: challenge.fingerprint,
-        }
-      : {}),
-  });
-  return workspaceRecordSchema.parse(payload);
-};
-
-const workspacePrepareTrustedHooksChallenge = async (
-  invokeFn: InvokeFn,
-  workspaceId: string,
-): Promise<TrustedHooksChallenge> => {
-  const payload = await invokeFn("workspace_prepare_trusted_hooks_challenge", {
-    workspaceId,
-  });
-  return parseTrustedHooksChallenge(payload);
-};
-
 const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
   await invokeFn("set_theme", { theme });
 };
@@ -348,18 +271,6 @@ export class TauriWorkspaceClient {
 
   async workspaceDetectGithubRepository(repoPath: string): Promise<GitProviderRepository | null> {
     return workspaceDetectGithubRepository(this.invokeFn, repoPath);
-  }
-
-  async workspacePrepareTrustedHooksChallenge(workspaceId: string): Promise<TrustedHooksChallenge> {
-    return workspacePrepareTrustedHooksChallenge(this.invokeFn, workspaceId);
-  }
-
-  async workspaceSetTrustedHooks(
-    workspaceId: string,
-    trusted: boolean,
-    challenge?: TrustedHooksProof,
-  ): Promise<WorkspaceRecord> {
-    return workspaceSetTrustedHooks(this.invokeFn, workspaceId, trusted, challenge);
   }
 
   async workspaceStageLocalAttachment(input: {

@@ -12,8 +12,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::IsTerminal;
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(test)]
-use std::sync::Mutex;
 use std::sync::{Arc, OnceLock};
 #[cfg(test)]
 use std::time::SystemTime;
@@ -49,8 +47,6 @@ use commands::workspace::*;
 
 pub(crate) struct AppState {
     service: Arc<AppService>,
-    #[cfg(test)]
-    hook_trust_dialog_test_response: Mutex<Option<bool>>,
 }
 
 pub(crate) struct PullRequestSyncLoopState {
@@ -304,7 +300,6 @@ pub(crate) struct RepoSettingsPayload {
     branch_prefix: Option<String>,
     default_target_branch: Option<host_infra_system::GitTargetBranch>,
     git: Option<host_infra_system::RepoGitConfig>,
-    trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
     dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
     worktree_file_copies: Option<Vec<String>>,
@@ -524,7 +519,6 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         workspace_update_repo_config,
         workspace_save_repo_settings,
         workspace_update_repo_hooks,
-        workspace_prepare_trusted_hooks_challenge,
         workspace_stage_local_attachment,
         workspace_resolve_local_attachment_path,
         workspace_get_repo_config,
@@ -532,7 +526,6 @@ fn startup_phase_command_registration<R: tauri::Runtime>(
         workspace_get_settings_snapshot,
         workspace_update_global_git_config,
         workspace_save_settings_snapshot,
-        workspace_set_trusted_hooks,
         git_get_branches,
         git_get_current_branch,
         git_switch_branch,
@@ -618,11 +611,7 @@ fn startup_phase_build_tauri_app(
     ]);
 
     let builder = builder
-        .manage(AppState {
-            service,
-            #[cfg(test)]
-            hook_trust_dialog_test_response: Mutex::new(None),
-        })
+        .manage(AppState { service })
         .setup(move |app| {
             #[cfg(all(feature = "cef", target_os = "macos"))]
             macos_cef_quit::install(app)?;
@@ -1017,7 +1006,6 @@ mod tests {
         );
 
         let settings_payload = json!({
-            "trustedHooks": false,
             "defaultTargetBranch": {
                 "remote": "origin",
                 "branch": "develop"

@@ -2,7 +2,7 @@ mod processes;
 mod state;
 mod terminal;
 
-use super::{validate_hook_trust, AppService, DevServerEmitter, DevServerGroupRuntime};
+use super::{AppService, DevServerEmitter, DevServerGroupRuntime};
 use anyhow::{anyhow, Result};
 use host_domain::DevServerGroupState;
 
@@ -69,7 +69,6 @@ impl AppService {
                 )
             })?
             .working_directory;
-        validate_hook_trust(repo_path.as_str(), &repo_config)?;
         let key = dev_server_group_key(repo_path.as_str(), task_id);
         tracing::info!(
             target: "openducktor.lifecycle",
