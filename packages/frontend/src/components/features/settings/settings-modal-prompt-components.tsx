@@ -85,11 +85,11 @@ type PromptOverrideCardProps = {
   override?: RepoPromptOverrides[AgentPromptTemplateId] | undefined;
   inheritedPreview?: PromptInheritedPreview | undefined;
   disabled: boolean;
-  canResetToBuiltin: boolean;
+  canClearOverride: boolean;
   validationError?: string | undefined;
   onToggleEnabled: (next: boolean) => void;
   onTemplateChange: (nextTemplate: string) => void;
-  onResetToBuiltin: () => void;
+  onClearOverride: () => void;
 };
 
 export function PromptOverrideCard({
@@ -98,11 +98,11 @@ export function PromptOverrideCard({
   override,
   inheritedPreview,
   disabled,
-  canResetToBuiltin,
+  canClearOverride,
   validationError,
   onToggleEnabled,
   onTemplateChange,
-  onResetToBuiltin,
+  onClearOverride,
 }: PromptOverrideCardProps): ReactElement {
   const isOverrideEnabled = Boolean(override && override.enabled !== false);
   const editorValue = override?.template ?? inheritedPreview?.template ?? "";
@@ -176,10 +176,10 @@ export function PromptOverrideCard({
           type="button"
           variant="ghost"
           size="sm"
-          disabled={disabled || !canResetToBuiltin}
-          onClick={onResetToBuiltin}
+          disabled={disabled || !canClearOverride}
+          onClick={onClearOverride}
         >
-          Reset to Builtin
+          Clear override
         </Button>
       </div>
     </div>

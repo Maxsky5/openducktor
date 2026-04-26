@@ -168,38 +168,22 @@ export const getNeededCatalogRuntimeKinds = (
   return [...runtimeKinds];
 };
 
-const normalizeTemplateForComparison = (value: string | undefined): string =>
-  (value ?? "").replaceAll("\r\n", "\n").trim();
-
-export const canResetPromptOverrideToBuiltin = (
+export const canClearPromptOverride = (
   override: RepoPromptOverrides[AgentPromptTemplateId] | undefined,
-  builtinTemplate: string,
-): boolean =>
-  Boolean(
-    override &&
-      normalizeTemplateForComparison(override.template) !==
-        normalizeTemplateForComparison(builtinTemplate),
-  );
+): boolean => Boolean(override);
 
-export const resetPromptOverrideToBuiltin = (
+export const clearPromptOverride = (
   overrides: RepoPromptOverrides,
   templateId: AgentPromptTemplateId,
-  builtinTemplate: string,
-  builtinVersion: number,
 ): RepoPromptOverrides => {
   const existing = overrides[templateId];
   if (!existing) {
     return overrides;
   }
 
-  return {
-    ...overrides,
-    [templateId]: {
-      ...existing,
-      template: builtinTemplate,
-      baseVersion: builtinVersion,
-    },
-  };
+  const next = { ...overrides };
+  delete next[templateId];
+  return next;
 };
 
 export const togglePromptOverrideEnabled = (
@@ -254,19 +238,6 @@ export const updatePromptOverrideTemplate = (
       enabled: existing ? existing.enabled !== false : false,
     },
   };
-};
-
-export const removePromptOverride = (
-  overrides: RepoPromptOverrides,
-  templateId: AgentPromptTemplateId,
-): RepoPromptOverrides => {
-  if (!overrides[templateId]) {
-    return overrides;
-  }
-
-  const next = { ...overrides };
-  delete next[templateId];
-  return next;
 };
 
 type PromptOverrideValidationErrors = Partial<Record<AgentPromptTemplateId, string>>;
