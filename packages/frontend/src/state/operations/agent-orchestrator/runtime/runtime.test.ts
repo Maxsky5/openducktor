@@ -111,6 +111,22 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectory: "/tmp/repo/worktree",
       },
     });
+
+    expect(
+      resolveRuntimeRouteConnection(
+        {
+          type: "stdio",
+          identity: "runtime-stdio",
+        },
+        "/tmp/repo/worktree",
+      ),
+    ).toEqual({
+      runtimeConnection: {
+        type: "stdio",
+        identity: "runtime-stdio",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
   });
 
   test("starts build bootstrap and refreshes task data when no target worktree is provided", async () => {

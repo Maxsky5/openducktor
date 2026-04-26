@@ -742,9 +742,10 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-stdio",
-            runtimeRoute: { type: "stdio" },
+            runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
             runtimeConnection: {
               type: "stdio",
+              identity: "runtime-stdio",
               workingDirectory: "/tmp/repo/worktree",
             },
           }),

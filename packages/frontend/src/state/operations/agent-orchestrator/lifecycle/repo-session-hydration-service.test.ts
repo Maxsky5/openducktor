@@ -139,9 +139,10 @@ const createRuntimeInstance = ({
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
-const stdioRuntimeConnection = (workingDirectory: string) =>
+const stdioRuntimeConnection = (workingDirectory: string, identity = "runtime-stdio") =>
   ({
     type: "stdio",
+    identity,
     workingDirectory,
   }) as const;
 
@@ -455,12 +456,12 @@ describe("repo-session-hydration-service", () => {
       createRuntimeInstance({
         runtimeId: "runtime-stdio-a",
         workingDirectory: worktreeA,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-a" },
       }),
       createRuntimeInstance({
         runtimeId: "runtime-stdio-b",
         workingDirectory: worktreeB,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-b" },
       }),
     ];
 
@@ -505,13 +506,16 @@ describe("repo-session-hydration-service", () => {
       isCurrentRepo: () => true,
     });
 
+    const runtimeConnectionA = stdioRuntimeConnection(worktreeA, "runtime-stdio-a");
+    const runtimeConnectionB = stdioRuntimeConnection(worktreeB, "runtime-stdio-b");
+
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([
       {
-        runtimeConnection: stdioRuntimeConnection(worktreeA),
+        runtimeConnection: runtimeConnectionA,
         directories: [worktreeA],
       },
       {
-        runtimeConnection: stdioRuntimeConnection(worktreeB),
+        runtimeConnection: runtimeConnectionB,
         directories: [worktreeB],
       },
     ]);
@@ -519,7 +523,7 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore.readSnapshot({
         repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection(worktreeA),
+        runtimeConnection: runtimeConnectionA,
         workingDirectory: worktreeA,
         externalSessionId: "external-1",
       })?.externalSessionId,
@@ -528,7 +532,7 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore.readSnapshot({
         repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection(worktreeB),
+        runtimeConnection: runtimeConnectionB,
         workingDirectory: worktreeB,
         externalSessionId: "external-2",
       })?.externalSessionId,
@@ -544,7 +548,10 @@ describe("repo-session-hydration-service", () => {
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
     host.runtimeList = async () => [
-      createRuntimeInstance({ runtimeId: "runtime-stdio", runtimeRoute: { type: "stdio" } }),
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+      }),
     ];
 
     const service = createRepoSessionHydrationService({
@@ -769,7 +776,7 @@ describe("repo-session-hydration-service", () => {
       return createRuntimeInstance({
         runtimeId: "runtime-stdio-root",
         workingDirectory: repoPath,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-root" },
       });
     };
 

@@ -164,6 +164,9 @@ export const runtimeRefSchema = z.object({
 });
 export type RuntimeRef = z.infer<typeof runtimeRefSchema>;
 
+export const stdioRuntimeIdentitySchema = z.string().trim().min(1);
+export type StdioRuntimeIdentity = z.infer<typeof stdioRuntimeIdentitySchema>;
+
 const runtimeToolIdSchema = z.string().trim().min(1);
 const runtimeReadOnlyRoleBlockedToolsSchema = z
   .array(runtimeToolIdSchema)
@@ -239,6 +242,7 @@ export const runtimeTransportSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("stdio"),
+      identity: stdioRuntimeIdentitySchema,
       workingDirectory: z.string().trim().min(1),
     })
     .strict(),

@@ -29,14 +29,14 @@ describe("live-agent-session-cache", () => {
       "opencode::local_http:http://127.0.0.1:4444",
     );
     expect(getLiveAgentSessionCacheKey("opencode", stdioRuntimeConnection)).toBe(
-      "opencode::stdio::/tmp/runtime-root",
+      "opencode::stdio:runtime-stdio::/tmp/runtime-root",
     );
     expect(runtimeWorkingDirectoryKey("opencode", "/tmp/repo/worktree/")).toBe(
       "opencode::/tmp/repo/worktree",
     );
     expect(
       liveAgentSessionLookupKey("opencode", stdioRuntimeConnection, "/tmp/repo/worktree/"),
-    ).toBe("opencode::stdio::/tmp/runtime-root::/tmp/repo/worktree");
+    ).toBe("opencode::stdio:runtime-stdio::/tmp/runtime-root::/tmp/repo/worktree");
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {

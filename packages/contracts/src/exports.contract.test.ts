@@ -299,6 +299,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoRuntimeStartupStageSchema",
   "repoRuntimeStartupStatusSchema",
   "runtimeRouteSchema",
+  "stdioRuntimeIdentitySchema",
   "runtimeProvisioningModeSchema",
   "getMissingRequiredRuntimeSupportedScopes",
   "runtimeRequiredScopesByRole",

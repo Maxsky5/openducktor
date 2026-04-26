@@ -119,7 +119,7 @@ pub(crate) fn require_local_http_endpoint<'a>(
 ) -> Result<&'a str> {
     match runtime_route {
         RuntimeRoute::LocalHttp { endpoint } => Ok(endpoint.as_str()),
-        RuntimeRoute::Stdio => Err(anyhow!(
+        RuntimeRoute::Stdio { .. } => Err(anyhow!(
             "Runtime {action} requires a local_http runtime route"
         )),
     }

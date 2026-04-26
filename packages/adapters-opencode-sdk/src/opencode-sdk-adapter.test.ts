@@ -340,6 +340,7 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
         runtimeConnection: {
           type: "stdio",
+          identity: "runtime-stdio",
           workingDirectory: "/repo",
         },
       }),

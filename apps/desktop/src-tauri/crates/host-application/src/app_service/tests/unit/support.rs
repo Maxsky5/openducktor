@@ -341,7 +341,7 @@ impl AppRuntime for TestRuntimeAdapter {
                         ),
                     ))
                 }
-                host_domain::RuntimeRoute::Stdio => {
+                host_domain::RuntimeRoute::Stdio { .. } => {
                     Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported)
                 }
             },

@@ -153,7 +153,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: false,

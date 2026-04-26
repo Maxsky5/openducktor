@@ -315,7 +315,7 @@ mod tests {
             .runtime(&AgentRuntimeKind::opencode())
             .expect("opencode runtime should be registered")
             .stop_session(
-                &RuntimeRoute::Stdio,
+                &RuntimeRoute::stdio("runtime-stdio").expect("stdio route"),
                 "external-session-1",
                 "/tmp/repo/worktree",
             )

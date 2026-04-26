@@ -692,7 +692,7 @@ mod tests {
     #[test]
     fn opencode_runtime_marks_stdio_session_probe_as_unsupported() -> Result<()> {
         let resolution = OpenCodeRuntime::default()
-            .session_status_probe_target(&RuntimeRoute::Stdio, "/tmp/repo")?;
+            .session_status_probe_target(&RuntimeRoute::stdio("runtime-stdio")?, "/tmp/repo")?;
 
         assert!(matches!(
             resolution,

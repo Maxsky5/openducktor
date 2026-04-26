@@ -44,6 +44,7 @@ export const runtimeConnectionToRoute = (
     case "stdio":
       return {
         type: "stdio",
+        identity: runtimeConnection.identity,
       };
   }
 };
@@ -62,6 +63,7 @@ export const runtimeRouteToConnection = (
     case "stdio":
       return {
         type: "stdio",
+        identity: runtimeRoute.identity,
         workingDirectory,
       };
   }
@@ -85,7 +87,7 @@ export const runtimeRouteTransportKey = (runtimeRoute: RuntimeRoute | null | und
     case "local_http":
       return `local_http:${runtimeRoute.endpoint.trim()}`;
     case "stdio":
-      return "stdio";
+      return `stdio:${runtimeRoute.identity.trim()}`;
   }
 };
 
@@ -96,7 +98,7 @@ export const runtimeConnectionTransportKey = (
     case "local_http":
       return `local_http:${runtimeConnection.endpoint.trim()}`;
     case "stdio":
-      return "stdio";
+      return `stdio:${runtimeConnection.identity.trim()}`;
   }
 };
 
@@ -135,7 +137,7 @@ export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute | null | undefin
     case "local_http":
       return runtimeRoute.endpoint;
     case "stdio":
-      return "stdio";
+      return `stdio:${runtimeRoute.identity.trim()}`;
   }
 };
 

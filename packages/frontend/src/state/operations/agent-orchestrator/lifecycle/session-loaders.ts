@@ -37,6 +37,15 @@ const validateLocalHttpRuntimeEndpoint = (runtimeEndpoint: string): string => {
   return trimmedEndpoint;
 };
 
+const validateStdioRuntimeIdentity = (identity: string): string => {
+  const trimmedIdentity = identity.trim();
+  if (trimmedIdentity.length === 0) {
+    throw new Error("Session runtime stdio identity is required.");
+  }
+
+  return trimmedIdentity;
+};
+
 const validateWorkingDirectory = (workingDirectory: string): string => {
   const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
   if (normalizedWorkingDirectory.length === 0) {
@@ -76,6 +85,7 @@ const validateRuntimeConnection = (
     case "stdio":
       return {
         type: "stdio",
+        identity: validateStdioRuntimeIdentity(runtimeConnection.identity),
         workingDirectory,
       };
   }

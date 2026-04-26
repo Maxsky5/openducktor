@@ -44,6 +44,7 @@ export const createStdioRuntimeConnection = (
   workingDirectory = "/tmp/runtime-root",
 ): AgentRuntimeConnection => ({
   type: "stdio",
+  identity: "runtime-stdio",
   workingDirectory,
 });
 

@@ -547,7 +547,7 @@ describe("useAgentStudioModelSelection", () => {
       createBaseProps({
         activeSession: createActiveSession({
           runtimeKind: "opencode",
-          runtimeRoute: { type: "stdio" },
+          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
           workingDirectory: "/repo/session-worktree",
         }),
         readSessionSlashCommands,
@@ -606,7 +606,7 @@ describe("useAgentStudioModelSelection", () => {
       createBaseProps({
         activeSession: createActiveSession({
           runtimeKind: "opencode",
-          runtimeRoute: { type: "stdio" },
+          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
           workingDirectory: "/repo/session-worktree",
         }),
         readSessionFileSearch,

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { runtimeDescriptorSchema, runtimeKindSchema } from "./agent-runtime-schemas";
+import {
+  runtimeDescriptorSchema,
+  runtimeKindSchema,
+  stdioRuntimeIdentitySchema,
+} from "./agent-runtime-schemas";
 import { failureKindSchema } from "./failure-schemas";
 
 export const runtimeHealthSchema = z.object({
@@ -112,6 +116,7 @@ export const runtimeRouteSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("stdio"),
+      identity: stdioRuntimeIdentitySchema,
     })
     .strict(),
 ]);

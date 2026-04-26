@@ -127,7 +127,7 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
         workingDirectory: "/repo-a/worktree",
         messages: [],
         draftAssistantText: "",

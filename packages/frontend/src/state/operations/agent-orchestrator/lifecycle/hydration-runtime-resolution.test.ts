@@ -38,6 +38,18 @@ const createRuntime = (workingDirectory: string): RuntimeInstanceSummary => ({
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
+const createStdioRuntime = (
+  runtimeId: string,
+  workingDirectory: string,
+): RuntimeInstanceSummary => ({
+  ...createRuntime(workingDirectory),
+  runtimeId,
+  runtimeRoute: {
+    type: "stdio",
+    identity: runtimeId,
+  },
+});
+
 describe("createHydrationRuntimeResolver", () => {
   test("prefers live runtime resolution over preloaded runtime connections", async () => {
     const workingDirectory = "/tmp/repo/worktree";
@@ -199,6 +211,7 @@ describe("createHydrationRuntimeResolver", () => {
         runtimeWorkingDirectoryKey("opencode", workingDirectory),
         {
           type: "stdio",
+          identity: "runtime-stdio",
           workingDirectory,
         },
       ],
@@ -219,10 +232,37 @@ describe("createHydrationRuntimeResolver", () => {
     expect(result.runtimeId).toBeNull();
     expect(result.runtimeConnection).toEqual({
       type: "stdio",
+      identity: "runtime-stdio",
       workingDirectory,
     });
     expect(result.runtimeRoute).toEqual({
       type: "stdio",
+      identity: "runtime-stdio",
+    });
+  });
+
+  test("fails fast when multiple stdio runtimes match the same working directory", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        [
+          "opencode",
+          [
+            createStdioRuntime("runtime-stdio-a", workingDirectory),
+            createStdioRuntime("runtime-stdio-b", workingDirectory),
+          ],
+        ],
+      ]),
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    await expect(
+      resolveHydrationRuntime(createRecord("planner", workingDirectory)),
+    ).resolves.toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: `Multiple live stdio runtimes found for working directory ${workingDirectory}.`,
     });
   });
 
