@@ -5,11 +5,14 @@ use super::{
     RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeTargetResolution,
     RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary, RuntimeRegistry,
+    RuntimeStartupReadinessConfig,
 };
+use host_infra_system::RuntimeConfig;
 use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 use std::process::Child;
 use std::sync::Arc;
 
@@ -23,7 +26,29 @@ pub(crate) use open_code::OpenCodeRuntime;
 pub(crate) trait AppRuntime: Send + Sync {
     fn definition(&self) -> RuntimeDefinition;
 
-    fn startup_policy(&self, service: &AppService) -> Result<RuntimeStartupReadinessPolicy>;
+    fn kind(&self) -> AgentRuntimeKind {
+        self.definition().kind().clone()
+    }
+
+    fn startup_config(&self, service: &AppService) -> Result<RuntimeStartupReadinessConfig> {
+        let runtime_kind = self.kind();
+        let config_path = service.runtime_config_store.path();
+        let config = service.runtime_config_store.load().with_context(|| {
+            format!(
+                "Failed loading startup readiness config for runtime '{}' from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
+                runtime_kind.as_str(),
+                config_path.display()
+            )
+        })?;
+
+        select_startup_config(&config, &runtime_kind, config_path)
+    }
+
+    fn startup_policy(&self, service: &AppService) -> Result<RuntimeStartupReadinessPolicy> {
+        Ok(RuntimeStartupReadinessPolicy::from_config(
+            self.startup_config(service)?,
+        ))
+    }
 
     fn start_external(
         &self,
@@ -142,6 +167,25 @@ pub(crate) trait AppRuntime: Send + Sync {
     }
 }
 
+fn select_startup_config(
+    config: &RuntimeConfig,
+    runtime_kind: &AgentRuntimeKind,
+    config_path: &Path,
+) -> Result<RuntimeStartupReadinessConfig> {
+    config
+        .runtimes
+        .get(runtime_kind.as_str())
+        .cloned()
+        .ok_or_else(|| {
+            anyhow!(
+                "Runtime config {} is missing startup readiness settings for runtime '{}'. Add a runtimes.{} entry or delete the file so OpenDucktor can recreate registry defaults.",
+                config_path.display(),
+                runtime_kind.as_str(),
+                runtime_kind.as_str()
+            )
+        })
+}
+
 pub(crate) struct ExternalRuntimeStart {
     pub(crate) runtime_route: RuntimeRoute,
     pub(crate) startup_report: RuntimeStartupWaitReport,
@@ -255,6 +299,32 @@ impl AppRuntimeRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn select_startup_config_errors_when_runtime_entry_is_missing() {
+        let config = RuntimeConfig {
+            runtimes: BTreeMap::new(),
+            ..RuntimeConfig::default()
+        };
+        let config_path = Path::new("/tmp/runtime-config.json");
+
+        let error = select_startup_config(
+            &config,
+            &AgentRuntimeKind::from("test-runtime"),
+            config_path,
+        )
+        .expect_err("missing runtime startup config should fail");
+        let message = error.to_string();
+
+        assert!(
+            message.contains("runtime 'test-runtime'"),
+            "error should name requested runtime kind: {message}"
+        );
+        assert!(
+            message.contains(config_path.to_string_lossy().as_ref()),
+            "error should include runtime config path: {message}"
+        );
+    }
 
     #[test]
     fn builtin_for_service_creates_distinct_runtime_instances() {

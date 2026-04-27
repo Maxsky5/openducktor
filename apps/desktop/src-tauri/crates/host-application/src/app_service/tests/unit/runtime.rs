@@ -8,8 +8,8 @@ impl AppRuntime for HostManagedStdioRuntimeAdapter {
         test_runtime_definition("test-runtime", "Test Runtime")
     }
 
-    fn startup_policy(&self, _service: &AppService) -> Result<OpencodeStartupReadinessPolicy> {
-        Ok(OpencodeStartupReadinessPolicy::default())
+    fn kind(&self) -> AgentRuntimeKind {
+        AgentRuntimeKind::from("test-runtime")
     }
 
     fn start_host_managed(
@@ -28,12 +28,7 @@ impl AppRuntime for HostManagedStdioRuntimeAdapter {
     }
 
     fn runtime_health(&self) -> RuntimeHealth {
-        RuntimeHealth {
-            kind: "test-runtime".to_string(),
-            ok: true,
-            version: None,
-            error: None,
-        }
+        runtime_health_ok("test-runtime")
     }
 
     fn stop_session(
@@ -54,30 +49,14 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
     fs::create_dir_all(repo_path.join(".git"))?;
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition_with_provisioning(
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(
+                TestRuntimeAdapter::for_kind_with_provisioning(
                     "test-runtime",
                     "Test Runtime",
                     RuntimeProvisioningMode::External,
                 ),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            ),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -119,16 +98,7 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
 
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
             Arc::new(HostManagedStdioRuntimeAdapter),
         ],
         AgentRuntimeKind::opencode(),
@@ -171,26 +141,13 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
 fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: Some("1.0.0".to_string()),
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: Some("0.1.0".to_string()),
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            Arc::new(
+                TestRuntimeAdapter::opencode().with_health_version("1.0.0"),
+            ),
+            Arc::new(
+                TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")
+                    .with_health_version("0.1.0"),
+            ),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -214,26 +171,8 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
 fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -254,26 +193,8 @@ fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> 
 fn injected_runtime_registry_drives_runtime_config_defaults() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -322,28 +243,13 @@ fn runtime_apis_fail_fast_for_unsupported_runtime_kinds() {
 fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::ReturnError(
-                    "custom runtime probe hook invoked",
-                ),
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(
+                TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")
+                    .with_session_probe_behavior(SessionProbeBehavior::ReturnError(
+                        "custom runtime probe hook invoked",
+                    )),
+            ),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -411,26 +317,11 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
 
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::ReturnUnsupported,
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(
+                TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")
+                    .with_session_probe_behavior(SessionProbeBehavior::ReturnUnsupported),
+            ),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -492,26 +383,8 @@ fn task_delete_uses_task_runtime_route_for_matching_runtime_kind_and_worktree() 
 
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -574,26 +447,8 @@ fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() 
 
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")),
         ],
         AgentRuntimeKind::opencode(),
     )?;
@@ -652,28 +507,13 @@ fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() 
 fn runs_list_hides_runs_when_runtime_probe_returns_actionable_failure() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::ProbeFailure(
-                    "probe failed for test runtime",
-                ),
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(
+                TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")
+                    .with_session_probe_behavior(SessionProbeBehavior::ProbeFailure(
+                        "probe failed for test runtime",
+                    )),
+            ),
         ],
         AgentRuntimeKind::opencode(),
     )?;

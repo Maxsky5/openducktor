@@ -147,6 +147,49 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
 }
 
 #[test]
+fn startup_readiness_policy_uses_config_for_registered_runtime_kind() -> Result<()> {
+    let runtime_registry = AppRuntimeRegistry::new(
+        vec![
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")),
+        ],
+        AgentRuntimeKind::opencode(),
+    )?;
+    let (service, _task_state, _git_state) =
+        build_service_with_runtime_registry(vec![], runtime_registry);
+    let config = RuntimeConfig {
+        runtimes: BTreeMap::from([(
+            "test-runtime".to_string(),
+            OpencodeStartupReadinessConfig {
+                timeout_ms: 45_678,
+                connect_timeout_ms: 678,
+                initial_retry_delay_ms: 44,
+                max_retry_delay_ms: 222,
+                child_check_interval_ms: 88,
+            },
+        )]),
+        ..RuntimeConfig::default()
+    };
+    service.runtime_config_store.save(&config)?;
+
+    let policy = service.resolve_runtime_startup_policy(
+        &AgentRuntimeKind::from("test-runtime"),
+        "agent_runtime",
+        "/tmp/repo",
+        "task-42",
+        RuntimeRole::Qa,
+        "test runtime failed to start for task task-42",
+    )?;
+
+    assert_eq!(policy.timeout, Duration::from_millis(45_678));
+    assert_eq!(policy.connect_timeout, Duration::from_millis(678));
+    assert_eq!(policy.initial_retry_delay, Duration::from_millis(44));
+    assert_eq!(policy.max_retry_delay, Duration::from_millis(222));
+    assert_eq!(policy.child_state_check_interval, Duration::from_millis(88));
+    Ok(())
+}
+
+#[test]
 fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config() -> Result<()> {
     let root = unique_temp_path("startup-policy-invalid-config");
     let config_path = root.join("runtime-config.json");
@@ -164,7 +207,7 @@ fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config(
     let message = format!("{error:#}");
     assert!(
         message.contains(&format!(
-            "Failed loading OpenCode startup readiness config from {}",
+            "Failed loading startup readiness config for runtime 'opencode' from {}",
             config_path.display()
         )),
         "error should include startup context and config path: {message}"
@@ -201,7 +244,7 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
         .expect_err("invalid config should fail build startup policy resolution");
     let message = format!("{error:#}");
     assert!(message.contains("opencode build runtime failed before worktree preparation"));
-    assert!(message.contains("Failed loading OpenCode startup readiness config"));
+    assert!(message.contains("Failed loading startup readiness config for runtime 'opencode'"));
 
     let metrics = service.startup_metrics_snapshot()?;
     assert_eq!(
@@ -235,7 +278,7 @@ fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
         .expect_err("invalid config should fail runtime startup policy resolution");
     let message = format!("{error:#}");
     assert!(message.contains("opencode runtime failed to start for task task-42"));
-    assert!(message.contains("Failed loading OpenCode startup readiness config"));
+    assert!(message.contains("Failed loading startup readiness config for runtime 'opencode'"));
 
     let metrics = service.startup_metrics_snapshot()?;
     assert_eq!(
