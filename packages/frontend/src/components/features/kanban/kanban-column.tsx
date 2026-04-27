@@ -6,7 +6,10 @@ import type {
 } from "@openducktor/core";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
-import { KANBAN_LANE_WIDTH_CLASS } from "@/components/features/kanban/kanban-layout";
+import {
+  KANBAN_LANE_HEADER_HEIGHT_CLASS,
+  KANBAN_LANE_WIDTH_CLASS,
+} from "@/components/features/kanban/kanban-layout";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
@@ -196,14 +199,23 @@ function LaneHeader({
   const theme = laneTheme(id);
   return (
     <header
-      className={cn("space-y-3 border-b border-border/80 px-4 pb-3 pt-4", theme.headerSurfaceClass)}
+      className={cn(
+        "flex flex-col justify-between border-b border-border/80 px-4 pb-3 pt-4",
+        KANBAN_LANE_HEADER_HEIGHT_CLASS,
+        theme.headerSurfaceClass,
+      )}
     >
       <span className={cn("block h-1.5 w-14 rounded-full", theme.headerAccentClass)} />
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">{title}</h3>
+        <h3 className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide text-foreground">
+          {title}
+        </h3>
         <Badge
           variant="outline"
-          className={cn("h-6 rounded-full px-2 text-[11px] font-semibold", theme.countBadgeClass)}
+          className={cn(
+            "h-6 shrink-0 rounded-full px-2 text-[11px] font-semibold",
+            theme.countBadgeClass,
+          )}
         >
           {laneCountLabel(count)}
         </Badge>
