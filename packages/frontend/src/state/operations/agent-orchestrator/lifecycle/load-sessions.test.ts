@@ -1968,10 +1968,33 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
+    const preloadedRuntimeLists = new Map<"opencode", RuntimeInstanceSummary[]>([
+      [
+        "opencode",
+        [
+          {
+            kind: "opencode",
+            runtimeId: "runtime-worktree",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo/worktree",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4444",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          },
+        ],
+      ],
+    ]);
+
     await loadAgentSessions("task-1", {
       mode: "requested_history",
       targetSessionId: "session-child-1",
       historyPolicy: "requested_only",
+      preloadedRuntimeLists,
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
@@ -3038,7 +3061,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
   });
 
-  test("hydrates qa sessions through the shared workspace runtime when only a shared workspace runtime exists", async () => {
+  test("fails fast for qa worktree sessions when only a shared workspace runtime exists", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     let observedRuntimeEndpoint: string | null = null;
@@ -3121,21 +3144,21 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1", {
-        mode: "requested_history",
-        targetSessionId: "session-qa-1",
-        historyPolicy: "requested_only",
-      });
+      await expect(
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-qa-1",
+          historyPolicy: "requested_only",
+        }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktree.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
     }
 
-    expect(String(observedRuntimeEndpoint)).toBe("http://127.0.0.1:4444");
-    expect(state["session-qa-1"]?.runtimeId).toBe("runtime-1");
-    expect(sessionMessageAt(getSession(state, "session-qa-1"), 0)?.id).toBe(
-      "history:session-start:session-qa-1",
-    );
+    expect(observedRuntimeEndpoint).toBeNull();
+    expect(state["session-qa-1"]?.runtimeId).toBeNull();
+    expect(sessionMessagesToArray(getSession(state, "session-qa-1"))).toEqual([]);
   });
 
   test("does not ensure a shared workspace runtime for qa sessions when repo root paths only differ by trailing slash", async () => {
@@ -3346,7 +3369,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(appQueryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
   });
 
-  test("hydrates build sessions through the shared workspace runtime on worktree directories", async () => {
+  test("fails fast for build worktree sessions when only the shared workspace runtime exists", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const ensuredRuntimeKinds: string[] = [];
@@ -3447,11 +3470,13 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", {
-        mode: "requested_history",
-        targetSessionId: "session-1",
-        historyPolicy: "requested_only",
-      });
+      await expect(
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-1",
+          historyPolicy: "requested_only",
+        }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/conflict-worktree.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -3460,16 +3485,11 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-1"]?.runtimeRoute).toEqual({
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4666",
-    });
-    expect(sessionMessageAt(getSession(state, "session-1"), 0)?.id).toBe(
-      "history:session-start:session-1",
-    );
+    expect(state["session-1"]?.runtimeRoute).toBeNull();
+    expect(sessionMessagesToArray(getSession(state, "session-1"))).toEqual([]);
   });
 
-  test("ensures a shared workspace runtime for qa sessions on non-root working directories", async () => {
+  test("does not ensure a shared workspace runtime for qa sessions on non-root working directories", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const ensuredRuntimeKinds: string[] = [];
@@ -3554,11 +3574,13 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", {
-        mode: "requested_history",
-        targetSessionId: "session-qa-worktree",
-        historyPolicy: "requested_only",
-      });
+      await expect(
+        loadAgentSessions("task-1", {
+          mode: "requested_history",
+          targetSessionId: "session-qa-worktree",
+          historyPolicy: "requested_only",
+        }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktrees/task-1.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -3566,14 +3588,9 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
-    expect(ensuredRuntimeKinds).toEqual(["opencode"]);
-    expect(state["session-qa-worktree"]?.runtimeRoute).toEqual({
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4777",
-    });
-    expect(sessionMessageAt(getSession(state, "session-qa-worktree"), 0)?.id).toBe(
-      "history:session-start:session-qa-worktree",
-    );
+    expect(ensuredRuntimeKinds).toEqual([]);
+    expect(state["session-qa-worktree"]?.runtimeRoute).toBeNull();
+    expect(sessionMessagesToArray(getSession(state, "session-qa-worktree"))).toEqual([]);
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {

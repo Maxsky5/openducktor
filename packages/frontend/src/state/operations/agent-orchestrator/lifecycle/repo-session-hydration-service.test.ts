@@ -669,14 +669,13 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
-  test("reconcile scans workspace-derived directories for every repo-root stdio runtime", async () => {
+  test("reconcile does not synthesize worktree scans from repo-root stdio runtimes", async () => {
     const listLiveAgentSessionSnapshotsCalls: Array<{
       runtimeConnection: unknown;
       directories?: string[];
     }> = [];
+    const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
-    const runtimeConnectionA = stdioRuntimeConnection(worktreePath, "runtime-stdio-a");
-    const runtimeConnectionB = stdioRuntimeConnection(worktreePath, "runtime-stdio-b");
 
     setRuntimeList([
       createRuntimeInstance({
@@ -712,7 +711,23 @@ describe("repo-session-hydration-service", () => {
       },
       sessionHydration: {
         bootstrapTaskSessions: async () => {},
-        reconcileLiveTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({
+          taskId,
+          persistedRecords,
+          preloadedRuntimeConnections,
+        }) => {
+          reconcileCalls.push(taskId);
+          const record = persistedRecords?.[0];
+          if (!record) {
+            throw new Error("Expected persisted session record");
+          }
+          expect(preloadedRuntimeConnections?.hasAny("opencode", record.workingDirectory)).toBe(
+            false,
+          );
+          throw new Error(
+            `No live runtime found for working directory ${record.workingDirectory}.`,
+          );
+        },
       },
       liveAgentSessionStore,
       onRetryRequested: () => {},
@@ -728,16 +743,8 @@ describe("repo-session-hydration-service", () => {
       isCurrentRepo: () => true,
     });
 
-    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
-      {
-        runtimeConnection: runtimeConnectionA,
-        directories: [worktreePath],
-      },
-      {
-        runtimeConnection: runtimeConnectionB,
-        directories: [worktreePath],
-      },
-    ]);
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([]);
+    expect(reconcileCalls.sort()).toEqual(["task-a", "task-b"]);
     service.dispose();
   });
 
@@ -926,7 +933,7 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+    setRuntimeList([createRuntimeInstance({ workingDirectory: worktreePath })]);
 
     const service = createTestRepoSessionHydrationService({
       agentEngine: {
@@ -969,6 +976,7 @@ describe("repo-session-hydration-service", () => {
       runtimeConnection: unknown;
       directories?: string[];
     }> = [];
+    const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
     setRuntimeList([]);
@@ -993,7 +1001,13 @@ describe("repo-session-hydration-service", () => {
       },
       sessionHydration: {
         bootstrapTaskSessions: async () => {},
-        reconcileLiveTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push(taskId);
+          const record = persistedRecords?.[0];
+          throw new Error(
+            `No live runtime found for working directory ${record?.workingDirectory ?? "unknown"}.`,
+          );
+        },
       },
       liveAgentSessionStore,
       onRetryRequested: () => {},
@@ -1011,6 +1025,7 @@ describe("repo-session-hydration-service", () => {
 
     expect(runtimeEnsureCalls).toBe(0);
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([]);
+    expect(reconcileCalls.sort()).toEqual(["task-1", "task-2"]);
     service.dispose();
   });
 

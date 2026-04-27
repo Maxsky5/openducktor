@@ -23,19 +23,19 @@ describe("canUseWorkspaceRuntimeForHydration", () => {
     ).toBe(true);
   });
 
-  test("allows non-root build sessions", () => {
+  test("rejects non-root build sessions", () => {
     expect(
       canUseWorkspaceRuntimeForHydration(
         createRecord("build", "/tmp/openducktor-worktrees/task-1"),
         "/tmp/repo",
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  test("allows build sessions outside the repo root", () => {
+  test("rejects build sessions outside the repo root", () => {
     expect(
       canUseWorkspaceRuntimeForHydration(createRecord("build", "/tmp/other-worktree"), "/tmp/repo"),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   test("rejects worktree planner sessions", () => {
@@ -51,5 +51,11 @@ describe("canUseWorkspaceRuntimeForHydration", () => {
     expect(canUseWorkspaceRuntimeForHydration(createRecord("qa", "/tmp/repo"), "/tmp/repo")).toBe(
       false,
     );
+  });
+
+  test("rejects worktree qa sessions", () => {
+    expect(
+      canUseWorkspaceRuntimeForHydration(createRecord("qa", "/tmp/repo/worktree"), "/tmp/repo"),
+    ).toBe(false);
   });
 });
