@@ -496,7 +496,7 @@ type SubagentMessageProps = {
   sessionRuntimeKind?: import("@openducktor/contracts").RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
-  subagentPendingPermissionCountBySessionId?: Record<string, number>;
+  subagentPendingPermissionCount?: number;
 };
 
 const SubagentMessage = ({
@@ -506,14 +506,14 @@ const SubagentMessage = ({
   sessionRuntimeKind,
   sessionWorkingDirectory,
   timeLabel,
-  subagentPendingPermissionCountBySessionId = {},
+  subagentPendingPermissionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
   const isRunning = meta.status === "running";
   const isWaitingForPermission = Boolean(
     meta.sessionId &&
       (meta.status === "pending" || meta.status === "running") &&
-      (subagentPendingPermissionCountBySessionId?.[meta.sessionId] ?? 0) > 0,
+      subagentPendingPermissionCount > 0,
   );
   const durationMs =
     meta.status !== "pending" &&
@@ -605,7 +605,7 @@ type MessageBodyProps = {
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  subagentPendingPermissionCountBySessionId?: Record<string, number>;
+  subagentPendingPermissionCount?: number;
 };
 
 export const MessageBody = ({
@@ -619,7 +619,7 @@ export const MessageBody = ({
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  subagentPendingPermissionCountBySessionId = {},
+  subagentPendingPermissionCount = 0,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
 
@@ -660,7 +660,7 @@ export const MessageBody = ({
         sessionRuntimeKind={sessionRuntimeKind ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
-        subagentPendingPermissionCountBySessionId={subagentPendingPermissionCountBySessionId}
+        subagentPendingPermissionCount={subagentPendingPermissionCount}
       />
     );
   }

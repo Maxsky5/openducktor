@@ -71,6 +71,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const sessionsForTask = overrides.core?.sessionsForTask ?? [
     toAgentSessionSummary(defaultSession),
   ];
+  const allSessionSummaries = overrides.core?.allSessionSummaries ?? sessionsForTask;
   const activeSession =
     overrides.core?.activeSession !== undefined ? overrides.core.activeSession : defaultSession;
   const contextSessionsLength =
@@ -90,6 +91,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,
     ...overrides.core,
+    allSessionSummaries,
     sessionsForTask,
     activeSession,
     contextSessionsLength,
@@ -749,9 +751,10 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("derives subagent pending permission counts from task sessions", async () => {
+  test("derives subagent pending permission counts from all live session summaries", async () => {
     const parentSession = createSession("session-parent", "external-parent");
     const childWithPermission = createSession("session-child-1", "external-child-1", {
+      taskId: "other-task",
       pendingPermissions: [
         { requestId: "perm-1", permission: "shell", patterns: ["bun test"] },
         { requestId: "perm-2", permission: "shell", patterns: ["git status"] },
@@ -764,7 +767,8 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         core: {
           activeSession: parentSession,
-          sessionsForTask: [
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
             toAgentSessionSummary(parentSession),
             toAgentSessionSummary(childWithPermission),
             toAgentSessionSummary(childWithoutPermission),
@@ -780,6 +784,55 @@ describe("useAgentStudioPageModels", () => {
     ).toEqual({
       "session-child-1": 2,
     });
+
+    await harness.unmount();
+  });
+
+  test("keeps subagent pending permission count map stable when counts do not change", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithPermission = createSession("session-child-1", "external-child-1", {
+      taskId: "other-task",
+      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
+    });
+    const initialProps = createHookArgs({
+      core: {
+        activeSession: parentSession,
+        sessionsForTask: [toAgentSessionSummary(parentSession)],
+        allSessionSummaries: [
+          toAgentSessionSummary(parentSession),
+          toAgentSessionSummary(childWithPermission),
+        ],
+      },
+    });
+    const harness = createHookHarness(initialProps);
+
+    await harness.mount();
+
+    const initialCounts =
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId;
+
+    await harness.update(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithPermission),
+            toAgentSessionSummary(
+              createSession("session-child-2", "external-child-2", {
+                taskId: "other-task",
+                pendingPermissions: [],
+              }),
+            ),
+          ],
+        },
+      }),
+    );
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
+    ).toBe(initialCounts);
 
     await harness.unmount();
   });

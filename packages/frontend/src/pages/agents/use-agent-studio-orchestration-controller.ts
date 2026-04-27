@@ -98,7 +98,10 @@ type AgentStudioPageModelsViewContext = Pick<
 
 type AgentStudioPageModelsSessionsContext = Pick<
   AgentStudioOrchestrationSelectionContext,
-  "viewSessionsForTask" | "viewActiveSession" | "viewSessionRuntimeDataError"
+  | "allSessionSummaries"
+  | "viewSessionsForTask"
+  | "viewActiveSession"
+  | "viewSessionRuntimeDataError"
 >;
 
 type AgentStudioPageModelsTabsContext = Pick<
@@ -190,6 +193,7 @@ export const buildAgentStudioPageModelsArgs = ({
       role: view.viewRole,
       selectedTask: view.viewSelectedTask,
       sessionsForTask: sessions.viewSessionsForTask,
+      allSessionSummaries: sessions.allSessionSummaries,
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
       sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
@@ -382,6 +386,7 @@ export function useAgentStudioOrchestrationController({
       isViewSessionWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
     },
     sessions: {
+      allSessionSummaries: selection.allSessionSummaries,
       viewSessionsForTask,
       viewActiveSession,
       viewSessionRuntimeDataError,

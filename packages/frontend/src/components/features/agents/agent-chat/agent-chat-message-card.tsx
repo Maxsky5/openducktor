@@ -16,6 +16,7 @@ type AgentChatMessageCardProps = {
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
+  subagentPendingPermissionCount?: number;
   subagentPendingPermissionCountBySessionId?: Record<string, number>;
 };
 
@@ -28,6 +29,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  subagentPendingPermissionCount,
   subagentPendingPermissionCountBySessionId = {},
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = useContext(RuntimeDefinitionsContext);
@@ -42,6 +44,11 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionAgentColors,
     workflowToolAliasesByCanonical,
   });
+  const resolvedSubagentPendingPermissionCount =
+    subagentPendingPermissionCount ??
+    (message.meta?.kind === "subagent" && message.meta.sessionId
+      ? (subagentPendingPermissionCountBySessionId[message.meta.sessionId] ?? 0)
+      : 0);
 
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
@@ -64,7 +71,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
-        subagentPendingPermissionCountBySessionId={subagentPendingPermissionCountBySessionId}
+        subagentPendingPermissionCount={resolvedSubagentPendingPermissionCount}
       />
     </article>
   );

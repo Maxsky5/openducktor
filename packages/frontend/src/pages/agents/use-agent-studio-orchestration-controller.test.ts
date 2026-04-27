@@ -41,6 +41,7 @@ const baseArgs: BuildArgs = {
     isViewSessionWaitingForRuntimeReadiness: false,
   },
   sessions: {
+    allSessionSummaries: [session],
     viewSessionsForTask: [session],
     viewActiveSession: session,
   },
@@ -232,6 +233,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
       ...baseArgs,
       sessions: {
         ...baseArgs.sessions,
+        allSessionSummaries: [session, secondSession],
         viewSessionsForTask: [session, secondSession],
       },
     });

@@ -47,7 +47,7 @@ type AgentChatThreadMotionRowProps = {
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  subagentPendingPermissionCountBySessionId: AgentChatThreadModel["subagentPendingPermissionCountBySessionId"];
+  subagentPendingPermissionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
 };
 
@@ -148,6 +148,18 @@ const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowR
   return left.kind === "message" && right.kind === "message" && left.message === right.message;
 };
 
+const readSubagentPendingPermissionCount = (
+  row: AgentChatWindowRow,
+  countsBySessionId: AgentChatThreadModel["subagentPendingPermissionCountBySessionId"],
+): number => {
+  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
+    return 0;
+  }
+
+  const sessionId = row.message.meta.sessionId;
+  return sessionId ? (countsBySessionId?.[sessionId] ?? 0) : 0;
+};
+
 const AgentChatThreadMotionRow = memo(
   function AgentChatThreadMotionRow({
     row,
@@ -158,7 +170,7 @@ const AgentChatThreadMotionRow = memo(
     sessionSelectedModel,
     sessionWorkingDirectory,
     sessionRuntimeKind,
-    subagentPendingPermissionCountBySessionId = {},
+    subagentPendingPermissionCount,
     resolveRowRef,
   }: AgentChatThreadMotionRowProps): ReactElement {
     return (
@@ -172,7 +184,7 @@ const AgentChatThreadMotionRow = memo(
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
-          subagentPendingPermissionCountBySessionId={subagentPendingPermissionCountBySessionId}
+          subagentPendingPermissionCount={subagentPendingPermissionCount}
         />
       </div>
     );
@@ -184,8 +196,7 @@ const AgentChatThreadMotionRow = memo(
       previousProps.sessionSelectedModel === nextProps.sessionSelectedModel &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
-      previousProps.subagentPendingPermissionCountBySessionId ===
-        nextProps.subagentPendingPermissionCountBySessionId &&
+      previousProps.subagentPendingPermissionCount === nextProps.subagentPendingPermissionCount &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
       previousProps.resolveRowRef === nextProps.resolveRowRef &&
@@ -234,7 +245,10 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
-          subagentPendingPermissionCountBySessionId={subagentPendingPermissionCountBySessionId}
+          subagentPendingPermissionCount={readSubagentPendingPermissionCount(
+            row,
+            subagentPendingPermissionCountBySessionId,
+          )}
           resolveRowRef={resolveRowRef}
         />
       ))}

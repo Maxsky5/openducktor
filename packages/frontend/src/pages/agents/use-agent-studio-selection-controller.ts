@@ -73,6 +73,7 @@ export type AgentStudioSelectionControllerResult = {
   selectedSessionById: AgentSessionSummary | null;
   taskId: string;
   selectedTask: TaskCard | null;
+  allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
   activeSessionSummary: AgentSessionSummary | null;
   activeSession: AgentSessionState | null;
@@ -428,6 +429,7 @@ export function useAgentStudioSelectionController({
     selectedSessionById,
     taskId,
     selectedTask,
+    allSessionSummaries: sessions,
     sessionsForTask,
     activeSessionSummary,
     activeSession: activeSessionRuntimeData.session,
