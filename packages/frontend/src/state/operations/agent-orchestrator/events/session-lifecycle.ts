@@ -16,6 +16,7 @@ import {
   upsertSessionMessage,
 } from "../support/messages";
 import { formatSubagentContent } from "../support/subagent-messages";
+import { clearSubagentPendingPermissionFromSessions } from "../support/subagent-permission-overlay";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -100,8 +101,8 @@ const patchParentSubagentSessionLink = (
   if (!event.parentSessionId || !event.subagentCorrelationKey) {
     return;
   }
-  const childSessionId = event.childExternalSessionId?.trim();
-  if (!childSessionId) {
+  const childExternalSessionId = event.childExternalSessionId?.trim();
+  if (!childExternalSessionId) {
     return;
   }
 
@@ -118,13 +119,13 @@ const patchParentSubagentSessionLink = (
       if (subagentMessage?.meta?.kind !== "subagent") {
         return current;
       }
-      if (subagentMessage.meta.sessionId === childSessionId) {
+      if (subagentMessage.meta.sessionId === childExternalSessionId) {
         return current;
       }
 
       const nextMeta = {
         ...subagentMessage.meta,
-        sessionId: childSessionId,
+        sessionId: childExternalSessionId,
       };
       return {
         ...current,
@@ -143,11 +144,11 @@ const isLinkedChildPermissionObservedByParent = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: PermissionRequiredEvent,
 ): boolean => {
-  const childSessionId = normalizeSessionId(event.childExternalSessionId);
+  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   return Boolean(
-    childSessionId &&
+    childExternalSessionId &&
       event.parentSessionId === context.store.sessionId &&
-      childSessionId !== context.store.sessionId,
+      childExternalSessionId !== context.store.sessionId,
   );
 };
 
@@ -159,8 +160,8 @@ const recordParentSubagentPendingPermission = (
     return;
   }
 
-  const childSessionId = normalizeSessionId(event.childExternalSessionId);
-  if (!childSessionId) {
+  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
+  if (!childExternalSessionId) {
     return;
   }
 
@@ -169,7 +170,7 @@ const recordParentSubagentPendingPermission = (
     event.parentSessionId,
     (current) => {
       const currentMap = current.subagentPendingPermissionsBySessionId ?? {};
-      const currentEntries = currentMap[childSessionId] ?? [];
+      const currentEntries = currentMap[childExternalSessionId] ?? [];
       const nextEntries = [
         ...currentEntries.filter((entry) => entry.requestId !== event.requestId),
         pendingPermission,
@@ -178,66 +179,12 @@ const recordParentSubagentPendingPermission = (
         ...current,
         subagentPendingPermissionsBySessionId: {
           ...currentMap,
-          [childSessionId]: nextEntries,
+          [childExternalSessionId]: nextEntries,
         },
       };
     },
     { persist: false },
   );
-};
-
-const clearSubagentPendingPermission = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  targetSessionId: string,
-  requestId: string,
-): void => {
-  const targetSession = context.store.sessionsRef.current[targetSessionId];
-  const sessionIds = new Set([targetSessionId]);
-  if (targetSession?.externalSessionId) {
-    sessionIds.add(targetSession.externalSessionId);
-  }
-
-  for (const session of Object.values(context.store.sessionsRef.current)) {
-    const currentMap = session.subagentPendingPermissionsBySessionId;
-    if (!currentMap) {
-      continue;
-    }
-
-    let changed = false;
-    const nextMap = { ...currentMap };
-    for (const sessionId of sessionIds) {
-      const entries = nextMap[sessionId];
-      if (!entries) {
-        continue;
-      }
-
-      const nextEntries = entries.filter((entry) => entry.requestId !== requestId);
-      if (nextEntries.length === entries.length) {
-        continue;
-      }
-
-      changed = true;
-      if (nextEntries.length > 0) {
-        nextMap[sessionId] = nextEntries;
-      } else {
-        delete nextMap[sessionId];
-      }
-    }
-
-    if (!changed) {
-      continue;
-    }
-
-    context.store.updateSession(
-      session.sessionId,
-      (current) => ({
-        ...current,
-        subagentPendingPermissionsBySessionId:
-          Object.keys(nextMap).length > 0 ? nextMap : undefined,
-      }),
-      { persist: false },
-    );
-  }
 };
 
 const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
@@ -265,19 +212,35 @@ const shouldAutoRejectPermission = (
   );
 };
 
+const isLinkedChildPermissionOwnedByAttachedListener = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: PermissionRequiredEvent,
+): boolean => {
+  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
+  if (!childExternalSessionId || !context.store.isSessionListenerAttached) {
+    return false;
+  }
+
+  const localChildSessionId = resolveLocalSessionIdByExternalId(
+    context.store.sessionsRef.current,
+    childExternalSessionId,
+  );
+  return localChildSessionId ? context.store.isSessionListenerAttached(localChildSessionId) : false;
+};
+
 const autoRejectMutatingPermission = (
   context: SessionLifecycleEventContext,
   event: PermissionRequiredEvent,
   role: AgentRole,
-  targetSessionId = context.store.sessionId,
-  clearSubagentSessionId = targetSessionId,
+  replySessionId = context.store.sessionId,
+  overlaySessionId = replySessionId,
 ): void => {
   const pendingPermission = toPendingPermission(event);
   const promptOverrides =
-    context.store.sessionsRef.current[event.parentSessionId ?? targetSessionId]?.promptOverrides;
+    context.store.sessionsRef.current[event.parentSessionId ?? replySessionId]?.promptOverrides;
   const markManualResponseRequired = (error: unknown): void => {
     context.store.updateSession(
-      targetSessionId,
+      replySessionId,
       (current) => ({
         ...current,
         pendingPermissions: [
@@ -309,14 +272,14 @@ const autoRejectMutatingPermission = (
 
   void context.permissions.adapter
     .replyPermission({
-      sessionId: targetSessionId,
+      sessionId: replySessionId,
       requestId: event.requestId,
       reply: "reject",
       message: rejectionMessage,
     })
     .then(() => {
       context.store.updateSession(
-        targetSessionId,
+        replySessionId,
         (current) => ({
           ...current,
           pendingPermissions: current.pendingPermissions.filter(
@@ -331,7 +294,12 @@ const autoRejectMutatingPermission = (
         }),
         { persist: true },
       );
-      clearSubagentPendingPermission(context, clearSubagentSessionId, event.requestId);
+      clearSubagentPendingPermissionFromSessions({
+        sessionsRef: context.store.sessionsRef,
+        updateSession: context.store.updateSession,
+        targetSessionId: overlaySessionId,
+        requestId: event.requestId,
+      });
     })
     .catch((error) => {
       markManualResponseRequired(error);
@@ -529,19 +497,20 @@ export const handlePermissionRequired = (
 
   if (isLinkedChildPermissionObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
+    if (isLinkedChildPermissionOwnedByAttachedListener(context, event)) {
+      return;
+    }
+
     recordParentSubagentPendingPermission(context, event);
     if (role && shouldAutoRejectPermission(role, event)) {
-      const childSessionId = normalizeSessionId(event.childExternalSessionId);
-      const localChildSessionId = childSessionId
-        ? resolveLocalSessionIdByExternalId(context.store.sessionsRef.current, childSessionId)
-        : null;
-      if (!localChildSessionId) {
+      const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
+      if (childExternalSessionId) {
         autoRejectMutatingPermission(
           context,
           event,
           role,
           context.store.sessionId,
-          childSessionId ?? context.store.sessionId,
+          childExternalSessionId,
         );
       }
     }

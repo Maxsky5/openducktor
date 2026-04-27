@@ -26,6 +26,7 @@ import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
+import { clearSubagentPendingPermissionFromSessions } from "../support/subagent-permission-overlay";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -83,59 +84,6 @@ const markTurnUserAnchorIfMissing = (
   if (turnModelBySessionRef) {
     turnModelBySessionRef.current[sessionId] =
       sessionsRef.current[sessionId]?.selectedModel ?? null;
-  }
-};
-
-const clearSubagentPendingPermission = (
-  sessionsRef: { current: Record<string, AgentSessionState> },
-  updateSession: SessionActionsDependencies["updateSession"],
-  targetSessionId: string,
-  requestId: string,
-): void => {
-  const targetSession = sessionsRef.current[targetSessionId];
-  const sessionIds = new Set([targetSessionId]);
-  if (targetSession?.externalSessionId) {
-    sessionIds.add(targetSession.externalSessionId);
-  }
-
-  for (const session of Object.values(sessionsRef.current)) {
-    const currentMap = session.subagentPendingPermissionsBySessionId;
-    if (!currentMap) {
-      continue;
-    }
-
-    let changed = false;
-    const nextMap = { ...currentMap };
-    for (const sessionId of sessionIds) {
-      const entries = nextMap[sessionId];
-      if (!entries) {
-        continue;
-      }
-      const nextEntries = entries.filter((entry) => entry.requestId !== requestId);
-      if (nextEntries.length === entries.length) {
-        continue;
-      }
-      changed = true;
-      if (nextEntries.length > 0) {
-        nextMap[sessionId] = nextEntries;
-      } else {
-        delete nextMap[sessionId];
-      }
-    }
-
-    if (!changed) {
-      continue;
-    }
-
-    updateSession(
-      session.sessionId,
-      (current) => ({
-        ...current,
-        subagentPendingPermissionsBySessionId:
-          Object.keys(nextMap).length > 0 ? nextMap : undefined,
-      }),
-      { persist: false },
-    );
   }
 };
 
@@ -514,7 +462,12 @@ export const createAgentSessionActions = ({
       }),
       { persist: true },
     );
-    clearSubagentPendingPermission(sessionsRef, updateSession, sessionId, requestId);
+    clearSubagentPendingPermissionFromSessions({
+      sessionsRef,
+      updateSession,
+      targetSessionId: sessionId,
+      requestId,
+    });
   };
 
   const answerAgentQuestion = async (

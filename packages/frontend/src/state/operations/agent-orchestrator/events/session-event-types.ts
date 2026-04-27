@@ -43,6 +43,7 @@ export type AttachAgentSessionListenerParams = {
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
+  isSessionListenerAttached?: (sessionId: string) => boolean;
   recordTurnActivityTimestamp?: RecordTurnTimestamp;
   recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
@@ -53,7 +54,7 @@ export type AttachAgentSessionListenerParams = {
 
 export type SessionStoreContext = Pick<
   AttachAgentSessionListenerParams,
-  "sessionId" | "sessionsRef" | "updateSession"
+  "sessionId" | "sessionsRef" | "updateSession" | "isSessionListenerAttached"
 >;
 
 export type SessionDraftContext = Pick<
@@ -113,6 +114,9 @@ export const createSessionEventHandlerContext = (
       sessionId: context.sessionId,
       sessionsRef: context.sessionsRef,
       updateSession: context.updateSession,
+      ...(context.isSessionListenerAttached
+        ? { isSessionListenerAttached: context.isSessionListenerAttached }
+        : {}),
     },
     drafts: {
       sessionId: context.sessionId,
