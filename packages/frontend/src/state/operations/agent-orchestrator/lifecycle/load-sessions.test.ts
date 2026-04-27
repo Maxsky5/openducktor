@@ -98,6 +98,22 @@ const createAdapter = (
   ...overrides,
 });
 
+const waitForHistoryCallCount = async (
+  getHistoryCalls: () => number,
+  expectedCalls: number,
+): Promise<void> => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (getHistoryCalls() >= expectedCalls) {
+      return;
+    }
+    await Promise.resolve();
+  }
+
+  throw new Error(
+    `Expected at least ${expectedCalls} history calls, received ${getHistoryCalls()}.`,
+  );
+};
+
 describe("agent-orchestrator-load-sessions", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -4640,6 +4656,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
+    const workingDirectory = "/tmp/repo/worktree";
     const persistedRecords = [
       persistedSessionRecord({
         sessionId: "session-1",
@@ -4647,7 +4664,7 @@ describe("agent-orchestrator-load-sessions", () => {
         role: "build",
         scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
-        workingDirectory: "/tmp/repo",
+        workingDirectory,
       }),
     ];
     const preloadedRuntimeLists = new Map([
@@ -4660,7 +4677,7 @@ describe("agent-orchestrator-load-sessions", () => {
             repoPath: "/tmp/repo",
             taskId: null,
             role: "workspace",
-            workingDirectory: "/tmp/repo",
+            workingDirectory,
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             startedAt: "2026-02-22T08:00:00.000Z",
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -4684,9 +4701,7 @@ describe("agent-orchestrator-load-sessions", () => {
       preloadedRuntimeLists,
     });
 
-    while (historyCalls === 0) {
-      await Promise.resolve();
-    }
+    await waitForHistoryCallCount(() => historyCalls, 1);
     expect(historyCalls).toBe(1);
     historyDeferred.resolve([
       {
@@ -4762,6 +4777,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
+    const workingDirectory = "/tmp/repo/worktree";
     const persistedRecords = [
       persistedSessionRecord({
         sessionId: "session-1",
@@ -4769,7 +4785,7 @@ describe("agent-orchestrator-load-sessions", () => {
         role: "build",
         scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
-        workingDirectory: "/tmp/repo",
+        workingDirectory,
       }),
     ];
     const preloadedRuntimeLists = new Map([
@@ -4782,7 +4798,7 @@ describe("agent-orchestrator-load-sessions", () => {
             repoPath: "/tmp/repo",
             taskId: null,
             role: "workspace",
-            workingDirectory: "/tmp/repo",
+            workingDirectory,
             runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
             startedAt: "2026-02-22T08:00:00.000Z",
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -4807,9 +4823,7 @@ describe("agent-orchestrator-load-sessions", () => {
       preloadedRuntimeLists,
     });
 
-    while (historyCalls < 2) {
-      await Promise.resolve();
-    }
+    await waitForHistoryCallCount(() => historyCalls, 2);
     expect(historyCalls).toBe(2);
 
     historyDeferred.resolve([
