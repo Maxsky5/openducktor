@@ -24,7 +24,7 @@
     "@openducktor/adapters-tauri-host": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
-    "@pierre/diffs": "^1.1.16",
+    "@pierre/diffs": "^1.1.19",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dismissable-layer": "^1.1.11",
@@ -34,7 +34,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tanstack/react-query": "^5.99.2",
+    "@tanstack/react-query": "^5.100.5",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
@@ -45,7 +45,7 @@
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4",
-    "react-router-dom": "^7.14.1",
+    "react-router-dom": "^7.14.2",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
@@ -60,8 +60,8 @@
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "bun-types": "^1.3.12",
+    "bun-types": "^1.3.13",
     "tailwindcss": "^4.1.12",
-    "vite": "^8.0.9"
+    "vite": "^8.0.10"
   }
 }
