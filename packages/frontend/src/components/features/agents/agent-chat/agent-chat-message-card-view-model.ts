@@ -164,7 +164,7 @@ export const buildAgentChatMessageCardViewModel = ({
     : "";
   const showSharedHeader =
     !isUserMessage &&
-    !isRegularToolMessage &&
+    !isToolMessage &&
     !isReasoningMessage &&
     !isAssistantMessage &&
     !isSessionNoticeMessage &&

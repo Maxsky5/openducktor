@@ -101,6 +101,40 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("1.5s");
   });
 
+  test("renders failed workflow tool pill aligned cleanly without centered ml-auto", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-failed",
+          role: "tool",
+          content: "Tool openducktor_odt_set_pull_request failed",
+          timestamp: "2026-02-20T19:00:02.500Z",
+          meta: {
+            kind: "tool",
+            partId: "part-failed",
+            callId: "call-failed",
+            tool: "openducktor_odt_set_pull_request",
+            status: "error",
+            input: { taskId: "fairnest-def" },
+            error: "Branch conflict",
+            startedAtMs: 1_000,
+            endedAtMs: 2_500,
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("FAILED");
+    expect(html).not.toContain("ml-auto rounded-full");
+    expect(html).toContain("rounded-full border");
+    expect(html).toContain("1.5s");
+    expect(html).toContain("open");
+    expect(html).not.toContain(">Activity<");
+  });
+
   test("renders expandable details for regular read_task tool rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
