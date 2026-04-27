@@ -258,7 +258,7 @@ pub fn hook_set_fingerprint(hooks: &HookSet) -> String {
     hasher.update(b"openducktor-hookset-fingerprint-v2");
     update_hasher_with_hook_group(&mut hasher, b"pre_start", &hooks.pre_start);
     update_hasher_with_hook_group(&mut hasher, b"post_complete", &hooks.post_complete);
-    format!("{:x}", hasher.finalize())
+    hex_encode(hasher.finalize().as_ref())
 }
 
 pub fn repo_script_fingerprint(hooks: &HookSet, dev_servers: &[RepoDevServerScript]) -> String {
@@ -278,7 +278,7 @@ pub fn repo_script_fingerprint(hooks: &HookSet, dev_servers: &[RepoDevServerScri
         hasher.update((bytes.len() as u64).to_be_bytes());
         hasher.update(bytes);
     }
-    format!("{:x}", hasher.finalize())
+    hex_encode(hasher.finalize().as_ref())
 }
 
 fn update_hasher_with_hook_group(hasher: &mut Sha256, group: &[u8], commands: &[String]) {
@@ -290,6 +290,10 @@ fn update_hasher_with_hook_group(hasher: &mut Sha256, group: &[u8], commands: &[
         hasher.update((bytes.len() as u64).to_be_bytes());
         hasher.update(bytes);
     }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
