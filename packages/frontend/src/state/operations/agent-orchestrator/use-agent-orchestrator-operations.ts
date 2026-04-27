@@ -276,6 +276,15 @@ export function useAgentOrchestratorOperations({
     [agentEngine],
   );
 
+  const readLiveAgentSessionPendingInput = useCallback(
+    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
+      agentEngine.listLiveAgentSessionPendingInput({
+        runtimeKind,
+        runtimeConnection,
+      }),
+    [agentEngine],
+  );
+
   const readSessionSlashCommands = useCallback(
     (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
       agentEngine.listAvailableSlashCommands({
@@ -742,6 +751,7 @@ export function useAgentOrchestratorOperations({
       loadAgentSessions,
       readSessionModelCatalog,
       readSessionTodos,
+      readLiveAgentSessionPendingInput,
       readSessionSlashCommands,
       readSessionFileSearch,
       removeAgentSession,
@@ -766,6 +776,7 @@ export function useAgentOrchestratorOperations({
     loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
+    readLiveAgentSessionPendingInput,
     retrySessionRuntimeAttachment,
     ensureSessionReadyForView,
     readSessionSlashCommands,

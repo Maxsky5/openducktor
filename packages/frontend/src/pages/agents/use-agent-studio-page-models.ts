@@ -1,5 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type {
+  AgentModelSelection,
+  AgentRole,
+  LiveAgentSessionPendingInputBySession,
+} from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
@@ -31,6 +35,7 @@ type AgentStudioCoreContext = {
   role: AgentRole;
   selectedTask: TaskCard | null;
   allSessionSummaries: AgentSessionSummary[];
+  livePendingInputBySession: LiveAgentSessionPendingInputBySession | null;
   sessionsForTask: AgentSessionSummary[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
@@ -59,6 +64,7 @@ const arePermissionCountMapsEqual = (
 
 const useStablePendingPermissionCounts = (
   sessions: AgentSessionSummary[],
+  livePendingInputBySession: LiveAgentSessionPendingInputBySession | null,
 ): Record<string, number> => {
   const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS);
   return useMemo(() => {
@@ -73,6 +79,15 @@ const useStablePendingPermissionCounts = (
       }
     }
 
+    if (livePendingInputBySession) {
+      for (const [sessionId, pendingInput] of Object.entries(livePendingInputBySession)) {
+        const pendingPermissionCount = pendingInput.permissions.length;
+        if (pendingPermissionCount > 0) {
+          next[sessionId] = pendingPermissionCount;
+        }
+      }
+    }
+
     const nextCounts =
       Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS;
     const previous = previousRef.current;
@@ -82,7 +97,7 @@ const useStablePendingPermissionCounts = (
 
     previousRef.current = nextCounts;
     return nextCounts;
-  }, [sessions]);
+  }, [sessions, livePendingInputBySession]);
 };
 
 type AgentStudioTaskTabsContext = {
@@ -191,6 +206,7 @@ export function useAgentStudioPageModels({
   const workflowSessionsForTask = core.sessionsForTask;
   const subagentPendingPermissionCountBySessionId = useStablePendingPermissionCounts(
     core.allSessionSummaries,
+    core.livePendingInputBySession,
   );
   const workflowActiveSessionId = core.activeSession?.sessionId ?? null;
   const workflowActiveSessionRole = core.activeSession?.role ?? null;

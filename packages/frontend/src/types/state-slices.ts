@@ -26,6 +26,7 @@ import type {
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
+  LiveAgentSessionPendingInputBySession,
 } from "@openducktor/core";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
@@ -208,6 +209,10 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readLiveAgentSessionPendingInput: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<LiveAgentSessionPendingInputBySession>;
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,

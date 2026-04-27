@@ -5,6 +5,7 @@ import type {
   AgentRuntimeConnection,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
+  LiveAgentSessionPendingInputBySession,
 } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -13,6 +14,7 @@ import { runtimeConnectionTransportKey } from "@/state/operations/agent-orchestr
 export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
+export const SESSION_PENDING_INPUT_STALE_TIME_MS = 1_000;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 const agentSessionRuntimeQueryKeys = {
@@ -59,7 +61,20 @@ const agentSessionRuntimeQueryKeys = {
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
       externalSessionId,
     ] as const,
+  pendingInput: (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
+    [
+      ...agentSessionRuntimeQueryKeys.all,
+      "pending-input",
+      runtimeKind,
+      runtimeConnectionTransportKey(runtimeConnection),
+      normalizeWorkingDirectory(runtimeConnection.workingDirectory),
+    ] as const,
 };
+
+export const sessionPendingInputQueryKey = (
+  runtimeKind: RuntimeKind,
+  runtimeConnection: AgentRuntimeConnection,
+) => agentSessionRuntimeQueryKeys.pendingInput(runtimeKind, runtimeConnection);
 
 export const sessionModelCatalogQueryOptions = (
   runtimeKind: RuntimeKind,
@@ -123,4 +138,19 @@ export const sessionTodosQueryOptions = (
     queryFn: (): Promise<AgentSessionTodoItem[]> =>
       readSessionTodos(runtimeKind, runtimeConnection, externalSessionId),
     staleTime: SESSION_TODOS_STALE_TIME_MS,
+  });
+
+export const sessionPendingInputQueryOptions = (
+  runtimeKind: RuntimeKind,
+  runtimeConnection: AgentRuntimeConnection,
+  readLiveAgentSessionPendingInput: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+  ) => Promise<LiveAgentSessionPendingInputBySession>,
+) =>
+  queryOptions({
+    queryKey: agentSessionRuntimeQueryKeys.pendingInput(runtimeKind, runtimeConnection),
+    queryFn: (): Promise<LiveAgentSessionPendingInputBySession> =>
+      readLiveAgentSessionPendingInput(runtimeKind, runtimeConnection),
+    staleTime: SESSION_PENDING_INPUT_STALE_TIME_MS,
   });

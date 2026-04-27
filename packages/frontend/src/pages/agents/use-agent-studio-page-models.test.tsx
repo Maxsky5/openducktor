@@ -85,6 +85,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     role: "spec",
     selectedTask: createTask(),
     sessionRuntimeDataError: null,
+    livePendingInputBySession: null,
     isTaskHydrating: false,
     isSessionHistoryHydrating: false,
     isWaitingForRuntimeReadiness: false,
@@ -814,6 +815,35 @@ describe("useAgentStudioPageModels", () => {
       harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
     expect(counts["session-child-internal"]).toBe(1);
     expect(counts["session-child-runtime"]).toBe(1);
+
+    await harness.unmount();
+  });
+
+  test("derives subagent pending permission counts from live runtime pending input", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [toAgentSessionSummary(parentSession)],
+          livePendingInputBySession: {
+            "external-child-session": {
+              permissions: [
+                { requestId: "perm-1", permission: "external_directory", patterns: ["/tmp/*"] },
+              ],
+              questions: [],
+            },
+          },
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const counts =
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
+    expect(counts["external-child-session"]).toBe(1);
 
     await harness.unmount();
   });

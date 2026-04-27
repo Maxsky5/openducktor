@@ -42,6 +42,7 @@ const baseArgs: BuildArgs = {
   },
   sessions: {
     allSessionSummaries: [session],
+    viewLivePendingInputBySession: null,
     viewSessionsForTask: [session],
     viewActiveSession: session,
   },

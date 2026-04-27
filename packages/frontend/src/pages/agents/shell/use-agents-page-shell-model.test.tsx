@@ -163,6 +163,7 @@ let agentOperations = {
   bootstrapTaskSessions: mock(async () => undefined),
   hydrateRequestedTaskSessionHistory: mock(async () => undefined),
   readSessionFileSearch: mock(async () => []),
+  readLiveAgentSessionPendingInput: mock(async () => ({})),
   readSessionModelCatalog: mock(async () => ({
     providers: [],
     models: [],
@@ -491,6 +492,7 @@ beforeEach(async () => {
     bootstrapTaskSessions: mock(async () => undefined),
     hydrateRequestedTaskSessionHistory: mock(async () => undefined),
     readSessionFileSearch: mock(async () => []),
+    readLiveAgentSessionPendingInput: mock(async () => ({})),
     readSessionModelCatalog: mock(async () => ({
       providers: [],
       models: [],
