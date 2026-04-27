@@ -499,6 +499,162 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps completed ODT MCP protocol validation text as tool error part", () => {
+    const protocolError =
+      'MCP error -32602: Input validation error: Invalid arguments for tool odt_set_pull_request: [{"path":["workspaceId"],"message":"Invalid input: expected never, received string"}]';
+    const part = createToolPart({
+      id: "tool-1d",
+      tool: "odt_set_pull_request",
+      status: "completed",
+      input: { taskId: "task-7", workspaceId: "repo", providerId: "github", number: 42 },
+      output: protocolError,
+      metadata: { source: "mcp" },
+      time: { start: 500, end: 700 },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1d",
+      partId: "tool-1d",
+      callId: "call-tool-1d",
+      tool: "odt_set_pull_request",
+      status: "error",
+      input: { taskId: "task-7", workspaceId: "repo", providerId: "github", number: 42 },
+      preview: "task-7 · github · #42",
+      error: protocolError,
+      metadata: { source: "mcp" },
+      startedAtMs: 500,
+      endedAtMs: 700,
+    });
+  });
+
+  test("maps MCP content text structured errors without structuredContent", () => {
+    const part = createToolPart({
+      id: "tool-1e",
+      tool: "odt_set_spec",
+      status: "completed",
+      input: { taskId: "task-8" },
+      output: {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: {
+                code: "ODT_TOOL_EXECUTION_ERROR",
+                message: "Cannot write spec from current state.",
+              },
+            }),
+          },
+        ],
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1e",
+      partId: "tool-1e",
+      callId: "call-tool-1e",
+      tool: "odt_set_spec",
+      status: "error",
+      input: { taskId: "task-8" },
+      preview: "task-8",
+      error: "Cannot write spec from current state.",
+    });
+  });
+
+  test("maps stringified MCP content text structured errors", () => {
+    const part = createToolPart({
+      id: "tool-1e-string",
+      tool: "odt_set_spec",
+      status: "completed",
+      input: { taskId: "task-8" },
+      output: JSON.stringify({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: {
+                code: "ODT_TOOL_EXECUTION_ERROR",
+                message: "Cannot write spec from serialized MCP content.",
+              },
+            }),
+          },
+        ],
+      }),
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1e-string",
+      partId: "tool-1e-string",
+      callId: "call-tool-1e-string",
+      tool: "odt_set_spec",
+      status: "error",
+      input: { taskId: "task-8" },
+      preview: "task-8",
+      error: "Cannot write spec from serialized MCP content.",
+    });
+  });
+
+  test("keeps successful output containing the word error as completed", () => {
+    const part = createToolPart({
+      id: "tool-1f",
+      tool: "odt_read_task",
+      status: "completed",
+      input: { taskId: "task-9" },
+      output: "The task title mentions error handling but the call succeeded.",
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1f",
+      partId: "tool-1f",
+      callId: "call-tool-1f",
+      tool: "odt_read_task",
+      status: "completed",
+      input: { taskId: "task-9" },
+      preview: "task-9",
+      output: "The task title mentions error handling but the call succeeded.",
+    });
+  });
+
+  test("keeps successful structured output with a top-level error field as completed", () => {
+    const output = {
+      ok: true,
+      error: {
+        message: "non-fatal validation notes are present",
+      },
+      data: {
+        taskId: "task-10",
+      },
+    };
+    const part = createToolPart({
+      id: "tool-1g",
+      tool: "custom_mcp_tool",
+      status: "completed",
+      input: { taskId: "task-10" },
+      output,
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1g",
+      partId: "tool-1g",
+      callId: "call-tool-1g",
+      tool: "custom_mcp_tool",
+      status: "completed",
+      input: { taskId: "task-10" },
+      output: JSON.stringify(output, null, 2),
+    });
+  });
+
   test("maps pending tool with end timing as completed", () => {
     const part = createToolPart({
       id: "tool-2",

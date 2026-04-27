@@ -101,6 +101,40 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("1.5s");
   });
 
+  test("renders failed workflow tool pill aligned cleanly without centered ml-auto", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-failed",
+          role: "tool",
+          content: "Tool openducktor_odt_set_pull_request failed",
+          timestamp: "2026-02-20T19:00:02.500Z",
+          meta: {
+            kind: "tool",
+            partId: "part-failed",
+            callId: "call-failed",
+            tool: "openducktor_odt_set_pull_request",
+            status: "error",
+            input: { taskId: "fairnest-def" },
+            error: "Branch conflict",
+            startedAtMs: 1_000,
+            endedAtMs: 2_500,
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("FAILED");
+    expect(html).not.toContain("ml-auto rounded-full");
+    expect(html).toContain("rounded-full border");
+    expect(html).toContain("1.5s");
+    expect(html).toMatch(/<details\b[^>]*\bopen\b/);
+    expect(html).not.toContain(">Activity<");
+  });
+
   test("renders expandable details for regular read_task tool rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -329,25 +363,32 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("RUNNING");
   });
 
-  test("renders workflow MCP validation failures as error styling", () => {
+  test("renders workflow MCP validation failures as destructive error details", () => {
+    const validationError =
+      'MCP error -32602: Input validation error: Invalid arguments for tool odt_set_pull_request: [{"path":["workspaceId"],"message":"Invalid input: expected never, received string"}]';
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
           id: "tool-5",
           role: "tool",
-          content: "Tool odt_set_plan completed",
+          content: "Tool odt_set_pull_request failed",
           timestamp: "2026-02-22T10:21:30.000Z",
           meta: {
             kind: "tool",
             partId: "part-5",
             callId: "call-5",
-            tool: "odt_set_plan",
+            tool: "odt_set_pull_request",
             status: "error",
-            input: { taskId: "fairnest-99z" },
-            error: "Input validation error",
+            input: {
+              taskId: "fairnest-99z",
+              workspaceId: "repo",
+              providerId: "github",
+              number: 12,
+            },
+            error: validationError,
           },
         },
-        sessionRole: "planner",
+        sessionRole: "build",
         sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
@@ -355,6 +396,11 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain("border-destructive-border");
     expect(html).not.toContain("border-success-border");
+    expect(html).not.toContain("border-cancelled-border");
+    expect(html).toContain("FAILED");
+    expect(html).toContain("odt_set_pull_request");
+    expect(html).toContain("workspaceId");
+    expect(html).toContain("Input validation error");
   });
 
   test("renders workflow status-guard rejections as error styling", () => {

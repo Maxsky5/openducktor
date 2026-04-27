@@ -617,6 +617,7 @@ export const MessageBody = ({
         <WorkflowToolMessage
           meta={meta}
           messageTimestamp={message.timestamp}
+          timeLabel={timeLabel}
           sessionWorkingDirectory={sessionWorkingDirectory}
           workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
         />

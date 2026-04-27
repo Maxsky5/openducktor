@@ -21,6 +21,7 @@ type RecordedRequest = {
 type ContentToolResult = {
   content: Array<{ type: string; text?: string }>;
   structuredContent?: Record<string, unknown>;
+  isError?: boolean;
 };
 
 const activeServers = new Set<ReturnType<typeof createServer>>();
@@ -132,7 +133,16 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     }
 
     if (url === "/invoke/odt_read_task") {
-      requests.push({ url, body: await readJsonBody(request) });
+      const body = await readJsonBody(request);
+      requests.push({ url, body });
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        (body as { taskId?: unknown }).taskId === "bad-response"
+      ) {
+        writeJson(response, { task: { id: "bad-response" } });
+        return;
+      }
       writeJson(response, taskSummaryPayload);
       return;
     }
@@ -183,6 +193,18 @@ const requireContentToolResult = (result: unknown): ContentToolResult => {
   }
 
   return result as ContentToolResult;
+};
+
+const expectStructuredError = (
+  result: ContentToolResult,
+): { code?: unknown; message?: unknown; details?: unknown; issues?: unknown } => {
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({ ok: false });
+  const textPayload = JSON.parse(result.content[0]?.text ?? "null");
+  expect(textPayload).toEqual(result.structuredContent);
+  const error = (result.structuredContent as { error?: unknown }).error;
+  expect(error).toBeTruthy();
+  return error as { code?: unknown; message?: unknown; details?: unknown; issues?: unknown };
 };
 
 const readToolInputProperties = (
@@ -252,13 +274,71 @@ describe("MCP server tool results", () => {
         },
       });
       const contentResult = requireContentToolResult(result);
+      const error = expectStructuredError(contentResult);
 
-      expect(contentResult.structuredContent).toBeUndefined();
-      expect(contentResult.content[0]?.text ?? "").toContain("Invalid arguments");
+      expect(error.code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
+      expect(error.message).toContain("Invalid arguments for tool odt_read_task");
+      expect(error.message).toContain("workspaceId");
+      expect(error.issues).toEqual([
+        {
+          path: ["workspaceId"],
+          code: "forbidden_workspace_id",
+          message: "workspaceId is not allowed in workflow-scoped tool calls.",
+        },
+      ]);
+      expect(JSON.stringify(error.details)).toContain("workspaceId");
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
         { url: "/invoke/odt_get_workspaces", body: {} },
       ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("host bridge HTTP failures return structured tool errors", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_set_plan",
+        arguments: {
+          taskId: "task-1",
+          markdown: "# Plan",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+      const error = expectStructuredError(contentResult);
+
+      expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect(error.message).toContain("Unexpected URL: /invoke/odt_set_plan");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("host response schema failures return structured tool errors", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_read_task",
+        arguments: {
+          taskId: "bad-response",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+      const error = expectStructuredError(contentResult);
+
+      expect(error.code).toBe("ODT_HOST_RESPONSE_INVALID");
+      expect(error.message).toContain("Invalid response from host odt_read_task");
+      expect(JSON.stringify(error.details)).toContain("title");
     } finally {
       await client.close();
     }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
 import { OdtHostBridgeClient } from "./host-bridge-client";
+import { OdtToolError } from "./tool-results";
 
 const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
@@ -73,6 +74,53 @@ describe("OdtHostBridgeClient", () => {
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     await expect(client.ready()).rejects.toThrow("bridge unavailable");
+  });
+
+  test("wraps host transport failures as bridge errors", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      throw new TypeError("fetch failed");
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    try {
+      await client.getWorkspaces();
+      throw new Error("Expected getWorkspaces() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OdtToolError);
+      expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect((error as Error).message).toContain("host odt_get_workspaces failed: fetch failed");
+      expect((error as OdtToolError).details).toMatchObject({
+        action: "host odt_get_workspaces",
+        causeName: "TypeError",
+      });
+    }
+  });
+
+  test("wraps invalid host JSON responses as response errors", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      return new Response("not json", {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    try {
+      await client.getWorkspaces();
+      throw new Error("Expected getWorkspaces() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OdtToolError);
+      expect((error as OdtToolError).code).toBe("ODT_HOST_RESPONSE_INVALID");
+      expect((error as Error).message).toContain(
+        "Invalid JSON response from host odt_get_workspaces",
+      );
+      expect((error as OdtToolError).details).toMatchObject({
+        action: "host odt_get_workspaces",
+        causeName: "SyntaxError",
+      });
+    }
   });
 
   test("getWorkspaces forwards a workspace-free request and validates the response", async () => {

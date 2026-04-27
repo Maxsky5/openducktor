@@ -3,6 +3,7 @@ import {
   getWorkspacesResultSchema,
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+  odtToolErrorPayloadSchema,
   publicTaskSchema,
   ReadTaskInputSchema,
   taskSummarySchema,
@@ -131,5 +132,40 @@ describe("odt mcp public task schemas", () => {
     });
 
     expect(parsed.workspaces[0]?.workspaceId).toBe("repo");
+  });
+
+  test("ODT tool error payload schema accepts stable structured errors", () => {
+    const parsed = odtToolErrorPayloadSchema.parse({
+      ok: false,
+      error: {
+        code: "ODT_WORKSPACE_SCOPE_VIOLATION",
+        message: "Invalid arguments for tool odt_read_task: workspaceId is not allowed.",
+        details: {
+          toolName: "odt_read_task",
+        },
+        issues: [
+          {
+            path: ["workspaceId"],
+            code: "forbidden_workspace_id",
+            message: "workspaceId is not allowed in workflow-scoped tool calls.",
+          },
+        ],
+      },
+    });
+
+    expect(parsed.error.code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
+    expect(parsed.error.issues?.[0]?.path).toEqual(["workspaceId"]);
+  });
+
+  test("ODT tool error payload schema rejects success envelopes", () => {
+    expect(() => {
+      odtToolErrorPayloadSchema.parse({
+        ok: true,
+        error: {
+          code: "ODT_TOOL_EXECUTION_ERROR",
+          message: "This must not parse as an error envelope.",
+        },
+      });
+    }).toThrow();
   });
 });

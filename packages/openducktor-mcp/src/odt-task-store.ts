@@ -6,6 +6,7 @@ import {
 import type { z } from "zod";
 import { OdtHostBridgeClient, type OdtHostBridgeClientPort } from "./host-bridge-client";
 import type { OdtStoreOptions } from "./store-context";
+import { OdtToolError } from "./tool-results";
 
 export type OdtTaskStoreDeps = {
   client?: OdtHostBridgeClientPort;
@@ -34,8 +35,10 @@ export class OdtTaskStore {
       return workspaceId;
     }
 
-    throw new Error(
+    throw new OdtToolError(
+      "ODT_WORKSPACE_MISSING",
       `Missing workspaceId for workspace-scoped tool '${toolName}'. Start @openducktor/mcp with --workspace-id or provide workspaceId in the tool input.`,
+      { toolName },
     );
   }
 

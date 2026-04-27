@@ -92,6 +92,7 @@ type ToolJsonDetailsProps = {
   value: string;
   className: string;
   titleClassName: string;
+  open?: boolean;
 };
 
 const ToolJsonDetails = ({
@@ -99,9 +100,10 @@ const ToolJsonDetails = ({
   value,
   className,
   titleClassName,
+  open,
 }: ToolJsonDetailsProps): ReactElement => {
   return (
-    <details className={className}>
+    <details className={className} open={open}>
       <summary className={titleClassName}>{label}</summary>
       <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]">
         {formatRawJsonLikeText(value)}
@@ -117,9 +119,36 @@ const formatToolInput = (
   return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
 };
 
+const workflowToolForegroundClassName = ({
+  isFailure,
+  isCancelled,
+  isSuccessfulCompletion,
+  isExecuting,
+}: {
+  isFailure: boolean;
+  isCancelled: boolean;
+  isSuccessfulCompletion: boolean;
+  isExecuting: boolean;
+}): string => {
+  if (isFailure) {
+    return "text-destructive-surface-foreground";
+  }
+  if (isCancelled) {
+    return "text-cancelled-surface-foreground";
+  }
+  if (isSuccessfulCompletion) {
+    return "text-success-surface-foreground";
+  }
+  if (isExecuting) {
+    return "text-info-surface-foreground";
+  }
+  return "text-pending-surface-foreground";
+};
+
 type WorkflowToolMessageProps = {
   meta: ToolMeta;
   messageTimestamp: string;
+  timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
 };
@@ -127,6 +156,7 @@ type WorkflowToolMessageProps = {
 export const WorkflowToolMessage = ({
   meta,
   messageTimestamp,
+  timeLabel,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
 }: WorkflowToolMessageProps): ReactElement => {
@@ -140,48 +170,60 @@ export const WorkflowToolMessage = ({
   const isCancelled = lifecyclePhase === "cancelled";
   const isSuccessfulCompletion = lifecyclePhase === "completed";
   const isExecuting = lifecyclePhase === "executing";
-  const statusLabel =
-    lifecyclePhase === "queued" ? "QUEUED" : lifecyclePhase === "executing" ? "RUNNING" : null;
-  const statusClassName = isExecuting
-    ? "border-info-border bg-info-surface text-info-surface-foreground"
-    : "border-pending-border bg-pending-surface text-pending-surface-foreground";
+  const statusLabel = (() => {
+    if (lifecyclePhase === "queued") {
+      return "QUEUED";
+    }
+    if (lifecyclePhase === "executing") {
+      return "RUNNING";
+    }
+    if (lifecyclePhase === "failed") {
+      return "FAILED";
+    }
+    if (lifecyclePhase === "cancelled") {
+      return "CANCELLED";
+    }
+    return null;
+  })();
+  let statusClassName = "border-pending-border bg-pending-surface text-pending-surface-foreground";
+  if (isExecuting) {
+    statusClassName = "border-info-border bg-info-surface text-info-surface-foreground";
+  } else if (isFailure) {
+    statusClassName =
+      "border-destructive-border bg-destructive-surface text-destructive-surface-foreground";
+  } else if (isCancelled) {
+    statusClassName =
+      "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground";
+  }
+  const foregroundClassName = workflowToolForegroundClassName({
+    isFailure,
+    isCancelled,
+    isSuccessfulCompletion,
+    isExecuting,
+  });
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span>{toolIcon(meta.tool)}</span>
-        <p
-          className={cn(
-            "text-xs font-semibold",
-            isFailure
-              ? "text-destructive-surface-foreground"
-              : isCancelled
-                ? "text-cancelled-surface-foreground"
-                : isSuccessfulCompletion
-                  ? "text-success-surface-foreground"
-                  : isExecuting
-                    ? "text-info-surface-foreground"
-                    : "text-pending-surface-foreground",
-          )}
-        >
+        <span className={foregroundClassName}>{toolIcon(meta.tool)}</span>
+        <p className={cn("text-[11px] font-semibold", foregroundClassName)}>
           {toolDisplayName(meta.tool, workflowToolAliasesByCanonical)}
         </p>
         {statusLabel ? (
           <span
             className={cn(
-              "ml-auto rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide",
+              "rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
               statusClassName,
             )}
           >
             {statusLabel}
           </span>
         ) : null}
-        {isExecuting ? <LoaderCircle className="size-3 animate-spin" /> : null}
-        {!isActive && durationMs !== null ? (
-          <span className="ml-auto text-[11px] text-current/75">
-            {formatAgentDuration(durationMs)}
-          </span>
-        ) : null}
+        <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-current/75 font-normal normal-case">
+          {isExecuting ? <LoaderCircle className="size-3 animate-spin" /> : null}
+          {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
+          {timeLabel ? <span>{timeLabel}</span> : null}
+        </span>
       </div>
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
@@ -209,6 +251,7 @@ export const WorkflowToolMessage = ({
               value={meta.error}
               className="rounded border border-current/20 bg-muted/90"
               titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+              open={isFailure}
             />
           ) : null}
         </div>
@@ -296,7 +339,7 @@ export const RegularToolMessage = ({
   return (
     <div className="space-y-1 px-1 py-0.5">
       {hasExpandableDetails ? (
-        <details className="group">
+        <details className="group" open={lifecyclePhase === "failed"}>
           <summary className="list-none [&::-webkit-details-marker]:hidden">{summaryRow}</summary>
           <div className="ml-5 mt-1 space-y-2">
             {hasInput && meta.input ? (
@@ -320,7 +363,10 @@ export const RegularToolMessage = ({
               </details>
             ) : null}
             {hasError && meta.error ? (
-              <details className="rounded border border-destructive-border bg-destructive-surface">
+              <details
+                className="rounded border border-destructive-border bg-destructive-surface"
+                open={lifecyclePhase === "failed"}
+              >
                 <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-destructive-muted">
                   Error
                 </summary>
