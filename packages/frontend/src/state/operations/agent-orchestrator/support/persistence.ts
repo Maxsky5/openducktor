@@ -20,6 +20,7 @@ import {
   readAssistantActivityStartedAtMsFromParts,
   resolveAssistantTurnDurationMs,
 } from "./assistant-turn-duration";
+import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import {
   readPersistedRuntimeKind,
@@ -190,7 +191,7 @@ const historyPartToChatMessage = (
         return null;
       }
       return {
-        id: `history:thinking:${message.messageId}:${part.partId}`,
+        id: toReasoningMessageId(message.messageId, part.partId),
         role: "thinking",
         content: part.text,
         timestamp: message.timestamp,
@@ -206,7 +207,11 @@ const historyPartToChatMessage = (
       const output = normalizeToolText(part.output);
       const error = normalizeToolText(part.error);
       return {
-        id: `history:tool:${message.messageId}:${part.partId}`,
+        id: toToolMessageId({
+          messageId: message.messageId,
+          partId: part.partId,
+          callId: part.callId,
+        }),
         role: "tool",
         content: formatToolContent(part),
         timestamp: message.timestamp,

@@ -253,6 +253,252 @@ describe("load-sessions-stages", () => {
     });
   });
 
+  test("absorbs live reasoning and tool rows that duplicate hydrated history rows", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "thinking:assistant-1:thinking-1",
+          role: "thinking",
+          content: "Hydrated reasoning",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "reasoning",
+            partId: "thinking-1",
+            completed: true,
+          },
+        },
+        {
+          id: "tool:assistant-1:call-1",
+          role: "tool",
+          content: "bash completed",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "completed",
+            output: "done",
+          },
+        },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Final answer",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Final answer",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+        {
+          id: "thinking:assistant-1:thinking-1",
+          role: "thinking",
+          content: "Live reasoning",
+          timestamp: "2026-03-01T09:00:04.000Z",
+          meta: {
+            kind: "reasoning",
+            partId: "thinking-1",
+            completed: false,
+          },
+        },
+        {
+          id: "tool:assistant-1:call-1",
+          role: "tool",
+          content: "bash running",
+          timestamp: "2026-03-01T09:00:05.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "running",
+            observedStartedAtMs: 100,
+            inputReadyAtMs: 120,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(3);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      role: "thinking",
+      content: "Hydrated reasoning",
+      meta: { kind: "reasoning", completed: true },
+    });
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 1)).toMatchObject({
+      role: "tool",
+      content: "bash completed",
+      meta: {
+        kind: "tool",
+        status: "completed",
+        output: "done",
+        observedStartedAtMs: 100,
+        inputReadyAtMs: 120,
+      },
+    });
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 2)).toMatchObject({
+      id: "assistant-1",
+      role: "assistant",
+      content: "Final answer",
+    });
+  });
+
+  test("keeps separate same-tool rows with different call ids", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "tool:assistant-1:call-1",
+          role: "tool",
+          content: "first",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "completed",
+          },
+        },
+      ],
+      [
+        {
+          id: "tool:assistant-1:call-2",
+          role: "tool",
+          content: "second",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-2",
+            callId: "call-2",
+            tool: "bash",
+            status: "completed",
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(2);
+  });
+
+  test("prefers hydrated completed tool rows over same-id live running rows", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "tool:assistant-1:call-1",
+          role: "tool",
+          content: "completed output",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "completed",
+            output: "done",
+          },
+        },
+      ],
+      [
+        {
+          id: "tool:assistant-1:call-1",
+          role: "tool",
+          content: "still running",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "running",
+            observedStartedAtMs: 100,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      role: "tool",
+      content: "completed output",
+      meta: {
+        kind: "tool",
+        status: "completed",
+        output: "done",
+        observedStartedAtMs: 100,
+      },
+    });
+  });
+
+  test("absorbs live tool rows created before a call id is available", () => {
+    const merged = mergeHydratedMessages(
+      "session-1",
+      [
+        {
+          id: "tool:assistant-1:call-1",
+          role: "tool",
+          content: "completed output",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-1",
+            tool: "bash",
+            status: "completed",
+            output: "done",
+          },
+        },
+      ],
+      [
+        {
+          id: "tool:assistant-1:tool-part-1",
+          role: "tool",
+          content: "still running",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "",
+            tool: "bash",
+            status: "running",
+            observedStartedAtMs: 100,
+          },
+        },
+      ],
+    );
+
+    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
+    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+      id: "tool:assistant-1:call-1",
+      role: "tool",
+      content: "completed output",
+      meta: {
+        kind: "tool",
+        partId: "tool-part-1",
+        callId: "call-1",
+        status: "completed",
+        observedStartedAtMs: 100,
+      },
+    });
+  });
+
   test("absorbs current subagent rows when hydrated history has the same child session id", () => {
     const merged = mergeHydratedMessages(
       "session-1",

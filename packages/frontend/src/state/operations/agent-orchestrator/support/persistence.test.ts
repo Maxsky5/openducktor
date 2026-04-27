@@ -410,8 +410,10 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    expect(messages.some((entry) => entry.role === "thinking")).toBe(true);
-    expect(messages.some((entry) => entry.role === "tool")).toBe(true);
+    const thinking = messages.find((entry) => entry.role === "thinking");
+    const tool = messages.find((entry) => entry.role === "tool");
+    expect(thinking?.id).toBe("thinking:m-assistant:p-thinking");
+    expect(tool?.id).toBe("tool:m-assistant:call-1");
     expect(
       messages.some(
         (entry) => entry.role === "system" && entry.content.includes("Subagent (build)"),
@@ -457,6 +459,35 @@ describe("agent-orchestrator/support/persistence", () => {
         text: "Please implement this",
       },
     ]);
+  });
+
+  test("uses part ids for hydrated tool messages without call ids", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "m-assistant",
+              partId: "p-tool",
+              callId: "",
+              tool: "bash",
+              status: "completed",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    expect(messages.find((entry) => entry.role === "tool")?.id).toBe("tool:m-assistant:p-tool");
   });
 
   test("merges hydrated subagent history parts that share a correlation key", () => {
