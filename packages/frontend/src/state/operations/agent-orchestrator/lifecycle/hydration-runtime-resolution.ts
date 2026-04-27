@@ -77,12 +77,19 @@ export const createHydrationRuntimeResolver = ({
       return { ok: true, runtimeConnection: null };
     }
 
+    const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
     const matchesByTransportKey = new Map<string, AgentRuntimeConnection>();
     for (const runtimeConnection of runtimeConnections) {
       const snapshots = preloadedLiveAgentSessionsByKey.get(
         liveAgentSessionLookupKey(runtimeKind, runtimeConnection, workingDirectory),
       );
-      if (!snapshots?.some((snapshot) => snapshot.externalSessionId === externalSessionId)) {
+      if (
+        !snapshots?.some(
+          (snapshot) =>
+            snapshot.externalSessionId === externalSessionId &&
+            normalizeWorkingDirectory(snapshot.workingDirectory) === normalizedWorkingDirectory,
+        )
+      ) {
         continue;
       }
       matchesByTransportKey.set(
@@ -222,18 +229,26 @@ export const createHydrationRuntimeResolver = ({
     }
 
     const candidates = preloadedRuntimeConnections.findCandidates(runtimeKind, workingDirectory);
-    const candidatesByTransportKey = new Map(
+    const candidatesByTransportKey = new Map<string, AgentRuntimeConnection>(
       candidates.map((runtimeConnection) => [
         runtimeConnectionTransportKey(runtimeConnection),
         runtimeConnection,
       ]),
     );
-    if (candidatesByTransportKey.size > 1) {
+    const candidateConnections = Array.from(candidatesByTransportKey.values());
+    const candidatesWithPreloadedSnapshots = preloadedLiveAgentSessionsByKey
+      ? candidateConnections.filter((runtimeConnection) =>
+          preloadedLiveAgentSessionsByKey.has(
+            liveAgentSessionLookupKey(runtimeKind, runtimeConnection, workingDirectory),
+          ),
+        )
+      : [];
+    if (candidatesWithPreloadedSnapshots.length > 0) {
       const snapshotMatch = findPreloadedSnapshotConnection(
         runtimeKind,
         workingDirectory,
         externalSessionId,
-        Array.from(candidatesByTransportKey.values()),
+        candidatesWithPreloadedSnapshots,
       );
       if (!snapshotMatch.ok) {
         return { ok: false, reason: snapshotMatch.reason };
@@ -241,6 +256,10 @@ export const createHydrationRuntimeResolver = ({
       if (snapshotMatch.runtimeConnection) {
         return { ok: true, runtimeConnection: snapshotMatch.runtimeConnection };
       }
+      return { ok: true, runtimeConnection: null };
+    }
+
+    if (candidatesByTransportKey.size > 1) {
       return {
         ok: false,
         reason: `Multiple preloaded runtime connections found for working directory ${workingDirectory}.`,
