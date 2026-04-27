@@ -26,9 +26,12 @@ pub(crate) use open_code::OpenCodeRuntime;
 pub(crate) trait AppRuntime: Send + Sync {
     fn definition(&self) -> RuntimeDefinition;
 
+    fn kind(&self) -> AgentRuntimeKind {
+        self.definition().kind().clone()
+    }
+
     fn startup_config(&self, service: &AppService) -> Result<RuntimeStartupReadinessConfig> {
-        let definition = self.definition();
-        let runtime_kind = definition.kind();
+        let runtime_kind = self.kind();
         let config_path = service.runtime_config_store.path();
         let config = service.runtime_config_store.load().with_context(|| {
             format!(
@@ -38,7 +41,7 @@ pub(crate) trait AppRuntime: Send + Sync {
             )
         })?;
 
-        select_startup_config(&config, runtime_kind, config_path)
+        select_startup_config(&config, &runtime_kind, config_path)
     }
 
     fn startup_policy(&self, service: &AppService) -> Result<RuntimeStartupReadinessPolicy> {

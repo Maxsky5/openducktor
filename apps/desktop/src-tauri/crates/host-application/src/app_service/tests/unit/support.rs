@@ -317,6 +317,10 @@ impl AppRuntime for TestRuntimeAdapter {
         self.definition.clone()
     }
 
+    fn kind(&self) -> AgentRuntimeKind {
+        self.definition.kind().clone()
+    }
+
     fn start_external(
         &self,
         _service: &AppService,

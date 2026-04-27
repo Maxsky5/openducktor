@@ -470,6 +470,10 @@ impl AppRuntime for OpenCodeRuntime {
             .clone()
     }
 
+    fn kind(&self) -> AgentRuntimeKind {
+        AgentRuntimeKind::opencode()
+    }
+
     fn start_host_managed(
         &self,
         service: &AppService,

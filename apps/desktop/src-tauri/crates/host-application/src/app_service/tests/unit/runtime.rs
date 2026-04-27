@@ -8,6 +8,10 @@ impl AppRuntime for HostManagedStdioRuntimeAdapter {
         test_runtime_definition("test-runtime", "Test Runtime")
     }
 
+    fn kind(&self) -> AgentRuntimeKind {
+        AgentRuntimeKind::from("test-runtime")
+    }
+
     fn start_host_managed(
         &self,
         _service: &AppService,
