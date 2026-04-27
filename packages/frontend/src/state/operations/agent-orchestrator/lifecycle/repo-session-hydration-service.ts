@@ -353,22 +353,30 @@ export const createRepoSessionHydrationService = ({
         continue;
       }
 
-      const routeSourceRuntime =
-        runtimeEntries.find(
-          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
-        ) ??
-        (runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind)
-          ? await ensureRuntimeAndInvalidateReadinessQueries({
-              repoPath,
-              runtimeKind,
-              ensureRuntime: runtimeEnsure,
-            })
-          : null);
-      if (!routeSourceRuntime) {
+      const routeSourceRuntimes = runtimeEntries.filter(
+        (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
+      );
+      if (
+        routeSourceRuntimes.length === 0 &&
+        runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind)
+      ) {
+        routeSourceRuntimes.push(
+          await ensureRuntimeAndInvalidateReadinessQueries({
+            repoPath,
+            runtimeKind,
+            ensureRuntime: runtimeEnsure,
+          }),
+        );
+      }
+      if (routeSourceRuntimes.length === 0) {
         continue;
       }
 
-      if (!runtimeEntries.includes(routeSourceRuntime)) {
+      if (
+        routeSourceRuntimes.some(
+          (routeSourceRuntime) => !runtimeEntries.includes(routeSourceRuntime),
+        )
+      ) {
         await invalidateRuntimeList(queryClient, runtimeKind, repoPath);
         if (isCancelled()) {
           return {
@@ -380,24 +388,30 @@ export const createRepoSessionHydrationService = ({
             skippedTaskErrors,
           };
         }
-        runtimeEntries.push(routeSourceRuntime);
+        for (const routeSourceRuntime of routeSourceRuntimes) {
+          if (!runtimeEntries.includes(routeSourceRuntime)) {
+            runtimeEntries.push(routeSourceRuntime);
+          }
+        }
       }
 
       for (const workingDirectory of missingDerivedDirectories) {
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          routeSourceRuntime.runtimeRoute,
-          workingDirectory,
-        );
-        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
-        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
-        if (!runtimeConnections.has(scanKey)) {
-          runtimeConnections.set(scanKey, {
-            runtimeKind,
-            runtimeConnection,
-            directories: new Set<string>(),
-          });
+        for (const routeSourceRuntime of routeSourceRuntimes) {
+          const { runtimeConnection } = resolveRuntimeRouteConnection(
+            routeSourceRuntime.runtimeRoute,
+            workingDirectory,
+          );
+          preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+          const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
+          if (!runtimeConnections.has(scanKey)) {
+            runtimeConnections.set(scanKey, {
+              runtimeKind,
+              runtimeConnection,
+              directories: new Set<string>(),
+            });
+          }
+          runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
         }
-        runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
       }
     }
 

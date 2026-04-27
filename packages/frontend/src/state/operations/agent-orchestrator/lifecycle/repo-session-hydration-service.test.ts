@@ -669,6 +669,78 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile scans workspace-derived directories for every repo-root stdio runtime", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const runtimeConnectionA = stdioRuntimeConnection(worktreePath, "runtime-stdio-a");
+    const runtimeConnectionB = stdioRuntimeConnection(worktreePath, "runtime-stdio-b");
+
+    setRuntimeList([
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-a",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-a" },
+      }),
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-b",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-b" },
+      }),
+    ]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            createLiveAgentSessionSnapshotFixture({
+              externalSessionId:
+                input.runtimeConnection.type === "stdio" &&
+                input.runtimeConnection.identity === "runtime-stdio-a"
+                  ? "external-a"
+                  : "external-b",
+              workingDirectory: worktreePath,
+            }),
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-a", "external-a", worktreePath),
+        taskWithSessionAt("task-b", "external-b", worktreePath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: runtimeConnectionA,
+        directories: [worktreePath],
+      },
+      {
+        runtimeConnection: runtimeConnectionB,
+        directories: [worktreePath],
+      },
+    ]);
+    service.dispose();
+  });
+
   test("reconcile preloads stdio runtime snapshots into the live session store", async () => {
     const listLiveAgentSessionSnapshotsCalls: Array<{
       runtimeConnection: unknown;

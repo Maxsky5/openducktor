@@ -643,6 +643,9 @@ export const createRuntimeResolutionPlannerStage = async ({
     ...(options?.preloadedRuntimeConnections
       ? { preloadedRuntimeConnections: options.preloadedRuntimeConnections }
       : {}),
+    ...(options?.preloadedLiveAgentSessionsByKey
+      ? { preloadedLiveAgentSessionsByKey: options.preloadedLiveAgentSessionsByKey }
+      : {}),
     ensureWorkspaceRuntime,
   });
 

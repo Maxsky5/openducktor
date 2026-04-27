@@ -4,7 +4,7 @@ import type {
   RuntimeKind,
   RuntimeRoute,
 } from "@openducktor/contracts";
-import type { AgentRuntimeConnection } from "@openducktor/core";
+import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
 import {
   resolveRuntimeRouteConnection,
   runtimeConnectionToRoute,
@@ -13,7 +13,10 @@ import {
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
-import type { RuntimeConnectionPreloadIndex } from "./live-agent-session-cache";
+import {
+  liveAgentSessionLookupKey,
+  type RuntimeConnectionPreloadIndex,
+} from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
   | {
@@ -37,6 +40,15 @@ type PreloadedRuntimeConnectionLookupResult =
   | { ok: true; runtimeConnection: AgentRuntimeConnection | null }
   | { ok: false; reason: string };
 
+type RuntimeSnapshotCandidate = {
+  runtime: RuntimeInstanceSummary;
+  runtimeConnection: AgentRuntimeConnection;
+};
+
+type SnapshotConnectionMatchResult =
+  | { ok: true; runtimeConnection: AgentRuntimeConnection | null }
+  | { ok: false; reason: string };
+
 const hasAmbiguousStdioRoutes = (runtimes: RuntimeInstanceSummary[]): boolean => {
   const identities = new Set(
     runtimes
@@ -52,18 +64,58 @@ export const createHydrationRuntimeResolver = ({
   repoPath,
   runtimesByKind,
   preloadedRuntimeConnections,
+  preloadedLiveAgentSessionsByKey,
   ensureWorkspaceRuntime,
 }: {
   repoPath: string;
   runtimesByKind: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
+  preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
   ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
 
+  const findPreloadedSnapshotConnection = (
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+    externalSessionId: string,
+    runtimeConnections: AgentRuntimeConnection[],
+  ): SnapshotConnectionMatchResult => {
+    if (!preloadedLiveAgentSessionsByKey) {
+      return { ok: true, runtimeConnection: null };
+    }
+
+    const matchesByTransportKey = new Map<string, AgentRuntimeConnection>();
+    for (const runtimeConnection of runtimeConnections) {
+      const snapshots = preloadedLiveAgentSessionsByKey.get(
+        liveAgentSessionLookupKey(runtimeKind, runtimeConnection, workingDirectory),
+      );
+      if (!snapshots?.some((snapshot) => snapshot.externalSessionId === externalSessionId)) {
+        continue;
+      }
+      matchesByTransportKey.set(
+        runtimeConnectionTransportKey(runtimeConnection),
+        runtimeConnection,
+      );
+    }
+
+    if (matchesByTransportKey.size > 1) {
+      return {
+        ok: false,
+        reason: `Multiple preloaded live sessions found for external session ${externalSessionId} in working directory ${workingDirectory}.`,
+      };
+    }
+
+    return {
+      ok: true,
+      runtimeConnection: Array.from(matchesByTransportKey.values())[0] ?? null,
+    };
+  };
+
   const findRuntimeByWorkingDirectory = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
+    externalSessionId: string,
   ): RuntimeLookupResult => {
     const runtimes = runtimesByKind.get(runtimeKind) ?? [];
     const normalizedDirectory = normalizeWorkingDirectory(workingDirectory);
@@ -71,6 +123,30 @@ export const createHydrationRuntimeResolver = ({
       (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === normalizedDirectory,
     );
     if (hasAmbiguousStdioRoutes(matches)) {
+      const candidates: RuntimeSnapshotCandidate[] = matches.map((runtime) => ({
+        runtime,
+        runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, workingDirectory)
+          .runtimeConnection,
+      }));
+      const snapshotMatch = findPreloadedSnapshotConnection(
+        runtimeKind,
+        workingDirectory,
+        externalSessionId,
+        candidates.map((candidate) => candidate.runtimeConnection),
+      );
+      if (!snapshotMatch.ok) {
+        return { ok: false, reason: snapshotMatch.reason };
+      }
+      if (snapshotMatch.runtimeConnection) {
+        const matchedTransportKey = runtimeConnectionTransportKey(snapshotMatch.runtimeConnection);
+        const matchedRuntime = candidates.find(
+          (candidate) =>
+            runtimeConnectionTransportKey(candidate.runtimeConnection) === matchedTransportKey,
+        )?.runtime;
+        if (matchedRuntime) {
+          return { ok: true, runtime: matchedRuntime };
+        }
+      }
       return {
         ok: false,
         reason: `Multiple live stdio runtimes found for working directory ${workingDirectory}.`,
@@ -80,7 +156,11 @@ export const createHydrationRuntimeResolver = ({
     return { ok: true, runtime: matches[0] ?? null };
   };
 
-  const findWorkspaceRuntime = (runtimeKind: RuntimeKind): RuntimeLookupResult => {
+  const findWorkspaceRuntime = (
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+    externalSessionId: string,
+  ): RuntimeLookupResult => {
     const runtimes = runtimesByKind.get(runtimeKind) ?? [];
     const matches = runtimes.filter(
       (runtime) =>
@@ -88,6 +168,30 @@ export const createHydrationRuntimeResolver = ({
         normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath,
     );
     if (hasAmbiguousStdioRoutes(matches)) {
+      const candidates: RuntimeSnapshotCandidate[] = matches.map((runtime) => ({
+        runtime,
+        runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, workingDirectory)
+          .runtimeConnection,
+      }));
+      const snapshotMatch = findPreloadedSnapshotConnection(
+        runtimeKind,
+        workingDirectory,
+        externalSessionId,
+        candidates.map((candidate) => candidate.runtimeConnection),
+      );
+      if (!snapshotMatch.ok) {
+        return { ok: false, reason: snapshotMatch.reason };
+      }
+      if (snapshotMatch.runtimeConnection) {
+        const matchedTransportKey = runtimeConnectionTransportKey(snapshotMatch.runtimeConnection);
+        const matchedRuntime = candidates.find(
+          (candidate) =>
+            runtimeConnectionTransportKey(candidate.runtimeConnection) === matchedTransportKey,
+        )?.runtime;
+        if (matchedRuntime) {
+          return { ok: true, runtime: matchedRuntime };
+        }
+      }
       return {
         ok: false,
         reason: `Multiple live stdio workspace runtimes found for repo ${repoPath}.`,
@@ -100,6 +204,7 @@ export const createHydrationRuntimeResolver = ({
   const findPreloadedRuntimeConnection = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
+    externalSessionId: string,
   ): PreloadedRuntimeConnectionLookupResult => {
     if (!preloadedRuntimeConnections) {
       return { ok: true, runtimeConnection: null };
@@ -113,6 +218,18 @@ export const createHydrationRuntimeResolver = ({
       ]),
     );
     if (candidatesByTransportKey.size > 1) {
+      const snapshotMatch = findPreloadedSnapshotConnection(
+        runtimeKind,
+        workingDirectory,
+        externalSessionId,
+        Array.from(candidatesByTransportKey.values()),
+      );
+      if (!snapshotMatch.ok) {
+        return { ok: false, reason: snapshotMatch.reason };
+      }
+      if (snapshotMatch.runtimeConnection) {
+        return { ok: true, runtimeConnection: snapshotMatch.runtimeConnection };
+      }
       return {
         ok: false,
         reason: `Multiple preloaded runtime connections found for working directory ${workingDirectory}.`,
@@ -128,8 +245,13 @@ export const createHydrationRuntimeResolver = ({
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
+    const externalSessionId = record.externalSessionId ?? record.sessionId;
 
-    const runtimeForDirectory = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
+    const runtimeForDirectory = findRuntimeByWorkingDirectory(
+      runtimeKind,
+      workingDirectory,
+      externalSessionId,
+    );
     if (!runtimeForDirectory.ok) {
       return {
         ok: false,
@@ -140,7 +262,11 @@ export const createHydrationRuntimeResolver = ({
 
     let runtime = runtimeForDirectory.runtime;
     if (!runtime && canUseWorkspaceRuntimeForHydration(record, repoPath)) {
-      const workspaceRuntime = findWorkspaceRuntime(runtimeKind);
+      const workspaceRuntime = findWorkspaceRuntime(
+        runtimeKind,
+        workingDirectory,
+        externalSessionId,
+      );
       if (!workspaceRuntime.ok) {
         return {
           ok: false,
@@ -167,6 +293,7 @@ export const createHydrationRuntimeResolver = ({
     const preloadedRuntimeConnection = findPreloadedRuntimeConnection(
       runtimeKind,
       workingDirectory,
+      externalSessionId,
     );
     if (!preloadedRuntimeConnection.ok) {
       return {

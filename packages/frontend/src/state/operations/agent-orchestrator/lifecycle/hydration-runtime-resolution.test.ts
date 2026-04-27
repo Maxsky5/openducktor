@@ -6,8 +6,12 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
+import { createLiveAgentSessionSnapshotFixture } from "../test-utils";
 import { createHydrationRuntimeResolver } from "./hydration-runtime-resolution";
-import { RuntimeConnectionPreloadIndex } from "./live-agent-session-cache";
+import {
+  liveAgentSessionLookupKey,
+  RuntimeConnectionPreloadIndex,
+} from "./live-agent-session-cache";
 
 const createRecord = (
   role: AgentSessionRecord["role"],
@@ -122,6 +126,60 @@ describe("createHydrationRuntimeResolver", () => {
       workingDirectory: "/tmp/openducktor-worktrees/task-1",
     });
     expect(ensureCalls).toBe(0);
+  });
+
+  test("uses preloaded snapshots to disambiguate same-repo workspace stdio runtimes", async () => {
+    const workingDirectory = "/tmp/openducktor-worktrees/task-1";
+    const runtimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const runtimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      runtimeConnectionA,
+      runtimeConnectionB,
+    ]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", runtimeConnectionB, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        [
+          "opencode",
+          [
+            createStdioRuntime("runtime-stdio-a", "/tmp/repo"),
+            createStdioRuntime("runtime-stdio-b", "/tmp/repo"),
+          ],
+        ],
+      ]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-stdio-b");
+    expect(result.runtimeConnection).toEqual(runtimeConnectionB);
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
   });
 
   test("fails fast for repo-root build sessions when no live runtime exists", async () => {
@@ -264,6 +322,60 @@ describe("createHydrationRuntimeResolver", () => {
     });
   });
 
+  test("uses preloaded snapshots to disambiguate same-directory live stdio runtimes", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const runtimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const runtimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      runtimeConnectionA,
+      runtimeConnectionB,
+    ]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", runtimeConnectionB, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        [
+          "opencode",
+          [
+            createStdioRuntime("runtime-stdio-a", workingDirectory),
+            createStdioRuntime("runtime-stdio-b", workingDirectory),
+          ],
+        ],
+      ]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("planner", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-stdio-b");
+    expect(result.runtimeConnection).toEqual(runtimeConnectionB);
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
+  });
+
   test("fails fast when multiple preloaded stdio connections match the same working directory", async () => {
     const workingDirectory = "/tmp/repo";
     const preloadedRuntimeConnectionA: AgentRuntimeConnection = {
@@ -295,6 +407,52 @@ describe("createHydrationRuntimeResolver", () => {
       runtimeKind: "opencode",
       reason: `Multiple preloaded runtime connections found for working directory ${workingDirectory}.`,
     });
+  });
+
+  test("uses preloaded snapshots to disambiguate same-directory preloaded stdio connections", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      preloadedRuntimeConnectionA,
+      preloadedRuntimeConnectionB,
+    ]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", preloadedRuntimeConnectionB, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("planner", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBeNull();
+    expect(result.runtimeConnection).toEqual(preloadedRuntimeConnectionB);
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
   });
 
   test("includes the missing working directory when repo-root planner ensure cannot provide a runtime", async () => {
