@@ -322,7 +322,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       onSubmit: NOOP_SUBMIT_ANSWERS,
     },
     permissions: {
-      canReply: activePermissionSessionId !== null,
+      canReply: activePermissionSessionId !== null && pendingPermissionRequests.length > 0,
       isSubmittingByRequestId: isSubmittingPermissionByRequestId,
       errorByRequestId: permissionReplyErrorByRequestId,
       onReply: onReplyPermission,

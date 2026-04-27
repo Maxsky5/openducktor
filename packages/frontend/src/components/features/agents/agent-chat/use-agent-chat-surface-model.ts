@@ -219,8 +219,8 @@ export function useAgentChatSurfaceModel({
     }));
   }, [activeSessionId]);
 
-  const isInteractiveEnabled = mode === "interactive" && runtimeReadiness.isReady;
-  const canReplyToPermissions = runtimeReadiness.isReady && permissions.canReply;
+  const isComposerInteractionEnabled = mode === "interactive" && runtimeReadiness.isReady;
+  const canReplyToPermissionRequests = runtimeReadiness.isReady && permissions.canReply;
 
   const threadModel = useMemo(
     () => ({
@@ -231,7 +231,7 @@ export function useAgentChatSurfaceModel({
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness,
       readinessState: runtimeReadiness.readinessState,
-      isInteractionEnabled: isInteractiveEnabled,
+      isInteractionEnabled: isComposerInteractionEnabled,
       blockedReason: runtimeReadiness.blockedReason,
       isLoadingChecks: runtimeReadiness.isLoadingChecks,
       onRefreshChecks: (): void => {
@@ -243,10 +243,10 @@ export function useAgentChatSurfaceModel({
       sessionAgentColors: resolvedSessionAgentColors,
       subagentPendingPermissionCountBySessionId: subagentPendingPermissionCountBySessionId ?? {},
       canSubmitQuestionAnswers:
-        mode === "interactive" && isInteractiveEnabled && pendingQuestions.canSubmit,
+        mode === "interactive" && isComposerInteractionEnabled && pendingQuestions.canSubmit,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
-      canReplyToPermissions,
+      canReplyToPermissions: canReplyToPermissionRequests,
       isSubmittingPermissionByRequestId: permissions.isSubmittingByRequestId,
       permissionReplyErrorByRequestId: permissions.errorByRequestId,
       onReplyPermission: permissions.onReply,
@@ -259,13 +259,13 @@ export function useAgentChatSurfaceModel({
     }),
     [
       activeTodoPanelCollapsed,
-      canReplyToPermissions,
+      canReplyToPermissionRequests,
       composer?.isSending,
       composer?.isStarting,
       emptyState,
       handleToggleTodoPanel,
       isContextSwitching,
-      isInteractiveEnabled,
+      isComposerInteractionEnabled,
       isSessionHistoryLoading,
       isSessionWorking,
       isWaitingForRuntimeReadiness,
@@ -403,7 +403,7 @@ export function useAgentChatSurfaceModel({
     return {
       taskId: composerTaskId,
       displayedSessionId: composerSessionId,
-      isInteractionEnabled: isInteractiveEnabled,
+      isInteractionEnabled: isComposerInteractionEnabled,
       isReadOnly: composerIsReadOnly,
       readOnlyReason: composerReadOnlyReason,
       busySendBlockedReason: composerBusySendBlockedReason,
@@ -482,7 +482,7 @@ export function useAgentChatSurfaceModel({
     handleComposerSend,
     handleStopSession,
     hasComposer,
-    isInteractiveEnabled,
+    isComposerInteractionEnabled,
     mode,
     pendingInlineCommentCount,
     resizeComposerEditor,

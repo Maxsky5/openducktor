@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import { useAgentSessionPermissionActions } from "@/components/features/agents/agent-chat/use-agent-session-permission-actions";
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "@/pages/agents/agent-studio-test-utils";
+import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
+import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 
 enableReactActEnvironment();
 

@@ -492,4 +492,42 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps permission replies disabled when the transcript has no pending permissions", async () => {
+    runtimeDataSession = {
+      sessionId: "session-child-1",
+      pendingPermissions: [],
+    } as unknown as AgentSessionState;
+
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-child-1",
+        persistedRecords,
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+
+      const permissions = latestSurfaceModelArgs?.permissions as {
+        canReply: boolean;
+      };
+      expect(permissions.canReply).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });
