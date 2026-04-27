@@ -207,7 +207,7 @@ jobs:
           fi
 
       - name: Install Apple signing certificate
-        uses: apple-actions/import-codesign-certs@fe74d46e82474f87e1ba79832ad28a4013d0e33a
+        uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
