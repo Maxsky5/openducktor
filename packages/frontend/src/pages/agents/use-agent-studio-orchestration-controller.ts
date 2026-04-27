@@ -99,7 +99,6 @@ type AgentStudioPageModelsViewContext = Pick<
 type AgentStudioPageModelsSessionsContext = Pick<
   AgentStudioOrchestrationSelectionContext,
   | "allSessionSummaries"
-  | "viewLivePendingInputBySession"
   | "viewSessionsForTask"
   | "viewActiveSession"
   | "viewSessionRuntimeDataError"
@@ -195,7 +194,6 @@ export const buildAgentStudioPageModelsArgs = ({
       selectedTask: view.viewSelectedTask,
       sessionsForTask: sessions.viewSessionsForTask,
       allSessionSummaries: sessions.allSessionSummaries,
-      livePendingInputBySession: sessions.viewLivePendingInputBySession,
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
       sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
@@ -389,7 +387,6 @@ export function useAgentStudioOrchestrationController({
     },
     sessions: {
       allSessionSummaries: selection.allSessionSummaries,
-      viewLivePendingInputBySession: selection.viewLivePendingInputBySession,
       viewSessionsForTask,
       viewActiveSession,
       viewSessionRuntimeDataError,

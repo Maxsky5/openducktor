@@ -35,11 +35,12 @@ const resolveSubagentSessionLink = (
   sessions: Map<string, SessionRecord>,
   childExternalSessionId: string,
 ): SubagentSessionLink | undefined => {
-  const childTransportKeys = new Set(
-    [...sessions.values()]
-      .filter((session) => session.externalSessionId === childExternalSessionId)
-      .map((session) => session.eventTransportKey),
-  );
+  const childTransportKeys = new Set<string>();
+  for (const session of sessions.values()) {
+    if (session.externalSessionId === childExternalSessionId) {
+      childTransportKeys.add(session.eventTransportKey);
+    }
+  }
   const matches: SubagentSessionLink[] = [];
 
   for (const [parentSessionId, session] of sessions) {

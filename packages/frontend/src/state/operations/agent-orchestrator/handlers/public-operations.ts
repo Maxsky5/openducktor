@@ -11,7 +11,6 @@ import type {
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
-  LiveAgentSessionPendingInputBySession,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import { toast } from "sonner";
@@ -76,10 +75,6 @@ type CreatePublicOperationsArgs = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
-  readLiveAgentSessionPendingInput: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<LiveAgentSessionPendingInputBySession>;
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
@@ -118,7 +113,6 @@ export const createOrchestratorPublicOperations = ({
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
-  readLiveAgentSessionPendingInput,
   readSessionSlashCommands,
   readSessionFileSearch,
   removeAgentSession,
@@ -141,7 +135,6 @@ export const createOrchestratorPublicOperations = ({
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,
   readSessionTodos,
-  readLiveAgentSessionPendingInput,
   readSessionSlashCommands,
   readSessionFileSearch,
   removeAgentSession,

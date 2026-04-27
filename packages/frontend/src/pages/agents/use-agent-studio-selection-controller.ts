@@ -5,22 +5,12 @@ import type {
   AgentRuntimeConnection,
   AgentScenario,
   AgentSessionTodoItem,
-  LiveAgentSessionPendingInputBySession,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 import { useAgentChatSessionHydration } from "@/components/features/agents/agent-chat/use-agent-chat-session-hydration";
 import { useAgentChatSessionRuntimeData } from "@/components/features/agents/agent-chat/use-agent-chat-session-runtime-data";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSession } from "@/state/app-state-provider";
-import {
-  getRuntimeConnectionSupportError,
-  runtimeRouteToConnection,
-} from "@/state/operations/agent-orchestrator/runtime/runtime";
-import {
-  SESSION_PENDING_INPUT_STALE_TIME_MS,
-  sessionPendingInputQueryKey,
-} from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -75,24 +65,8 @@ type UseAgentStudioSelectionControllerArgs = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
-  readLiveAgentSessionPendingInput: (
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<LiveAgentSessionPendingInputBySession>;
   clearComposerInput: () => void;
   onContextSwitchIntent?: () => void;
-};
-
-const hasPendingLiveInput = (
-  pendingInputBySession: LiveAgentSessionPendingInputBySession | undefined,
-): boolean => {
-  if (!pendingInputBySession) {
-    return false;
-  }
-
-  return Object.values(pendingInputBySession).some(
-    (pendingInput) => pendingInput.permissions.length > 0 || pendingInput.questions.length > 0,
-  );
 };
 
 export type AgentStudioSelectionControllerResult = {
@@ -122,7 +96,6 @@ export type AgentStudioSelectionControllerResult = {
   viewActiveSessionSummary: AgentSessionSummary | null;
   viewActiveSession: AgentSessionState | null;
   viewSessionRuntimeDataError?: string | null;
-  viewLivePendingInputBySession: LiveAgentSessionPendingInputBySession | null;
   viewRole: AgentRole;
   viewScenario: AgentScenario;
   isActiveTaskHydrated: boolean;
@@ -227,7 +200,6 @@ export function useAgentStudioSelectionController({
   refreshRuntimeAttachmentSources,
   readSessionModelCatalog,
   readSessionTodos,
-  readLiveAgentSessionPendingInput,
   clearComposerInput,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
@@ -424,56 +396,6 @@ export function useAgentStudioSelectionController({
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const viewLivePendingInputQueryTarget = useMemo(() => {
-    const session = viewSessionRuntimeData.session;
-    if (!session?.runtimeKind || !session.runtimeRoute) {
-      return null;
-    }
-
-    const runtimeConnection = runtimeRouteToConnection(
-      session.runtimeRoute,
-      session.workingDirectory,
-    );
-    const supportError = getRuntimeConnectionSupportError(
-      session.runtimeKind,
-      runtimeConnection,
-      "live agent session pending input",
-    );
-    if (supportError) {
-      return null;
-    }
-
-    return {
-      runtimeKind: session.runtimeKind,
-      runtimeConnection,
-      isActiveSessionWorking: session.status === "starting" || session.status === "running",
-    };
-  }, [viewSessionRuntimeData.session]);
-  const viewLivePendingInputQuery = useQuery<LiveAgentSessionPendingInputBySession>({
-    queryKey: viewLivePendingInputQueryTarget
-      ? sessionPendingInputQueryKey(
-          viewLivePendingInputQueryTarget.runtimeKind,
-          viewLivePendingInputQueryTarget.runtimeConnection,
-        )
-      : (["agent-session-runtime", "pending-input", "disabled", "disabled", "disabled"] as const),
-    queryFn: (): Promise<LiveAgentSessionPendingInputBySession> => {
-      if (!viewLivePendingInputQueryTarget) {
-        return Promise.resolve({});
-      }
-      return readLiveAgentSessionPendingInput(
-        viewLivePendingInputQueryTarget.runtimeKind,
-        viewLivePendingInputQueryTarget.runtimeConnection,
-      );
-    },
-    enabled: viewLivePendingInputQueryTarget !== null && agentStudioReadinessState === "ready",
-    refetchInterval: (query) => {
-      if (viewLivePendingInputQueryTarget?.isActiveSessionWorking) {
-        return 2_000;
-      }
-      return hasPendingLiveInput(query.state.data) ? 2_000 : false;
-    },
-    staleTime: SESSION_PENDING_INPUT_STALE_TIME_MS,
-  });
   const viewRole = viewSelection.role;
   const viewScenario = viewSelection.scenario;
   const runtimeAttachmentCandidates = useMemo(
@@ -526,7 +448,6 @@ export function useAgentStudioSelectionController({
     viewActiveSessionSummary: viewSelection.activeSession,
     viewActiveSession: viewSessionRuntimeData.session,
     viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
-    viewLivePendingInputBySession: viewLivePendingInputQuery.data ?? null,
     viewRole,
     viewScenario,
     isActiveTaskHydrated,

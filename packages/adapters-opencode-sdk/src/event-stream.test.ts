@@ -6,6 +6,7 @@ import {
   processOpencodeEvent,
   subscribeOpencodeEvents,
 } from "./event-stream";
+import type { SubagentSessionLink } from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -108,6 +109,7 @@ const buildQueuedSignature = (message: string, model?: AgentModelSelection | nul
 const runEventStreamWithSession = async (
   events: Event[],
   configureSession?: (sessionRecord: SessionRecord) => void,
+  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined,
 ): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
   const client = makeClientWithEvents(events);
   const emitted: AgentEvent[] = [];
@@ -127,6 +129,7 @@ const runEventStreamWithSession = async (
       emitted.push(event);
     },
     getSession: () => sessionRecord,
+    ...(resolveSubagentSessionLink ? { resolveSubagentSessionLink } : {}),
   });
 
   return { emitted, sessionRecord };
@@ -2611,8 +2614,77 @@ describe("event-stream", () => {
     }
     expect(permissionEvents[0].metadata).toEqual({ reason: "Need file write" });
     expect(permissionEvents[0].childExternalSessionId).toBe("external-session-1");
+    expect(permissionEvents[0].parentSessionId).toBeUndefined();
+    expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
+    expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
     expect(questionEvents[0].questions).toHaveLength(1);
     expect(questionEvents[0].questions[0]?.header).toBe("Scope");
+  });
+
+  test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.asked",
+          properties: {
+            sessionID: "external-child-session",
+            id: "perm-child-1",
+            permission: "read",
+            patterns: ["src/**"],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentSessionId: "local-session-1",
+              parentExternalSessionId: "external-session-1",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    );
+
+    const permissionEvents = emitted.filter((event) => event.type === "permission_required");
+    expect(permissionEvents).toHaveLength(1);
+    expect(permissionEvents[0]).toMatchObject({
+      type: "permission_required",
+      sessionId: "local-session-1",
+      requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentSessionId: "local-session-1",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
+  test("subscribeOpencodeEvents ignores child permission links for other parents", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.asked",
+          properties: {
+            sessionID: "external-child-session",
+            id: "perm-child-1",
+            permission: "read",
+            patterns: ["src/**"],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentSessionId: "other-local-parent",
+              parentExternalSessionId: "other-external-parent",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    );
+
+    expect(emitted.filter((event) => event.type === "permission_required")).toHaveLength(0);
   });
 
   test("forwards subagent session linkage on child permission events", () => {

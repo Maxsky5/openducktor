@@ -147,7 +147,6 @@ describe("app-state-context-values", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
-      readLiveAgentSessionPendingInput: async () => ({}),
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       startAgentSession: async () => "session",

@@ -13,7 +13,6 @@ import { runtimeConnectionTransportKey } from "@/state/operations/agent-orchestr
 export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
-export const SESSION_PENDING_INPUT_STALE_TIME_MS = 1_000;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 const agentSessionRuntimeQueryKeys = {
@@ -60,20 +59,7 @@ const agentSessionRuntimeQueryKeys = {
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
       externalSessionId,
     ] as const,
-  pendingInput: (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
-    [
-      ...agentSessionRuntimeQueryKeys.all,
-      "pending-input",
-      runtimeKind,
-      runtimeConnectionTransportKey(runtimeConnection),
-      normalizeWorkingDirectory(runtimeConnection.workingDirectory),
-    ] as const,
 };
-
-export const sessionPendingInputQueryKey = (
-  runtimeKind: RuntimeKind,
-  runtimeConnection: AgentRuntimeConnection,
-) => agentSessionRuntimeQueryKeys.pendingInput(runtimeKind, runtimeConnection);
 
 export const sessionModelCatalogQueryOptions = (
   runtimeKind: RuntimeKind,

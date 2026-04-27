@@ -86,7 +86,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   runtimeAttachmentSources: [],
   refreshRuntimeAttachmentSources: async () => {},
   readSessionModelCatalog: async () => emptyCatalog,
-  readLiveAgentSessionPendingInput: async () => ({}),
   readSessionTodos: async () => [],
   clearComposerInput: () => {},
   ...overrides,
@@ -318,57 +317,6 @@ describe("useAgentStudioSelectionController", () => {
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);
       expect(readSessionTodos).toHaveBeenCalledTimes(0);
       expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(0);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("reads live pending input for the viewed active session runtime", async () => {
-    const readLiveAgentSessionPendingInput = mock(async () => ({
-      "external-child-session": {
-        permissions: [
-          { requestId: "perm-1", permission: "external_directory", patterns: ["/tmp/*"] },
-        ],
-        questions: [],
-      },
-    }));
-    const session = createSession("task-1", "session-1", {
-      runtimeKind: "opencode",
-      runtimeRoute: { type: "local_http", endpoint: "http://runtime" },
-      workingDirectory: "/repo-a",
-      role: "build",
-      scenario: "build_implementation_start",
-      status: "running",
-    });
-    const harness = createHookHarness(
-      createBaseArgs({
-        sessions: [session],
-        taskIdParam: "task-1",
-        sessionParam: "session-1",
-        hasExplicitRoleParam: true,
-        roleFromQuery: "build",
-        scenarioFromQuery: "build_implementation_start",
-        readLiveAgentSessionPendingInput,
-      }),
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.viewLivePendingInputBySession !== null);
-
-      expect(readLiveAgentSessionPendingInput).toHaveBeenCalledWith("opencode", {
-        type: "local_http",
-        endpoint: "http://runtime",
-        workingDirectory: "/repo-a",
-      });
-      expect(harness.getLatest().viewLivePendingInputBySession).toEqual({
-        "external-child-session": {
-          permissions: [
-            { requestId: "perm-1", permission: "external_directory", patterns: ["/tmp/*"] },
-          ],
-          questions: [],
-        },
-      });
     } finally {
       await harness.unmount();
     }

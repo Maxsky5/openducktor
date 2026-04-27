@@ -10,7 +10,10 @@ import {
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { AgentSessionHistoryPreludeMode } from "@/types/agent-orchestrator";
+import type {
+  AgentPermissionRequest,
+  AgentSessionHistoryPreludeMode,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type RuntimeAttachmentSource,
@@ -25,6 +28,7 @@ import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
 const SYNTHETIC_HISTORY_PRELUDE_MODE: AgentSessionHistoryPreludeMode = "none";
+const EMPTY_PENDING_PERMISSIONS = Object.freeze([]) as unknown as AgentPermissionRequest[];
 const NOOP_SUBMIT_ANSWERS = async (_requestId: string, _answers: string[][]): Promise<void> => {};
 const toFallbackPersistedRecord = ({
   sessionId,
@@ -295,7 +299,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
   ]);
   const permissionSession = runtimeData.session;
   const activePermissionSessionId = permissionSession?.sessionId ?? null;
-  const pendingPermissionRequests = permissionSession?.pendingPermissions ?? [];
+  const pendingPermissionRequests =
+    permissionSession?.pendingPermissions ?? EMPTY_PENDING_PERMISSIONS;
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
     useAgentSessionPermissionActions({
       activeSessionId: activePermissionSessionId,

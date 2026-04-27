@@ -227,6 +227,18 @@ export const subscribeOpencodeEvents = async (
           input: input.context.input,
         },
         event,
+        input.resolveSubagentSessionLink
+          ? {
+              isKnownChildSessionId: (sessionId) => {
+                const link = input.resolveSubagentSessionLink?.(sessionId);
+                return Boolean(
+                  link &&
+                    (link.parentSessionId === input.context.sessionId ||
+                      link.parentExternalSessionId === input.context.externalSessionId),
+                );
+              },
+            }
+          : undefined,
       );
       logStreamEvent({
         subscriber: {
