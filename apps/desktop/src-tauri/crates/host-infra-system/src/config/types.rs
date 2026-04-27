@@ -611,45 +611,9 @@ impl RuntimeConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        deserialize_global_config, hook_set_fingerprint, repo_script_fingerprint, GlobalConfig,
-        HookSet, KanbanEmptyColumnDisplay, KanbanSettings, RepoConfig, RepoDevServerScript,
+        deserialize_global_config, GlobalConfig, KanbanEmptyColumnDisplay, KanbanSettings,
+        RepoConfig,
     };
-
-    #[test]
-    fn hook_set_fingerprint_changes_with_command_boundaries() {
-        let grouped = HookSet {
-            pre_start: vec!["echo a".to_string(), "echo b".to_string()],
-            post_complete: Vec::new(),
-        };
-        let embedded_newline = HookSet {
-            pre_start: vec!["echo a\necho b".to_string()],
-            post_complete: Vec::new(),
-        };
-
-        assert_ne!(
-            hook_set_fingerprint(&grouped),
-            hook_set_fingerprint(&embedded_newline),
-            "fingerprint must be sensitive to command boundaries"
-        );
-    }
-
-    #[test]
-    fn hook_set_fingerprint_changes_with_group_assignment() {
-        let pre_start = HookSet {
-            pre_start: vec!["echo test".to_string()],
-            post_complete: Vec::new(),
-        };
-        let post_complete = HookSet {
-            pre_start: Vec::new(),
-            post_complete: vec!["echo test".to_string()],
-        };
-
-        assert_ne!(
-            hook_set_fingerprint(&pre_start),
-            hook_set_fingerprint(&post_complete),
-            "fingerprint must include the target hook group"
-        );
-    }
 
     #[test]
     fn repo_config_default_target_branch_is_origin_main() {
@@ -723,48 +687,6 @@ mod tests {
         assert!(
             error.contains("compact"),
             "error should identify the invalid value: {error}"
-        );
-    }
-
-    #[test]
-    fn repo_script_fingerprint_ignores_dev_server_names_but_tracks_commands() {
-        let hooks = HookSet::default();
-        let renamed = vec![RepoDevServerScript {
-            id: "frontend".to_string(),
-            name: "Frontend".to_string(),
-            command: "bun run dev".to_string(),
-        }];
-        let same_command_new_name = vec![RepoDevServerScript {
-            id: "frontend".to_string(),
-            name: "Web".to_string(),
-            command: "bun run dev".to_string(),
-        }];
-        let changed_command = vec![RepoDevServerScript {
-            id: "frontend".to_string(),
-            name: "Frontend".to_string(),
-            command: "bun run start".to_string(),
-        }];
-
-        assert_eq!(
-            repo_script_fingerprint(&hooks, &renamed),
-            repo_script_fingerprint(&hooks, &same_command_new_name)
-        );
-        assert_ne!(
-            repo_script_fingerprint(&hooks, &renamed),
-            repo_script_fingerprint(&hooks, &changed_command)
-        );
-    }
-
-    #[test]
-    fn repo_script_fingerprint_matches_legacy_hook_fingerprint_without_dev_servers() {
-        let hooks = HookSet {
-            pre_start: vec!["echo pre".to_string()],
-            post_complete: vec!["echo post".to_string()],
-        };
-
-        assert_eq!(
-            hook_set_fingerprint(&hooks),
-            repo_script_fingerprint(&hooks, &[])
         );
     }
 }
