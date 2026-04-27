@@ -150,28 +150,8 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
 fn startup_readiness_policy_uses_config_for_registered_runtime_kind() -> Result<()> {
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::default(),
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition("test-runtime", "Test Runtime"),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::default(),
-            }),
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(TestRuntimeAdapter::for_kind("test-runtime", "Test Runtime")),
         ],
         AgentRuntimeKind::opencode(),
     )?;

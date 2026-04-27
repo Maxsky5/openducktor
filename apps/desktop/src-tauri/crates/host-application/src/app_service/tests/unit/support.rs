@@ -140,6 +140,15 @@ pub(super) struct TestRuntimeAdapter {
     pub(super) external_start_behavior: ExternalStartBehavior,
 }
 
+pub(super) fn runtime_health_ok(kind: &str) -> RuntimeHealth {
+    RuntimeHealth {
+        kind: kind.to_string(),
+        ok: true,
+        version: None,
+        error: None,
+    }
+}
+
 #[derive(Clone)]
 pub(super) enum ExternalStartBehavior {
     ReturnRoute(host_domain::RuntimeRoute),
@@ -151,6 +160,53 @@ impl Default for ExternalStartBehavior {
         Self::ReturnRoute(host_domain::RuntimeRoute::LocalHttp {
             endpoint: "http://127.0.0.1:43123".to_string(),
         })
+    }
+}
+
+impl TestRuntimeAdapter {
+    pub(super) fn new(definition: RuntimeDefinition) -> Self {
+        let health = runtime_health_ok(definition.kind().as_str());
+        Self {
+            health,
+            definition,
+            session_probe_behavior: SessionProbeBehavior::Default,
+            external_start_behavior: ExternalStartBehavior::default(),
+        }
+    }
+
+    pub(super) fn opencode() -> Self {
+        Self::new(builtin_opencode_runtime_definition())
+    }
+
+    pub(super) fn for_kind(kind: &str, label: &str) -> Self {
+        Self::new(test_runtime_definition(kind, label))
+    }
+
+    pub(super) fn for_kind_with_provisioning(
+        kind: &str,
+        label: &str,
+        provisioning_mode: RuntimeProvisioningMode,
+    ) -> Self {
+        Self::new(test_runtime_definition_with_provisioning(
+            kind,
+            label,
+            provisioning_mode,
+        ))
+    }
+
+    pub(super) fn with_health_version(mut self, version: impl Into<String>) -> Self {
+        self.health.version = Some(version.into());
+        self
+    }
+
+    pub(super) fn with_session_probe_behavior(mut self, behavior: SessionProbeBehavior) -> Self {
+        self.session_probe_behavior = behavior;
+        self
+    }
+
+    pub(super) fn with_external_start_behavior(mut self, behavior: ExternalStartBehavior) -> Self {
+        self.external_start_behavior = behavior;
+        self
     }
 }
 
@@ -182,32 +238,15 @@ pub(super) fn build_external_runtime_build_start_harness(
 
     let runtime_registry = AppRuntimeRegistry::new(
         vec![
-            Arc::new(TestRuntimeAdapter {
-                definition: builtin_opencode_runtime_definition(),
-                health: RuntimeHealth {
-                    kind: "opencode".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior: ExternalStartBehavior::default(),
-            }),
-            Arc::new(TestRuntimeAdapter {
-                definition: test_runtime_definition_with_provisioning(
+            Arc::new(TestRuntimeAdapter::opencode()),
+            Arc::new(
+                TestRuntimeAdapter::for_kind_with_provisioning(
                     "test-runtime",
                     "Test Runtime",
                     RuntimeProvisioningMode::External,
-                ),
-                health: RuntimeHealth {
-                    kind: "test-runtime".to_string(),
-                    ok: true,
-                    version: None,
-                    error: None,
-                },
-                session_probe_behavior: SessionProbeBehavior::Default,
-                external_start_behavior,
-            }),
+                )
+                .with_external_start_behavior(external_start_behavior),
+            ),
         ],
         AgentRuntimeKind::opencode(),
     )?;
