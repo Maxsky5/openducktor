@@ -37,9 +37,28 @@ pub(crate) fn run_parsed_hook_command_allow_failure(
     }
 }
 
+pub(crate) struct HookCommandFailure<'a> {
+    pub(crate) hook: &'a str,
+    pub(crate) stderr: String,
+}
+
+pub(crate) fn run_hook_commands_allow_failure<'a>(
+    hooks: &'a [String],
+    cwd: &Path,
+) -> Option<HookCommandFailure<'a>> {
+    for hook in hooks {
+        let (ok, _stdout, stderr) = run_parsed_hook_command_allow_failure(hook, cwd);
+        if !ok {
+            return Some(HookCommandFailure { hook, stderr });
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
-    use super::run_parsed_hook_command_allow_failure;
+    use super::{run_hook_commands_allow_failure, run_parsed_hook_command_allow_failure};
 
     #[test]
     fn run_parsed_hook_command_allow_failure_reports_empty_hook() {
@@ -47,5 +66,20 @@ mod tests {
             run_parsed_hook_command_allow_failure("  ", std::path::Path::new("."));
         assert!(!ok);
         assert!(stderr.contains("Hook command is empty"));
+    }
+
+    #[test]
+    fn run_hook_commands_allow_failure_reports_first_failed_hook() {
+        let hooks = vec![
+            "sh -lc 'exit 0'".to_string(),
+            "sh -lc 'echo failed >&2; exit 7'".to_string(),
+            "sh -lc 'exit 0'".to_string(),
+        ];
+
+        let failure = run_hook_commands_allow_failure(&hooks, std::path::Path::new("."))
+            .expect("expected failed hook");
+
+        assert_eq!(failure.hook, "sh -lc 'echo failed >&2; exit 7'");
+        assert!(failure.stderr.contains("failed"));
     }
 }

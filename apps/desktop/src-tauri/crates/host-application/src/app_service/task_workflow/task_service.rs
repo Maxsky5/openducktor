@@ -1,4 +1,4 @@
-use crate::app_service::run_parsed_hook_command_allow_failure;
+use crate::app_service::run_hook_commands_allow_failure;
 use crate::app_service::service_core::AppService;
 use crate::app_service::task_workflow::{
     implementation_reset_service::ImplementationResetService, session_service::TaskWorktreeLookup,
@@ -252,19 +252,21 @@ impl AppService {
             }
         };
 
-        for hook in &repo_config.hooks.post_complete {
-            let (ok, _stdout, stderr) =
-                run_parsed_hook_command_allow_failure(hook, Path::new(worktree_path.as_str()));
-            if !ok {
-                let message = format!("Worktree cleanup script command failed: {hook}\n{stderr}");
-                self.task_transition(
-                    context.repo.repo_path.as_str(),
-                    context.task.id.as_str(),
-                    TaskStatus::Blocked,
-                    Some(message.as_str()),
-                )?;
-                return Err(anyhow!(message));
-            }
+        if let Some(failure) = run_hook_commands_allow_failure(
+            repo_config.hooks.post_complete.as_slice(),
+            Path::new(worktree_path.as_str()),
+        ) {
+            let message = format!(
+                "Worktree cleanup script command failed: {}\n{}",
+                failure.hook, failure.stderr
+            );
+            self.task_transition(
+                context.repo.repo_path.as_str(),
+                context.task.id.as_str(),
+                TaskStatus::Blocked,
+                Some(message.as_str()),
+            )?;
+            return Err(anyhow!(message));
         }
 
         Ok(())

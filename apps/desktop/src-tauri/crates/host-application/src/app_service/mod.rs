@@ -42,7 +42,7 @@ pub(crate) mod test_support;
 mod workflow_rules;
 mod workspace_policy;
 
-pub(crate) use hook_security::run_parsed_hook_command_allow_failure;
+pub(crate) use hook_security::run_hook_commands_allow_failure;
 pub use odt_mcp::{
     OdtCreateTaskInput, OdtHostBridgeReady, OdtSearchTasksInput, OdtSearchTasksResult,
     OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult, OdtTaskDocumentsRead,
