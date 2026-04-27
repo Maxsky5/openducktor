@@ -1,4 +1,8 @@
-import type { OdtToolErrorCode, OdtToolErrorPayload } from "@openducktor/contracts";
+import type {
+  OdtToolErrorCode,
+  OdtToolErrorIssue,
+  OdtToolErrorPayload,
+} from "@openducktor/contracts";
 import { z } from "zod";
 
 export type ToolResult = {
@@ -21,15 +25,17 @@ export class OdtToolError extends Error {
   }
 }
 
-type ZodIssueSummary = {
-  path: Array<string | number>;
-  message: string;
-  code: string;
-};
+type ZodIssueSummary = OdtToolErrorIssue;
 
 export const toErrorMessage = (error: unknown): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
+  }
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error.trim();
+  }
+  if (typeof error === "number" || typeof error === "boolean") {
+    return String(error);
   }
   return "Unknown error";
 };
@@ -38,13 +44,7 @@ const isStructuredToolPayload = (payload: unknown): payload is Record<string, un
   return payload !== null && typeof payload === "object" && !Array.isArray(payload);
 };
 
-const readZodIssues = (error: unknown): ZodIssueSummary[] | undefined => {
-  if (!(error instanceof z.ZodError) && !isStructuredToolPayload(error)) {
-    return undefined;
-  }
-
-  const issues =
-    error instanceof z.ZodError ? error.issues : (error as { issues?: unknown }).issues;
+const normalizeIssues = (issues: unknown): ZodIssueSummary[] | undefined => {
   if (!Array.isArray(issues)) {
     return undefined;
   }
@@ -68,6 +68,18 @@ const readZodIssues = (error: unknown): ZodIssueSummary[] | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const readZodIssues = (error: unknown): ZodIssueSummary[] | undefined => {
+  return error instanceof z.ZodError ? normalizeIssues(error.issues) : undefined;
+};
+
+const readOdtToolErrorIssues = (error: unknown): ZodIssueSummary[] | undefined => {
+  if (!(error instanceof OdtToolError) || !error.details) {
+    return undefined;
+  }
+
+  return normalizeIssues(error.details.issues);
+};
+
 export const toToolResult = (payload: unknown): ToolResult => {
   return {
     content: [
@@ -83,6 +95,8 @@ export const toToolResult = (payload: unknown): ToolResult => {
 export const toToolError = (error: unknown): ToolResult => {
   const message = toErrorMessage(error);
   const zodIssues = readZodIssues(error);
+  const odtIssues = readOdtToolErrorIssues(error);
+  const issues = odtIssues ?? zodIssues;
   const code =
     error instanceof OdtToolError
       ? error.code
@@ -95,7 +109,7 @@ export const toToolError = (error: unknown): ToolResult => {
       code,
       message,
       ...(error instanceof OdtToolError && error.details ? { details: error.details } : {}),
-      ...(zodIssues ? { issues: zodIssues } : {}),
+      ...(issues ? { issues } : {}),
     },
   };
   return {

@@ -565,6 +565,42 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps stringified MCP content text structured errors", () => {
+    const part = createToolPart({
+      id: "tool-1e-string",
+      tool: "odt_set_spec",
+      status: "completed",
+      input: { taskId: "task-8" },
+      output: JSON.stringify({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: {
+                code: "ODT_TOOL_EXECUTION_ERROR",
+                message: "Cannot write spec from serialized MCP content.",
+              },
+            }),
+          },
+        ],
+      }),
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1e-string",
+      partId: "tool-1e-string",
+      callId: "call-tool-1e-string",
+      tool: "odt_set_spec",
+      status: "error",
+      input: { taskId: "task-8" },
+      preview: "task-8",
+      error: "Cannot write spec from serialized MCP content.",
+    });
+  });
+
   test("keeps successful output containing the word error as completed", () => {
     const part = createToolPart({
       id: "tool-1f",

@@ -131,7 +131,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("ml-auto rounded-full");
     expect(html).toContain("rounded-full border");
     expect(html).toContain("1.5s");
-    expect(html).toContain("open");
+    expect(html).toMatch(/<details\b[^>]*\bopen\b/);
     expect(html).not.toContain(">Activity<");
   });
 

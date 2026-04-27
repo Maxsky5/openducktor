@@ -279,6 +279,13 @@ describe("MCP server tool results", () => {
       expect(error.code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
       expect(error.message).toContain("Invalid arguments for tool odt_read_task");
       expect(error.message).toContain("workspaceId");
+      expect(error.issues).toEqual([
+        {
+          path: ["workspaceId"],
+          code: "forbidden_workspace_id",
+          message: "workspaceId is not allowed in workflow-scoped tool calls.",
+        },
+      ]);
       expect(JSON.stringify(error.details)).toContain("workspaceId");
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },

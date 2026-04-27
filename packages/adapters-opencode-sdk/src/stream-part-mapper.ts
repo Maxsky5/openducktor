@@ -136,7 +136,7 @@ const readMcpContentTextError = (value: unknown): string | undefined => {
 
 const readStructuredToolError = (value: unknown): string | undefined => {
   const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
-  const contentTextError = readMcpContentTextError(value);
+  const contentTextError = readMcpContentTextError(record ?? value);
   const transportError = readMcpTransportError(value);
   if (!record) {
     return contentTextError ?? transportError;
