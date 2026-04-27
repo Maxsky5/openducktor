@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type {
@@ -50,10 +51,15 @@ import {
   type SubagentMessage,
 } from "../support/subagent-messages";
 import {
+  EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+  mergeSubagentPendingPermissionOverlay,
+  type SubagentPendingPermissionsBySessionId,
+} from "../support/subagent-permission-overlay";
+import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
 } from "./hydration-runtime-resolution";
-import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
+import { LiveAgentSessionCache } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createReattachLiveSession } from "./reattach-live-session";
 
@@ -175,6 +181,98 @@ const EMPTY_PROMPT_OVERRIDES: RepoPromptOverrides = {};
 const normalizeLiveSessionTitle = (title: string | undefined): string | undefined => {
   const trimmed = title?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
+};
+
+const readSubagentSessionIds = (
+  sessionId: string,
+  messages: AgentSessionState["messages"],
+): string[] => {
+  const sessionIds = new Set<string>();
+  forEachSessionMessage({ sessionId, messages }, (message) => {
+    if (!isSubagentMessage(message)) {
+      return;
+    }
+    const subagentSessionId = message.meta.sessionId?.trim();
+    if (subagentSessionId) {
+      sessionIds.add(subagentSessionId);
+    }
+  });
+  return Array.from(sessionIds);
+};
+
+type HydratedSubagentPendingPermissionOverlay = {
+  scannedChildExternalSessionIds: string[];
+  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId;
+};
+
+const EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY = Object.freeze({
+  scannedChildExternalSessionIds: [],
+  pendingPermissionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+}) satisfies HydratedSubagentPendingPermissionOverlay;
+
+const toHydratedSubagentPendingPermissionOverlay = (
+  scannedChildExternalSessionIds: string[],
+  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId,
+): HydratedSubagentPendingPermissionOverlay => {
+  if (scannedChildExternalSessionIds.length === 0) {
+    return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
+  }
+
+  return {
+    scannedChildExternalSessionIds,
+    pendingPermissionsByChildExternalSessionId:
+      Object.keys(pendingPermissionsByChildExternalSessionId).length > 0
+        ? pendingPermissionsByChildExternalSessionId
+        : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+  };
+};
+
+const loadHydratedSubagentPendingPermissionOverlay = async ({
+  record,
+  messages,
+  runtimeResolution,
+  runtimePlanner,
+}: {
+  record: AgentSessionRecord;
+  messages: AgentSessionState["messages"];
+  runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>;
+  runtimePlanner: HydrationRuntimePlanner;
+}): Promise<HydratedSubagentPendingPermissionOverlay> => {
+  const childExternalSessionIds = readSubagentSessionIds(record.sessionId, messages);
+  if (childExternalSessionIds.length === 0) {
+    return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
+  }
+
+  const pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId = {};
+  const scannedChildExternalSessionIds: string[] = [];
+  await Promise.all(
+    childExternalSessionIds.map(async (childExternalSessionId) => {
+      try {
+        const snapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(
+          {
+            ...record,
+            sessionId: childExternalSessionId,
+            externalSessionId: childExternalSessionId,
+          },
+          runtimeResolution,
+        );
+        scannedChildExternalSessionIds.push(childExternalSessionId);
+        if (snapshot && snapshot.pendingPermissions.length > 0) {
+          pendingPermissionsByChildExternalSessionId[childExternalSessionId] =
+            snapshot.pendingPermissions;
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to hydrate pending permissions for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
+        );
+      }
+    }),
+  );
+
+  return toHydratedSubagentPendingPermissionOverlay(
+    scannedChildExternalSessionIds,
+    pendingPermissionsByChildExternalSessionId,
+  );
 };
 
 const mergePersistedSessionRecord = (
@@ -648,6 +746,22 @@ export const createRuntimeResolutionPlannerStage = async ({
       : {}),
     ensureWorkspaceRuntime,
   });
+  const liveAgentSessionScanCache =
+    adapter.listLiveAgentSessionSnapshots || options?.preloadedLiveAgentSessionsByKey
+      ? new LiveAgentSessionCache(
+          {
+            listLiveAgentSessionSnapshots: async (input) => {
+              if (!adapter.listLiveAgentSessionSnapshots) {
+                throw new Error(
+                  "Live agent session snapshots are unavailable for session scanning.",
+                );
+              }
+              return adapter.listLiveAgentSessionSnapshots(input);
+            },
+          },
+          options?.preloadedLiveAgentSessionsByKey,
+        )
+      : null;
 
   const loadLiveAgentSessionSnapshot = async (
     record: AgentSessionRecord,
@@ -666,23 +780,10 @@ export const createRuntimeResolutionPlannerStage = async ({
       return storedSnapshot;
     }
 
-    const preloadedSnapshots = options?.preloadedLiveAgentSessionsByKey?.get(
-      liveAgentSessionLookupKey(
-        runtimeResolution.runtimeKind,
-        runtimeResolution.runtimeConnection,
-        resolvedWorkingDirectory,
-      ),
-    );
-    if (preloadedSnapshots) {
-      return (
-        preloadedSnapshots.find((snapshot) => snapshot.externalSessionId === externalSessionId) ??
-        null
-      );
-    }
-    if (!adapter.listLiveAgentSessionSnapshots) {
+    if (!liveAgentSessionScanCache) {
       throw new Error("Live agent session snapshots are unavailable for session hydration.");
     }
-    const snapshots = await adapter.listLiveAgentSessionSnapshots({
+    const snapshots = await liveAgentSessionScanCache.load({
       runtimeKind: runtimeResolution.runtimeKind,
       runtimeConnection: runtimeResolution.runtimeConnection,
       directories: [resolvedWorkingDirectory],
@@ -1024,6 +1125,22 @@ export const hydrateSessionRecordsStage = async ({
       : null;
     const livePendingPermissions = liveRuntimeSnapshot?.pendingPermissions ?? [];
     const livePendingQuestions = liveRuntimeSnapshot?.pendingQuestions ?? [];
+    const selectedModel = normalizePersistedSelection(record.selectedModel);
+    const liveSessionTitle = normalizeLiveSessionTitle(liveRuntimeSnapshot?.title);
+    const hydratedMessages = createSessionMessagesState(record.sessionId, [
+      ...getSessionMessagesSlice({ sessionId: record.sessionId, messages: preludeMessages }, 0),
+      ...historyToChatMessages(history, {
+        role: record.role,
+        selectedModel,
+      }),
+    ]);
+    const hydratedSubagentPendingPermissionsBySessionId =
+      await loadHydratedSubagentPendingPermissionOverlay({
+        record,
+        messages: hydratedMessages,
+        runtimeResolution,
+        runtimePlanner,
+      });
     if (isStaleRepoOperation()) {
       return;
     }
@@ -1031,15 +1148,6 @@ export const hydrateSessionRecordsStage = async ({
     updateSession(
       record.sessionId,
       (current) => {
-        const selectedModel = normalizePersistedSelection(record.selectedModel);
-        const liveSessionTitle = normalizeLiveSessionTitle(liveRuntimeSnapshot?.title);
-        const hydratedMessages = createSessionMessagesState(record.sessionId, [
-          ...getSessionMessagesSlice({ sessionId: record.sessionId, messages: preludeMessages }, 0),
-          ...historyToChatMessages(history, {
-            role: record.role,
-            selectedModel,
-          }),
-        ]);
         const nextSession: AgentSessionState = {
           ...current,
           runtimeKind,
@@ -1052,6 +1160,13 @@ export const hydrateSessionRecordsStage = async ({
           promptOverrides,
           pendingPermissions: livePendingPermissions,
           pendingQuestions: livePendingQuestions,
+          subagentPendingPermissionsBySessionId: mergeSubagentPendingPermissionOverlay({
+            current: current.subagentPendingPermissionsBySessionId,
+            scannedChildExternalSessionIds:
+              hydratedSubagentPendingPermissionsBySessionId.scannedChildExternalSessionIds,
+            pendingPermissionsByChildExternalSessionId:
+              hydratedSubagentPendingPermissionsBySessionId.pendingPermissionsByChildExternalSessionId,
+          }),
           contextUsage: historyToSessionContextUsage(history, selectedModel),
           messages: mergeHydratedMessages(current.sessionId, hydratedMessages, current.messages),
         };

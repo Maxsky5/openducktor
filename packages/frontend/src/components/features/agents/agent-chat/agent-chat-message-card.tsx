@@ -7,6 +7,8 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 
+const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
@@ -16,6 +18,8 @@ type AgentChatMessageCardProps = {
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
+  subagentPendingPermissionCount?: number;
+  subagentPendingPermissionCountBySessionId?: Record<string, number>;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
@@ -27,6 +31,8 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  subagentPendingPermissionCount,
+  subagentPendingPermissionCountBySessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = useContext(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
@@ -40,6 +46,11 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionAgentColors,
     workflowToolAliasesByCanonical,
   });
+  const resolvedSubagentPendingPermissionCount =
+    subagentPendingPermissionCount ??
+    (message.meta?.kind === "subagent" && message.meta.sessionId
+      ? (subagentPendingPermissionCountBySessionId[message.meta.sessionId] ?? 0)
+      : 0);
 
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
@@ -62,6 +73,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        subagentPendingPermissionCount={resolvedSubagentPendingPermissionCount}
       />
     </article>
   );

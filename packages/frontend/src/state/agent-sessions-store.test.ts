@@ -11,6 +11,7 @@ describe("toAgentSessionSummary", () => {
 
     expect(toAgentSessionSummary(session)).toMatchObject({
       sessionId: session.sessionId,
+      externalSessionId: session.externalSessionId,
       role: "build",
       workingDirectory: "/repo",
     });

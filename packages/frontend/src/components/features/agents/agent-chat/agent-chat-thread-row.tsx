@@ -15,6 +15,7 @@ type AgentChatWindowRowProps = {
   sessionSelectedModel?: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
+  subagentPendingPermissionCount?: number;
 };
 
 export const AgentChatThreadRow = memo(function AgentChatThreadRow({
@@ -26,6 +27,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  subagentPendingPermissionCount = 0,
 }: AgentChatWindowRowProps): ReactElement {
   switch (row.kind) {
     case "turn_duration": {
@@ -44,6 +46,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             sessionAgentColors={sessionAgentColors}
             sessionWorkingDirectory={sessionWorkingDirectory}
             sessionRuntimeKind={sessionRuntimeKind}
+            subagentPendingPermissionCount={subagentPendingPermissionCount}
           />
         </div>
       );

@@ -19,6 +19,8 @@ import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-com
 import { useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
+const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+
 const parseDraftStateKey = (draftStateKey: string) => {
   const [taskId = "", role = "", sessionId = "", contextSwitchVersion = ""] =
     draftStateKey.split(":");
@@ -160,6 +162,7 @@ type UseAgentChatSurfaceModelArgs = {
   permissions: AgentChatPendingPermissionActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
+  subagentPendingPermissionCountBySessionId?: Record<string, number>;
 };
 
 export function useAgentChatSurfaceModel({
@@ -178,6 +181,7 @@ export function useAgentChatSurfaceModel({
   permissions,
   composer,
   sessionAgentColors,
+  subagentPendingPermissionCountBySessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
@@ -217,7 +221,8 @@ export function useAgentChatSurfaceModel({
     }));
   }, [activeSessionId]);
 
-  const isInteractiveEnabled = mode === "interactive" && runtimeReadiness.isReady;
+  const isComposerInteractionEnabled = mode === "interactive" && runtimeReadiness.isReady;
+  const canReplyToPermissionRequests = runtimeReadiness.isReady && permissions.canReply;
 
   const threadModel = useMemo(
     () => ({
@@ -228,7 +233,7 @@ export function useAgentChatSurfaceModel({
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness,
       readinessState: runtimeReadiness.readinessState,
-      isInteractionEnabled: isInteractiveEnabled,
+      isInteractionEnabled: isComposerInteractionEnabled,
       blockedReason: runtimeReadiness.blockedReason,
       isLoadingChecks: runtimeReadiness.isLoadingChecks,
       onRefreshChecks: (): void => {
@@ -238,11 +243,13 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
+      subagentPendingPermissionCountBySessionId:
+        subagentPendingPermissionCountBySessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
       canSubmitQuestionAnswers:
-        mode === "interactive" && isInteractiveEnabled && pendingQuestions.canSubmit,
+        mode === "interactive" && isComposerInteractionEnabled && pendingQuestions.canSubmit,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
-      canReplyToPermissions: mode === "interactive" && isInteractiveEnabled && permissions.canReply,
+      canReplyToPermissions: canReplyToPermissionRequests,
       isSubmittingPermissionByRequestId: permissions.isSubmittingByRequestId,
       permissionReplyErrorByRequestId: permissions.errorByRequestId,
       onReplyPermission: permissions.onReply,
@@ -255,12 +262,13 @@ export function useAgentChatSurfaceModel({
     }),
     [
       activeTodoPanelCollapsed,
+      canReplyToPermissionRequests,
       composer?.isSending,
       composer?.isStarting,
       emptyState,
       handleToggleTodoPanel,
       isContextSwitching,
-      isInteractiveEnabled,
+      isComposerInteractionEnabled,
       isSessionHistoryLoading,
       isSessionWorking,
       isWaitingForRuntimeReadiness,
@@ -272,6 +280,7 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       sessionRuntimeDataError,
       showThinkingMessages,
+      subagentPendingPermissionCountBySessionId,
       threadSession,
     ],
   );
@@ -397,7 +406,7 @@ export function useAgentChatSurfaceModel({
     return {
       taskId: composerTaskId,
       displayedSessionId: composerSessionId,
-      isInteractionEnabled: isInteractiveEnabled,
+      isInteractionEnabled: isComposerInteractionEnabled,
       isReadOnly: composerIsReadOnly,
       readOnlyReason: composerReadOnlyReason,
       busySendBlockedReason: composerBusySendBlockedReason,
@@ -476,7 +485,7 @@ export function useAgentChatSurfaceModel({
     handleComposerSend,
     handleStopSession,
     hasComposer,
-    isInteractiveEnabled,
+    isComposerInteractionEnabled,
     mode,
     pendingInlineCommentCount,
     resizeComposerEditor,

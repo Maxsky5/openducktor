@@ -26,6 +26,7 @@ import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
+import { clearSubagentPendingPermissionFromSessions } from "../support/subagent-permission-overlay";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -461,6 +462,12 @@ export const createAgentSessionActions = ({
       }),
       { persist: true },
     );
+    clearSubagentPendingPermissionFromSessions({
+      sessionsRef,
+      updateSession,
+      targetSessionId: sessionId,
+      requestId,
+    });
   };
 
   const answerAgentQuestion = async (

@@ -71,6 +71,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const sessionsForTask = overrides.core?.sessionsForTask ?? [
     toAgentSessionSummary(defaultSession),
   ];
+  const allSessionSummaries = overrides.core?.allSessionSummaries ?? sessionsForTask;
   const activeSession =
     overrides.core?.activeSession !== undefined ? overrides.core.activeSession : defaultSession;
   const contextSessionsLength =
@@ -90,6 +91,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,
     ...overrides.core,
+    allSessionSummaries,
     sessionsForTask,
     activeSession,
     contextSessionsLength,
@@ -745,6 +747,155 @@ describe("useAgentStudioPageModels", () => {
     expect(questionState.agentChatModel.thread).not.toBe(permissionThreadModel);
     expect(questionState.agentChatModel.composer).toBe(initialComposerModel);
     expect(questionState.agentChatModel.thread.isSubmittingQuestionByRequestId["q-1"]).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("derives subagent pending permission counts from all live session summaries", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithPermission = createSession("session-child-1", "external-child-1", {
+      taskId: "other-task",
+      pendingPermissions: [
+        { requestId: "perm-1", permission: "shell", patterns: ["bun test"] },
+        { requestId: "perm-2", permission: "shell", patterns: ["git status"] },
+      ],
+    });
+    const childWithoutPermission = createSession("session-child-2", "external-child-2", {
+      pendingPermissions: [],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithPermission),
+            toAgentSessionSummary(childWithoutPermission),
+          ],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
+    ).toEqual({
+      "external-child-1": 2,
+      "session-child-1": 2,
+    });
+
+    await harness.unmount();
+  });
+
+  test("keys subagent pending permission counts by external session id", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithPermission = createSession("session-child-internal", "session-child-runtime", {
+      taskId: "other-task",
+      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithPermission),
+          ],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const counts =
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
+    expect(counts["session-child-internal"]).toBe(1);
+    expect(counts["session-child-runtime"]).toBe(1);
+
+    await harness.unmount();
+  });
+
+  test("derives subagent pending permission counts from parent live event overlay", async () => {
+    const parentSession = createSession("session-parent", "external-parent", {
+      subagentPendingPermissionsBySessionId: {
+        "external-child-session": [
+          { requestId: "perm-1", permission: "external_directory", patterns: ["/tmp/*"] },
+        ],
+      },
+    });
+    const childSummary = toAgentSessionSummary(
+      createSession("internal-child-session", "external-child-session", {
+        taskId: "other-task",
+      }),
+    );
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [toAgentSessionSummary(parentSession), childSummary],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const counts =
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
+    expect(counts["external-child-session"]).toBe(1);
+    expect(counts["internal-child-session"]).toBe(1);
+
+    await harness.unmount();
+  });
+
+  test("keeps subagent pending permission count map stable when counts do not change", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithPermission = createSession("session-child-1", "external-child-1", {
+      taskId: "other-task",
+      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
+    });
+    const initialProps = createHookArgs({
+      core: {
+        activeSession: parentSession,
+        sessionsForTask: [toAgentSessionSummary(parentSession)],
+        allSessionSummaries: [
+          toAgentSessionSummary(parentSession),
+          toAgentSessionSummary(childWithPermission),
+        ],
+      },
+    });
+    const harness = createHookHarness(initialProps);
+
+    await harness.mount();
+
+    const initialCounts =
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId;
+
+    await harness.update(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithPermission),
+            toAgentSessionSummary(
+              createSession("session-child-2", "external-child-2", {
+                taskId: "other-task",
+                pendingPermissions: [],
+              }),
+            ),
+          ],
+        },
+      }),
+    );
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
+    ).toBe(initialCounts);
 
     await harness.unmount();
   });

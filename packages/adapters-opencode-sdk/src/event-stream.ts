@@ -2,6 +2,7 @@ import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/cli
 import type { AgentEvent } from "@openducktor/core";
 import { handleMessageEvent } from "./event-stream/message-events";
 import { handleSessionEvent } from "./event-stream/session-events";
+import type { SubagentSessionLink } from "./event-stream/shared";
 import { isRelevantEvent, readEventDirectory, readEventSessionId } from "./event-stream/shared";
 import type {
   EventStreamSubscriber,
@@ -20,6 +21,7 @@ type ProcessOpencodeEventInput = {
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   getSession: (sessionId: string) => SessionRecord | undefined;
+  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
 };
 
 type SubscribeGlobalEventsInput = {
@@ -40,6 +42,7 @@ type SubscribeOpencodeEventsInput = {
   emit: (sessionId: string, event: AgentEvent) => void;
   getSession: (sessionId: string) => SessionRecord | undefined;
   logEvent?: OpencodeEventLogger;
+  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
 };
 
 type LogEventInput = {
@@ -47,6 +50,10 @@ type LogEventInput = {
   event: Event;
   relevant: boolean;
   logEvent?: OpencodeEventLogger;
+};
+
+type RelevantSubscriberEventOptions = {
+  isKnownChildSessionId?: (sessionId: string) => boolean;
 };
 
 type GlobalEventStream = {
@@ -109,6 +116,9 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     now: input.now,
     emit: input.emit,
     getSession: input.getSession,
+    ...(input.resolveSubagentSessionLink
+      ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
+      : {}),
     partsById: session.partsById,
     messageRoleById: session.messageRoleById,
     pendingDeltasByPartId: session.pendingDeltasByPartId,
@@ -155,6 +165,7 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
 export const isRelevantSubscriberEvent = (
   subscriber: EventStreamSubscriber,
   event: Event,
+  options?: RelevantSubscriberEventOptions,
 ): boolean => {
   if (isRelevantEvent(subscriber.externalSessionId, event)) {
     return true;
@@ -185,6 +196,10 @@ export const isRelevantSubscriberEvent = (
       return true;
     }
 
+    if (event.type === "permission.asked" && options?.isKnownChildSessionId?.(eventSessionId)) {
+      return true;
+    }
+
     return false;
   }
 
@@ -212,6 +227,18 @@ export const subscribeOpencodeEvents = async (
           input: input.context.input,
         },
         event,
+        input.resolveSubagentSessionLink
+          ? {
+              isKnownChildSessionId: (sessionId) => {
+                const link = input.resolveSubagentSessionLink?.(sessionId);
+                return Boolean(
+                  link &&
+                    (link.parentSessionId === input.context.sessionId ||
+                      link.parentExternalSessionId === input.context.externalSessionId),
+                );
+              },
+            }
+          : undefined,
       );
       logStreamEvent({
         subscriber: {
@@ -232,6 +259,9 @@ export const subscribeOpencodeEvents = async (
         now: input.now,
         emit: input.emit,
         getSession: input.getSession,
+        ...(input.resolveSubagentSessionLink
+          ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
+          : {}),
       });
     },
   });

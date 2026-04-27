@@ -394,6 +394,8 @@ export function useAgentOrchestratorOperations({
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
+        isSessionListenerAttached: (candidateSessionId) =>
+          candidateSessionId === sessionId || unsubscribersRef.current.has(candidateSessionId),
         recordTurnActivityTimestamp,
         recordTurnUserMessageTimestamp,
         resolveTurnDurationMs,

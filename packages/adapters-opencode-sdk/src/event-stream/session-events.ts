@@ -19,6 +19,7 @@ import {
   emitSessionIdle,
   markSessionActive,
   markSessionIdle,
+  readEventSessionId,
   removePendingSubagentCorrelationKey,
 } from "./shared";
 
@@ -75,6 +76,8 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
     return true;
   }
   markSessionActive(runtime);
+  const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
+  const subagentLink = runtime.resolveSubagentSessionLink?.(childExternalSessionId);
   runtime.emit(runtime.sessionId, {
     type: "permission_required",
     sessionId: runtime.sessionId,
@@ -83,6 +86,14 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
     permission: parsed.permission,
     patterns: parsed.patterns,
     ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
+    childExternalSessionId,
+    ...(subagentLink
+      ? {
+          parentSessionId: subagentLink.parentSessionId,
+          parentExternalSessionId: subagentLink.parentExternalSessionId,
+          subagentCorrelationKey: subagentLink.subagentCorrelationKey,
+        }
+      : {}),
   });
   return true;
 };

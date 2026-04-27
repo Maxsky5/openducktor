@@ -1253,6 +1253,637 @@ describe("agent-orchestrator-session-events", () => {
     ).toBe(true);
   });
 
+  test("patches the parent subagent row when a child permission event has linkage", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-1";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Inspect repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-1",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+            },
+          ],
+        }),
+        "child-session": buildSession({
+          sessionId: "child-session",
+          externalSessionId: "external-child-session",
+          role: "build",
+        }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "child-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "permission_required",
+      sessionId: "child-session",
+      requestId: "perm-child-1",
+      permission: "read",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    });
+
+    expect(sessionsRef.current["child-session"]?.pendingPermissions).toEqual([
+      {
+        requestId: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    ]);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      sessionId: "external-child-session",
+      status: "running",
+    });
+    expect(
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId?.[
+        "external-child-session"
+      ],
+    ).toEqual([
+      {
+        requestId: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    ]);
+  });
+
+  test("patches the parent subagent row with the child external id when handled from parent context", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-parent-context";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Inspect repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-parent-context",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+            },
+          ],
+        }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "permission_required",
+      sessionId: "parent-session",
+      requestId: "perm-child-1",
+      permission: "read",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    });
+
+    expect(sessionsRef.current["parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId?.[
+        "external-child-session"
+      ],
+    ).toEqual([
+      {
+        requestId: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    ]);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      sessionId: "external-child-session",
+    });
+  });
+
+  test("auto-rejects mutating child permissions observed from a read-only parent context", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const replyPermission = mock(async () => {});
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission,
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-parent-write";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Update repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-parent-write",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Update repo",
+              },
+            },
+          ],
+        }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "permission_required",
+      sessionId: "parent-session",
+      requestId: "perm-child-write",
+      permission: "write",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    });
+    await Promise.resolve();
+
+    expect(replyPermission).toHaveBeenCalledWith({
+      sessionId: "parent-session",
+      requestId: "perm-child-write",
+      reply: "reject",
+      message: expect.any(String),
+    });
+    expect(sessionsRef.current["parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+    ).toBeUndefined();
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      sessionId: "external-child-session",
+    });
+  });
+
+  test("auto-rejects mutating child permissions from parent context when local child state has no listener", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const replyPermission = mock(async () => {});
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission,
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-detached-child-write";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Update repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-detached-child-write",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Update repo",
+              },
+            },
+          ],
+        }),
+        "child-session": buildSession({
+          sessionId: "child-session",
+          externalSessionId: "external-child-session",
+          role: "build",
+        }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      isSessionListenerAttached: (sessionId) => sessionId === "parent-session",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleParentEvent = handlers[0];
+    if (!handleParentEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleParentEvent({
+      type: "permission_required",
+      sessionId: "parent-session",
+      requestId: "perm-child-write",
+      permission: "write",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    });
+    await Promise.resolve();
+
+    expect(replyPermission).toHaveBeenCalledWith({
+      sessionId: "parent-session",
+      requestId: "perm-child-write",
+      reply: "reject",
+      message: expect.any(String),
+    });
+    expect(
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+    ).toBeUndefined();
+  });
+
+  test("lets attached child sessions own linked auto-reject replies", async () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const replyPermission = mock(async () => {});
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission,
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-child-write";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Update repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-child-write",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Update repo",
+              },
+            },
+          ],
+        }),
+        "child-session": buildSession({
+          sessionId: "child-session",
+          externalSessionId: "external-child-session",
+          role: "build",
+        }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      isSessionListenerAttached: (sessionId) =>
+        sessionId === "parent-session" || sessionId === "child-session",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "child-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      isSessionListenerAttached: (sessionId) =>
+        sessionId === "parent-session" || sessionId === "child-session",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const [handleParentEvent, handleChildEvent] = handlers;
+    if (!handleParentEvent || !handleChildEvent) {
+      throw new Error("Expected both session event handlers to be registered");
+    }
+    const event: SessionEvent = {
+      type: "permission_required",
+      sessionId: "parent-session",
+      requestId: "perm-child-write",
+      permission: "write",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    };
+
+    handleParentEvent(event);
+    expect(replyPermission).toHaveBeenCalledTimes(0);
+
+    handleChildEvent({ ...event, sessionId: "child-session" });
+    await Promise.resolve();
+
+    expect(replyPermission).toHaveBeenCalledTimes(1);
+    expect(replyPermission).toHaveBeenCalledWith({
+      sessionId: "child-session",
+      requestId: "perm-child-write",
+      reply: "reject",
+      message: expect.any(String),
+    });
+    expect(
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+    ).toBeUndefined();
+
+    handleParentEvent(event);
+
+    expect(replyPermission).toHaveBeenCalledTimes(1);
+    expect(
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+    ).toBeUndefined();
+  });
+
+  test("does not patch the parent subagent row when linked permission lacks a child external id", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-missing-child";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Inspect repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-missing-child",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+            },
+          ],
+        }),
+      },
+    };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "permission_required",
+      sessionId: "parent-session",
+      requestId: "perm-child-1",
+      permission: "read",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      subagentCorrelationKey,
+    });
+
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+    });
+    expect(parentSubagentMessage?.meta).not.toHaveProperty("sessionId");
+  });
+
   test("keeps permission pending when auto-reject reply fails", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const replyPermission = mock(
@@ -1271,6 +1902,27 @@ describe("agent-orchestrator-session-events", () => {
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
+        "parent-session": buildSession({
+          sessionId: "parent-session",
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: "subagent:part:assistant-parent:subtask-fail",
+              role: "system",
+              content: "Subagent (spec): Inspect repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-fail",
+                correlationKey: "part:assistant-parent:subtask-fail",
+                status: "running",
+                agent: "spec",
+                prompt: "Inspect repo",
+              },
+            },
+          ],
+        }),
         "session-1": buildSession({ role: "spec" }),
       },
     };
@@ -1316,6 +1968,10 @@ describe("agent-orchestrator-session-events", () => {
       patterns: ["edit file"],
       metadata: { tool: "edit" },
       timestamp: "2026-02-22T08:00:05.000Z",
+      parentSessionId: "parent-session",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-1",
+      subagentCorrelationKey: "part:assistant-parent:subtask-fail",
     });
 
     await Promise.resolve();
@@ -1329,6 +1985,12 @@ describe("agent-orchestrator-session-events", () => {
         message.content.includes("Automatic permission rejection failed"),
       ),
     ).toBe(true);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: "part:assistant-parent:subtask-fail",
+      sessionId: "external-1",
+    });
   });
 
   test("keeps permission pending when auto-reject prompt rendering fails", async () => {

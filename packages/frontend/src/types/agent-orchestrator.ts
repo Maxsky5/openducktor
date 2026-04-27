@@ -179,6 +179,8 @@ export type AgentSessionState = {
   contextUsage?: AgentSessionContextUsage | null;
   pendingPermissions: AgentPermissionRequest[];
   pendingQuestions: AgentQuestionRequest[];
+  /** Live-only parent-session overlay keyed by child runtime session id. */
+  subagentPendingPermissionsBySessionId?: Record<string, AgentPermissionRequest[]> | undefined;
   todos: AgentSessionTodoItem[];
   modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;

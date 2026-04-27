@@ -439,6 +439,10 @@ export type AgentEvent =
       permission: string;
       patterns: string[];
       metadata?: Record<string, unknown>;
+      parentSessionId?: string;
+      parentExternalSessionId?: string;
+      childExternalSessionId?: string;
+      subagentCorrelationKey?: string;
     }
   | {
       type: "question_required";

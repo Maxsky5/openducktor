@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
@@ -30,6 +30,7 @@ type AgentStudioCoreContext = {
   taskId: string;
   role: AgentRole;
   selectedTask: TaskCard | null;
+  allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
@@ -39,6 +40,70 @@ type AgentStudioCoreContext = {
   isWaitingForRuntimeReadiness: boolean;
   isSessionHistoryHydrationFailed: boolean;
   contextSwitchVersion: number;
+};
+
+const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS: Record<string, number> = Object.freeze({});
+
+const arePermissionCountMapsEqual = (
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean => {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => left[key] === right[key]);
+};
+
+const useStablePendingPermissionCounts = (
+  sessions: AgentSessionSummary[],
+  subagentPendingPermissionsBySessionId:
+    | AgentSessionState["subagentPendingPermissionsBySessionId"]
+    | undefined,
+): Record<string, number> => {
+  const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS);
+  return useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const session of sessions) {
+      const pendingPermissionCount = session.pendingPermissions.length;
+      if (pendingPermissionCount > 0) {
+        next[session.sessionId] = pendingPermissionCount;
+        if (session.externalSessionId !== session.sessionId) {
+          next[session.externalSessionId] = pendingPermissionCount;
+        }
+      }
+    }
+
+    if (subagentPendingPermissionsBySessionId) {
+      for (const [sessionId, pendingPermissions] of Object.entries(
+        subagentPendingPermissionsBySessionId,
+      )) {
+        const pendingPermissionCount = pendingPermissions.length;
+        if (pendingPermissionCount > 0) {
+          next[sessionId] = pendingPermissionCount;
+          const matchingSession = sessions.find(
+            (session) => session.sessionId === sessionId || session.externalSessionId === sessionId,
+          );
+          if (matchingSession) {
+            next[matchingSession.sessionId] = pendingPermissionCount;
+            next[matchingSession.externalSessionId] = pendingPermissionCount;
+          }
+        }
+      }
+    }
+
+    const nextCounts =
+      Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS;
+    const previous = previousRef.current;
+    if (arePermissionCountMapsEqual(previous, nextCounts)) {
+      return previous;
+    }
+
+    previousRef.current = nextCounts;
+    return nextCounts;
+  }, [sessions, subagentPendingPermissionsBySessionId]);
 };
 
 type AgentStudioTaskTabsContext = {
@@ -145,6 +210,10 @@ export function useAgentStudioPageModels({
   agentChatModel: AgentChatModel;
 } {
   const workflowSessionsForTask = core.sessionsForTask;
+  const subagentPendingPermissionCountBySessionId = useStablePendingPermissionCounts(
+    core.allSessionSummaries,
+    core.activeSession?.subagentPendingPermissionsBySessionId,
+  );
   const workflowActiveSessionId = core.activeSession?.sessionId ?? null;
   const workflowActiveSessionRole = core.activeSession?.role ?? null;
   const workflowActiveSession = useMemo(
@@ -448,6 +517,7 @@ export function useAgentStudioPageModels({
     permissions: permissionsModel,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
+    subagentPendingPermissionCountBySessionId,
   });
   const composerModel = surfaceModel.composer;
 

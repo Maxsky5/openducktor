@@ -230,6 +230,7 @@ describe("useAgentStudioModelSelection", () => {
     });
     const summary = {
       sessionId: "session-1",
+      externalSessionId: "external-1",
       taskId: "task-1",
       role: "spec" as const,
       scenario: "spec_initial" as const,
@@ -264,6 +265,7 @@ describe("useAgentStudioModelSelection", () => {
   test("keeps summary selection available while the hydrated session is missing", () => {
     const summary = {
       sessionId: "session-1",
+      externalSessionId: "external-1",
       taskId: "task-1",
       role: "spec" as const,
       scenario: "spec_initial" as const,
@@ -407,6 +409,7 @@ describe("useAgentStudioModelSelection", () => {
         activeSession: null,
         activeSessionSummary: {
           sessionId: "session-1",
+          externalSessionId: "external-1",
           taskId: "task-1",
           role: "spec",
           scenario: "spec_initial",
