@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { KanbanCollapsedColumn } from "@/components/features/kanban/kanban-collapsed-column";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { KanbanBoardLoadingShell } from "./kanban-board-loading-shell";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
@@ -57,9 +58,11 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
           showBlockingLoader ? "opacity-0" : "opacity-100",
         )}
       >
-        <div className="flex min-h-full min-w-max items-start gap-4 pr-4">
-          {model.columns.map((column) => renderKanbanColumn(column, model))}
-        </div>
+        <TooltipProvider delayDuration={120}>
+          <div className="flex min-h-full min-w-max items-start gap-4 pr-4">
+            {model.columns.map((column) => renderKanbanColumn(column, model))}
+          </div>
+        </TooltipProvider>
       </div>
 
       {showBlockingLoader ? (

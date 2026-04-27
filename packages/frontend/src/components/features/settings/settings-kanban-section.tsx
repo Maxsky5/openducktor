@@ -90,7 +90,8 @@ export function SettingsKanbanSection({
                 return;
               }
               if (!isKanbanEmptyColumnDisplay(value)) {
-                throw new Error(`Unsupported Kanban empty-column display mode: ${value}`);
+                console.error(`Unsupported Kanban empty-column display mode: ${value}`);
+                return;
               }
 
               onUpdateKanban((current) => ({
