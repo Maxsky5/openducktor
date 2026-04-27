@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type {
@@ -243,25 +244,33 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
   }
 
   const pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId = {};
+  const scannedChildExternalSessionIds: string[] = [];
   await Promise.all(
     childExternalSessionIds.map(async (childExternalSessionId) => {
-      const snapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(
-        {
-          ...record,
-          sessionId: childExternalSessionId,
-          externalSessionId: childExternalSessionId,
-        },
-        runtimeResolution,
-      );
-      if (snapshot && snapshot.pendingPermissions.length > 0) {
-        pendingPermissionsByChildExternalSessionId[childExternalSessionId] =
-          snapshot.pendingPermissions;
+      try {
+        const snapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(
+          {
+            ...record,
+            sessionId: childExternalSessionId,
+            externalSessionId: childExternalSessionId,
+          },
+          runtimeResolution,
+        );
+        scannedChildExternalSessionIds.push(childExternalSessionId);
+        if (snapshot && snapshot.pendingPermissions.length > 0) {
+          pendingPermissionsByChildExternalSessionId[childExternalSessionId] =
+            snapshot.pendingPermissions;
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to hydrate pending permissions for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
+        );
       }
     }),
   );
 
   return toHydratedSubagentPendingPermissionOverlay(
-    childExternalSessionIds,
+    scannedChildExternalSessionIds,
     pendingPermissionsByChildExternalSessionId,
   );
 };
