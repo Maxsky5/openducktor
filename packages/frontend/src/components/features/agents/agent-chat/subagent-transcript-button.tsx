@@ -23,15 +23,20 @@ type SubagentTranscriptButtonProps = {
 const buildTranscriptRequest = (
   taskId: string,
   sessionId: string,
-  fallbackSession?: OpenAgentSessionTranscriptRequest["fallbackSession"],
-): OpenAgentSessionTranscriptRequest => ({
-  taskId,
-  sessionId,
-  title: "Subagent activity",
-  description: "View what this subagent did.",
-  historyPreludeMode: "none",
-  ...(fallbackSession ? { fallbackSession } : {}),
-});
+  subagentRuntime: Extract<
+    OpenAgentSessionTranscriptRequest,
+    { source: "subagent_session" }
+  >["subagentRuntime"],
+): OpenAgentSessionTranscriptRequest => {
+  return {
+    taskId,
+    sessionId,
+    title: "Subagent activity",
+    description: "View what this subagent did.",
+    source: "subagent_session",
+    subagentRuntime,
+  };
+};
 
 export function SubagentTranscriptButton({
   taskId,
@@ -45,27 +50,27 @@ export function SubagentTranscriptButton({
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
   const sessionId = meta.sessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
-  const fallbackSession =
+  const subagentRuntime =
     taskId &&
     sessionRole &&
     sessionRuntimeKind &&
     sessionWorkingDirectory &&
     sessionWorkingDirectory.trim().length > 0
       ? {
-          role: sessionRole,
+          parentRole: sessionRole,
           runtimeKind: sessionRuntimeKind,
           workingDirectory: sessionWorkingDirectory,
         }
       : undefined;
 
-  if (!taskId || !sessionId || !openTranscript) {
+  if (!taskId || !sessionId || !openTranscript || !subagentRuntime) {
     return null;
   }
 
   const handleOpen = (event: MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
     event.stopPropagation();
-    openTranscript(buildTranscriptRequest(taskId, sessionId, fallbackSession));
+    openTranscript(buildTranscriptRequest(taskId, sessionId, subagentRuntime));
   };
 
   return (

@@ -229,7 +229,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("hydrates a fallback subagent session record when no persisted records exist", async () => {
+  test("hydrates a runtime subagent transcript when no workflow session record exists", async () => {
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -244,8 +244,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-subagent-1",
-        fallbackSession: {
-          role: "build",
+        subagentRuntime: {
+          parentRole: "build",
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
         },
@@ -280,10 +280,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("suppresses parent workflow prelude for subagent transcript requests even when records exist", async () => {
-    const subagentRecord: AgentSessionRecord = {
-      sessionId: "session-subagent-1",
-      externalSessionId: "session-subagent-1",
+  test("does not pass parent workflow records into subagent runtime transcript hydration", async () => {
+    const parentRecord: AgentSessionRecord = {
+      sessionId: "session-parent-1",
+      externalSessionId: "external-parent-1",
       role: "build",
       scenario: "build_implementation_start",
       startedAt: "2026-02-22T12:01:00.000Z",
@@ -305,10 +305,82 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         isOpen: true,
         taskId: "TASK-1",
         sessionId: "session-subagent-1",
-        persistedRecords: [subagentRecord],
+        persistedRecords: [parentRecord],
+        historyPreludeMode: "task_context",
+        subagentRuntime: {
+          parentRole: "build",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        },
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "TASK-1",
+        sessionId: "session-subagent-1",
         historyPreludeMode: "none",
-        fallbackSession: {
-          role: "build",
+        persistedRecords: [
+          {
+            sessionId: "session-subagent-1",
+            externalSessionId: "session-subagent-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            startedAt: "1970-01-01T00:00:00.000Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo-a",
+            selectedModel: null,
+          },
+        ],
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps only the requested subagent record when mixed workflow records are provided", async () => {
+    const parentRecord: AgentSessionRecord = {
+      sessionId: "session-parent-1",
+      externalSessionId: "external-parent-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T12:01:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      selectedModel: null,
+    };
+    const subagentRecord: AgentSessionRecord = {
+      sessionId: "session-subagent-1",
+      externalSessionId: "session-subagent-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T12:02:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      selectedModel: null,
+    };
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-subagent-1",
+        persistedRecords: [parentRecord, subagentRecord],
+        subagentRuntime: {
+          parentRole: "build",
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
         },

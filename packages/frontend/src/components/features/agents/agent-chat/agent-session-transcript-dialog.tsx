@@ -20,8 +20,8 @@ type AgentSessionTranscriptDialogProps = {
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
   historyPreludeMode?: AgentSessionHistoryPreludeMode;
-  fallbackSession?: {
-    role: AgentRole;
+  subagentRuntime?: {
+    parentRole: AgentRole;
     runtimeKind: RuntimeKind;
     workingDirectory: string;
   };
@@ -38,7 +38,7 @@ export function AgentSessionTranscriptDialog({
   sessionId,
   persistedRecords,
   historyPreludeMode,
-  fallbackSession,
+  subagentRuntime,
   isResolvingRequestedSession,
   open,
   onOpenChange,
@@ -52,7 +52,7 @@ export function AgentSessionTranscriptDialog({
     sessionId,
     ...(persistedRecords ? { persistedRecords } : {}),
     ...(historyPreludeMode ? { historyPreludeMode } : {}),
-    ...(fallbackSession ? { fallbackSession } : {}),
+    ...(subagentRuntime ? { subagentRuntime } : {}),
     isResolvingRequestedSession,
   });
   const resolvedTitle = resolveAgentSessionDialogTitle(title, model.thread.session?.title);

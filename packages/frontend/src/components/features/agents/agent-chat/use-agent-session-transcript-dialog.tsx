@@ -21,18 +21,26 @@ import { host } from "@/state/operations/host";
 import type { AgentSessionHistoryPreludeMode } from "@/types/agent-orchestrator";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 
-export type OpenAgentSessionTranscriptRequest = {
+type OpenAgentSessionTranscriptBaseRequest = {
   taskId: string;
   sessionId: string;
   title?: string;
   description?: string;
-  historyPreludeMode?: AgentSessionHistoryPreludeMode;
-  fallbackSession?: {
-    role: AgentRole;
-    runtimeKind: RuntimeKind;
-    workingDirectory: string;
-  };
 };
+
+export type OpenAgentSessionTranscriptRequest =
+  | (OpenAgentSessionTranscriptBaseRequest & {
+      source?: "workflow_session";
+      historyPreludeMode?: AgentSessionHistoryPreludeMode;
+    })
+  | (OpenAgentSessionTranscriptBaseRequest & {
+      source: "subagent_session";
+      subagentRuntime: {
+        parentRole: AgentRole;
+        runtimeKind: RuntimeKind;
+        workingDirectory: string;
+      };
+    });
 
 type AgentSessionTranscriptDialogContextValue = {
   openSessionTranscript: (request: OpenAgentSessionTranscriptRequest) => void;
@@ -53,6 +61,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
   const repoPath = activeWorkspace?.repoPath ?? null;
   const requestedTaskId = request?.taskId?.trim() ?? "";
   const sessionId = request?.sessionId ?? null;
+  const isSubagentSessionRequest = request?.source === "subagent_session";
   const activeTranscriptSession = useAgentSession(sessionId);
   const open = request !== null;
   const requestedTask = useMemo(
@@ -76,7 +85,11 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     );
   }, [requestedTask, sessionId, tasks]);
   const needsAuthoritativeSessionLookup =
-    open && repoPath !== null && sessionId !== null && !locallyResolvedTask;
+    open &&
+    repoPath !== null &&
+    sessionId !== null &&
+    !locallyResolvedTask &&
+    !isSubagentSessionRequest;
   const requestedTaskCandidateIds = useMemo(
     () => (requestedTaskId ? [requestedTaskId] : []),
     [requestedTaskId],
@@ -151,6 +164,10 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
       return requestedTaskId;
     }
 
+    if (isSubagentSessionRequest) {
+      return requestedTaskId;
+    }
+
     if (locallyResolvedTask) {
       return locallyResolvedTask.id;
     }
@@ -170,12 +187,16 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     return requestedTaskId;
   }, [
     locallyResolvedTask,
+    isSubagentSessionRequest,
     requestedTaskHasSession,
     requestedTaskId,
     sessionId,
     workspaceSessionRecordsByTaskId,
   ]);
   const persistedRecords = useMemo(() => {
+    if (isSubagentSessionRequest) {
+      return undefined;
+    }
     if (!resolvedTaskId) {
       return undefined;
     }
@@ -187,6 +208,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     }
     return workspaceSessionRecordsByTaskId?.[resolvedTaskId];
   }, [
+    isSubagentSessionRequest,
     locallyResolvedTask,
     requestedTaskHasSession,
     requestedTaskId,
@@ -228,8 +250,14 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
         taskId={resolvedTaskId}
         sessionId={sessionId}
         {...(persistedRecords ? { persistedRecords } : {})}
-        {...(request?.historyPreludeMode ? { historyPreludeMode: request.historyPreludeMode } : {})}
-        {...(request?.fallbackSession ? { fallbackSession: request.fallbackSession } : {})}
+        {...(request?.source === "subagent_session"
+          ? { historyPreludeMode: "none" as const }
+          : request?.historyPreludeMode
+            ? { historyPreludeMode: request.historyPreludeMode }
+            : {})}
+        {...(request?.source === "subagent_session"
+          ? { subagentRuntime: request.subagentRuntime }
+          : {})}
         isResolvingRequestedSession={isResolvingRequestedSession}
         open={open}
         onOpenChange={(nextOpen) => {

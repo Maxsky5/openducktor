@@ -21,6 +21,9 @@ describe("SubagentTranscriptButton", () => {
     render(
       <SubagentTranscriptButton
         taskId="task-1"
+        sessionRole="build"
+        sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -37,11 +40,16 @@ describe("SubagentTranscriptButton", () => {
       sessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
-      historyPreludeMode: "none",
+      source: "subagent_session",
+      subagentRuntime: {
+        parentRole: "build",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+      },
     });
   });
 
-  test("marks fallback subagent transcript requests as prelude-free", () => {
+  test("marks runtime-backed subagent transcript requests as subagent sessions", () => {
     const onOpenTranscript = mock(() => {});
 
     render(
@@ -62,9 +70,9 @@ describe("SubagentTranscriptButton", () => {
       sessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
-      historyPreludeMode: "none",
-      fallbackSession: {
-        role: "build",
+      source: "subagent_session",
+      subagentRuntime: {
+        parentRole: "build",
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
       },
@@ -75,6 +83,9 @@ describe("SubagentTranscriptButton", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
         taskId={null}
+        sessionRole="build"
+        sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
@@ -88,7 +99,22 @@ describe("SubagentTranscriptButton", () => {
     rerender(
       <SubagentTranscriptButton
         taskId="task-1"
+        sessionRole="build"
+        sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
         meta={metaWithoutSessionId}
+        onOpenTranscript={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
+  });
+
+  test("does not downgrade subagent cards to workflow transcripts when runtime context is unavailable", () => {
+    render(
+      <SubagentTranscriptButton
+        taskId="task-1"
+        meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
     );
@@ -105,6 +131,9 @@ describe("SubagentTranscriptButton", () => {
       render(
         <SubagentTranscriptButton
           taskId="task-1"
+          sessionRole="build"
+          sessionRuntimeKind="opencode"
+          sessionWorkingDirectory="/repo-a"
           meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
         />,
@@ -123,6 +152,9 @@ describe("SubagentTranscriptButton", () => {
     render(
       <SubagentTranscriptButton
         taskId="task-1"
+        sessionRole="build"
+        sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,

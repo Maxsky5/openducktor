@@ -30,20 +30,22 @@ const DEFAULT_SHOW_THINKING_MESSAGES = false;
 const SYNTHETIC_HISTORY_PRELUDE_MODE: AgentSessionHistoryPreludeMode = "none";
 const EMPTY_PENDING_PERMISSIONS = Object.freeze([]) as unknown as AgentPermissionRequest[];
 const NOOP_SUBMIT_ANSWERS = async (_requestId: string, _answers: string[][]): Promise<void> => {};
-const toFallbackPersistedRecord = ({
+const toSubagentRuntimeTranscriptRecord = ({
   sessionId,
-  fallbackSession,
+  subagentRuntime,
 }: {
   sessionId: string;
-  fallbackSession: NonNullable<UseReadonlySessionTranscriptSurfaceModelArgs["fallbackSession"]>;
+  subagentRuntime: NonNullable<UseReadonlySessionTranscriptSurfaceModelArgs["subagentRuntime"]>;
 }): AgentSessionRecord => ({
   sessionId,
   externalSessionId: sessionId,
-  role: fallbackSession.role,
-  scenario: defaultAgentScenarioForRole(fallbackSession.role),
+  // AgentSessionRecord is the runtime-hydration handle available today. For subagent runtime
+  // transcripts, these workflow fields must never drive a task prelude or generated system prompt.
+  role: subagentRuntime.parentRole,
+  scenario: defaultAgentScenarioForRole(subagentRuntime.parentRole),
   startedAt: SYNTHETIC_SESSION_STARTED_AT,
-  runtimeKind: fallbackSession.runtimeKind,
-  workingDirectory: fallbackSession.workingDirectory,
+  runtimeKind: subagentRuntime.runtimeKind,
+  workingDirectory: subagentRuntime.workingDirectory,
   selectedModel: null,
 });
 
@@ -54,8 +56,8 @@ type UseReadonlySessionTranscriptSurfaceModelArgs = {
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
   historyPreludeMode?: AgentSessionHistoryPreludeMode;
-  fallbackSession?: {
-    role: AgentRole;
+  subagentRuntime?: {
+    parentRole: AgentRole;
     runtimeKind: RuntimeKind;
     workingDirectory: string;
   };
@@ -71,7 +73,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   sessionId,
   persistedRecords,
   historyPreludeMode: requestedHistoryPreludeMode,
-  fallbackSession,
+  subagentRuntime,
   isResolvingRequestedSession,
 }: UseReadonlySessionTranscriptSurfaceModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -165,27 +167,32 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (!sessionId) {
       return false;
     }
-    const currentRecords = persistedRecords ?? [];
+    const currentRecords = subagentRuntime
+      ? (persistedRecords ?? []).filter((record) => record.sessionId === sessionId)
+      : (persistedRecords ?? []);
     const hasRequestedRecord = currentRecords.some((record) => record.sessionId === sessionId);
     return (
       !hasRequestedRecord &&
-      Boolean(fallbackSession) &&
-      (fallbackSession?.workingDirectory.trim().length ?? 0) > 0
+      Boolean(subagentRuntime) &&
+      (subagentRuntime?.workingDirectory.trim().length ?? 0) > 0
     );
-  }, [fallbackSession, persistedRecords, sessionId]);
+  }, [persistedRecords, sessionId, subagentRuntime]);
   const effectivePersistedRecords = useMemo(() => {
     if (!sessionId) {
       return persistedRecords;
     }
-    const currentRecords = persistedRecords ?? [];
-    if (!usesSyntheticRequestedRecord || !fallbackSession) {
-      return persistedRecords;
+    const currentRecords = subagentRuntime
+      ? (persistedRecords ?? []).filter((record) => record.sessionId === sessionId)
+      : (persistedRecords ?? []);
+    if (!usesSyntheticRequestedRecord || !subagentRuntime) {
+      return subagentRuntime ? currentRecords : persistedRecords;
     }
-    return [...currentRecords, toFallbackPersistedRecord({ sessionId, fallbackSession })];
-  }, [fallbackSession, persistedRecords, sessionId, usesSyntheticRequestedRecord]);
+    return [...currentRecords, toSubagentRuntimeTranscriptRecord({ sessionId, subagentRuntime })];
+  }, [persistedRecords, sessionId, subagentRuntime, usesSyntheticRequestedRecord]);
   const historyPreludeMode =
-    requestedHistoryPreludeMode ??
-    (usesSyntheticRequestedRecord ? SYNTHETIC_HISTORY_PRELUDE_MODE : undefined);
+    subagentRuntime || usesSyntheticRequestedRecord
+      ? SYNTHETIC_HISTORY_PRELUDE_MODE
+      : requestedHistoryPreludeMode;
   const hasPersistedSessionRecord = useMemo(
     () =>
       Boolean(

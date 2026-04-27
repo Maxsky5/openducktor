@@ -18,6 +18,11 @@ let latestDialogProps: {
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
   historyPreludeMode?: "task_context" | "none";
+  subagentRuntime?: {
+    parentRole: "spec" | "planner" | "build" | "qa";
+    runtimeKind: "opencode";
+    workingDirectory: string;
+  };
   isResolvingRequestedSession: boolean;
   title: string;
   description: string;
@@ -119,6 +124,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
         sessionId: string | null;
         persistedRecords?: AgentSessionRecord[];
         historyPreludeMode?: "task_context" | "none";
+        subagentRuntime?: {
+          parentRole: "spec" | "planner" | "build" | "qa";
+          runtimeKind: "opencode";
+          workingDirectory: string;
+        };
         isResolvingRequestedSession: boolean;
         title: string;
         description: string;
@@ -269,7 +279,28 @@ describe("AgentSessionTranscriptDialogHost", () => {
     ]);
   });
 
-  test("passes prelude mode requests through to the transcript dialog", async () => {
+  test("does not resolve subagent runtime transcripts as parent workflow session records", async () => {
+    const parentRecord: AgentSessionRecord = {
+      sessionId: "session-parent-1",
+      externalSessionId: "external-parent-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-04-20T18:06:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      selectedModel: null,
+    };
+    tasks = [
+      createTask({
+        id: "task-parent",
+        title: "Parent task",
+        agentSessions: [parentRecord],
+      }),
+    ];
+    agentSessionsListBulk.mockImplementation(async () => ({
+      "task-parent": [parentRecord],
+    }));
+
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
       "./use-agent-session-transcript-dialog"
     );
@@ -283,7 +314,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
             openSessionTranscript({
               taskId: "task-parent",
               sessionId: "session-child-1",
-              historyPreludeMode: "none",
+              source: "subagent_session",
+              subagentRuntime: {
+                parentRole: "build",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo-a",
+              },
             });
           }}
         >
@@ -302,8 +338,16 @@ describe("AgentSessionTranscriptDialogHost", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => {
-      expect(latestDialogProps?.historyPreludeMode).toBe("none");
+      expect(latestDialogProps?.taskId).toBe("task-parent");
+      expect(latestDialogProps?.persistedRecords).toBeUndefined();
+      expect(latestDialogProps?.subagentRuntime).toEqual({
+        parentRole: "build",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+      });
+      expect(latestDialogProps?.isResolvingRequestedSession).toBe(false);
     });
+    expect(agentSessionsListBulk).not.toHaveBeenCalled();
   });
 
   test("removes transcript-only sessions when the dialog closes", async () => {
