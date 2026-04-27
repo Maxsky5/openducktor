@@ -12,8 +12,9 @@ const readShellClientValue = (propertyKey: PropertyKey): unknown => {
   }
 
   const clientObject = client as object;
-  const existingBindings = shellClientMethodBindings.get(clientObject) ?? new Map();
-  if (!shellClientMethodBindings.has(clientObject)) {
+  let existingBindings = shellClientMethodBindings.get(clientObject);
+  if (!existingBindings) {
+    existingBindings = new Map();
     shellClientMethodBindings.set(clientObject, existingBindings);
   }
   const existingBinding = existingBindings.get(propertyKey);

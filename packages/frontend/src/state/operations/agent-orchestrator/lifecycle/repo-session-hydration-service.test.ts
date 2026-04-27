@@ -190,11 +190,10 @@ const withSuppressedExpectedConsoleErrors = async ({
 
   try {
     await run();
+    expect(suppressedCount).toBe(expectedCount);
   } finally {
     console.error = originalError;
   }
-
-  expect(suppressedCount).toBe(expectedCount);
 };
 
 const withSuppressedExpectedReconcileRetryLogs = (

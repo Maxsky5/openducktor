@@ -307,6 +307,9 @@ export const createHydrationRuntimeResolver = ({
       !canUseWorkspaceRuntime &&
       normalizeWorkingDirectory(workingDirectory) === normalizedRepoPath
     ) {
+      // Exact non-workspace repo-root runtimes are handled above. Preloaded
+      // connections do not carry runtime role metadata, so build/QA records must
+      // fail here instead of accepting a role-less repo-root workspace route.
       return {
         ok: false,
         runtimeKind,
