@@ -6,7 +6,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
-import { toErrorMessage, toToolError, toToolResult } from "./tool-results";
+import { OdtToolError, toErrorMessage, toToolError, toToolResult } from "./tool-results";
 
 const parseCliArgs = (argv: string[]): OdtStoreContext => {
   const next: OdtStoreContext = {};
@@ -93,7 +93,7 @@ type RegisteredToolSpecs = {
 };
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
-const FORBIDDEN_WORKSPACE_ID_SCHEMA = z.never().optional().describe("Do not provide.");
+const FORBIDDEN_WORKSPACE_ID_SCHEMA = z.unknown().optional().describe("Do not provide.");
 const SHARED_SERVER_INSTRUCTIONS =
   "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).";
 
@@ -119,7 +119,20 @@ const rejectForbiddenWorkspaceIdInput = (
     WORKSPACE_SCOPED_TOOL_NAMES.has(toolName) &&
     hasOwnWorkspaceIdInput(input)
   ) {
-    throw new Error("workspaceId is not allowed in workflow-scoped tool calls.");
+    throw new OdtToolError(
+      "ODT_WORKSPACE_SCOPE_VIOLATION",
+      `Invalid arguments for tool ${toolName}: workspaceId is not allowed in workflow-scoped tool calls.`,
+      {
+        toolName,
+        issues: [
+          {
+            path: ["workspaceId"],
+            code: "forbidden_workspace_id",
+            message: "workspaceId is not allowed in workflow-scoped tool calls.",
+          },
+        ],
+      },
+    );
   }
 };
 

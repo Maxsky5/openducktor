@@ -9,6 +9,7 @@ import {
 } from "@openducktor/contracts";
 import type { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
+import { OdtToolError } from "./tool-results";
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
 type ToolOutput<Name extends OdtToolName> = z.infer<
@@ -51,12 +52,57 @@ const toBridgeErrorMessage = async (response: Response, action: string): Promise
   }
 };
 
+const toIssueDetails = (
+  error: z.ZodError,
+): Array<{
+  path: Array<string | number>;
+  message: string;
+  code: string;
+}> => {
+  return error.issues.map((issue) => ({
+    path: issue.path.filter((entry): entry is string | number => {
+      return typeof entry === "string" || typeof entry === "number";
+    }),
+    message: issue.message,
+    code: issue.code,
+  }));
+};
+
+const parseHostResponse = <Schema extends z.ZodType>(
+  schema: Schema,
+  payload: unknown,
+  command: string,
+): z.infer<Schema> => {
+  const parsed = schema.safeParse(payload);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw new OdtToolError(
+    "ODT_HOST_RESPONSE_INVALID",
+    `Invalid response from host ${command}: ${parsed.error.message}`,
+    { command, issues: toIssueDetails(parsed.error) },
+  );
+};
+
+const createBridgeHttpError = async (response: Response, action: string): Promise<OdtToolError> => {
+  return new OdtToolError("ODT_HOST_BRIDGE_ERROR", await toBridgeErrorMessage(response, action), {
+    action,
+    status: response.status,
+    statusText: response.statusText,
+  });
+};
+
 const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
   const missing = Object.keys(ODT_TOOL_SCHEMAS).filter(
     (toolName) => !ready.toolNames.includes(toolName),
   );
   if (missing.length > 0) {
-    throw new Error(`Rust host bridge is missing required MCP tools: ${missing.join(", ")}`);
+    throw new OdtToolError(
+      "ODT_HOST_RESPONSE_INVALID",
+      `Rust host bridge is missing required MCP tools: ${missing.join(", ")}`,
+      { missingToolNames: missing },
+    );
   }
 };
 
@@ -74,14 +120,18 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   async ready(): Promise<OdtHostBridgeReady> {
     await this.checkHealth();
     const payload = await this.invokeJson(READY_TOOL_NAME, {});
-    const ready = odtHostBridgeReadySchema.parse(payload);
+    const ready = parseHostResponse(odtHostBridgeReadySchema, payload, READY_TOOL_NAME);
     assertToolCoverage(ready);
     return ready;
   }
 
   async getWorkspaces(): Promise<GetWorkspacesResult> {
     const payload = await this.invokeJson("odt_get_workspaces", {});
-    return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_get_workspaces.parse(payload);
+    return parseHostResponse(
+      ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_get_workspaces,
+      payload,
+      "odt_get_workspaces",
+    );
   }
 
   async call<Name extends WorkspaceScopedToolName>(
@@ -93,7 +143,11 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       ...input,
       workspaceId,
     });
-    return ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName].parse(payload) as ToolOutput<Name>;
+    return parseHostResponse(
+      ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName],
+      payload,
+      toolName,
+    ) as ToolOutput<Name>;
   }
 
   private async checkHealth(): Promise<void> {
@@ -105,7 +159,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     });
 
     if (!response.ok) {
-      throw new Error(await toBridgeErrorMessage(response, "host health check"));
+      throw await createBridgeHttpError(response, "host health check");
     }
   }
 
@@ -123,7 +177,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     });
 
     if (!response.ok) {
-      throw new Error(await toBridgeErrorMessage(response, `host ${command}`));
+      throw await createBridgeHttpError(response, `host ${command}`);
     }
 
     return response.json();

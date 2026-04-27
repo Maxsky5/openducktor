@@ -140,11 +140,31 @@ export const WorkflowToolMessage = ({
   const isCancelled = lifecyclePhase === "cancelled";
   const isSuccessfulCompletion = lifecyclePhase === "completed";
   const isExecuting = lifecyclePhase === "executing";
-  const statusLabel =
-    lifecyclePhase === "queued" ? "QUEUED" : lifecyclePhase === "executing" ? "RUNNING" : null;
-  const statusClassName = isExecuting
-    ? "border-info-border bg-info-surface text-info-surface-foreground"
-    : "border-pending-border bg-pending-surface text-pending-surface-foreground";
+  const statusLabel = (() => {
+    if (lifecyclePhase === "queued") {
+      return "QUEUED";
+    }
+    if (lifecyclePhase === "executing") {
+      return "RUNNING";
+    }
+    if (lifecyclePhase === "failed") {
+      return "FAILED";
+    }
+    if (lifecyclePhase === "cancelled") {
+      return "CANCELLED";
+    }
+    return null;
+  })();
+  let statusClassName = "border-pending-border bg-pending-surface text-pending-surface-foreground";
+  if (isExecuting) {
+    statusClassName = "border-info-border bg-info-surface text-info-surface-foreground";
+  } else if (isFailure) {
+    statusClassName =
+      "border-destructive-border bg-destructive-surface text-destructive-surface-foreground";
+  } else if (isCancelled) {
+    statusClassName =
+      "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground";
+  }
 
   return (
     <div className="space-y-2">

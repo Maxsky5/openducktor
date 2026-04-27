@@ -80,25 +80,85 @@ const readToolOutputText = (value: unknown): string | undefined => {
   return outputTextFromMcpPayload(value) ?? toDisplayText(value);
 };
 
-const readStructuredToolError = (value: unknown): string | undefined => {
+const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
+
+const readErrorValueMessage = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  return readTrimmedString(record, ["message"]);
+};
+
+const readEnvelopeErrorMessage = (value: unknown): string | undefined => {
   const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
   if (!record) {
     return undefined;
   }
 
+  if (readUnknownProp(record, "ok") !== false) {
+    return undefined;
+  }
+
+  return readErrorValueMessage(readUnknownProp(record, "error")) ?? "Tool failed";
+};
+
+const readMcpTransportError = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return MCP_TRANSPORT_ERROR_PREFIX.test(trimmed) ? trimmed : undefined;
+};
+
+const readMcpContentTextError = (value: unknown): string | undefined => {
+  const text = outputTextFromMcpPayload(value);
+  if (!text) {
+    return undefined;
+  }
+
+  return readEnvelopeErrorMessage(text) ?? readMcpTransportError(text);
+};
+
+const readStructuredToolError = (value: unknown): string | undefined => {
+  const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
+  const contentTextError = readMcpContentTextError(value);
+  const transportError = readMcpTransportError(value);
+  if (!record) {
+    return contentTextError ?? transportError;
+  }
+
   const isError = readUnknownProp(record, "isError");
   const directError = readUnknownProp(record, "error");
-  const directErrorMessage = readUnknownProp(directError, "message");
+  const directErrorMessage = readErrorValueMessage(directError);
   const structuredContent = readUnknownProp(record, "structuredContent");
   const structuredError = readUnknownProp(structuredContent, "error");
-  const structuredErrorMessage = readUnknownProp(structuredError, "message");
+  const structuredErrorMessage = readErrorValueMessage(structuredError);
   const structuredOk = readUnknownProp(structuredContent, "ok");
+  const flattenedEnvelopeMessage = readEnvelopeErrorMessage(record);
+  const structuredEnvelopeMessage = readEnvelopeErrorMessage(structuredContent);
 
-  if (typeof directErrorMessage === "string" && directErrorMessage.trim().length > 0) {
-    return directErrorMessage.trim();
+  if (directErrorMessage) {
+    return directErrorMessage;
   }
-  if (typeof structuredErrorMessage === "string" && structuredErrorMessage.trim().length > 0) {
-    return structuredErrorMessage.trim();
+  if (structuredErrorMessage) {
+    return structuredErrorMessage;
+  }
+  if (flattenedEnvelopeMessage) {
+    return flattenedEnvelopeMessage;
+  }
+  if (structuredEnvelopeMessage) {
+    return structuredEnvelopeMessage;
+  }
+  if (contentTextError || transportError) {
+    return contentTextError ?? transportError;
   }
   if (isError === true || structuredOk === false) {
     return outputTextFromMcpPayload(value) ?? toDisplayText(value) ?? "Tool failed";
