@@ -397,6 +397,12 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveRepoSettings({
         ...inputFixture,
+        preStartHooks: ["  echo pre  ", " ", ""],
+        postCompleteHooks: ["\t", " echo post "],
+        devServers: [
+          { id: "frontend", name: "Frontend", command: " bun run dev " },
+          { id: "backend", name: "Backend", command: "   " },
+        ],
       });
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {

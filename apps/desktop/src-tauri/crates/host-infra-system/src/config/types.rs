@@ -292,6 +292,8 @@ const fn default_prompt_override_enabled() -> bool {
     true
 }
 
+// RepoConfig intentionally allows unknown legacy keys such as "trustedHooks" and
+// "trustedHooksFingerprint" so old on-disk configs deserialize and drop them on save.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {

@@ -119,7 +119,7 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
-  test("preserves hook draft blank rows while marking scripts as trusted", () => {
+  test("preserves hook draft blank rows when editing preStart", () => {
     const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
 
     try {
@@ -147,7 +147,7 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
-  test("clears trust when both script fields become empty", () => {
+  test("clears empty hook rows when both fields are empty", () => {
     const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
       updaters.push(updater);
@@ -226,7 +226,7 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
-  test("marks scripts as trusted when a dev server command is entered", () => {
+  test("updates devServers when a dev server command is entered", () => {
     const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
       updaters.push(updater);

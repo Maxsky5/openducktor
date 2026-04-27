@@ -594,14 +594,6 @@ mod tests {
     }
 
     fn setup_workspace_command_fixture(prefix: &str, hooks: HookSet) -> WorkspaceCommandFixture {
-        setup_workspace_command_fixture_with_dialog_response(prefix, hooks, None)
-    }
-
-    fn setup_workspace_command_fixture_with_dialog_response(
-        prefix: &str,
-        hooks: HookSet,
-        _dialog_response: Option<bool>,
-    ) -> WorkspaceCommandFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
         fs::create_dir_all(&repo).expect("git workspace should exist");

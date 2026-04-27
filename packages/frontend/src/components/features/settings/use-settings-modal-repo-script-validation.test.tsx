@@ -57,6 +57,20 @@ const createSnapshot = (): SettingsSnapshot => ({
       promptOverrides: {},
       agentDefaults: {},
     },
+    "repo-c": {
+      workspaceId: "repo-c",
+      workspaceName: "Repo C",
+      repoPath: "/repo-c",
+      defaultRuntimeKind: "opencode",
+      branchPrefix: "odt",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: { providers: {} },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [{ id: "", name: "", command: "   " }],
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    },
   },
 });
 
@@ -76,6 +90,24 @@ describe("useSettingsModalRepoScriptValidation", () => {
         name: "Tab label is required.",
       },
     });
+    expect(latest.invalidRepoPathsWithDevServerErrors).toEqual(["repo-a", "repo-b"]);
+    expect(latest.repoScriptValidationErrorCount).toBe(2);
+    expect(latest.hasRepoScriptValidationErrors).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("ignores empty-command dev server drafts", async () => {
+    const snapshotDraft = createSnapshot();
+    const harness = createHookHarness({
+      snapshotDraft,
+      selectedRepoConfig: snapshotDraft.workspaces["repo-c"] ?? null,
+    });
+
+    await harness.mount();
+    const latest = harness.getLatest();
+
+    expect(latest.selectedRepoDevServerValidationErrors).toEqual({});
     expect(latest.invalidRepoPathsWithDevServerErrors).toEqual(["repo-a", "repo-b"]);
     expect(latest.repoScriptValidationErrorCount).toBe(2);
     expect(latest.hasRepoScriptValidationErrors).toBe(true);

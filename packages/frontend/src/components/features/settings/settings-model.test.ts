@@ -69,6 +69,7 @@ describe("settings-model", () => {
       buildDevServerDraftValidationMap([
         { id: "frontend", name: "", command: " bun run dev " },
         { id: "backend", name: "Backend", command: "   " },
+        { id: "   ", name: "", command: "bun run api" },
       ]),
     ).toEqual({
       frontend: {
@@ -79,8 +80,9 @@ describe("settings-model", () => {
       countDevServerDraftValidationErrors([
         { id: "frontend", name: "", command: " bun run dev " },
         { id: "backend", name: "Backend", command: "   " },
+        { id: "   ", name: "", command: "bun run api" },
       ]),
-    ).toBe(1);
+    ).toBe(3);
   });
 
   test("normalizeDevServers trims entries, skips blank commands, and rejects invalid configured rows", () => {

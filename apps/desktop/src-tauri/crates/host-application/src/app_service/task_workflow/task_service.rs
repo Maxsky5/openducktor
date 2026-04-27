@@ -191,8 +191,6 @@ impl AppService {
         summary: Option<&str>,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
-        let repo_config =
-            self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
         if context.task.status != TaskStatus::InProgress {
             return Err(anyhow!(
                 "build_completed is only allowed from in_progress. Task {} is {}.",
@@ -200,6 +198,8 @@ impl AppService {
                 context.task.status.as_cli_value()
             ));
         }
+        let repo_config =
+            self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
 
         let should_return_to_ai_review = context.task.ai_review_enabled
             && context.task.document_summary.qa_report.verdict != QaWorkflowVerdict::Approved;

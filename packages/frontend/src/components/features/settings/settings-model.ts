@@ -57,8 +57,12 @@ export const buildDevServerDraftValidationMap = (
 ): DevServerDraftValidationMap =>
   Object.fromEntries(
     devServers.flatMap((devServer) => {
+      const id = devServer.id.trim();
+      if (!id) {
+        return [];
+      }
       const errors = getDevServerDraftValidationErrors(devServer);
-      return errors ? [[devServer.id, errors] as const] : [];
+      return errors ? [[id, errors] as const] : [];
     }),
   );
 

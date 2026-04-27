@@ -92,12 +92,9 @@ export function RepositoryConfigurationSection({
   } else if (selectedRepoBranchesError) {
     defaultTargetBranchPlaceholder = "Branches unavailable";
   }
-  const updateScriptDraft = (updater: (repoConfig: RepoConfig) => RepoConfig): void => {
-    onUpdateSelectedRepoConfig(updater);
-  };
   const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
     const nextHookLines = parseHookLines(value);
-    updateScriptDraft((repoConfig) => ({
+    onUpdateSelectedRepoConfig((repoConfig) => ({
       ...repoConfig,
       hooks: {
         ...repoConfig.hooks,
@@ -157,7 +154,7 @@ export function RepositoryConfigurationSection({
           devServerValidationErrors={devServerValidationErrors}
           devServers={selectedRepoConfig.devServers}
           isDisabled={isLoadingSettings || isSaving}
-          updateScriptDraft={updateScriptDraft}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
 
         <RepositoryWorktreeFileCopiesSection
@@ -458,12 +455,12 @@ function RepositoryDevServersSection({
   devServerValidationErrors,
   devServers,
   isDisabled,
-  updateScriptDraft,
+  onUpdateSelectedRepoConfig,
 }: {
   devServerValidationErrors: Record<string, { name?: string; command?: string }>;
   devServers: RepoConfig["devServers"];
   isDisabled: boolean;
-  updateScriptDraft: (updater: (repoConfig: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
   return (
     <div className="grid gap-3">
@@ -481,7 +478,7 @@ function RepositoryDevServersSection({
           size="sm"
           disabled={isDisabled}
           onClick={() => {
-            updateScriptDraft((repoConfig) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
               const nextIndex = repoConfig.devServers.length + 1;
               return {
                 ...repoConfig,
@@ -521,7 +518,7 @@ function RepositoryDevServersSection({
                 index={index}
                 isDisabled={isDisabled}
                 isLastRow={index === devServers.length - 1}
-                updateScriptDraft={updateScriptDraft}
+                onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
                 validationErrors={devServerValidationErrors[devServer.id]}
               />
             ))}
@@ -537,14 +534,14 @@ function RepositoryDevServerRow({
   index,
   isDisabled,
   isLastRow,
-  updateScriptDraft,
+  onUpdateSelectedRepoConfig,
   validationErrors,
 }: {
   devServer: RepoConfig["devServers"][number];
   index: number;
   isDisabled: boolean;
   isLastRow: boolean;
-  updateScriptDraft: (updater: (repoConfig: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
   validationErrors: { name?: string; command?: string } | undefined;
 }): ReactElement {
   const label = devServer.name || `dev server ${index + 1}`;
@@ -565,7 +562,7 @@ function RepositoryDevServerRow({
           disabled={isDisabled}
           onChange={(event) => {
             const name = event.currentTarget.value;
-            updateScriptDraft((repoConfig) => ({
+            onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
               devServers: repoConfig.devServers.map((entry) =>
                 entry.id === devServer.id ? { ...entry, name } : entry,
@@ -598,7 +595,7 @@ function RepositoryDevServerRow({
           disabled={isDisabled}
           onChange={(event) => {
             const command = event.currentTarget.value;
-            updateScriptDraft((repoConfig) => ({
+            onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
               devServers: repoConfig.devServers.map((entry) =>
                 entry.id === devServer.id ? { ...entry, command } : entry,
@@ -625,7 +622,7 @@ function RepositoryDevServerRow({
           size="icon"
           disabled={isDisabled || index === 0}
           onClick={() => {
-            updateScriptDraft((repoConfig) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
               const nextDevServers = [...repoConfig.devServers];
               const [entry] = nextDevServers.splice(index, 1);
               if (!entry) {
@@ -649,7 +646,7 @@ function RepositoryDevServerRow({
           size="icon"
           disabled={isDisabled || isLastRow}
           onClick={() => {
-            updateScriptDraft((repoConfig) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
               const nextDevServers = [...repoConfig.devServers];
               const [entry] = nextDevServers.splice(index, 1);
               if (!entry) {
@@ -673,7 +670,7 @@ function RepositoryDevServerRow({
           size="icon"
           disabled={isDisabled}
           onClick={() => {
-            updateScriptDraft((repoConfig) => ({
+            onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
               devServers: repoConfig.devServers.filter((entry) => entry.id !== devServer.id),
             }));
