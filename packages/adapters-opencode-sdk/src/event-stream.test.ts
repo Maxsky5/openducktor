@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
-import { subscribeOpencodeEvents } from "./event-stream";
+import { processOpencodeEvent, subscribeOpencodeEvents } from "./event-stream";
 import type { SessionInput, SessionRecord } from "./types";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -2567,8 +2567,58 @@ describe("event-stream", () => {
       throw new Error("Expected question_required event");
     }
     expect(permissionEvents[0].metadata).toEqual({ reason: "Need file write" });
+    expect(permissionEvents[0].childExternalSessionId).toBe("external-session-1");
     expect(questionEvents[0].questions).toHaveLength(1);
     expect(questionEvents[0].questions[0]?.header).toBe("Scope");
+  });
+
+  test("forwards subagent session linkage on child permission events", () => {
+    const emitted: AgentEvent[] = [];
+    const client = makeClientWithEvents([]);
+    const sessionRecord = makeSessionRecord(client);
+
+    processOpencodeEvent({
+      context: {
+        sessionId: "local-child-session",
+        externalSessionId: "external-child-session",
+        input: makeSessionInput(),
+      },
+      event: {
+        type: "permission.asked",
+        properties: {
+          sessionID: "external-child-session",
+          id: "perm-child-1",
+          permission: "read",
+          patterns: ["src/**"],
+        },
+      } as unknown as Event,
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_sessionId, event) => emitted.push(event),
+      getSession: () => sessionRecord,
+      resolveSubagentSessionLink: (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentSessionId: "local-parent-session",
+              parentExternalSessionId: "external-parent-session",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    });
+
+    expect(emitted).toHaveLength(1);
+    const [permissionEvent] = emitted;
+    if (permissionEvent?.type !== "permission_required") {
+      throw new Error("Expected permission_required event");
+    }
+    expect(permissionEvent).toMatchObject({
+      sessionId: "local-child-session",
+      requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentSessionId: "local-parent-session",
+      parentExternalSessionId: "external-parent-session",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
   });
 
   test("clears pending deltas when message part is removed", async () => {

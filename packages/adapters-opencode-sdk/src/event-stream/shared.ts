@@ -26,6 +26,14 @@ export type EventStreamContext = {
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   getSession: (sessionId: string) => SessionRecord | undefined;
+  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
+};
+
+export type SubagentSessionLink = {
+  parentSessionId: string;
+  parentExternalSessionId: string;
+  childExternalSessionId: string;
+  subagentCorrelationKey: string;
 };
 
 export type EventStreamState = {

@@ -10,7 +10,12 @@ import {
   toSessionContextUsage,
 } from "../support/assistant-meta";
 import { READ_ONLY_ROLES } from "../support/core";
-import { appendSessionMessage, upsertSessionMessage } from "../support/messages";
+import {
+  appendSessionMessage,
+  findLastSessionMessageByRole,
+  upsertSessionMessage,
+} from "../support/messages";
+import { formatSubagentContent } from "../support/subagent-messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -52,6 +57,48 @@ const toPendingPermission = (event: PermissionRequiredEvent) => ({
   patterns: event.patterns,
   ...(event.metadata ? { metadata: event.metadata } : {}),
 });
+
+const patchParentSubagentSessionLink = (
+  context: SessionLifecycleEventContext,
+  event: PermissionRequiredEvent,
+): void => {
+  if (!event.parentSessionId || !event.subagentCorrelationKey) {
+    return;
+  }
+
+  context.store.updateSession(
+    event.parentSessionId,
+    (current) => {
+      const subagentMessage = findLastSessionMessageByRole(
+        current,
+        "system",
+        (message) =>
+          message.meta?.kind === "subagent" &&
+          message.meta.correlationKey === event.subagentCorrelationKey,
+      );
+      if (subagentMessage?.meta?.kind !== "subagent") {
+        return current;
+      }
+      if (subagentMessage.meta.sessionId === event.sessionId) {
+        return current;
+      }
+
+      const nextMeta = {
+        ...subagentMessage.meta,
+        sessionId: event.sessionId,
+      };
+      return {
+        ...current,
+        messages: upsertSessionMessage(current, {
+          ...subagentMessage,
+          content: formatSubagentContent(nextMeta),
+          meta: nextMeta,
+        }),
+      };
+    },
+    { persist: false },
+  );
+};
 
 const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
   const model = event.model;
@@ -104,6 +151,7 @@ const autoRejectMutatingPermission = (
       }),
       { persist: true },
     );
+    patchParentSubagentSessionLink(context, event);
   };
 
   let rejectionMessage: string;
@@ -352,6 +400,7 @@ export const handlePermissionRequired = (
     }),
     { persist: true },
   );
+  patchParentSubagentSessionLink(context, event);
 };
 
 export const handleQuestionRequired = (

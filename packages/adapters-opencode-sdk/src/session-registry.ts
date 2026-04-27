@@ -7,6 +7,7 @@ import {
   processOpencodeEvent,
   subscribeGlobalEvents,
 } from "./event-stream";
+import type { SubagentSessionLink } from "./event-stream/shared";
 import type {
   ClientFactory,
   OpencodeEventLogger,
@@ -28,6 +29,38 @@ export const requireSession = (
     throw new Error(`Unknown session: ${sessionId}`);
   }
   return session;
+};
+
+const resolveSubagentSessionLink = (
+  sessions: Map<string, SessionRecord>,
+  childExternalSessionId: string,
+): SubagentSessionLink | undefined => {
+  const childTransportKeys = new Set(
+    [...sessions.values()]
+      .filter((session) => session.externalSessionId === childExternalSessionId)
+      .map((session) => session.eventTransportKey),
+  );
+  const matches: SubagentSessionLink[] = [];
+
+  for (const [parentSessionId, session] of sessions) {
+    const subagentCorrelationKey =
+      session.subagentCorrelationKeyBySessionId.get(childExternalSessionId);
+    if (!subagentCorrelationKey) {
+      continue;
+    }
+    if (childTransportKeys.size > 0 && !childTransportKeys.has(session.eventTransportKey)) {
+      continue;
+    }
+
+    matches.push({
+      parentSessionId,
+      parentExternalSessionId: session.externalSessionId,
+      childExternalSessionId,
+      subagentCorrelationKey,
+    });
+  }
+
+  return matches.length === 1 ? matches[0] : undefined;
 };
 
 const ensureRuntimeEventTransport = (input: {
@@ -82,6 +115,8 @@ const ensureRuntimeEventTransport = (input: {
           now: input.now,
           emit: input.emit,
           getSession: (sessionId) => input.sessions.get(sessionId),
+          resolveSubagentSessionLink: (childExternalSessionId) =>
+            resolveSubagentSessionLink(input.sessions, childExternalSessionId),
         });
       }
     },
