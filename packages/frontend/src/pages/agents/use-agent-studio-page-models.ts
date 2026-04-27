@@ -67,6 +67,9 @@ const useStablePendingPermissionCounts = (
       const pendingPermissionCount = session.pendingPermissions.length;
       if (pendingPermissionCount > 0) {
         next[session.sessionId] = pendingPermissionCount;
+        if (session.externalSessionId !== session.sessionId) {
+          next[session.externalSessionId] = pendingPermissionCount;
+        }
       }
     }
 

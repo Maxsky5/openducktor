@@ -5,6 +5,7 @@ export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<
   AgentSessionState,
   | "sessionId"
+  | "externalSessionId"
   | "taskId"
   | "role"
   | "scenario"
@@ -44,6 +45,7 @@ const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState):
 
 export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionSummary => ({
   sessionId: session.sessionId,
+  externalSessionId: session.externalSessionId,
   taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
@@ -78,6 +80,7 @@ const areSummariesEquivalent = (
 ): boolean => {
   return (
     left?.sessionId === right.sessionId &&
+    left.externalSessionId === right.externalSessionId &&
     left.taskId === right.taskId &&
     left.role === right.role &&
     left.scenario === right.scenario &&

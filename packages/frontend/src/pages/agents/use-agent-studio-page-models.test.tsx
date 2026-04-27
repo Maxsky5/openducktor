@@ -782,8 +782,38 @@ describe("useAgentStudioPageModels", () => {
     expect(
       harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
     ).toEqual({
+      "external-child-1": 2,
       "session-child-1": 2,
     });
+
+    await harness.unmount();
+  });
+
+  test("keys subagent pending permission counts by external session id", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithPermission = createSession("session-child-internal", "session-child-runtime", {
+      taskId: "other-task",
+      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithPermission),
+          ],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const counts =
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
+    expect(counts["session-child-internal"]).toBe(1);
+    expect(counts["session-child-runtime"]).toBe(1);
 
     await harness.unmount();
   });
