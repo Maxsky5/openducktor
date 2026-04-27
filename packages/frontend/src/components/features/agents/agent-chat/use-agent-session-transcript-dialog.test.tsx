@@ -17,6 +17,7 @@ let latestDialogProps: {
   taskId: string;
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
+  historyPreludeMode?: "task_context" | "none";
   isResolvingRequestedSession: boolean;
   title: string;
   description: string;
@@ -117,6 +118,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         taskId: string;
         sessionId: string | null;
         persistedRecords?: AgentSessionRecord[];
+        historyPreludeMode?: "task_context" | "none";
         isResolvingRequestedSession: boolean;
         title: string;
         description: string;
@@ -265,6 +267,43 @@ describe("AgentSessionTranscriptDialogHost", () => {
       "task-child",
       "task-parent",
     ]);
+  });
+
+  test("passes prelude mode requests through to the transcript dialog", async () => {
+    const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
+      "./use-agent-session-transcript-dialog"
+    );
+
+    function OpenDialogButton(): ReactElement {
+      const { openSessionTranscript } = useAgentSessionTranscriptDialog();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            openSessionTranscript({
+              taskId: "task-parent",
+              sessionId: "session-child-1",
+              historyPreludeMode: "none",
+            });
+          }}
+        >
+          Open
+        </button>
+      );
+    }
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryProvider useIsolatedClient>
+        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+      </QueryProvider>
+    );
+
+    render(<OpenDialogButton />, { wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    await waitFor(() => {
+      expect(latestDialogProps?.historyPreludeMode).toBe("none");
+    });
   });
 
   test("removes transcript-only sessions when the dialog closes", async () => {

@@ -29,6 +29,7 @@ const buildTranscriptRequest = (
   sessionId,
   title: "Subagent activity",
   description: "View what this subagent did.",
+  historyPreludeMode: "none",
   ...(fallbackSession ? { fallbackSession } : {}),
 });
 

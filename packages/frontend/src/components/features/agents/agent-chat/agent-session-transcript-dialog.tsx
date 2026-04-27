@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { AgentSessionHistoryPreludeMode } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
@@ -18,6 +19,7 @@ type AgentSessionTranscriptDialogProps = {
   taskId: string;
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
   fallbackSession?: {
     role: AgentRole;
     runtimeKind: RuntimeKind;
@@ -35,6 +37,7 @@ export function AgentSessionTranscriptDialog({
   taskId,
   sessionId,
   persistedRecords,
+  historyPreludeMode,
   fallbackSession,
   isResolvingRequestedSession,
   open,
@@ -48,6 +51,7 @@ export function AgentSessionTranscriptDialog({
     taskId,
     sessionId,
     ...(persistedRecords ? { persistedRecords } : {}),
+    ...(historyPreludeMode ? { historyPreludeMode } : {}),
     ...(fallbackSession ? { fallbackSession } : {}),
     isResolvingRequestedSession,
   });

@@ -280,6 +280,58 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("suppresses parent workflow prelude for subagent transcript requests even when records exist", async () => {
+    const subagentRecord: AgentSessionRecord = {
+      sessionId: "session-subagent-1",
+      externalSessionId: "session-subagent-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-22T12:01:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      selectedModel: null,
+    };
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        taskId: "TASK-1",
+        sessionId: "session-subagent-1",
+        persistedRecords: [subagentRecord],
+        historyPreludeMode: "none",
+        fallbackSession: {
+          role: "build",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        },
+        isResolvingRequestedSession: false,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+
+      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
+        taskId: "TASK-1",
+        sessionId: "session-subagent-1",
+        historyPreludeMode: "none",
+        persistedRecords: [subagentRecord],
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("shows a failure empty state when requested history hydration fails", async () => {
     hydrateRequestedTaskSessionHistory.mockImplementationOnce(async () => {
       throw new Error("hydrate boom");

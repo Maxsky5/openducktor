@@ -37,6 +37,37 @@ describe("SubagentTranscriptButton", () => {
       sessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
+      historyPreludeMode: "none",
+    });
+  });
+
+  test("marks fallback subagent transcript requests as prelude-free", () => {
+    const onOpenTranscript = mock(() => {});
+
+    render(
+      <SubagentTranscriptButton
+        taskId="task-1"
+        sessionRole="build"
+        sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
+        meta={createSubagentMeta()}
+        onOpenTranscript={onOpenTranscript}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
+
+    expect(onOpenTranscript).toHaveBeenCalledWith({
+      taskId: "task-1",
+      sessionId: "session-child-1",
+      title: "Subagent activity",
+      description: "View what this subagent did.",
+      historyPreludeMode: "none",
+      fallbackSession: {
+        role: "build",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+      },
     });
   });
 

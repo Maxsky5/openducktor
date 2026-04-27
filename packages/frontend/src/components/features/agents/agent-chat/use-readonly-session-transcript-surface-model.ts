@@ -53,6 +53,7 @@ type UseReadonlySessionTranscriptSurfaceModelArgs = {
   taskId: string;
   sessionId: string | null;
   persistedRecords?: AgentSessionRecord[];
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
   fallbackSession?: {
     role: AgentRole;
     runtimeKind: RuntimeKind;
@@ -69,6 +70,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   taskId,
   sessionId,
   persistedRecords,
+  historyPreludeMode: requestedHistoryPreludeMode,
   fallbackSession,
   isResolvingRequestedSession,
 }: UseReadonlySessionTranscriptSurfaceModelArgs) {
@@ -181,9 +183,9 @@ export function useReadonlySessionTranscriptSurfaceModel({
     }
     return [...currentRecords, toFallbackPersistedRecord({ sessionId, fallbackSession })];
   }, [fallbackSession, persistedRecords, sessionId, usesSyntheticRequestedRecord]);
-  const historyPreludeMode = usesSyntheticRequestedRecord
-    ? SYNTHETIC_HISTORY_PRELUDE_MODE
-    : undefined;
+  const historyPreludeMode =
+    requestedHistoryPreludeMode ??
+    (usesSyntheticRequestedRecord ? SYNTHETIC_HISTORY_PRELUDE_MODE : undefined);
   const hasPersistedSessionRecord = useMemo(
     () =>
       Boolean(

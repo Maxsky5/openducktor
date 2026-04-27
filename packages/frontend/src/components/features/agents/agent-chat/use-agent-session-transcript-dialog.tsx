@@ -18,6 +18,7 @@ import {
 } from "@/state/app-state-provider";
 import { isTranscriptAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import { host } from "@/state/operations/host";
+import type { AgentSessionHistoryPreludeMode } from "@/types/agent-orchestrator";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 
 export type OpenAgentSessionTranscriptRequest = {
@@ -25,6 +26,7 @@ export type OpenAgentSessionTranscriptRequest = {
   sessionId: string;
   title?: string;
   description?: string;
+  historyPreludeMode?: AgentSessionHistoryPreludeMode;
   fallbackSession?: {
     role: AgentRole;
     runtimeKind: RuntimeKind;
@@ -226,6 +228,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
         taskId={resolvedTaskId}
         sessionId={sessionId}
         {...(persistedRecords ? { persistedRecords } : {})}
+        {...(request?.historyPreludeMode ? { historyPreludeMode: request.historyPreludeMode } : {})}
         {...(request?.fallbackSession ? { fallbackSession: request.fallbackSession } : {})}
         isResolvingRequestedSession={isResolvingRequestedSession}
         open={open}
