@@ -147,6 +147,76 @@ const stdioRuntimeConnection = (workingDirectory: string, identity = "runtime-st
     workingDirectory,
   }) as const;
 
+const isExpectedReconcileRetryLog = (args: Parameters<typeof console.error>): boolean => {
+  const [message, error] = args;
+  return (
+    typeof message === "string" &&
+    message.startsWith("Failed to reconcile agent sessions for task") &&
+    message.includes("Retrying in") &&
+    error instanceof Error &&
+    error.message.startsWith("No live runtime found for working directory ")
+  );
+};
+
+const isExpectedRuntimeMetadataLog = (args: Parameters<typeof console.error>): boolean => {
+  const [message, error] = args;
+  return (
+    typeof message === "string" &&
+    message.startsWith("Skipping reconcile preload for task") &&
+    error instanceof Error &&
+    error.name === "SessionRuntimeMetadataError"
+  );
+};
+
+const withSuppressedExpectedConsoleErrors = async ({
+  expectedCount,
+  isExpected,
+  run,
+}: {
+  expectedCount: number;
+  isExpected: (args: Parameters<typeof console.error>) => boolean;
+  run: () => Promise<void>;
+}): Promise<void> => {
+  const originalError = console.error;
+  let suppressedCount = 0;
+  console.error = (...args: Parameters<typeof console.error>): void => {
+    if (isExpected(args)) {
+      suppressedCount += 1;
+      return;
+    }
+
+    originalError(...args);
+  };
+
+  try {
+    await run();
+  } finally {
+    console.error = originalError;
+  }
+
+  expect(suppressedCount).toBe(expectedCount);
+};
+
+const withSuppressedExpectedReconcileRetryLogs = (
+  expectedCount: number,
+  run: () => Promise<void>,
+): Promise<void> =>
+  withSuppressedExpectedConsoleErrors({
+    expectedCount,
+    isExpected: isExpectedReconcileRetryLog,
+    run,
+  });
+
+const withSuppressedExpectedRuntimeMetadataLogs = (
+  expectedCount: number,
+  run: () => Promise<void>,
+): Promise<void> =>
+  withSuppressedExpectedConsoleErrors({
+    expectedCount,
+    isExpected: isExpectedRuntimeMetadataLog,
+    run,
+  });
+
 type RuntimeEnsure = (
   nextRepoPath: string,
   nextRuntimeKind: RuntimeKind,
@@ -733,14 +803,16 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [
-        taskWithSessionAt("task-a", "external-a", worktreePath),
-        taskWithSessionAt("task-b", "external-b", worktreePath),
-      ],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedReconcileRetryLogs(2, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [
+          taskWithSessionAt("task-a", "external-a", worktreePath),
+          taskWithSessionAt("task-b", "external-b", worktreePath),
+        ],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([]);
@@ -795,14 +867,16 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [
-        taskWithSessionAt("task-root-build", "external-build-root", repoPath),
-        plannerTaskWithSessionAt("task-root-planner", "external-planner-root", repoPath),
-      ],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedReconcileRetryLogs(2, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [
+          taskWithSessionAt("task-root-build", "external-build-root", repoPath),
+          plannerTaskWithSessionAt("task-root-planner", "external-planner-root", repoPath),
+        ],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([{ directories: [repoPath] }]);
@@ -1075,14 +1149,16 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [
-        taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a"),
-        taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b"),
-      ],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedReconcileRetryLogs(2, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [
+          taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a"),
+          taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b"),
+        ],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     expect(runtimeEnsureCalls).toBe(0);
@@ -1182,11 +1258,13 @@ describe("repo-session-hydration-service", () => {
       },
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [taskWithSession("task-valid", "external-valid"), invalidTask],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedRuntimeMetadataLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [taskWithSession("task-valid", "external-valid"), invalidTask],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     const retryResult = await Promise.race([
@@ -1254,11 +1332,13 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [taskWithSession("task-valid", "external-valid"), partiallyInvalidTask],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedRuntimeMetadataLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [taskWithSession("task-valid", "external-valid"), partiallyInvalidTask],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     expect(reconcileCalls).toEqual(["task-valid"]);
