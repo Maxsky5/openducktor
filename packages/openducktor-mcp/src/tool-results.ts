@@ -1,3 +1,4 @@
+import type { OdtToolErrorCode, OdtToolErrorPayload } from "@openducktor/contracts";
 import { z } from "zod";
 
 export type ToolResult = {
@@ -5,14 +6,6 @@ export type ToolResult = {
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
-
-export type OdtToolErrorCode =
-  | "ODT_TOOL_INPUT_INVALID"
-  | "ODT_WORKSPACE_SCOPE_VIOLATION"
-  | "ODT_WORKSPACE_MISSING"
-  | "ODT_HOST_BRIDGE_ERROR"
-  | "ODT_HOST_RESPONSE_INVALID"
-  | "ODT_TOOL_EXECUTION_ERROR";
 
 export type OdtToolErrorDetails = Record<string, unknown>;
 
@@ -96,7 +89,7 @@ export const toToolError = (error: unknown): ToolResult => {
       : zodIssues
         ? "ODT_TOOL_INPUT_INVALID"
         : "ODT_TOOL_EXECUTION_ERROR";
-  const errorPayload = {
+  const errorPayload: OdtToolErrorPayload = {
     ok: false,
     error: {
       code,

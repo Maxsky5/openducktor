@@ -1,4 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
+import { odtToolErrorPayloadSchema } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import {
   asUnknownRecord,
@@ -106,6 +107,12 @@ const readEnvelopeErrorMessage = (value: unknown): string | undefined => {
     return undefined;
   }
 
+  const parsedOdtError = odtToolErrorPayloadSchema.safeParse(record);
+  if (parsedOdtError.success) {
+    const message = parsedOdtError.data.error.message.trim();
+    return message.length > 0 ? message : "Tool failed";
+  }
+
   return readErrorValueMessage(readUnknownProp(record, "error")) ?? "Tool failed";
 };
 
@@ -145,12 +152,6 @@ const readStructuredToolError = (value: unknown): string | undefined => {
   const flattenedEnvelopeMessage = readEnvelopeErrorMessage(record);
   const structuredEnvelopeMessage = readEnvelopeErrorMessage(structuredContent);
 
-  if (directErrorMessage) {
-    return directErrorMessage;
-  }
-  if (structuredErrorMessage) {
-    return structuredErrorMessage;
-  }
   if (flattenedEnvelopeMessage) {
     return flattenedEnvelopeMessage;
   }
@@ -161,7 +162,13 @@ const readStructuredToolError = (value: unknown): string | undefined => {
     return contentTextError ?? transportError;
   }
   if (isError === true || structuredOk === false) {
-    return outputTextFromMcpPayload(value) ?? toDisplayText(value) ?? "Tool failed";
+    return (
+      directErrorMessage ??
+      structuredErrorMessage ??
+      outputTextFromMcpPayload(value) ??
+      toDisplayText(value) ??
+      "Tool failed"
+    );
   }
 
   return undefined;

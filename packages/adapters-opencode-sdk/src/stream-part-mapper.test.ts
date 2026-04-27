@@ -588,6 +588,37 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("keeps successful structured output with a top-level error field as completed", () => {
+    const output = {
+      ok: true,
+      error: {
+        message: "non-fatal validation notes are present",
+      },
+      data: {
+        taskId: "task-10",
+      },
+    };
+    const part = createToolPart({
+      id: "tool-1g",
+      tool: "custom_mcp_tool",
+      status: "completed",
+      input: { taskId: "task-10" },
+      output,
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1g",
+      partId: "tool-1g",
+      callId: "call-tool-1g",
+      tool: "custom_mcp_tool",
+      status: "completed",
+      input: { taskId: "task-10" },
+      output: JSON.stringify(output, null, 2),
+    });
+  });
+
   test("maps pending tool with end timing as completed", () => {
     const part = createToolPart({
       id: "tool-2",

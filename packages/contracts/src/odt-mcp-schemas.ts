@@ -20,6 +20,43 @@ import {
   taskStatusSchema,
 } from "./task-schemas";
 
+export const odtToolErrorCodeSchema = z.enum([
+  "ODT_TOOL_INPUT_INVALID",
+  "ODT_WORKSPACE_SCOPE_VIOLATION",
+  "ODT_WORKSPACE_MISSING",
+  "ODT_HOST_BRIDGE_ERROR",
+  "ODT_HOST_RESPONSE_INVALID",
+  "ODT_TOOL_EXECUTION_ERROR",
+]);
+export type OdtToolErrorCode = z.infer<typeof odtToolErrorCodeSchema>;
+
+export const odtToolErrorIssueSchema = z
+  .object({
+    path: z.array(z.union([z.string(), z.number()])),
+    message: z.string(),
+    code: z.string(),
+  })
+  .strict();
+export type OdtToolErrorIssue = z.infer<typeof odtToolErrorIssueSchema>;
+
+export const odtToolErrorSchema = z
+  .object({
+    code: odtToolErrorCodeSchema,
+    message: z.string(),
+    details: z.record(z.string(), z.unknown()).optional(),
+    issues: z.array(odtToolErrorIssueSchema).optional(),
+  })
+  .strict();
+export type OdtToolErrorPayloadError = z.infer<typeof odtToolErrorSchema>;
+
+export const odtToolErrorPayloadSchema = z
+  .object({
+    ok: z.literal(false),
+    error: odtToolErrorSchema,
+  })
+  .strict();
+export type OdtToolErrorPayload = z.infer<typeof odtToolErrorPayloadSchema>;
+
 export const publicTaskSchema = z
   .object({
     id: z.string().trim().min(1).describe("Canonical task identifier."),

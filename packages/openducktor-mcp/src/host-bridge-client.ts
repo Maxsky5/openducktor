@@ -52,6 +52,19 @@ const toBridgeErrorMessage = async (response: Response, action: string): Promise
   }
 };
 
+const toCauseMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error.trim();
+  }
+  if (typeof error === "number" || typeof error === "boolean") {
+    return String(error);
+  }
+  return "Unknown bridge error";
+};
+
 const toIssueDetails = (
   error: z.ZodError,
 ): Array<{
@@ -91,6 +104,24 @@ const createBridgeHttpError = async (response: Response, action: string): Promis
     status: response.status,
     statusText: response.statusText,
   });
+};
+
+const createBridgeTransportError = (action: string, error: unknown): OdtToolError => {
+  return new OdtToolError("ODT_HOST_BRIDGE_ERROR", `${action} failed: ${toCauseMessage(error)}`, {
+    action,
+    causeName: error instanceof Error ? error.name : typeof error,
+  });
+};
+
+const createBridgeJsonError = (action: string, error: unknown): OdtToolError => {
+  return new OdtToolError(
+    "ODT_HOST_RESPONSE_INVALID",
+    `Invalid JSON response from ${action}: ${toCauseMessage(error)}`,
+    {
+      action,
+      causeName: error instanceof Error ? error.name : typeof error,
+    },
+  );
 };
 
 const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
@@ -152,11 +183,15 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
 
   private async checkHealth(): Promise<void> {
     const url = new URL("/health", this.baseUrl);
-    const response = await this.fetchImpl(url.toString(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-    });
+    const response = await this.fetchBridge(
+      url.toString(),
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      },
+      "host health check",
+    );
 
     if (!response.ok) {
       throw await createBridgeHttpError(response, "host health check");
@@ -165,21 +200,42 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
 
   private async invokeJson(command: string, input: Record<string, unknown>): Promise<unknown> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
-    const response = await this.fetchImpl(url.toString(), {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...(this.appToken ? { "x-openducktor-app-token": this.appToken } : {}),
+    const action = `host ${command}`;
+    const response = await this.fetchBridge(
+      url.toString(),
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(this.appToken ? { "x-openducktor-app-token": this.appToken } : {}),
+        },
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
       },
-      body: JSON.stringify(input),
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-    });
+      action,
+    );
 
     if (!response.ok) {
-      throw await createBridgeHttpError(response, `host ${command}`);
+      throw await createBridgeHttpError(response, action);
     }
 
-    return response.json();
+    return this.readJsonResponse(response, action);
+  }
+
+  private async fetchBridge(input: string, init: RequestInit, action: string): Promise<Response> {
+    try {
+      return await this.fetchImpl(input, init);
+    } catch (error) {
+      throw createBridgeTransportError(action, error);
+    }
+  }
+
+  private async readJsonResponse(response: Response, action: string): Promise<unknown> {
+    try {
+      return await response.json();
+    } catch (error) {
+      throw createBridgeJsonError(action, error);
+    }
   }
 }
