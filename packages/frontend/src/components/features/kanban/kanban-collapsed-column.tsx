@@ -2,7 +2,7 @@ import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { KANBAN_COLLAPSED_LANE_WIDTH_CLASS } from "@/components/features/kanban/kanban-layout";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
-import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type KanbanCollapsedColumnProps = {
@@ -12,37 +12,49 @@ type KanbanCollapsedColumnProps = {
 export function KanbanCollapsedColumn({ column }: KanbanCollapsedColumnProps): ReactElement {
   const theme = laneTheme(column.id);
   const label = `${column.title} column is empty and collapsed`;
+  const accentClass = column.id === "open" ? "bg-muted-foreground/45" : theme.headerAccentClass;
 
   return (
-    <section
-      aria-label={label}
-      title={label}
-      className={cn(
-        "flex min-h-96 flex-col overflow-hidden rounded-2xl border shadow-sm",
-        KANBAN_COLLAPSED_LANE_WIDTH_CLASS,
-        theme.boardSurfaceClass,
-      )}
-    >
-      <div className={cn("border-b border-border/60 p-3", theme.headerSurfaceClass)}>
-        <span
-          className={cn("mb-3 block h-1.5 w-10 rounded-full", theme.headerAccentClass)}
-          aria-hidden="true"
-        />
-        <h3 className="text-sm font-semibold leading-snug text-foreground">{column.title}</h3>
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <Badge
-          variant="outline"
-          className={cn(
-            "w-fit rounded-full px-2 py-0.5 text-[11px] font-medium",
-            theme.countBadgeClass,
-          )}
-        >
-          0 tasks
-        </Badge>
-        <p className="text-xs leading-relaxed text-muted-foreground">Empty lane</p>
-        <p className="sr-only">No tasks in this lane.</p>
-      </div>
-    </section>
+    <TooltipProvider delayDuration={120}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <section
+            aria-label={label}
+            title={label}
+            className={cn(
+              "group flex min-h-96 flex-col items-center rounded-full border px-1.5 py-3 shadow-sm transition-[background-color,border-color,box-shadow] hover:shadow-md",
+              KANBAN_COLLAPSED_LANE_WIDTH_CLASS,
+              theme.boardSurfaceClass,
+            )}
+          >
+            <span
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-background shadow-sm ring-2 ring-background",
+                accentClass,
+              )}
+              aria-hidden="true"
+            >
+              0
+            </span>
+            <span
+              className={cn("mt-3 h-12 w-1 rounded-full opacity-80", accentClass)}
+              aria-hidden="true"
+            />
+            <span
+              className={cn(
+                "mt-2 w-1 flex-1 rounded-full opacity-25 transition-opacity group-hover:opacity-45",
+                accentClass,
+              )}
+              aria-hidden="true"
+            />
+            <span className="sr-only">No tasks in this lane.</span>
+          </section>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={10} className="flex flex-col gap-1 px-3 py-2">
+          <p className="text-sm font-semibold text-background">{column.title}</p>
+          <p className="text-xs font-medium text-background/75">Collapsed empty lane</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
