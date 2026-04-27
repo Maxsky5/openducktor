@@ -3,15 +3,16 @@ import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
+  type RuntimeKind,
   type TaskCard,
 } from "@openducktor/contracts";
-import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import type { QueryClient } from "@tanstack/react-query";
+import { createQueryClient } from "@/lib/query-client";
 import {
   createLiveAgentSessionSnapshotFixture,
   createLocalHttpRuntimeConnection,
 } from "@/state/operations/agent-orchestrator/test-utils";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
-import { host } from "../../shared/host";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createRuntimeResolutionPlannerStage } from "./load-sessions-stages";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
@@ -139,20 +140,42 @@ const createRuntimeInstance = ({
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
-const stdioRuntimeConnection = (workingDirectory: string) =>
+const stdioRuntimeConnection = (workingDirectory: string, identity = "runtime-stdio") =>
   ({
     type: "stdio",
+    identity,
     workingDirectory,
   }) as const;
 
-describe("repo-session-hydration-service", () => {
-  const originalRuntimeList = host.runtimeList;
-  const originalRuntimeEnsure = host.runtimeEnsure;
+type RuntimeEnsure = (
+  nextRepoPath: string,
+  nextRuntimeKind: RuntimeKind,
+) => Promise<RuntimeInstanceSummary>;
 
-  beforeEach(async () => {
-    await clearAppQueryClient();
-    host.runtimeList = async () => [];
-    host.runtimeEnsure = async () => {
+describe("repo-session-hydration-service", () => {
+  let queryClient: QueryClient;
+  let runtimeEnsure: RuntimeEnsure;
+
+  const setRuntimeList = (runtimes: RuntimeInstanceSummary[]) => {
+    queryClient.setQueryData(runtimeQueryKeys.list("opencode", repoPath), runtimes);
+  };
+
+  const createTestRepoSessionHydrationService = (
+    options: Omit<
+      Parameters<typeof createRepoSessionHydrationService>[0],
+      "queryClient" | "runtimeEnsure"
+    >,
+  ) =>
+    createRepoSessionHydrationService({
+      ...options,
+      queryClient,
+      runtimeEnsure,
+    });
+
+  beforeEach(() => {
+    queryClient = createQueryClient();
+    setRuntimeList([]);
+    runtimeEnsure = async () => {
       throw new Error("runtimeEnsure should not be called in this test");
     };
   });
@@ -163,7 +186,7 @@ describe("repo-session-hydration-service", () => {
     let retryRequests = 0;
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async () => [],
       },
@@ -207,9 +230,9 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [createRuntimeInstance()];
+    setRuntimeList([createRuntimeInstance()]);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push(
@@ -295,9 +318,9 @@ describe("repo-session-hydration-service", () => {
     let reusedPreloadedSnapshot: string | null = null;
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [createRuntimeInstance()];
+    setRuntimeList([createRuntimeInstance()]);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async () => {
           preloadScanCalls += 1;
@@ -310,7 +333,7 @@ describe("repo-session-hydration-service", () => {
           taskId,
           persistedRecords,
           preloadedRuntimeLists,
-          preloadedRuntimeConnectionsByKey,
+          preloadedRuntimeConnections,
           preloadedLiveAgentSessionsByKey,
           allowRuntimeEnsure,
         }) => {
@@ -322,7 +345,7 @@ describe("repo-session-hydration-service", () => {
           const plannerOptions = {
             ...(persistedRecords ? { persistedRecords } : {}),
             ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
-            ...(preloadedRuntimeConnectionsByKey ? { preloadedRuntimeConnectionsByKey } : {}),
+            ...(preloadedRuntimeConnections ? { preloadedRuntimeConnections } : {}),
             ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),
             ...(allowRuntimeEnsure !== undefined ? { allowRuntimeEnsure } : {}),
           };
@@ -451,23 +474,23 @@ describe("repo-session-hydration-service", () => {
     }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [
+    setRuntimeList([
       createRuntimeInstance({
         runtimeId: "runtime-stdio-a",
         workingDirectory: worktreeA,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-a" },
       }),
       createRuntimeInstance({
         runtimeId: "runtime-stdio-b",
         workingDirectory: worktreeB,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-b" },
       }),
-    ];
+    ]);
 
     const taskOne = taskWithSessionAt("task-1", "external-1", worktreeA);
     const taskTwo = taskWithSessionAt("task-2", "external-2", worktreeB);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push({
@@ -505,13 +528,16 @@ describe("repo-session-hydration-service", () => {
       isCurrentRepo: () => true,
     });
 
+    const runtimeConnectionA = stdioRuntimeConnection(worktreeA, "runtime-stdio-a");
+    const runtimeConnectionB = stdioRuntimeConnection(worktreeB, "runtime-stdio-b");
+
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([
       {
-        runtimeConnection: stdioRuntimeConnection(worktreeA),
+        runtimeConnection: runtimeConnectionA,
         directories: [worktreeA],
       },
       {
-        runtimeConnection: stdioRuntimeConnection(worktreeB),
+        runtimeConnection: runtimeConnectionB,
         directories: [worktreeB],
       },
     ]);
@@ -519,7 +545,7 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore.readSnapshot({
         repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection(worktreeA),
+        runtimeConnection: runtimeConnectionA,
         workingDirectory: worktreeA,
         externalSessionId: "external-1",
       })?.externalSessionId,
@@ -528,11 +554,190 @@ describe("repo-session-hydration-service", () => {
       liveAgentSessionStore.readSnapshot({
         repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection(worktreeB),
+        runtimeConnection: runtimeConnectionB,
         workingDirectory: worktreeB,
         externalSessionId: "external-2",
       })?.externalSessionId,
     ).toBe("external-2");
+    service.dispose();
+  });
+
+  test("reconcile keeps same-directory stdio runtimes under identity-aware preload keys", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const reconcilePreloadIdentities: string[][] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const runtimeConnectionA = stdioRuntimeConnection(worktreePath, "runtime-stdio-a");
+    const runtimeConnectionB = stdioRuntimeConnection(worktreePath, "runtime-stdio-b");
+
+    setRuntimeList([
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-a",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-a" },
+      }),
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-b",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-b" },
+      }),
+    ]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            {
+              externalSessionId:
+                input.runtimeConnection.type === "stdio" &&
+                input.runtimeConnection.identity === "runtime-stdio-a"
+                  ? "external-a"
+                  : "external-b",
+              title: "Task",
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              startedAt: "2026-02-22T08:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+            },
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ preloadedRuntimeConnections }) => {
+          reconcilePreloadIdentities.push(
+            preloadedRuntimeConnections
+              ?.findCandidates("opencode", worktreePath)
+              .map((runtimeConnection) =>
+                runtimeConnection.type === "stdio" ? runtimeConnection.identity : "local_http",
+              )
+              .sort() ?? [],
+          );
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-a", "external-a", worktreePath),
+        taskWithSessionAt("task-b", "external-b", worktreePath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: runtimeConnectionA,
+        directories: [worktreePath],
+      },
+      {
+        runtimeConnection: runtimeConnectionB,
+        directories: [worktreePath],
+      },
+    ]);
+    expect(reconcilePreloadIdentities).toEqual([
+      ["runtime-stdio-a", "runtime-stdio-b"],
+      ["runtime-stdio-a", "runtime-stdio-b"],
+    ]);
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: runtimeConnectionA,
+        workingDirectory: worktreePath,
+        externalSessionId: "external-a",
+      })?.externalSessionId,
+    ).toBe("external-a");
+    expect(
+      liveAgentSessionStore.readSnapshot({
+        repoPath,
+        runtimeKind: "opencode",
+        runtimeConnection: runtimeConnectionB,
+        workingDirectory: worktreePath,
+        externalSessionId: "external-b",
+      })?.externalSessionId,
+    ).toBe("external-b");
+    service.dispose();
+  });
+
+  test("reconcile scans workspace-derived directories for every repo-root stdio runtime", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{
+      runtimeConnection: unknown;
+      directories?: string[];
+    }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const runtimeConnectionA = stdioRuntimeConnection(worktreePath, "runtime-stdio-a");
+    const runtimeConnectionB = stdioRuntimeConnection(worktreePath, "runtime-stdio-b");
+
+    setRuntimeList([
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-a",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-a" },
+      }),
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio-b",
+        workingDirectory: repoPath,
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-b" },
+      }),
+    ]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            runtimeConnection: input.runtimeConnection,
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            createLiveAgentSessionSnapshotFixture({
+              externalSessionId:
+                input.runtimeConnection.type === "stdio" &&
+                input.runtimeConnection.identity === "runtime-stdio-a"
+                  ? "external-a"
+                  : "external-b",
+              workingDirectory: worktreePath,
+            }),
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-a", "external-a", worktreePath),
+        taskWithSessionAt("task-b", "external-b", worktreePath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        runtimeConnection: runtimeConnectionA,
+        directories: [worktreePath],
+      },
+      {
+        runtimeConnection: runtimeConnectionB,
+        directories: [worktreePath],
+      },
+    ]);
     service.dispose();
   });
 
@@ -543,11 +748,14 @@ describe("repo-session-hydration-service", () => {
     }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [
-      createRuntimeInstance({ runtimeId: "runtime-stdio", runtimeRoute: { type: "stdio" } }),
-    ];
+    setRuntimeList([
+      createRuntimeInstance({
+        runtimeId: "runtime-stdio",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+      }),
+    ]);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push({
@@ -605,8 +813,8 @@ describe("repo-session-hydration-service", () => {
     const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [];
-    host.runtimeEnsure = async () => {
+    setRuntimeList([]);
+    runtimeEnsure = async () => {
       runtimeEnsureCalls += 1;
       return {
         kind: "opencode",
@@ -627,7 +835,7 @@ describe("repo-session-hydration-service", () => {
     const taskOne = plannerTaskWithSessionAt("task-1", "external-1", repoPath);
     const taskTwo = plannerTaskWithSessionAt("task-2", "external-2", repoPath);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push(
@@ -666,13 +874,13 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [createRuntimeInstance({ workingDirectory: repoPath })];
-    host.runtimeEnsure = async () => {
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+    runtimeEnsure = async () => {
       runtimeEnsureCalls += 1;
       return createRuntimeInstance({ workingDirectory: repoPath });
     };
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push(
@@ -718,9 +926,9 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [createRuntimeInstance({ workingDirectory: repoPath })];
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push(
@@ -763,17 +971,17 @@ describe("repo-session-hydration-service", () => {
     }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [];
-    host.runtimeEnsure = async () => {
+    setRuntimeList([]);
+    runtimeEnsure = async () => {
       runtimeEnsureCalls += 1;
       return createRuntimeInstance({
         runtimeId: "runtime-stdio-root",
         workingDirectory: repoPath,
-        runtimeRoute: { type: "stdio" },
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio-root" },
       });
     };
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async (input) => {
           listLiveAgentSessionSnapshotsCalls.push({
@@ -808,8 +1016,8 @@ describe("repo-session-hydration-service", () => {
 
   test("reconcile invalidates runtime list queries after ensuring a missing runtime", async () => {
     const liveAgentSessionStore = new LiveAgentSessionStore();
-    host.runtimeList = async () => [];
-    host.runtimeEnsure = async () => ({
+    setRuntimeList([]);
+    runtimeEnsure = async () => ({
       kind: "opencode",
       runtimeId: "runtime-1",
       repoPath,
@@ -823,9 +1031,9 @@ describe("repo-session-hydration-service", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
       descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
-    appQueryClient.setQueryData(runtimeQueryKeys.list("opencode", repoPath), []);
+    queryClient.setQueryData(runtimeQueryKeys.list("opencode", repoPath), []);
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async () => [],
       },
@@ -845,7 +1053,7 @@ describe("repo-session-hydration-service", () => {
     });
 
     expect(
-      appQueryClient.getQueryState(runtimeQueryKeys.list("opencode", repoPath))?.isInvalidated,
+      queryClient.getQueryState(runtimeQueryKeys.list("opencode", repoPath))?.isInvalidated,
     ).toBe(true);
     service.dispose();
   });
@@ -856,7 +1064,7 @@ describe("repo-session-hydration-service", () => {
     const liveAgentSessionStore = new LiveAgentSessionStore();
     const retryTriggered = createDeferred<void>();
 
-    host.runtimeList = async () => [createRuntimeInstance()];
+    setRuntimeList([createRuntimeInstance()]);
 
     const invalidTask = taskWithSession("task-invalid", "external-invalid");
     const invalidSession = invalidTask.agentSessions?.[0];
@@ -870,7 +1078,7 @@ describe("repo-session-hydration-service", () => {
       },
     ];
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async () => [
           {
@@ -919,7 +1127,7 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    host.runtimeList = async () => [createRuntimeInstance()];
+    setRuntimeList([createRuntimeInstance()]);
 
     const partiallyInvalidTask = taskWithSession("task-invalid", "external-partial");
     const partiallyInvalidSession = partiallyInvalidTask.agentSessions?.[0];
@@ -936,7 +1144,7 @@ describe("repo-session-hydration-service", () => {
       },
     ];
 
-    const service = createRepoSessionHydrationService({
+    const service = createTestRepoSessionHydrationService({
       agentEngine: {
         listLiveAgentSessionSnapshots: async () => [
           {
@@ -981,7 +1189,6 @@ describe("repo-session-hydration-service", () => {
   });
 
   afterEach(() => {
-    host.runtimeList = originalRuntimeList;
-    host.runtimeEnsure = originalRuntimeEnsure;
+    queryClient.clear();
   });
 });

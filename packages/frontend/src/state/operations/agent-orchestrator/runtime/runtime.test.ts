@@ -12,9 +12,14 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
   createEnsureRuntime,
+  describeRuntimeRoute,
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   resolveRuntimeRouteConnection,
+  runtimeConnectionToRoute,
+  runtimeConnectionTransportKey,
+  runtimeRouteToConnection,
+  runtimeRouteTransportKey,
 } from "./runtime";
 
 const buildBootstrapFixture: BuildSessionBootstrap = {
@@ -111,6 +116,89 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectory: "/tmp/repo/worktree",
       },
     });
+
+    expect(
+      resolveRuntimeRouteConnection(
+        {
+          type: "stdio",
+          identity: "runtime-stdio",
+        },
+        "/tmp/repo/worktree",
+      ),
+    ).toEqual({
+      runtimeConnection: {
+        type: "stdio",
+        identity: "runtime-stdio",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+  });
+
+  test("preserves and normalizes stdio identity across route and connection helpers", () => {
+    expect(
+      runtimeConnectionToRoute({
+        type: "stdio",
+        identity: " runtime-stdio ",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    ).toEqual({ type: "stdio", identity: "runtime-stdio" });
+    expect(
+      runtimeRouteToConnection(
+        {
+          type: "stdio",
+          identity: " runtime-stdio ",
+        },
+        "/tmp/repo/worktree",
+      ),
+    ).toEqual({
+      type: "stdio",
+      identity: "runtime-stdio",
+      workingDirectory: "/tmp/repo/worktree",
+    });
+    expect(
+      runtimeConnectionTransportKey({
+        type: "stdio",
+        identity: "runtime-stdio-a",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+    ).toBe("stdio:runtime-stdio-a");
+    expect(runtimeRouteTransportKey({ type: "stdio", identity: "runtime-stdio-b" })).toBe(
+      "stdio:runtime-stdio-b",
+    );
+    expect(describeRuntimeRoute({ type: "stdio", identity: " runtime-stdio " })).toBe(
+      "stdio:runtime-stdio",
+    );
+  });
+
+  test("rejects missing or blank stdio identity before building route descriptions or keys", () => {
+    const blankRoute = { type: "stdio", identity: " " } as const;
+    const missingRoute = { type: "stdio" } as unknown as Parameters<
+      typeof runtimeRouteTransportKey
+    >[0];
+    const blankConnection = {
+      type: "stdio",
+      identity: "",
+      workingDirectory: "/tmp/repo/worktree",
+    } as const;
+
+    expect(() => runtimeRouteTransportKey(blankRoute)).toThrow(
+      "Runtime route stdio identity is required.",
+    );
+    expect(() => runtimeRouteTransportKey(missingRoute)).toThrow(
+      "Runtime route stdio identity is required.",
+    );
+    expect(() => describeRuntimeRoute(blankRoute)).toThrow(
+      "Runtime route stdio identity is required.",
+    );
+    expect(() => runtimeConnectionTransportKey(blankConnection)).toThrow(
+      "Runtime connection stdio identity is required.",
+    );
+    expect(() => runtimeConnectionToRoute(blankConnection)).toThrow(
+      "Runtime connection stdio identity is required.",
+    );
+    expect(() => runtimeRouteToConnection(blankRoute, "/tmp/repo/worktree")).toThrow(
+      "Runtime route stdio identity is required.",
+    );
   });
 
   test("starts build bootstrap and refreshes task data when no target worktree is provided", async () => {

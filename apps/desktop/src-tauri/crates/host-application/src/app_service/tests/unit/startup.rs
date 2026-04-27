@@ -400,7 +400,9 @@ fn wait_for_local_server_with_process_honors_cancellation_epoch() {
 fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
     let harness = build_external_runtime_build_start_harness(
         "build-start-stdio-runtime-route",
-        ExternalStartBehavior::ReturnRoute(host_domain::RuntimeRoute::Stdio),
+        ExternalStartBehavior::ReturnRoute(host_domain::RuntimeRoute::stdio(
+            "runtime-build-start-stdio",
+        )?),
     )?;
 
     let bootstrap =
@@ -412,7 +414,10 @@ fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
         bootstrap.runtime_kind,
         AgentRuntimeKind::from("test-runtime")
     );
-    assert_eq!(bootstrap.runtime_route, host_domain::RuntimeRoute::Stdio);
+    assert_eq!(
+        bootstrap.runtime_route,
+        host_domain::RuntimeRoute::stdio("runtime-build-start-stdio")?
+    );
     assert_eq!(
         bootstrap.working_directory,
         harness.expected_worktree_dir("task-1")
@@ -429,7 +434,7 @@ fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
         "test-runtime",
         harness.repo_path_string.as_str(),
         harness.repo_path.as_path(),
-        host_domain::RuntimeRoute::Stdio,
+        host_domain::RuntimeRoute::stdio("runtime-build-start-stdio")?,
     )?;
 
     Ok(())

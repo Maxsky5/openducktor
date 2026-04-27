@@ -167,12 +167,12 @@ describe("runtime schemas", () => {
   test("build session bootstrap preserves runtime route and working directory", () => {
     const parsed = buildSessionBootstrapSchema.parse({
       runtimeKind: "opencode",
-      runtimeRoute: { type: "stdio" },
+      runtimeRoute: { type: "stdio", identity: " runtime-build-1 " },
       workingDirectory: "/repo/.worktrees/task-1",
     });
 
     expect(parsed.runtimeKind).toBe("opencode");
-    expect(parsed.runtimeRoute).toEqual({ type: "stdio" });
+    expect(parsed.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-build-1" });
     expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
   });
 
@@ -798,21 +798,62 @@ describe("runtime schemas", () => {
         workingDirectory: "/repo",
         runtimeRoute: {
           type: "stdio",
+          identity: " runtime-stdio ",
         },
         startedAt: "2026-01-01T00:00:00.000Z",
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       }).runtimeRoute,
-    ).toEqual({ type: "stdio" });
+    ).toEqual({ type: "stdio", identity: "runtime-stdio" });
 
     expect(
       runtimeTransportSchema.parse({
         type: "stdio",
+        identity: " runtime-stdio ",
         workingDirectory: "/repo",
       }),
     ).toEqual({
       type: "stdio",
+      identity: "runtime-stdio",
       workingDirectory: "/repo",
     });
+  });
+
+  test("runtime route schema rejects malformed stdio payloads", () => {
+    const baseSummary = {
+      kind: "opencode",
+      runtimeId: "runtime-stdio",
+      repoPath: "/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/repo",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    } as const;
+
+    expect(() =>
+      runtimeInstanceSummarySchema.parse({
+        ...baseSummary,
+        runtimeRoute: { type: "stdio" },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      runtimeInstanceSummarySchema.parse({
+        ...baseSummary,
+        runtimeRoute: { type: "stdio", identity: "   " },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      runtimeInstanceSummarySchema.parse({
+        ...baseSummary,
+        runtimeRoute: {
+          type: "stdio",
+          identity: "runtime-stdio",
+          endpoint: "http://127.0.0.1:4444",
+        },
+      }),
+    ).toThrow();
   });
 
   test("runtime capabilities require execution modes only when subagents are supported", () => {
@@ -847,6 +888,29 @@ describe("runtime schemas", () => {
     expect(() =>
       runtimeTransportSchema.parse({
         type: "stdio",
+        workingDirectory: "/repo",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      runtimeTransportSchema.parse({
+        type: "stdio",
+        identity: "runtime-stdio",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      runtimeTransportSchema.parse({
+        type: "stdio",
+        identity: "   ",
+        workingDirectory: "/repo",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      runtimeTransportSchema.parse({
+        type: "stdio",
+        identity: "runtime-stdio",
         endpoint: "http://127.0.0.1:4444",
         workingDirectory: "/repo",
       }),

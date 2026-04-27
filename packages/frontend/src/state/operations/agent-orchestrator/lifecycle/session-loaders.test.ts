@@ -202,7 +202,9 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
   });
 
   test("accepts stdio model catalog connections without forcing an endpoint", async () => {
-    const harness = createStateHarness(createSession({ runtimeRoute: { type: "stdio" } }));
+    const harness = createStateHarness(
+      createSession({ runtimeRoute: { type: "stdio", identity: "runtime-stdio" } }),
+    );
     let receivedConnection: unknown = null;
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
       adapter: {
@@ -217,11 +219,13 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
 
     await loadSessionModelCatalog("session-1", "opencode", {
       type: "stdio",
+      identity: " runtime-stdio ",
       workingDirectory: "/tmp/repo",
     });
 
     expect(receivedConnection).toEqual({
       type: "stdio",
+      identity: "runtime-stdio",
       workingDirectory: "/tmp/repo",
     });
     expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);

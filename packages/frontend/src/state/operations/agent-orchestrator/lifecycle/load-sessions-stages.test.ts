@@ -9,7 +9,10 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { liveAgentSessionLookupKey, runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
+import {
+  liveAgentSessionLookupKey,
+  RuntimeConnectionPreloadIndex,
+} from "./live-agent-session-cache";
 import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
@@ -147,6 +150,15 @@ const createRuntime = (
   },
   startedAt: "2026-03-01T09:00:00.000Z",
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+});
+
+const createStdioRuntime = (
+  runtimeId: string,
+  workingDirectory: string,
+): RuntimeInstanceSummary => ({
+  ...createRuntime(workingDirectory),
+  runtimeId,
+  runtimeRoute: { type: "stdio", identity: runtimeId },
 });
 
 describe("load-sessions-stages", () => {
@@ -699,6 +711,68 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
   });
 
+  test("throws runtime resolution failures for reconcile hydration without marking the task reconciled", async () => {
+    const initialSession = createSession();
+    const stateHarness = createStateHarness({ "session-1": initialSession });
+    let updateCalls = 0;
+
+    await expect(
+      hydrateSessionRecordsStage({
+        adapter: {
+          hasSession: () => false,
+          listLiveAgentSessionSnapshots: async () => [],
+          loadSessionHistory: async () => [],
+          attachSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
+          resumeSession: async (input) => ({
+            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            scenario: input.scenario,
+            startedAt: "2026-03-01T09:00:00.000Z",
+            status: "idle",
+            runtimeKind: input.runtimeKind,
+          }),
+        },
+        setSessionsById: stateHarness.setSessionsById,
+        updateSession: (sessionId, updater) => {
+          updateCalls += 1;
+          stateHarness.updateSession(sessionId, updater);
+        },
+        isStaleRepoOperation: () => false,
+        recordsToHydrate: [createRecord()],
+        historyHydrationSessionIds: new Set(),
+        failOnRuntimeResolutionError: true,
+        runtimePlanner: {
+          readCurrentHydratedRuntimeResolution: () => null,
+          resolveHydrationRuntime: async () => ({
+            ok: false,
+            runtimeKind: "opencode",
+            reason: "Multiple live stdio runtimes found for working directory /tmp/repo/worktree.",
+          }),
+          loadLiveAgentSessionSnapshot: async () => null,
+        },
+        promptAssembler: {
+          buildHydrationPreludeMessages: async () => [],
+          buildHydrationSystemPrompt: async () => "",
+        },
+        getRepoPromptOverrides: async () => ({}),
+      }),
+    ).rejects.toThrow(
+      "Multiple live stdio runtimes found for working directory /tmp/repo/worktree.",
+    );
+
+    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+    expect(updateCalls).toBe(0);
+  });
+
   test("fails requested-history hydration before adapter history loads for unsupported stdio OpenCode runtimes", async () => {
     const stateHarness = createStateHarness({ "session-1": createSession() });
     let historyLoads = 0;
@@ -742,9 +816,10 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-stdio",
-            runtimeRoute: { type: "stdio" },
+            runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
             runtimeConnection: {
               type: "stdio",
+              identity: "runtime-stdio",
               workingDirectory: "/tmp/repo/worktree",
             },
           }),
@@ -976,6 +1051,12 @@ describe("load-sessions-stages", () => {
       workingDirectory,
     };
     let snapshotLoads = 0;
+    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
+    preloadedRuntimeConnections.add("opencode", {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+      workingDirectory,
+    });
 
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
@@ -989,12 +1070,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedRuntimeConnectionsByKey: new Map([
-          [
-            runtimeWorkingDirectoryKey("opencode", workingDirectory),
-            { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
-          ],
-        ]),
+        preloadedRuntimeConnections,
         preloadedLiveAgentSessionsByKey: new Map([
           [
             liveAgentSessionLookupKey(
@@ -1071,6 +1147,92 @@ describe("load-sessions-stages", () => {
 
     expect(snapshot).toEqual(liveSnapshot);
     expect(snapshotLoads).toBe(0);
+  });
+
+  test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const runtimeConnectionA = {
+      type: "stdio" as const,
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const runtimeConnectionB = {
+      type: "stdio" as const,
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
+    preloadedRuntimeConnections.add("opencode", runtimeConnectionA);
+    preloadedRuntimeConnections.add("opencode", runtimeConnectionB);
+
+    const planner = await createRuntimeResolutionPlannerStage({
+      intent: createIntent(),
+      options: {
+        preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+          [
+            "opencode",
+            [
+              createStdioRuntime("runtime-stdio-a", workingDirectory),
+              createStdioRuntime("runtime-stdio-b", workingDirectory),
+            ],
+          ],
+        ]),
+        preloadedRuntimeConnections,
+        preloadedLiveAgentSessionsByKey: new Map([
+          [
+            liveAgentSessionLookupKey("opencode", runtimeConnectionB, workingDirectory),
+            [
+              {
+                externalSessionId: "external-1",
+                title: "Builder Session",
+                startedAt: "2026-03-01T09:00:00.000Z",
+                status: { type: "busy" as const },
+                pendingPermissions: [],
+                pendingQuestions: [],
+                workingDirectory,
+              },
+            ],
+          ],
+        ]),
+        allowRuntimeEnsure: false,
+      },
+      adapter: {
+        hasSession: () => false,
+        loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+      },
+      sessionsRef: createStateHarness({}).sessionsRef,
+      recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
+      historyHydrationSessionIds: new Set(),
+    });
+
+    const result = await planner.resolveHydrationRuntime(
+      createRecord({ role: "planner", workingDirectory }),
+    );
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-stdio-b");
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
+    expect(result.runtimeConnection).toEqual(runtimeConnectionB);
   });
 
   test("prompt assembler omits system prompt when the task is unavailable", async () => {

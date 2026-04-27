@@ -9,6 +9,7 @@ import type {
   AgentRuntimeConnection,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
+import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
 import { host } from "../../shared/host";
@@ -24,7 +25,7 @@ import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
-  runtimeWorkingDirectoryKey,
+  RuntimeConnectionPreloadIndex,
 } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
@@ -41,7 +42,7 @@ type ReconcilePreloadPlan = {
   persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
   taskIdsToReconcile: Set<string>;
   preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeConnectionsByKey: Map<string, AgentRuntimeConnection>;
+  preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
   skippedTaskErrors: Map<string, unknown>;
 };
@@ -58,8 +59,12 @@ type ReconcilePreloadMetadata = {
 
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
-const invalidateRuntimeList = async (runtimeKind: RuntimeKind, repoPath: string): Promise<void> => {
-  await appQueryClient.invalidateQueries({
+const invalidateRuntimeList = async (
+  queryClient: QueryClient,
+  runtimeKind: RuntimeKind,
+  repoPath: string,
+): Promise<void> => {
+  await queryClient.invalidateQueries({
     queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
     exact: true,
     refetchType: "none",
@@ -189,6 +194,9 @@ export const createRepoSessionHydrationService = ({
   sessionHydration,
   liveAgentSessionStore,
   onRetryRequested,
+  queryClient = appQueryClient,
+  runtimeEnsure = (nextRepoPath, nextRuntimeKind) =>
+    host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
 }: {
   agentEngine: Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
   sessionHydration: Pick<
@@ -197,6 +205,11 @@ export const createRepoSessionHydrationService = ({
   >;
   liveAgentSessionStore: LiveAgentSessionStore;
   onRetryRequested: () => void;
+  queryClient?: QueryClient;
+  runtimeEnsure?: (
+    nextRepoPath: string,
+    nextRuntimeKind: RuntimeKind,
+  ) => Promise<RuntimeInstanceSummary>;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
   const reconciledTasksByRepo: Record<string, Set<string>> = {};
@@ -257,15 +270,15 @@ export const createRepoSessionHydrationService = ({
 
     const runtimeConnections = new Map<string, RuntimeConnectionScan>();
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
-    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>();
+    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
     for (const runtimeKind of runtimeKinds) {
-      const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
+      const runtimes = await loadRuntimeListFromQuery(queryClient, runtimeKind, repoPath);
       if (isCancelled()) {
         return {
           persistedByTask,
           taskIdsToReconcile: new Set<string>(),
           preloadedRuntimeLists,
-          preloadedRuntimeConnectionsByKey,
+          preloadedRuntimeConnections,
           preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
           skippedTaskErrors,
         };
@@ -283,16 +296,15 @@ export const createRepoSessionHydrationService = ({
         const ensuredRuntime = await ensureRuntimeAndInvalidateReadinessQueries({
           repoPath,
           runtimeKind,
-          ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-            host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
+          ensureRuntime: runtimeEnsure,
         });
-        await invalidateRuntimeList(runtimeKind, repoPath);
+        await invalidateRuntimeList(queryClient, runtimeKind, repoPath);
         if (isCancelled()) {
           return {
             persistedByTask,
             taskIdsToReconcile: new Set<string>(),
             preloadedRuntimeLists,
-            preloadedRuntimeConnectionsByKey,
+            preloadedRuntimeConnections,
             preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
             skippedTaskErrors,
           };
@@ -310,10 +322,7 @@ export const createRepoSessionHydrationService = ({
           runtime.runtimeRoute,
           runtime.workingDirectory,
         );
-        preloadedRuntimeConnectionsByKey.set(
-          runtimeWorkingDirectoryKey(runtimeKind, runtime.workingDirectory),
-          runtimeConnection,
-        );
+        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
         if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
           continue;
         }
@@ -344,55 +353,68 @@ export const createRepoSessionHydrationService = ({
         continue;
       }
 
-      const routeSourceRuntime =
-        runtimeEntries.find(
-          (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
-        ) ??
-        (runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind)
-          ? await ensureRuntimeAndInvalidateReadinessQueries({
-              repoPath,
-              runtimeKind,
-              ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-                host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-            })
-          : null);
-      if (!routeSourceRuntime) {
+      const routeSourceRuntimes = runtimeEntries.filter(
+        (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
+      );
+      if (
+        routeSourceRuntimes.length === 0 &&
+        runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind)
+      ) {
+        routeSourceRuntimes.push(
+          await ensureRuntimeAndInvalidateReadinessQueries({
+            repoPath,
+            runtimeKind,
+            ensureRuntime: runtimeEnsure,
+          }),
+        );
+      }
+      if (routeSourceRuntimes.length === 0) {
         continue;
       }
 
-      if (!runtimeEntries.includes(routeSourceRuntime)) {
-        await invalidateRuntimeList(runtimeKind, repoPath);
+      // A repo-root runtime can be produced by the ensure call above when the
+      // runtime list did not already contain one. Keep both the query cache and
+      // this local list aligned before deriving worktree routes from it.
+      if (
+        routeSourceRuntimes.some(
+          (routeSourceRuntime) => !runtimeEntries.includes(routeSourceRuntime),
+        )
+      ) {
+        await invalidateRuntimeList(queryClient, runtimeKind, repoPath);
         if (isCancelled()) {
           return {
             persistedByTask,
             taskIdsToReconcile: new Set<string>(),
             preloadedRuntimeLists,
-            preloadedRuntimeConnectionsByKey,
+            preloadedRuntimeConnections,
             preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
             skippedTaskErrors,
           };
         }
-        runtimeEntries.push(routeSourceRuntime);
+        for (const routeSourceRuntime of routeSourceRuntimes) {
+          if (!runtimeEntries.includes(routeSourceRuntime)) {
+            runtimeEntries.push(routeSourceRuntime);
+          }
+        }
       }
 
       for (const workingDirectory of missingDerivedDirectories) {
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          routeSourceRuntime.runtimeRoute,
-          workingDirectory,
-        );
-        preloadedRuntimeConnectionsByKey.set(
-          runtimeWorkingDirectoryKey(runtimeKind, workingDirectory),
-          runtimeConnection,
-        );
-        const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
-        if (!runtimeConnections.has(scanKey)) {
-          runtimeConnections.set(scanKey, {
-            runtimeKind,
-            runtimeConnection,
-            directories: new Set<string>(),
-          });
+        for (const routeSourceRuntime of routeSourceRuntimes) {
+          const { runtimeConnection } = resolveRuntimeRouteConnection(
+            routeSourceRuntime.runtimeRoute,
+            workingDirectory,
+          );
+          preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+          const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
+          if (!runtimeConnections.has(scanKey)) {
+            runtimeConnections.set(scanKey, {
+              runtimeKind,
+              runtimeConnection,
+              directories: new Set<string>(),
+            });
+          }
+          runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
         }
-        runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
       }
     }
 
@@ -403,8 +425,9 @@ export const createRepoSessionHydrationService = ({
       }
 
       const hasResolvableHydrationRuntime = records.some((record) =>
-        preloadedRuntimeConnectionsByKey.has(
-          runtimeWorkingDirectoryKey(readPersistedRuntimeKind(record), record.workingDirectory),
+        preloadedRuntimeConnections.hasAny(
+          readPersistedRuntimeKind(record),
+          record.workingDirectory,
         ),
       );
       if (hasResolvableHydrationRuntime) {
@@ -426,7 +449,7 @@ export const createRepoSessionHydrationService = ({
           persistedByTask,
           taskIdsToReconcile: new Set<string>(),
           preloadedRuntimeLists,
-          preloadedRuntimeConnectionsByKey,
+          preloadedRuntimeConnections,
           preloadedLiveAgentSessionsByKey,
           skippedTaskErrors,
         };
@@ -463,7 +486,7 @@ export const createRepoSessionHydrationService = ({
       persistedByTask,
       taskIdsToReconcile,
       preloadedRuntimeLists,
-      preloadedRuntimeConnectionsByKey,
+      preloadedRuntimeConnections,
       preloadedLiveAgentSessionsByKey,
       skippedTaskErrors,
     };
@@ -600,7 +623,7 @@ export const createRepoSessionHydrationService = ({
               taskId,
               persistedRecords: records,
               preloadedRuntimeLists: plan.preloadedRuntimeLists,
-              preloadedRuntimeConnectionsByKey: plan.preloadedRuntimeConnectionsByKey,
+              preloadedRuntimeConnections: plan.preloadedRuntimeConnections,
               preloadedLiveAgentSessionsByKey: plan.preloadedLiveAgentSessionsByKey,
               allowRuntimeEnsure: false,
             });

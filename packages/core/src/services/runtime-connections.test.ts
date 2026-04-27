@@ -9,6 +9,7 @@ describe("runtime-connections", () => {
   test("requireRuntimeConnection returns the provided connection", () => {
     const connection = {
       type: "stdio",
+      identity: "runtime-stdio",
       workingDirectory: "/repo",
     } as const;
 
@@ -26,6 +27,7 @@ describe("runtime-connections", () => {
       requireRuntimeWorkingDirectory(
         {
           type: "stdio",
+          identity: "runtime-stdio",
           workingDirectory: " /repo ",
         },
         "list models",
@@ -55,6 +57,7 @@ describe("runtime-connections", () => {
       requireLocalHttpRuntimeConnection(
         {
           type: "stdio",
+          identity: "runtime-stdio",
           workingDirectory: "/repo",
         },
         "list models",

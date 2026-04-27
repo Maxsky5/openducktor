@@ -164,7 +164,9 @@ mod tests {
                 prepared_worktree: PreparedBuildWorktree {
                     worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
                 },
-                runtime_summary: make_runtime_summary(RuntimeRoute::Stdio),
+                runtime_summary: make_runtime_summary(
+                    RuntimeRoute::stdio("runtime-stdio").expect("stdio route"),
+                ),
                 task_id: "task-1",
             })
             .expect_err("opencode build startup should reject stdio routes before task transition");

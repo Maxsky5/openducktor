@@ -6,7 +6,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { runtimeConnectionTransportKey } from "../runtime/runtime";
+import { normalizeStdioRuntimeIdentity, runtimeConnectionTransportKey } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import {
   coerceSessionSelectionToCatalog,
@@ -76,6 +76,10 @@ const validateRuntimeConnection = (
     case "stdio":
       return {
         type: "stdio",
+        identity: normalizeStdioRuntimeIdentity(
+          runtimeConnection.identity,
+          "Session runtime stdio identity",
+        ),
         workingDirectory,
       };
   }

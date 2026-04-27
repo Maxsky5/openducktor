@@ -27,7 +27,7 @@ import { useTaskOperations } from "./use-task-operations";
 type LegacyRunSummary = {
   runId: string;
   runtimeKind: string;
-  runtimeRoute: { type: "local_http"; endpoint: string } | { type: "stdio" };
+  runtimeRoute: { type: "local_http"; endpoint: string } | { type: "stdio"; identity: string };
   repoPath: string;
   taskId: string;
   branch: string;

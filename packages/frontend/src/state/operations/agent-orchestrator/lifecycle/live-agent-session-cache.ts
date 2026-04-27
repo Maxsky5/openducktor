@@ -21,6 +21,59 @@ export const getLiveAgentSessionCacheKey = (
 export const runtimeWorkingDirectoryKey = (runtimeKind: string, workingDirectory: string): string =>
   `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
 
+const runtimeConnectionPreloadKey = (
+  runtimeKind: string,
+  runtimeConnection: AgentRuntimeConnection,
+): string =>
+  `${runtimeKind}::${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(
+    runtimeConnection.workingDirectory,
+  )}`;
+
+const runtimeConnectionPreloadDirectoryKey = (
+  runtimeKind: RuntimeKind,
+  workingDirectory: string,
+): string => `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
+
+export class RuntimeConnectionPreloadIndex {
+  private readonly connectionsByKey = new Map<string, AgentRuntimeConnection>();
+  private readonly connectionsByDirectoryKey = new Map<
+    string,
+    Map<string, AgentRuntimeConnection>
+  >();
+
+  get size(): number {
+    return this.connectionsByKey.size;
+  }
+
+  add(runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection): void {
+    const connectionKey = runtimeConnectionPreloadKey(runtimeKind, runtimeConnection);
+    this.connectionsByKey.set(connectionKey, runtimeConnection);
+
+    const directoryKey = runtimeConnectionPreloadDirectoryKey(
+      runtimeKind,
+      runtimeConnection.workingDirectory,
+    );
+    const connectionsForDirectory =
+      this.connectionsByDirectoryKey.get(directoryKey) ?? new Map<string, AgentRuntimeConnection>();
+    connectionsForDirectory.set(connectionKey, runtimeConnection);
+    this.connectionsByDirectoryKey.set(directoryKey, connectionsForDirectory);
+  }
+
+  hasAny(runtimeKind: RuntimeKind, workingDirectory: string): boolean {
+    return this.connectionsByDirectoryKey.has(
+      runtimeConnectionPreloadDirectoryKey(runtimeKind, workingDirectory),
+    );
+  }
+
+  findCandidates(runtimeKind: RuntimeKind, workingDirectory: string): AgentRuntimeConnection[] {
+    return Array.from(
+      this.connectionsByDirectoryKey
+        .get(runtimeConnectionPreloadDirectoryKey(runtimeKind, workingDirectory))
+        ?.values() ?? [],
+    );
+  }
+}
+
 export const liveAgentSessionLookupKey = (
   runtimeKind: string,
   runtimeConnection: AgentRuntimeConnection,

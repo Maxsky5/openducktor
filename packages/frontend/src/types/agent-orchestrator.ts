@@ -10,6 +10,9 @@ import type {
   AgentUserMessageDisplayPart,
   AgentUserMessageState,
 } from "@openducktor/core";
+import type { RuntimeConnectionPreloadIndex } from "@/state/operations/agent-orchestrator/lifecycle/live-agent-session-cache";
+
+export type { RuntimeConnectionPreloadIndex };
 
 export type AgentChatMessageMeta =
   | {
@@ -203,10 +206,7 @@ export type AgentSessionLoadOptions = {
     import("@openducktor/contracts").RuntimeKind,
     import("@openducktor/contracts").RuntimeInstanceSummary[]
   >;
-  preloadedRuntimeConnectionsByKey?: Map<
-    string,
-    import("@openducktor/core").AgentRuntimeConnection
-  >;
+  preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey?: Map<
     string,
     import("@openducktor/core").LiveAgentSessionSnapshot[]

@@ -6,8 +6,12 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
+import { createLiveAgentSessionSnapshotFixture } from "../test-utils";
 import { createHydrationRuntimeResolver } from "./hydration-runtime-resolution";
-import { runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
+import {
+  liveAgentSessionLookupKey,
+  RuntimeConnectionPreloadIndex,
+} from "./live-agent-session-cache";
 
 const createRecord = (
   role: AgentSessionRecord["role"],
@@ -38,26 +42,44 @@ const createRuntime = (workingDirectory: string): RuntimeInstanceSummary => ({
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 });
 
+const createStdioRuntime = (
+  runtimeId: string,
+  workingDirectory: string,
+): RuntimeInstanceSummary => ({
+  ...createRuntime(workingDirectory),
+  runtimeId,
+  runtimeRoute: {
+    type: "stdio",
+    identity: runtimeId,
+  },
+});
+
+const createPreloadIndex = (
+  connections: AgentRuntimeConnection[],
+): RuntimeConnectionPreloadIndex => {
+  const preloadIndex = new RuntimeConnectionPreloadIndex();
+  for (const runtimeConnection of connections) {
+    preloadIndex.add("opencode", runtimeConnection);
+  }
+  return preloadIndex;
+};
+
 describe("createHydrationRuntimeResolver", () => {
   test("prefers live runtime resolution over preloaded runtime connections", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
-      [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:9999",
-          workingDirectory,
-        },
-      ],
-    ]);
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:9999",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([preloadedRuntimeConnection]);
 
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
         ["opencode", [createRuntime(workingDirectory)]],
       ]),
-      preloadedRuntimeConnectionsByKey,
+      preloadedRuntimeConnections,
       ensureWorkspaceRuntime: async () => null,
     });
 
@@ -104,6 +126,60 @@ describe("createHydrationRuntimeResolver", () => {
       workingDirectory: "/tmp/openducktor-worktrees/task-1",
     });
     expect(ensureCalls).toBe(0);
+  });
+
+  test("uses preloaded snapshots to disambiguate same-repo workspace stdio runtimes", async () => {
+    const workingDirectory = "/tmp/openducktor-worktrees/task-1";
+    const runtimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const runtimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      runtimeConnectionA,
+      runtimeConnectionB,
+    ]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", runtimeConnectionB, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        [
+          "opencode",
+          [
+            createStdioRuntime("runtime-stdio-a", "/tmp/repo"),
+            createStdioRuntime("runtime-stdio-b", "/tmp/repo"),
+          ],
+        ],
+      ]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-stdio-b");
+    expect(result.runtimeConnection).toEqual(runtimeConnectionB);
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
   });
 
   test("fails fast for repo-root build sessions when no live runtime exists", async () => {
@@ -157,22 +233,18 @@ describe("createHydrationRuntimeResolver", () => {
 
   test("falls back to preloaded runtime connection when no run or runtime exists", async () => {
     const workingDirectory = "/tmp/repo";
-    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
-      [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:9999",
-          workingDirectory,
-        },
-      ],
-    ]);
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:9999",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([preloadedRuntimeConnection]);
     let ensureCalls = 0;
 
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-      preloadedRuntimeConnectionsByKey,
+      preloadedRuntimeConnections,
       ensureWorkspaceRuntime: async () => {
         ensureCalls += 1;
         return null;
@@ -194,20 +266,17 @@ describe("createHydrationRuntimeResolver", () => {
 
   test("preserves stdio preloaded runtime connections during hydration fallback", async () => {
     const workingDirectory = "/tmp/repo";
-    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>([
-      [
-        runtimeWorkingDirectoryKey("opencode", workingDirectory),
-        {
-          type: "stdio",
-          workingDirectory,
-        },
-      ],
-    ]);
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([preloadedRuntimeConnection]);
 
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-      preloadedRuntimeConnectionsByKey,
+      preloadedRuntimeConnections,
       ensureWorkspaceRuntime: async () => null,
     });
 
@@ -219,11 +288,219 @@ describe("createHydrationRuntimeResolver", () => {
     expect(result.runtimeId).toBeNull();
     expect(result.runtimeConnection).toEqual({
       type: "stdio",
+      identity: "runtime-stdio",
       workingDirectory,
     });
     expect(result.runtimeRoute).toEqual({
       type: "stdio",
+      identity: "runtime-stdio",
     });
+  });
+
+  test("fails fast when multiple stdio runtimes match the same working directory", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        [
+          "opencode",
+          [
+            createStdioRuntime("runtime-stdio-a", workingDirectory),
+            createStdioRuntime("runtime-stdio-b", workingDirectory),
+          ],
+        ],
+      ]),
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    await expect(
+      resolveHydrationRuntime(createRecord("planner", workingDirectory)),
+    ).resolves.toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: `Multiple live stdio runtimes found for working directory ${workingDirectory}.`,
+    });
+  });
+
+  test("uses preloaded snapshots to disambiguate same-directory live stdio runtimes", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const runtimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const runtimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      runtimeConnectionA,
+      runtimeConnectionB,
+    ]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", runtimeConnectionB, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        [
+          "opencode",
+          [
+            createStdioRuntime("runtime-stdio-a", workingDirectory),
+            createStdioRuntime("runtime-stdio-b", workingDirectory),
+          ],
+        ],
+      ]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("planner", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBe("runtime-stdio-b");
+    expect(result.runtimeConnection).toEqual(runtimeConnectionB);
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
+  });
+
+  test("fails fast when duplicate live stdio runtimes share the same transport identity", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const runtimeConnection: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([runtimeConnection]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", runtimeConnection, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const runtimeA = {
+      ...createStdioRuntime("runtime-a", workingDirectory),
+      runtimeRoute: { type: "stdio", identity: "runtime-stdio" } as const,
+    };
+    const runtimeB = {
+      ...createStdioRuntime("runtime-b", workingDirectory),
+      runtimeRoute: { type: "stdio", identity: "runtime-stdio" } as const,
+    };
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        ["opencode", [runtimeA, runtimeB]],
+      ]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    await expect(
+      resolveHydrationRuntime(createRecord("planner", workingDirectory)),
+    ).resolves.toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: `Multiple live stdio runtimes share transport identity stdio:runtime-stdio for working directory ${workingDirectory}.`,
+    });
+  });
+
+  test("fails fast when multiple preloaded stdio connections match the same working directory", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      preloadedRuntimeConnectionA,
+      preloadedRuntimeConnectionB,
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnections,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    await expect(
+      resolveHydrationRuntime(createRecord("planner", workingDirectory)),
+    ).resolves.toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: `Multiple preloaded runtime connections found for working directory ${workingDirectory}.`,
+    });
+  });
+
+  test("uses preloaded snapshots to disambiguate same-directory preloaded stdio connections", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnectionA: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-a",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnectionB: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio-b",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([
+      preloadedRuntimeConnectionA,
+      preloadedRuntimeConnectionB,
+    ]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", preloadedRuntimeConnectionB, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("planner", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBeNull();
+    expect(result.runtimeConnection).toEqual(preloadedRuntimeConnectionB);
+    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
   });
 
   test("includes the missing working directory when repo-root planner ensure cannot provide a runtime", async () => {

@@ -16,13 +16,13 @@ impl AppRuntime for HostManagedStdioRuntimeAdapter {
         &self,
         _service: &AppService,
         _input: &crate::app_service::runtime_orchestrator::RuntimeStartInput<'_>,
-        _runtime_id: &str,
+        runtime_id: &str,
         _startup_policy: crate::app_service::RuntimeStartupReadinessPolicy,
     ) -> Result<HostManagedRuntimeStart> {
         Ok(HostManagedRuntimeStart {
             child: spawn_sleep_process(30),
             runtime_process_guard: RuntimeProcessGuard::new(()),
-            runtime_route: host_domain::RuntimeRoute::Stdio,
+            runtime_route: host_domain::RuntimeRoute::stdio(runtime_id)?,
             startup_report: crate::app_service::RuntimeStartupWaitReport::zero(),
         })
     }
@@ -140,7 +140,10 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
     let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;
 
     assert_eq!(runtime.kind, AgentRuntimeKind::from("test-runtime"));
-    assert!(matches!(runtime.runtime_route, host_domain::RuntimeRoute::Stdio));
+    assert_eq!(
+        runtime.runtime_route,
+        host_domain::RuntimeRoute::stdio(runtime.runtime_id.clone())?
+    );
     assert_eq!(
         service
             .runtime_list("test-runtime", Some(repo_path.to_string_lossy().as_ref()))?
@@ -155,7 +158,7 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
     let registered = runtimes
         .get(runtime.runtime_id.as_str())
         .expect("host-managed runtime should be registered");
-    assert!(matches!(registered.summary.runtime_route, host_domain::RuntimeRoute::Stdio));
+    assert_eq!(registered.summary.runtime_route, runtime.runtime_route);
     assert!(registered.child.is_some());
     drop(runtimes);
 
@@ -371,7 +374,7 @@ fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Res
                 summary: host_domain::RunSummary {
                     run_id: "run-1".to_string(),
                     runtime_kind: AgentRuntimeKind::from("test-runtime"),
-                    runtime_route: host_domain::RuntimeRoute::Stdio,
+                    runtime_route: host_domain::RuntimeRoute::stdio("run-stdio")?,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
                     branch: "odt/task-1".to_string(),
@@ -468,7 +471,7 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
         RuntimeRole::Build,
         repo_path_string.as_str(),
         repo_path_string.as_str(),
-        host_domain::RuntimeRoute::Stdio,
+        host_domain::RuntimeRoute::stdio("task-runtime-build-block")?,
     )?;
 
     let error = service
@@ -550,7 +553,7 @@ fn task_delete_uses_task_runtime_route_for_matching_runtime_kind_and_worktree() 
         RuntimeRole::Build,
         repo_path_string.as_str(),
         repo_path_string.as_str(),
-        host_domain::RuntimeRoute::Stdio,
+        host_domain::RuntimeRoute::stdio("task-runtime-build-match")?,
     )?;
 
     let error = service
@@ -632,7 +635,7 @@ fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() 
         RuntimeRole::Qa,
         repo_path_string.as_str(),
         repo_path_string.as_str(),
-        host_domain::RuntimeRoute::Stdio,
+        host_domain::RuntimeRoute::stdio("task-runtime-qa-match")?,
     )?;
 
     let error = service

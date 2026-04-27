@@ -9,6 +9,7 @@ import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
+  RuntimeConnectionPreloadIndex,
   runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
 
@@ -29,14 +30,40 @@ describe("live-agent-session-cache", () => {
       "opencode::local_http:http://127.0.0.1:4444",
     );
     expect(getLiveAgentSessionCacheKey("opencode", stdioRuntimeConnection)).toBe(
-      "opencode::stdio::/tmp/runtime-root",
+      "opencode::stdio:runtime-stdio::/tmp/runtime-root",
     );
     expect(runtimeWorkingDirectoryKey("opencode", "/tmp/repo/worktree/")).toBe(
       "opencode::/tmp/repo/worktree",
     );
+    const preloadIndex = new RuntimeConnectionPreloadIndex();
+    preloadIndex.add("opencode", stdioRuntimeConnection);
+    expect(preloadIndex.hasAny("opencode", "/tmp/runtime-root/")).toBe(true);
+    expect(preloadIndex.hasAny("opencode", "/tmp/other")).toBe(false);
+    expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
+      stdioRuntimeConnection,
+    ]);
     expect(
       liveAgentSessionLookupKey("opencode", stdioRuntimeConnection, "/tmp/repo/worktree/"),
-    ).toBe("opencode::stdio::/tmp/runtime-root::/tmp/repo/worktree");
+    ).toBe("opencode::stdio:runtime-stdio::/tmp/runtime-root::/tmp/repo/worktree");
+  });
+
+  test("indexes distinct stdio runtimes sharing a working directory", () => {
+    const runtimeConnectionA = createStdioRuntimeConnection("/tmp/runtime-root", {
+      identity: "runtime-stdio-a",
+    });
+    const runtimeConnectionB = createStdioRuntimeConnection("/tmp/runtime-root", {
+      identity: "runtime-stdio-b",
+    });
+
+    const preloadIndex = new RuntimeConnectionPreloadIndex();
+    preloadIndex.add("opencode", runtimeConnectionA);
+    preloadIndex.add("opencode", runtimeConnectionB);
+
+    expect(preloadIndex.size).toBe(2);
+    expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
+      runtimeConnectionA,
+      runtimeConnectionB,
+    ]);
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {

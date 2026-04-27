@@ -617,7 +617,7 @@ mod tests {
             task_id: None,
             role: host_domain::RuntimeRole::Workspace,
             working_directory: "/tmp/repo-health-stdio".to_string(),
-            runtime_route: RuntimeRoute::Stdio,
+            runtime_route: RuntimeRoute::stdio("runtime-stdio-health")?,
             started_at: "2026-04-04T16:00:00Z".to_string(),
             descriptor: builtin_opencode_runtime_descriptor(),
         };

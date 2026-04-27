@@ -32,6 +32,18 @@ export type RuntimeInfo = {
   workingDirectory: string;
 };
 
+export const normalizeStdioRuntimeIdentity = (
+  identity: string | null | undefined,
+  context = "Runtime stdio identity",
+): string => {
+  const trimmedIdentity = typeof identity === "string" ? identity.trim() : "";
+  if (trimmedIdentity.length === 0) {
+    throw new Error(`${context} is required.`);
+  }
+
+  return trimmedIdentity;
+};
+
 export const runtimeConnectionToRoute = (
   runtimeConnection: AgentRuntimeConnection,
 ): RuntimeRoute => {
@@ -44,6 +56,10 @@ export const runtimeConnectionToRoute = (
     case "stdio":
       return {
         type: "stdio",
+        identity: normalizeStdioRuntimeIdentity(
+          runtimeConnection.identity,
+          "Runtime connection stdio identity",
+        ),
       };
   }
 };
@@ -62,6 +78,10 @@ export const runtimeRouteToConnection = (
     case "stdio":
       return {
         type: "stdio",
+        identity: normalizeStdioRuntimeIdentity(
+          runtimeRoute.identity,
+          "Runtime route stdio identity",
+        ),
         workingDirectory,
       };
   }
@@ -85,7 +105,10 @@ export const runtimeRouteTransportKey = (runtimeRoute: RuntimeRoute | null | und
     case "local_http":
       return `local_http:${runtimeRoute.endpoint.trim()}`;
     case "stdio":
-      return "stdio";
+      return `stdio:${normalizeStdioRuntimeIdentity(
+        runtimeRoute.identity,
+        "Runtime route stdio identity",
+      )}`;
   }
 };
 
@@ -96,7 +119,10 @@ export const runtimeConnectionTransportKey = (
     case "local_http":
       return `local_http:${runtimeConnection.endpoint.trim()}`;
     case "stdio":
-      return "stdio";
+      return `stdio:${normalizeStdioRuntimeIdentity(
+        runtimeConnection.identity,
+        "Runtime connection stdio identity",
+      )}`;
   }
 };
 
@@ -135,7 +161,10 @@ export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute | null | undefin
     case "local_http":
       return runtimeRoute.endpoint;
     case "stdio":
-      return "stdio";
+      return `stdio:${normalizeStdioRuntimeIdentity(
+        runtimeRoute.identity,
+        "Runtime route stdio identity",
+      )}`;
   }
 };
 

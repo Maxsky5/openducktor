@@ -163,6 +163,7 @@ export type HistoryHydrationStageInput = {
   isStaleRepoOperation: () => boolean;
   recordsToHydrate: AgentSessionRecord[];
   historyHydrationSessionIds: Set<string>;
+  failOnRuntimeResolutionError?: boolean;
   runtimePlanner: HydrationRuntimePlanner;
   promptAssembler: HydrationPromptAssembler;
   getRepoPromptOverrides: () => Promise<RepoPromptOverrides>;
@@ -639,8 +640,11 @@ export const createRuntimeResolutionPlannerStage = async ({
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
     runtimesByKind,
-    ...(options?.preloadedRuntimeConnectionsByKey
-      ? { preloadedRuntimeConnectionsByKey: options.preloadedRuntimeConnectionsByKey }
+    ...(options?.preloadedRuntimeConnections
+      ? { preloadedRuntimeConnections: options.preloadedRuntimeConnections }
+      : {}),
+    ...(options?.preloadedLiveAgentSessionsByKey
+      ? { preloadedLiveAgentSessionsByKey: options.preloadedLiveAgentSessionsByKey }
       : {}),
     ensureWorkspaceRuntime,
   });
@@ -907,6 +911,7 @@ export const hydrateSessionRecordsStage = async ({
   isStaleRepoOperation,
   recordsToHydrate,
   historyHydrationSessionIds,
+  failOnRuntimeResolutionError = false,
   runtimePlanner,
   promptAssembler,
   getRepoPromptOverrides,
@@ -954,6 +959,9 @@ export const hydrateSessionRecordsStage = async ({
           }),
           { persist: false },
         );
+        throw new Error(runtimeResolution.reason);
+      }
+      if (failOnRuntimeResolutionError) {
         throw new Error(runtimeResolution.reason);
       }
       updateSession(

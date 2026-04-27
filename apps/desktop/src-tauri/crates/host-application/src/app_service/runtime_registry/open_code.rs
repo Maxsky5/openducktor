@@ -698,7 +698,9 @@ impl AppRuntime for OpenCodeRuntime {
                     ),
                 ))
             }
-            RuntimeRoute::Stdio => Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported),
+            RuntimeRoute::Stdio { .. } => {
+                Ok(RuntimeSessionStatusProbeTargetResolution::Unsupported)
+            }
         }
     }
 
