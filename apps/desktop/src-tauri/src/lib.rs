@@ -610,34 +610,30 @@ fn startup_phase_build_tauri_app(
         ("--no-first-run", None::<String>),
     ]);
 
-    let builder = builder
-        .manage(AppState { service })
-        .setup(move |app| {
-            #[cfg(all(feature = "cef", target_os = "macos"))]
-            macos_cef_quit::install(app)?;
+    let builder = builder.manage(AppState { service }).setup(move |app| {
+        #[cfg(all(feature = "cef", target_os = "macos"))]
+        macos_cef_quit::install(app)?;
 
-            let stop_requested =
-                start_task_event_relay(setup_service.clone(), app.handle().clone());
-            let pull_request_sync_stop_requested =
-                start_pull_request_sync_loop(setup_service.clone(), {
-                    let app_handle = app.handle().clone();
-                    move |event| {
-                        if let Err(error) = app_handle.emit(TASK_EVENT_NAME, event) {
-                            tracing::error!(
-                                target: "openducktor.task-sync",
-                                error = %error,
-                                "Pull request sync loop failed to emit a desktop task event"
-                            );
-                        }
+        let stop_requested = start_task_event_relay(setup_service.clone(), app.handle().clone());
+        let pull_request_sync_stop_requested =
+            start_pull_request_sync_loop(setup_service.clone(), {
+                let app_handle = app.handle().clone();
+                move |event| {
+                    if let Err(error) = app_handle.emit(TASK_EVENT_NAME, event) {
+                        tracing::error!(
+                            target: "openducktor.task-sync",
+                            error = %error,
+                            "Pull request sync loop failed to emit a desktop task event"
+                        );
                     }
-                });
-            app.manage(TaskEventRelayState { stop_requested });
-            app.manage(PullRequestSyncLoopState {
-                stop_requested: pull_request_sync_stop_requested,
+                }
             });
-            Ok(())
-        })
-        .plugin(tauri_plugin_dialog::init());
+        app.manage(TaskEventRelayState { stop_requested });
+        app.manage(PullRequestSyncLoopState {
+            stop_requested: pull_request_sync_stop_requested,
+        });
+        Ok(())
+    });
 
     startup_phase_command_registration(builder)
         .build(tauri::generate_context!())
@@ -1087,10 +1083,7 @@ mod tests {
             .get("permissions")
             .and_then(Value::as_array)
             .expect("default capability should contain permissions array");
-        let expected = vec![
-            Value::String("core:default".to_string()),
-            Value::String("dialog:allow-open".to_string()),
-        ];
+        let expected = vec![Value::String("core:default".to_string())];
 
         assert_eq!(
             permissions, &expected,

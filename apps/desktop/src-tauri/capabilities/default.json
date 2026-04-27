@@ -3,8 +3,5 @@
   "identifier": "default",
   "description": "Default capability for OpenDucktor",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "dialog:allow-open"
-  ]
+  "permissions": ["core:default"]
 }
