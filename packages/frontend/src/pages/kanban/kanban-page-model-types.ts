@@ -1,4 +1,4 @@
-import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
+import type { GitTargetBranch, KanbanEmptyColumnDisplay, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type {
@@ -79,6 +79,7 @@ export type KanbanPageHeaderModel = {
 export type KanbanPageContentModel = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
+  emptyColumnDisplay: KanbanEmptyColumnDisplay;
   columns: KanbanColumnData[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;

@@ -164,6 +164,17 @@ pub struct ChatSettings {
 pub struct KanbanSettings {
     #[serde(default = "default_done_visible_days")]
     pub done_visible_days: i32,
+    #[serde(default)]
+    pub empty_column_display: KanbanEmptyColumnDisplay,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum KanbanEmptyColumnDisplay {
+    #[default]
+    Show,
+    Hidden,
+    Collapsed,
 }
 
 const fn default_done_visible_days() -> i32 {
@@ -174,6 +185,7 @@ impl Default for KanbanSettings {
     fn default() -> Self {
         Self {
             done_visible_days: default_done_visible_days(),
+            empty_column_display: KanbanEmptyColumnDisplay::Show,
         }
     }
 }
@@ -598,11 +610,83 @@ impl RuntimeConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::RepoConfig;
+    use super::{
+        deserialize_global_config, GlobalConfig, KanbanEmptyColumnDisplay, KanbanSettings,
+        RepoConfig,
+    };
 
     #[test]
     fn repo_config_default_target_branch_is_origin_main() {
         let config = RepoConfig::default();
         assert_eq!(config.default_target_branch.canonical(), "origin/main");
+    }
+
+    #[test]
+    fn kanban_settings_defaults_empty_column_display_to_show() {
+        let settings = KanbanSettings::default();
+
+        assert_eq!(settings.done_visible_days, 1);
+        assert_eq!(
+            settings.empty_column_display,
+            KanbanEmptyColumnDisplay::Show
+        );
+    }
+
+    #[test]
+    fn deserialize_global_config_defaults_missing_kanban_empty_column_display() {
+        let config = deserialize_global_config(
+            r#"{
+                "version": 2,
+                "theme": "light",
+                "kanban": { "doneVisibleDays": 4 }
+            }"#,
+        )
+        .expect("config should deserialize");
+
+        assert_eq!(config.kanban.done_visible_days, 4);
+        assert_eq!(
+            config.kanban.empty_column_display,
+            KanbanEmptyColumnDisplay::Show
+        );
+    }
+
+    #[test]
+    fn kanban_empty_column_display_serializes_roundtrip() {
+        let config = GlobalConfig {
+            kanban: KanbanSettings {
+                done_visible_days: 2,
+                empty_column_display: KanbanEmptyColumnDisplay::Collapsed,
+            },
+            ..GlobalConfig::default()
+        };
+
+        let serialized = serde_json::to_string(&config).expect("config should serialize");
+        let deserialized =
+            deserialize_global_config(&serialized).expect("config should deserialize");
+
+        assert_eq!(
+            deserialized.kanban.empty_column_display,
+            KanbanEmptyColumnDisplay::Collapsed
+        );
+    }
+
+    #[test]
+    fn deserialize_global_config_rejects_invalid_kanban_empty_column_display() {
+        let error = deserialize_global_config(
+            r#"{
+                "version": 2,
+                "theme": "light",
+                "kanban": {
+                    "doneVisibleDays": 1,
+                    "emptyColumnDisplay": "compact"
+                }
+            }"#,
+        )
+        .expect_err("invalid empty-column display should fail");
+
+        assert!(
+            error.contains("compact"),
+            "error should identify the invalid value: {error}"
+        );
     }
 }

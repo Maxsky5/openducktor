@@ -8,7 +8,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   chat: { showThinkingMessages: false },
-  kanban: { doneVisibleDays: 1 },
+  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   workspaces: {},
   globalPromptOverrides: {},
@@ -105,7 +105,9 @@ describe("settings modal content", () => {
   });
 
   test("renders kanban section when section is kanban", () => {
-    const snapshot = createMockSnapshot({ kanban: { doneVisibleDays: 7 } });
+    const snapshot = createMockSnapshot({
+      kanban: { doneVisibleDays: 7, emptyColumnDisplay: "collapsed" },
+    });
     const controller = createMockController(snapshot);
 
     const html = renderToStaticMarkup(
@@ -124,6 +126,8 @@ describe("settings modal content", () => {
 
     expect(html).toContain("Kanban Settings");
     expect(html).toContain("Done tasks visible for");
+    expect(html).toContain("Empty columns");
+    expect(html).toContain("Choose whether empty lanes stay visible");
     expect(html).toContain('value="7"');
   });
 

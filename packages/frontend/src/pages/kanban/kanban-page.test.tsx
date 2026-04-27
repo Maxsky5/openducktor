@@ -57,6 +57,7 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   },
   kanban: {
     doneVisibleDays: 1,
+    emptyColumnDisplay: "show",
   },
   autopilot: {
     rules: [],
@@ -613,6 +614,7 @@ describe("KanbanPage session start modal flow", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+        emptyColumnDisplay: "show",
       },
       autopilot: {
         rules: [],

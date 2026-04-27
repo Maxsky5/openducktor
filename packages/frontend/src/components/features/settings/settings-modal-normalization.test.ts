@@ -339,6 +339,7 @@ describe("settings-modal-normalization", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+        emptyColumnDisplay: "show" as const,
       },
       autopilot: {
         rules: [],
@@ -386,6 +387,7 @@ describe("settings-modal-normalization", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+        emptyColumnDisplay: "show" as const,
       },
       autopilot: {
         rules: [],
@@ -415,6 +417,7 @@ describe("settings-modal-normalization", () => {
           },
           kanban: {
             doneVisibleDays: 1,
+            emptyColumnDisplay: "show" as const,
           },
           autopilot: {
             rules: [],

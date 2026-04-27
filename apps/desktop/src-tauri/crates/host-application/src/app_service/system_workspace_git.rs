@@ -542,6 +542,7 @@ impl AppService {
         config.chat = snapshot.chat;
         config.kanban = KanbanSettings {
             done_visible_days: snapshot.kanban.done_visible_days.max(0),
+            empty_column_display: snapshot.kanban.empty_column_display,
         };
         config.autopilot = snapshot.autopilot;
         config.global_prompt_overrides = snapshot.global_prompt_overrides;

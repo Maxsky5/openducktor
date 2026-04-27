@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
+import { KanbanCollapsedColumn } from "@/components/features/kanban/kanban-collapsed-column";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { KanbanBoardLoadingShell } from "./kanban-board-loading-shell";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
@@ -7,6 +9,41 @@ import type { KanbanPageContentModel } from "./kanban-page-model-types";
 type KanbanPageContentProps = {
   model: KanbanPageContentModel;
 };
+
+type KanbanPageColumn = KanbanPageContentModel["columns"][number];
+
+function renderKanbanColumn(
+  column: KanbanPageColumn,
+  model: KanbanPageContentModel,
+): ReactElement | null {
+  if (column.tasks.length === 0 && model.emptyColumnDisplay === "hidden") {
+    return null;
+  }
+
+  if (column.tasks.length === 0 && model.emptyColumnDisplay === "collapsed") {
+    return <KanbanCollapsedColumn key={column.id} column={column} />;
+  }
+
+  return (
+    <KanbanColumn
+      key={column.id}
+      column={column}
+      taskSessionsByTaskId={model.taskSessionsByTaskId}
+      activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
+      taskActivityStateByTaskId={model.taskActivityStateByTaskId}
+      onOpenDetails={model.onOpenDetails}
+      onDelegate={model.onDelegate}
+      onOpenSession={model.onOpenSession}
+      onPlan={model.onPlan}
+      onQaStart={model.onQaStart}
+      onQaOpen={model.onQaOpen}
+      onBuild={model.onBuild}
+      onHumanApprove={model.onHumanApprove}
+      onHumanRequestChanges={model.onHumanRequestChanges}
+      onResetImplementation={model.onResetImplementation}
+    />
+  );
+}
 
 export function KanbanPageContent({ model }: KanbanPageContentProps): ReactElement {
   const totalTaskCount = model.columns.reduce((count, column) => count + column.tasks.length, 0);
@@ -21,27 +58,11 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
           showBlockingLoader ? "opacity-0" : "opacity-100",
         )}
       >
-        <div className="flex min-h-full min-w-max items-start gap-4 pr-4">
-          {model.columns.map((column) => (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              taskSessionsByTaskId={model.taskSessionsByTaskId}
-              activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
-              taskActivityStateByTaskId={model.taskActivityStateByTaskId}
-              onOpenDetails={model.onOpenDetails}
-              onDelegate={model.onDelegate}
-              onOpenSession={model.onOpenSession}
-              onPlan={model.onPlan}
-              onQaStart={model.onQaStart}
-              onQaOpen={model.onQaOpen}
-              onBuild={model.onBuild}
-              onHumanApprove={model.onHumanApprove}
-              onHumanRequestChanges={model.onHumanRequestChanges}
-              onResetImplementation={model.onResetImplementation}
-            />
-          ))}
-        </div>
+        <TooltipProvider delayDuration={120}>
+          <div className="flex min-h-full min-w-max items-start gap-4 pr-4">
+            {model.columns.map((column) => renderKanbanColumn(column, model))}
+          </div>
+        </TooltipProvider>
       </div>
 
       {showBlockingLoader ? (

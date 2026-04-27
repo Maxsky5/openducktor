@@ -75,6 +75,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   kanban: {
     doneVisibleDays: 1,
+    emptyColumnDisplay: "show",
   },
   autopilot: {
     rules: [],
@@ -720,6 +721,7 @@ describe("use-repo-settings-operations", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+        emptyColumnDisplay: "show" as const,
       },
       autopilot: {
         rules: [],

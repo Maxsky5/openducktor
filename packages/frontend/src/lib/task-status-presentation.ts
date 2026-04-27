@@ -5,6 +5,7 @@ type KanbanLaneTheme = {
   boardSurfaceClass: string;
   headerSurfaceClass: string;
   headerAccentClass: string;
+  collapsedAccentClass?: string;
   countBadgeClass: string;
   emptyStateClass: string;
 };
@@ -31,6 +32,7 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
       boardSurfaceClass: "border-border/90 bg-muted/60",
       headerSurfaceClass: "bg-muted/80",
       headerAccentClass: "bg-muted/0",
+      collapsedAccentClass: "bg-muted-foreground/45",
       countBadgeClass: "border-input bg-card text-foreground",
       emptyStateClass: "border-input bg-card/80 text-muted-foreground",
     },

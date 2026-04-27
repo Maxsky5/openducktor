@@ -24,6 +24,7 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   },
   kanban: {
     doneVisibleDays: 1,
+    emptyColumnDisplay: "show",
   },
   autopilot: {
     rules: [],
@@ -141,11 +142,13 @@ describe("useSettingsModalDraftActions", () => {
       state.updateGlobalKanbanSettings((kanban) => ({
         ...kanban,
         doneVisibleDays: 7,
+        emptyColumnDisplay: "collapsed",
       }));
     });
 
     const snapshot = harness.getLatest().snapshotDraft;
     expect(snapshot?.kanban.doneVisibleDays).toBe(7);
+    expect(snapshot?.kanban.emptyColumnDisplay).toBe("collapsed");
     expect(snapshot?.chat.showThinkingMessages).toBe(false);
 
     await harness.unmount();

@@ -39,6 +39,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   kanban: {
     doneVisibleDays: 1,
+    emptyColumnDisplay: "show",
   },
   autopilot: createDefaultAutopilotSettings(),
   workspaces: {
