@@ -1,15 +1,55 @@
 import type { TauriHostClient } from "@openducktor/adapters-tauri-host";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
+const hostClientOverrides = new Map<PropertyKey, { value: unknown; restoreValue: unknown }>();
+const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, unknown>>();
+
+const readShellClientValue = (propertyKey: PropertyKey): unknown => {
+  const client = getShellBridge().client;
+  const value = client[propertyKey as keyof TauriHostClient];
+  if (typeof value !== "function") {
+    return value;
+  }
+
+  const clientObject = client as object;
+  let existingBindings = shellClientMethodBindings.get(clientObject);
+  if (!existingBindings) {
+    existingBindings = new Map();
+    shellClientMethodBindings.set(clientObject, existingBindings);
+  }
+  const existingBinding = existingBindings.get(propertyKey);
+  if (existingBinding) {
+    return existingBinding;
+  }
+
+  const boundValue = value.bind(client);
+  existingBindings.set(propertyKey, boundValue);
+  return boundValue;
+};
+
 const hostClientProxy = new Proxy(
   {},
   {
     get(_target, propertyKey) {
-      const value = getShellBridge().client[propertyKey as keyof TauriHostClient];
-      if (typeof value === "function") {
-        return value.bind(getShellBridge().client);
+      const override = hostClientOverrides.get(propertyKey);
+      if (override) {
+        return override.value;
       }
-      return value;
+      return readShellClientValue(propertyKey);
+    },
+    set(_target, propertyKey, value) {
+      const existingOverride = hostClientOverrides.get(propertyKey);
+      const restoreValue = existingOverride?.restoreValue ?? readShellClientValue(propertyKey);
+      if (value === restoreValue) {
+        hostClientOverrides.delete(propertyKey);
+        return true;
+      }
+      hostClientOverrides.set(propertyKey, { value, restoreValue });
+      return true;
+    },
+    deleteProperty(_target, propertyKey) {
+      hostClientOverrides.delete(propertyKey);
+      return true;
     },
   },
 ) as TauriHostClient;

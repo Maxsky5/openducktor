@@ -52,7 +52,6 @@ type ReconcilePreloadMetadata = {
   persistedTaskIdsByLiveSessionKey: Map<string, Set<string>>;
   runtimeKinds: Set<RuntimeKind>;
   desiredDirectoriesByRuntimeKind: Map<RuntimeKind, Set<string>>;
-  workspaceDerivedDirectoriesByRuntimeKind: Map<RuntimeKind, Set<string>>;
   runtimeKindsAllowedToEnsureRepoRoot: Set<RuntimeKind>;
   skippedTaskErrors: Map<string, unknown>;
 };
@@ -110,7 +109,6 @@ const collectReconcilePreloadMetadata = ({
   const persistedTaskIdsByLiveSessionKey = new Map<string, Set<string>>();
   const runtimeKinds = new Set<RuntimeKind>();
   const desiredDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
-  const workspaceDerivedDirectoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
   const runtimeKindsAllowedToEnsureRepoRoot = new Set<RuntimeKind>();
   const skippedTaskErrors = new Map<string, unknown>();
 
@@ -134,15 +132,7 @@ const collectReconcilePreloadMetadata = ({
           normalizeWorkingDirectory(record.workingDirectory),
         );
         if (canUseWorkspaceRuntimeForHydration(record, repoPath)) {
-          getOrCreateMapSet(workspaceDerivedDirectoriesByRuntimeKind, runtimeKind).add(
-            normalizeWorkingDirectory(record.workingDirectory),
-          );
-          if (
-            normalizeWorkingDirectory(record.workingDirectory) ===
-            normalizeWorkingDirectory(repoPath)
-          ) {
-            taskRuntimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
-          }
+          taskRuntimeKindsAllowedToEnsureRepoRoot.add(runtimeKind);
         }
       }
     } catch (error) {
@@ -183,7 +173,6 @@ const collectReconcilePreloadMetadata = ({
     persistedTaskIdsByLiveSessionKey,
     runtimeKinds,
     desiredDirectoriesByRuntimeKind,
-    workspaceDerivedDirectoriesByRuntimeKind,
     runtimeKindsAllowedToEnsureRepoRoot,
     skippedTaskErrors,
   };
@@ -263,7 +252,6 @@ export const createRepoSessionHydrationService = ({
       persistedTaskIdsByLiveSessionKey,
       runtimeKinds,
       desiredDirectoriesByRuntimeKind,
-      workspaceDerivedDirectoriesByRuntimeKind,
       runtimeKindsAllowedToEnsureRepoRoot,
       skippedTaskErrors,
     } = collectReconcilePreloadMetadata({ tasks, repoPath });
@@ -313,16 +301,46 @@ export const createRepoSessionHydrationService = ({
       }
 
       preloadedRuntimeLists.set(runtimeKind, runtimeEntries);
-      const coveredDirectories = new Set(
-        runtimeEntries.map((runtime) => normalizeWorkingDirectory(runtime.workingDirectory)),
-      );
+
+      const canScanRepoRootWorkspaceRuntime = (runtime: RuntimeInstanceSummary): boolean => {
+        const normalizedRuntimeDirectory = normalizeWorkingDirectory(runtime.workingDirectory);
+        if (runtime.role !== "workspace" || normalizedRuntimeDirectory !== repoPathKey) {
+          return true;
+        }
+
+        return persistedByTask.some(({ records }) =>
+          records.some((record) => {
+            try {
+              return (
+                readPersistedRuntimeKind(record) === runtimeKind &&
+                normalizeWorkingDirectory(record.workingDirectory) === normalizedRuntimeDirectory &&
+                canUseWorkspaceRuntimeForHydration(record, repoPath)
+              );
+            } catch (error) {
+              if (isSessionRuntimeMetadataError(error)) {
+                return false;
+              }
+              throw error;
+            }
+          }),
+        );
+      };
 
       for (const runtime of runtimeEntries) {
+        const isRepoRootWorkspaceRuntime =
+          runtime.role === "workspace" &&
+          normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey;
+        if (!canScanRepoRootWorkspaceRuntime(runtime)) {
+          continue;
+        }
+
         const { runtimeConnection } = resolveRuntimeRouteConnection(
           runtime.runtimeRoute,
           runtime.workingDirectory,
         );
-        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+        if (!isRepoRootWorkspaceRuntime) {
+          preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+        }
         if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
           continue;
         }
@@ -337,85 +355,6 @@ export const createRepoSessionHydrationService = ({
         }
         runtimeConnections.get(scanKey)?.directories.add(runtime.workingDirectory);
       }
-
-      const derivedDirectories =
-        workspaceDerivedDirectoriesByRuntimeKind.get(runtimeKind) ?? new Set();
-      const missingDerivedDirectories = Array.from(desiredDirectories).filter(
-        (workingDirectory) => {
-          const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-          return (
-            derivedDirectories.has(normalizedWorkingDirectory) &&
-            !coveredDirectories.has(normalizedWorkingDirectory)
-          );
-        },
-      );
-      if (missingDerivedDirectories.length === 0) {
-        continue;
-      }
-
-      const routeSourceRuntimes = runtimeEntries.filter(
-        (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey,
-      );
-      if (
-        routeSourceRuntimes.length === 0 &&
-        runtimeKindsAllowedToEnsureRepoRoot.has(runtimeKind)
-      ) {
-        routeSourceRuntimes.push(
-          await ensureRuntimeAndInvalidateReadinessQueries({
-            repoPath,
-            runtimeKind,
-            ensureRuntime: runtimeEnsure,
-          }),
-        );
-      }
-      if (routeSourceRuntimes.length === 0) {
-        continue;
-      }
-
-      // A repo-root runtime can be produced by the ensure call above when the
-      // runtime list did not already contain one. Keep both the query cache and
-      // this local list aligned before deriving worktree routes from it.
-      if (
-        routeSourceRuntimes.some(
-          (routeSourceRuntime) => !runtimeEntries.includes(routeSourceRuntime),
-        )
-      ) {
-        await invalidateRuntimeList(queryClient, runtimeKind, repoPath);
-        if (isCancelled()) {
-          return {
-            persistedByTask,
-            taskIdsToReconcile: new Set<string>(),
-            preloadedRuntimeLists,
-            preloadedRuntimeConnections,
-            preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
-            skippedTaskErrors,
-          };
-        }
-        for (const routeSourceRuntime of routeSourceRuntimes) {
-          if (!runtimeEntries.includes(routeSourceRuntime)) {
-            runtimeEntries.push(routeSourceRuntime);
-          }
-        }
-      }
-
-      for (const workingDirectory of missingDerivedDirectories) {
-        for (const routeSourceRuntime of routeSourceRuntimes) {
-          const { runtimeConnection } = resolveRuntimeRouteConnection(
-            routeSourceRuntime.runtimeRoute,
-            workingDirectory,
-          );
-          preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
-          const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
-          if (!runtimeConnections.has(scanKey)) {
-            runtimeConnections.set(scanKey, {
-              runtimeKind,
-              runtimeConnection,
-              directories: new Set<string>(),
-            });
-          }
-          runtimeConnections.get(scanKey)?.directories.add(workingDirectory);
-        }
-      }
     }
 
     const taskIdsToReconcile = new Set<string>();
@@ -424,13 +363,19 @@ export const createRepoSessionHydrationService = ({
         continue;
       }
 
-      const hasResolvableHydrationRuntime = records.some((record) =>
-        preloadedRuntimeConnections.hasAny(
-          readPersistedRuntimeKind(record),
-          record.workingDirectory,
-        ),
-      );
-      if (hasResolvableHydrationRuntime) {
+      const shouldAttemptReconcile = records.some((record) => {
+        const externalSessionId = record.externalSessionId ?? record.sessionId;
+        if (!externalSessionId) {
+          return false;
+        }
+
+        const runtimeKind = readPersistedRuntimeKind(record);
+        return (
+          preloadedRuntimeConnections.hasAny(runtimeKind, record.workingDirectory) ||
+          !canUseWorkspaceRuntimeForHydration(record, repoPath)
+        );
+      });
+      if (shouldAttemptReconcile) {
         taskIdsToReconcile.add(taskId);
       }
     }

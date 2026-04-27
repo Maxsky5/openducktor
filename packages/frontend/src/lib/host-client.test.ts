@@ -97,4 +97,34 @@ describe("host-client", () => {
     expect(firstRuntimeEnsure).toHaveBeenCalledTimes(1);
     expect(secondRuntimeEnsure).toHaveBeenCalledTimes(1);
   });
+
+  test("hostClient allows scoped method overrides for tests", async () => {
+    const shellRuntimeEnsure = mock(async () => createRuntimeInstanceSummary("runtime-shell"));
+    const overrideRuntimeEnsure = mock(async () =>
+      createRuntimeInstanceSummary("runtime-override"),
+    );
+    configureShellBridge(
+      createTestShellBridge({
+        client: { runtimeEnsure: shellRuntimeEnsure } as unknown as TauriHostClient,
+      }),
+    );
+
+    const { hostClient } = await import("./host-client");
+    const originalRuntimeEnsure = hostClient.runtimeEnsure;
+
+    hostClient.runtimeEnsure = overrideRuntimeEnsure as TauriHostClient["runtimeEnsure"];
+    try {
+      await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
+        runtimeId: "runtime-override",
+      });
+    } finally {
+      hostClient.runtimeEnsure = originalRuntimeEnsure;
+    }
+
+    await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
+      runtimeId: "runtime-shell",
+    });
+    expect(overrideRuntimeEnsure).toHaveBeenCalledTimes(1);
+    expect(shellRuntimeEnsure).toHaveBeenCalledTimes(1);
+  });
 });

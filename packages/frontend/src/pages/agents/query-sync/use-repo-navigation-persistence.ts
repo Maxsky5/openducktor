@@ -42,7 +42,7 @@ export const resolveRepoNavigationBoundaryPhase = ({
     return "idle";
   }
 
-  if (Boolean(lastWorkspaceId) && lastWorkspaceId !== activeWorkspaceId) {
+  if (lastWorkspaceId && lastWorkspaceId !== activeWorkspaceId) {
     return "detecting";
   }
 
