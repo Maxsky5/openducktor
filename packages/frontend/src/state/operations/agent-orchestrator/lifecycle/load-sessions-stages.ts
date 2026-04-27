@@ -950,18 +950,18 @@ export const hydrateSessionRecordsStage = async ({
       return;
     }
     if (!runtimeResolution.ok) {
-      if (shouldHydrateHistory || failOnRuntimeResolutionError) {
+      if (shouldHydrateHistory) {
         updateSession(
           record.sessionId,
-          (current) =>
-            shouldHydrateHistory
-              ? {
-                  ...current,
-                  historyHydrationState: "failed",
-                }
-              : current,
+          (current) => ({
+            ...current,
+            historyHydrationState: "failed",
+          }),
           { persist: false },
         );
+        throw new Error(runtimeResolution.reason);
+      }
+      if (failOnRuntimeResolutionError) {
         throw new Error(runtimeResolution.reason);
       }
       updateSession(

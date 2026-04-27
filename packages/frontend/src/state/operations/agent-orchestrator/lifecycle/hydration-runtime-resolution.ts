@@ -49,16 +49,8 @@ type SnapshotConnectionMatchResult =
   | { ok: true; runtimeConnection: AgentRuntimeConnection | null }
   | { ok: false; reason: string };
 
-const hasAmbiguousStdioRoutes = (runtimes: RuntimeInstanceSummary[]): boolean => {
-  const identities = new Set(
-    runtimes
-      .map((runtime) => runtime.runtimeRoute)
-      .filter((route): route is Extract<RuntimeRoute, { type: "stdio" }> => route.type === "stdio")
-      .map((route) => route.identity.trim()),
-  );
-
-  return identities.size > 1;
-};
+const hasAmbiguousStdioRoutes = (runtimes: RuntimeInstanceSummary[]): boolean =>
+  runtimes.length > 1 && runtimes.some((runtime) => runtime.runtimeRoute.type === "stdio");
 
 export const createHydrationRuntimeResolver = ({
   repoPath,
@@ -112,6 +104,49 @@ export const createHydrationRuntimeResolver = ({
     };
   };
 
+  const disambiguateAmbiguousStdioMatches = (
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+    externalSessionId: string,
+    matches: RuntimeInstanceSummary[],
+  ): RuntimeLookupResult | null => {
+    if (!hasAmbiguousStdioRoutes(matches)) {
+      return null;
+    }
+
+    const candidates: RuntimeSnapshotCandidate[] = matches.map((runtime) => ({
+      runtime,
+      runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, workingDirectory)
+        .runtimeConnection,
+    }));
+    const snapshotMatch = findPreloadedSnapshotConnection(
+      runtimeKind,
+      workingDirectory,
+      externalSessionId,
+      candidates.map((candidate) => candidate.runtimeConnection),
+    );
+    if (!snapshotMatch.ok) {
+      return { ok: false, reason: snapshotMatch.reason };
+    }
+    if (!snapshotMatch.runtimeConnection) {
+      return { ok: true, runtime: null };
+    }
+
+    const matchedTransportKey = runtimeConnectionTransportKey(snapshotMatch.runtimeConnection);
+    const matchedCandidates = candidates.filter(
+      (candidate) =>
+        runtimeConnectionTransportKey(candidate.runtimeConnection) === matchedTransportKey,
+    );
+    const [matchedCandidate] = matchedCandidates;
+    if (matchedCandidates.length === 1 && matchedCandidate) {
+      return { ok: true, runtime: matchedCandidate.runtime };
+    }
+    return {
+      ok: false,
+      reason: `Multiple live stdio runtimes share transport identity ${matchedTransportKey} for working directory ${workingDirectory}.`,
+    };
+  };
+
   const findRuntimeByWorkingDirectory = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
@@ -122,30 +157,15 @@ export const createHydrationRuntimeResolver = ({
     const matches = runtimes.filter(
       (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === normalizedDirectory,
     );
-    if (hasAmbiguousStdioRoutes(matches)) {
-      const candidates: RuntimeSnapshotCandidate[] = matches.map((runtime) => ({
-        runtime,
-        runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, workingDirectory)
-          .runtimeConnection,
-      }));
-      const snapshotMatch = findPreloadedSnapshotConnection(
-        runtimeKind,
-        workingDirectory,
-        externalSessionId,
-        candidates.map((candidate) => candidate.runtimeConnection),
-      );
-      if (!snapshotMatch.ok) {
-        return { ok: false, reason: snapshotMatch.reason };
-      }
-      if (snapshotMatch.runtimeConnection) {
-        const matchedTransportKey = runtimeConnectionTransportKey(snapshotMatch.runtimeConnection);
-        const matchedRuntime = candidates.find(
-          (candidate) =>
-            runtimeConnectionTransportKey(candidate.runtimeConnection) === matchedTransportKey,
-        )?.runtime;
-        if (matchedRuntime) {
-          return { ok: true, runtime: matchedRuntime };
-        }
+    const ambiguousMatch = disambiguateAmbiguousStdioMatches(
+      runtimeKind,
+      workingDirectory,
+      externalSessionId,
+      matches,
+    );
+    if (ambiguousMatch) {
+      if (!ambiguousMatch.ok || ambiguousMatch.runtime) {
+        return ambiguousMatch;
       }
       return {
         ok: false,
@@ -167,30 +187,15 @@ export const createHydrationRuntimeResolver = ({
         runtime.role === "workspace" &&
         normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath,
     );
-    if (hasAmbiguousStdioRoutes(matches)) {
-      const candidates: RuntimeSnapshotCandidate[] = matches.map((runtime) => ({
-        runtime,
-        runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, workingDirectory)
-          .runtimeConnection,
-      }));
-      const snapshotMatch = findPreloadedSnapshotConnection(
-        runtimeKind,
-        workingDirectory,
-        externalSessionId,
-        candidates.map((candidate) => candidate.runtimeConnection),
-      );
-      if (!snapshotMatch.ok) {
-        return { ok: false, reason: snapshotMatch.reason };
-      }
-      if (snapshotMatch.runtimeConnection) {
-        const matchedTransportKey = runtimeConnectionTransportKey(snapshotMatch.runtimeConnection);
-        const matchedRuntime = candidates.find(
-          (candidate) =>
-            runtimeConnectionTransportKey(candidate.runtimeConnection) === matchedTransportKey,
-        )?.runtime;
-        if (matchedRuntime) {
-          return { ok: true, runtime: matchedRuntime };
-        }
+    const ambiguousMatch = disambiguateAmbiguousStdioMatches(
+      runtimeKind,
+      workingDirectory,
+      externalSessionId,
+      matches,
+    );
+    if (ambiguousMatch) {
+      if (!ambiguousMatch.ok || ambiguousMatch.runtime) {
+        return ambiguousMatch;
       }
       return {
         ok: false,

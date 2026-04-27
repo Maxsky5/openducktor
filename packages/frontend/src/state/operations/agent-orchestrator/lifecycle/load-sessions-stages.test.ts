@@ -714,6 +714,7 @@ describe("load-sessions-stages", () => {
   test("throws runtime resolution failures for reconcile hydration without marking the task reconciled", async () => {
     const initialSession = createSession();
     const stateHarness = createStateHarness({ "session-1": initialSession });
+    let updateCalls = 0;
 
     await expect(
       hydrateSessionRecordsStage({
@@ -741,7 +742,10 @@ describe("load-sessions-stages", () => {
           }),
         },
         setSessionsById: stateHarness.setSessionsById,
-        updateSession: stateHarness.updateSession,
+        updateSession: (sessionId, updater) => {
+          updateCalls += 1;
+          stateHarness.updateSession(sessionId, updater);
+        },
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(),
@@ -766,6 +770,7 @@ describe("load-sessions-stages", () => {
     );
 
     expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+    expect(updateCalls).toBe(0);
   });
 
   test("fails requested-history hydration before adapter history loads for unsupported stdio OpenCode runtimes", async () => {

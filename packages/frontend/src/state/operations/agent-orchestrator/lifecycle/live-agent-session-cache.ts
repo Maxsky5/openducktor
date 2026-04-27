@@ -29,36 +29,48 @@ const runtimeConnectionPreloadKey = (
     runtimeConnection.workingDirectory,
   )}`;
 
+const runtimeConnectionPreloadDirectoryKey = (
+  runtimeKind: RuntimeKind,
+  workingDirectory: string,
+): string => `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
+
 export class RuntimeConnectionPreloadIndex {
   private readonly connectionsByKey = new Map<string, AgentRuntimeConnection>();
+  private readonly connectionsByDirectoryKey = new Map<
+    string,
+    Map<string, AgentRuntimeConnection>
+  >();
 
   get size(): number {
     return this.connectionsByKey.size;
   }
 
   add(runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection): void {
-    this.connectionsByKey.set(
-      runtimeConnectionPreloadKey(runtimeKind, runtimeConnection),
-      runtimeConnection,
+    const connectionKey = runtimeConnectionPreloadKey(runtimeKind, runtimeConnection);
+    this.connectionsByKey.set(connectionKey, runtimeConnection);
+
+    const directoryKey = runtimeConnectionPreloadDirectoryKey(
+      runtimeKind,
+      runtimeConnection.workingDirectory,
     );
+    const connectionsForDirectory =
+      this.connectionsByDirectoryKey.get(directoryKey) ?? new Map<string, AgentRuntimeConnection>();
+    connectionsForDirectory.set(connectionKey, runtimeConnection);
+    this.connectionsByDirectoryKey.set(directoryKey, connectionsForDirectory);
   }
 
   hasAny(runtimeKind: RuntimeKind, workingDirectory: string): boolean {
-    return this.findCandidates(runtimeKind, workingDirectory).length > 0;
+    return this.connectionsByDirectoryKey.has(
+      runtimeConnectionPreloadDirectoryKey(runtimeKind, workingDirectory),
+    );
   }
 
   findCandidates(runtimeKind: RuntimeKind, workingDirectory: string): AgentRuntimeConnection[] {
-    const runtimeKindPrefix = `${runtimeKind}::`;
-    const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-
-    return Array.from(this.connectionsByKey.entries())
-      .filter(
-        ([key, runtimeConnection]) =>
-          key.startsWith(runtimeKindPrefix) &&
-          normalizeWorkingDirectory(runtimeConnection.workingDirectory) ===
-            normalizedWorkingDirectory,
-      )
-      .map(([, runtimeConnection]) => runtimeConnection);
+    return Array.from(
+      this.connectionsByDirectoryKey
+        .get(runtimeConnectionPreloadDirectoryKey(runtimeKind, workingDirectory))
+        ?.values() ?? [],
+    );
   }
 }
 

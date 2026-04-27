@@ -37,6 +37,8 @@ describe("live-agent-session-cache", () => {
     );
     const preloadIndex = new RuntimeConnectionPreloadIndex();
     preloadIndex.add("opencode", stdioRuntimeConnection);
+    expect(preloadIndex.hasAny("opencode", "/tmp/runtime-root/")).toBe(true);
+    expect(preloadIndex.hasAny("opencode", "/tmp/other")).toBe(false);
     expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
       stdioRuntimeConnection,
     ]);

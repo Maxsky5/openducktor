@@ -895,6 +895,13 @@ describe("runtime schemas", () => {
     expect(() =>
       runtimeTransportSchema.parse({
         type: "stdio",
+        identity: "runtime-stdio",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      runtimeTransportSchema.parse({
+        type: "stdio",
         identity: "   ",
         workingDirectory: "/repo",
       }),

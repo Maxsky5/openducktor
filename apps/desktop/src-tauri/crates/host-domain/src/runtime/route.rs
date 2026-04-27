@@ -5,8 +5,13 @@ use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RuntimeRoute {
-    LocalHttp { endpoint: String },
-    Stdio { identity: String },
+    LocalHttp {
+        endpoint: String,
+    },
+    #[non_exhaustive]
+    Stdio {
+        identity: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

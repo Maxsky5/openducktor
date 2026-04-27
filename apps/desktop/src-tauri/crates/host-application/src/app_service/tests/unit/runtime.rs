@@ -142,9 +142,7 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
     assert_eq!(runtime.kind, AgentRuntimeKind::from("test-runtime"));
     assert_eq!(
         runtime.runtime_route,
-        host_domain::RuntimeRoute::Stdio {
-            identity: runtime.runtime_id.clone()
-        }
+        host_domain::RuntimeRoute::stdio(runtime.runtime_id.clone())?
     );
     assert_eq!(
         service

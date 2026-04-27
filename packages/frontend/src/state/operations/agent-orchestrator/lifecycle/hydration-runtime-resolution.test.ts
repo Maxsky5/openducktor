@@ -376,6 +376,54 @@ describe("createHydrationRuntimeResolver", () => {
     expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
   });
 
+  test("fails fast when duplicate live stdio runtimes share the same transport identity", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const runtimeConnection: AgentRuntimeConnection = {
+      type: "stdio",
+      identity: "runtime-stdio",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([runtimeConnection]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", runtimeConnection, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-1",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const runtimeA = {
+      ...createStdioRuntime("runtime-a", workingDirectory),
+      runtimeRoute: { type: "stdio", identity: "runtime-stdio" } as const,
+    };
+    const runtimeB = {
+      ...createStdioRuntime("runtime-b", workingDirectory),
+      runtimeRoute: { type: "stdio", identity: "runtime-stdio" } as const,
+    };
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        ["opencode", [runtimeA, runtimeB]],
+      ]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    await expect(
+      resolveHydrationRuntime(createRecord("planner", workingDirectory)),
+    ).resolves.toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: `Multiple live stdio runtimes share transport identity stdio:runtime-stdio for working directory ${workingDirectory}.`,
+    });
+  });
+
   test("fails fast when multiple preloaded stdio connections match the same working directory", async () => {
     const workingDirectory = "/tmp/repo";
     const preloadedRuntimeConnectionA: AgentRuntimeConnection = {

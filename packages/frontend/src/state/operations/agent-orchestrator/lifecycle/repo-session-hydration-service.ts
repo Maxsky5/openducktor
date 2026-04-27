@@ -372,6 +372,9 @@ export const createRepoSessionHydrationService = ({
         continue;
       }
 
+      // A repo-root runtime can be produced by the ensure call above when the
+      // runtime list did not already contain one. Keep both the query cache and
+      // this local list aligned before deriving worktree routes from it.
       if (
         routeSourceRuntimes.some(
           (routeSourceRuntime) => !runtimeEntries.includes(routeSourceRuntime),
