@@ -200,14 +200,54 @@ const readSubagentSessionIds = (
 
 const mergeSubagentPendingPermissionOverlay = (
   current: AgentSessionState["subagentPendingPermissionsBySessionId"],
-  hydrated: Record<string, AgentSessionState["pendingPermissions"]>,
+  scannedSessionIds: string[],
+  pendingPermissionsBySessionId: Record<string, AgentSessionState["pendingPermissions"]>,
 ): AgentSessionState["subagentPendingPermissionsBySessionId"] => {
-  if (Object.keys(hydrated).length === 0) {
+  if (scannedSessionIds.length === 0 && Object.keys(pendingPermissionsBySessionId).length === 0) {
     return current;
   }
+
+  const next = { ...(current ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID) };
+  for (const sessionId of scannedSessionIds) {
+    delete next[sessionId];
+  }
+
+  const merged = {
+    ...next,
+    ...pendingPermissionsBySessionId,
+  };
+
+  if (Object.keys(merged).length === 0) {
+    return undefined;
+  }
+
+  return merged;
+};
+
+type HydratedSubagentPendingPermissionOverlay = {
+  scannedSessionIds: string[];
+  pendingPermissionsBySessionId: Record<string, AgentSessionState["pendingPermissions"]>;
+};
+
+const EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY = Object.freeze({
+  scannedSessionIds: [],
+  pendingPermissionsBySessionId: EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+}) satisfies HydratedSubagentPendingPermissionOverlay;
+
+const toHydratedSubagentPendingPermissionOverlay = (
+  scannedSessionIds: string[],
+  pendingPermissionsBySessionId: Record<string, AgentSessionState["pendingPermissions"]>,
+): HydratedSubagentPendingPermissionOverlay => {
+  if (scannedSessionIds.length === 0) {
+    return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
+  }
+
   return {
-    ...(current ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID),
-    ...hydrated,
+    scannedSessionIds,
+    pendingPermissionsBySessionId:
+      Object.keys(pendingPermissionsBySessionId).length > 0
+        ? pendingPermissionsBySessionId
+        : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
   };
 };
 
@@ -221,10 +261,10 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
   messages: AgentSessionState["messages"];
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>;
   runtimePlanner: HydrationRuntimePlanner;
-}): Promise<Record<string, AgentSessionState["pendingPermissions"]>> => {
+}): Promise<HydratedSubagentPendingPermissionOverlay> => {
   const subagentSessionIds = readSubagentSessionIds(record.sessionId, messages);
   if (subagentSessionIds.length === 0) {
-    return EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID;
+    return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
   }
 
   const pendingPermissionsBySessionId: Record<string, AgentSessionState["pendingPermissions"]> = {};
@@ -244,9 +284,10 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
     }),
   );
 
-  return Object.keys(pendingPermissionsBySessionId).length > 0
-    ? pendingPermissionsBySessionId
-    : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID;
+  return toHydratedSubagentPendingPermissionOverlay(
+    subagentSessionIds,
+    pendingPermissionsBySessionId,
+  );
 };
 
 const mergePersistedSessionRecord = (
@@ -1136,7 +1177,8 @@ export const hydrateSessionRecordsStage = async ({
           pendingQuestions: livePendingQuestions,
           subagentPendingPermissionsBySessionId: mergeSubagentPendingPermissionOverlay(
             current.subagentPendingPermissionsBySessionId,
-            hydratedSubagentPendingPermissionsBySessionId,
+            hydratedSubagentPendingPermissionsBySessionId.scannedSessionIds,
+            hydratedSubagentPendingPermissionsBySessionId.pendingPermissionsBySessionId,
           ),
           contextUsage: historyToSessionContextUsage(history, selectedModel),
           messages: mergeHydratedMessages(current.sessionId, hydratedMessages, current.messages),

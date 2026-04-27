@@ -1144,6 +1144,123 @@ describe("load-sessions-stages", () => {
     ).toEqual([permissionRequest]);
   });
 
+  test("clears hydrated parent subagent pending overlay entries when child snapshot has no pending permissions", async () => {
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        historyHydrationState: "hydrating",
+        subagentPendingPermissionsBySessionId: {
+          "external-child-session": [
+            { requestId: "stale-perm", permission: "read", patterns: ["src/**"] },
+          ],
+          "unscanned-child-session": [
+            { requestId: "live-perm", permission: "read", patterns: ["docs/**"] },
+          ],
+        },
+      }),
+    });
+
+    await hydrateSessionRecordsStage({
+      adapter: {
+        hasSession: () => false,
+        listLiveAgentSessionSnapshots: async () => [],
+        loadSessionHistory: async () => [
+          {
+            messageId: "assistant-parent",
+            role: "assistant",
+            timestamp: "2026-03-01T09:00:02.000Z",
+            text: "",
+            parts: [
+              {
+                kind: "subagent",
+                messageId: "assistant-parent",
+                partId: "subtask-1",
+                correlationKey: "part:assistant-parent:subtask-1",
+                status: "running",
+                agent: "explorer",
+                description: "Inspect session state",
+                sessionId: "external-child-session",
+              },
+            ],
+          },
+        ],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+      },
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["session-1"]),
+      runtimePlanner: {
+        readCurrentHydratedRuntimeResolution: () => null,
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+          runtimeConnection: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        }),
+        loadLiveAgentSessionSnapshot: async (record) => {
+          const externalSessionId = record.externalSessionId ?? record.sessionId;
+          if (externalSessionId === "external-1") {
+            return {
+              externalSessionId,
+              title: "Parent",
+              startedAt: "2026-03-01T09:00:00.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+              workingDirectory: "/tmp/repo/worktree",
+            };
+          }
+          if (externalSessionId === "external-child-session") {
+            return {
+              externalSessionId,
+              title: "Child",
+              startedAt: "2026-03-01T09:00:01.000Z",
+              status: { type: "busy" },
+              pendingPermissions: [],
+              pendingQuestions: [],
+              workingDirectory: "/tmp/repo/worktree",
+            };
+          }
+          return null;
+        },
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["session-1"]?.subagentPendingPermissionsBySessionId).toEqual({
+      "unscanned-child-session": [
+        { requestId: "live-perm", permission: "read", patterns: ["docs/**"] },
+      ],
+    });
+  });
+
   test("runtime planner reuses current hydrated runtime and preloaded live snapshots", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const stateHarness = createStateHarness({
