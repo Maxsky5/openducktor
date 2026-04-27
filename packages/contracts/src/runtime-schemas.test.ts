@@ -181,7 +181,6 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: null,
       branchPrefix: "obp",
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
     });
 
@@ -200,7 +199,6 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      trustedHooks: true,
       hooks: { preStart: [], postComplete: [] },
       agentDefaults: {
         spec: {
@@ -225,7 +223,6 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       promptOverrides: {
         "kickoff.spec_initial": {
@@ -248,7 +245,6 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       promptOverrides: {
         "system.shared.workflow_guards": {
@@ -268,7 +264,6 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      trustedHooks: true,
       hooks: { preStart: [], postComplete: [] },
       agentDefaults: {
         spec: {
@@ -1119,7 +1114,6 @@ describe("runtime schemas", () => {
         workspaceName: "Repo",
         repoPath: "/repo",
         branchPrefix: "obp",
-        trustedHooks: false,
         hooks: { preStart: [], postComplete: [] },
       }),
     ).toThrow();
@@ -1128,7 +1122,6 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        trustedHooks: false,
         hooks: { preStart: [], postComplete: [] },
         agentDefaults: {
           spec: {

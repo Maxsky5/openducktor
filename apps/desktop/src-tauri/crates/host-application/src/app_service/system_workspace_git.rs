@@ -14,10 +14,9 @@ use host_domain::{
 use host_infra_system::{
     command_exists, copy_configured_worktree_files, discover_open_in_tools,
     open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
-    remove_worktree_path_if_present, repo_script_fingerprint,
-    resolve_effective_worktree_base_dir_for_workspace, run_command,
-    run_command_allow_failure_with_env, version_command, AutopilotSettings, ChatSettings,
-    GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    remove_worktree_path_if_present, resolve_effective_worktree_base_dir_for_workspace,
+    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
+    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
 };
 #[cfg(test)]
 use host_infra_system::{
@@ -548,38 +547,6 @@ impl AppService {
         config.global_prompt_overrides = snapshot.global_prompt_overrides;
         config.workspaces = next_workspaces;
         self.config_store.save(&config)
-    }
-
-    pub(super) fn workspace_persist_trusted_hooks(
-        &self,
-        workspace_id: &str,
-        trusted: bool,
-        expected_fingerprint: Option<&str>,
-    ) -> Result<WorkspaceRecord> {
-        if trusted {
-            let config = self.config_store.repo_config(workspace_id)?;
-            let current_fingerprint = repo_script_fingerprint(&config.hooks, &config.dev_servers);
-            if let Some(expected) = expected_fingerprint {
-                if expected != current_fingerprint {
-                    return Err(anyhow!(
-                        "Hook trust challenge is stale for workspace {workspace_id}; hooks changed before confirmation."
-                    ));
-                }
-            } else {
-                return Err(anyhow!(
-                    "Hook trust confirmation requires fingerprint challenge."
-                ));
-            }
-
-            return self.config_store.set_repo_trust_hooks(
-                workspace_id,
-                true,
-                Some(current_fingerprint),
-            );
-        }
-
-        self.config_store
-            .set_repo_trust_hooks(workspace_id, false, None)
     }
 
     pub fn set_theme(&self, theme: &str) -> Result<()> {

@@ -22,7 +22,6 @@ type RepoConfigFixture = {
   branchPrefix: string;
   defaultTargetBranch: { remote: string; branch: string };
   git: { providers: Record<string, never> };
-  trustedHooks: boolean;
   hooks: { preStart: []; postComplete: [] };
   devServers: [];
   worktreeFileCopies: [];
@@ -184,7 +183,6 @@ describe("use-workspace-selection-operations", () => {
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],
@@ -445,7 +443,6 @@ describe("use-workspace-selection-operations", () => {
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],
@@ -522,7 +519,6 @@ describe("use-workspace-selection-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -562,7 +558,6 @@ describe("use-workspace-selection-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -588,7 +583,6 @@ describe("use-workspace-selection-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],

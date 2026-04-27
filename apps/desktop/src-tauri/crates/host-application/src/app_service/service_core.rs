@@ -1,6 +1,5 @@
 use super::runtime_registry::AppRuntimeRegistry;
 use super::startup_metrics::OpencodeStartupMetrics;
-use super::workspace_policy::HookTrustChallenge;
 use super::*;
 use host_domain::{
     now_rfc3339, AgentRuntimeKind, RepoRuntimeHealthCheck, RepoRuntimeStartupFailureKind,
@@ -168,7 +167,6 @@ pub struct AppService {
     pub(super) startup_cancel_epoch: StartupCancelEpoch,
     pub(super) startup_metrics: Arc<Mutex<OpencodeStartupMetrics>>,
     pub(super) enforce_repo_allowlist: bool,
-    pub(super) hook_trust_challenges: Arc<Mutex<HashMap<String, HookTrustChallenge>>>,
     pub(super) dev_server_groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
     pub(super) mcp_bridge_process: Arc<Mutex<Option<McpBridgeProcess>>>,
 }
@@ -304,7 +302,6 @@ impl AppService {
             startup_cancel_epoch: Arc::new(AtomicU64::new(0)),
             startup_metrics: Arc::new(Mutex::new(OpencodeStartupMetrics::default())),
             enforce_repo_allowlist,
-            hook_trust_challenges: Arc::new(Mutex::new(HashMap::new())),
             dev_server_groups: Arc::new(Mutex::new(HashMap::new())),
             mcp_bridge_process: Arc::new(Mutex::new(None)),
         };

@@ -57,7 +57,6 @@ export type RepoSettingsInput = {
   branchPrefix: string;
   /** Default branch used for ahead/behind comparison, rebase, and PR creation. */
   defaultTargetBranch: GitTargetBranch;
-  trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
   devServers: RepoDevServerScript[];

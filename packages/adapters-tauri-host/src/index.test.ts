@@ -238,8 +238,6 @@ describe("TauriHostClient", () => {
       "workspaceUpdateGlobalGitConfig",
       "workspaceDetectGithubRepository",
       "workspaceSaveSettingsSnapshot",
-      "workspacePrepareTrustedHooksChallenge",
-      "workspaceSetTrustedHooks",
       "systemListOpenInTools",
       "systemOpenDirectoryInTool",
       "setTheme",
@@ -597,7 +595,6 @@ describe("TauriHostClient", () => {
     const result = await client.workspaceSaveRepoSettings("repo", {
       worktreeBasePath: "/tmp/worktrees",
       branchPrefix: "codex",
-      trustedHooks: true,
       hooks: {
         preStart: ["echo pre"],
         postComplete: ["echo post"],
@@ -619,7 +616,6 @@ describe("TauriHostClient", () => {
           settings: {
             worktreeBasePath: "/tmp/worktrees",
             branchPrefix: "codex",
-            trustedHooks: true,
             hooks: {
               preStart: ["echo pre"],
               postComplete: ["echo post"],
@@ -661,7 +657,6 @@ describe("TauriHostClient", () => {
               git: {
                 providers: {},
               },
-              trustedHooks: false,
               hooks: { preStart: [], postComplete: [] },
               worktreeFileCopies: [],
               promptOverrides: {},
@@ -731,7 +726,6 @@ describe("TauriHostClient", () => {
             providers: {},
           },
           devServers: [],
-          trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
           worktreeFileCopies: [],
           promptOverrides: {},
@@ -772,7 +766,6 @@ describe("TauriHostClient", () => {
                   providers: {},
                 },
                 devServers: [],
-                trustedHooks: false,
                 hooks: { preStart: [], postComplete: [] },
                 worktreeFileCopies: [],
                 promptOverrides: {},
@@ -2231,59 +2224,6 @@ describe("TauriHostClient", () => {
     );
     await expect(client.repoPullRequestSync("/repo")).rejects.toThrow(
       "Expected { ok: boolean } payload from host command repo_pull_request_sync",
-    );
-  });
-
-  test("workspacePrepareTrustedHooksChallenge validates host payload shape", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "workspace_prepare_trusted_hooks_challenge") {
-        return {
-          nonce: "nonce-1",
-          workspaceId: "repo",
-          fingerprint: "fp-1",
-          expiresAt: "2026-03-15T01:00:00Z",
-          preStartCount: 1,
-          postCompleteCount: 2,
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    expect(await client.workspacePrepareTrustedHooksChallenge("repo")).toEqual({
-      nonce: "nonce-1",
-      workspaceId: "repo",
-      fingerprint: "fp-1",
-      expiresAt: "2026-03-15T01:00:00Z",
-      preStartCount: 1,
-      postCompleteCount: 2,
-    });
-    expect(calls).toEqual([
-      {
-        command: "workspace_prepare_trusted_hooks_challenge",
-        args: {
-          workspaceId: "repo",
-        },
-      },
-    ]);
-  });
-
-  test("workspacePrepareTrustedHooksChallenge rejects malformed host payloads", async () => {
-    const { client } = createClient((command) => {
-      if (command === "workspace_prepare_trusted_hooks_challenge") {
-        return {
-          nonce: "nonce-1",
-          workspaceId: "repo",
-          fingerprint: "fp-1",
-          expiresAt: "2026-03-15T01:00:00Z",
-          preStartCount: "1",
-          postCompleteCount: 2,
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await expect(client.workspacePrepareTrustedHooksChallenge("repo")).rejects.toThrow(
-      "Expected non-negative integer field 'preStartCount' in trusted hooks challenge payload",
     );
   });
 });

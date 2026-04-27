@@ -92,7 +92,6 @@ const createRepoConfig = () => ({
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: { providers: {} },
-  trustedHooks: false,
   hooks: { preStart: ["a"], postComplete: ["b"] },
   devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
   worktreeFileCopies: [],
@@ -120,7 +119,6 @@ const inputFixture: RepoSettingsInput = {
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  codex/  ",
   defaultTargetBranch: { remote: "origin", branch: "  develop  " },
-  trustedHooks: true,
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
   devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
@@ -243,7 +241,6 @@ describe("use-repo-settings-operations", () => {
         worktreeBasePath: "",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        trustedHooks: false,
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
@@ -318,7 +315,6 @@ describe("use-repo-settings-operations", () => {
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "develop" },
-        trustedHooks: true,
         hooks: {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
@@ -381,7 +377,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveRepoSettings preserves explicit untrusted hook settings", async () => {
+  test("saveRepoSettings sends normalized repo scripts", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
@@ -401,7 +397,12 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveRepoSettings({
         ...inputFixture,
-        trustedHooks: false,
+        preStartHooks: ["  echo pre  ", " ", ""],
+        postCompleteHooks: ["\t", " echo post "],
+        devServers: [
+          { id: "frontend", name: "Frontend", command: " bun run dev " },
+          { id: "backend", name: "Backend", command: "   " },
+        ],
       });
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
@@ -409,7 +410,6 @@ describe("use-repo-settings-operations", () => {
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "develop" },
-        trustedHooks: false,
         hooks: {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
@@ -476,7 +476,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveRepoSettings rejects blank dev server commands", async () => {
+  test("saveRepoSettings omits blank dev server commands", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
@@ -494,13 +494,16 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
-      await expect(
-        harness.getLatest().saveRepoSettings({
-          ...inputFixture,
-          devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+      await harness.getLatest().saveRepoSettings({
+        ...inputFixture,
+        devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+      });
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith(
+        "repo-a",
+        expect.objectContaining({
+          devServers: [],
         }),
-      ).rejects.toThrow("Dev server commands cannot be blank.");
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
+      );
     } finally {
       await harness.unmount();
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
@@ -733,7 +736,6 @@ describe("use-repo-settings-operations", () => {
           git: {
             providers: {},
           },
-          trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
           devServers: [],
           worktreeFileCopies: [],

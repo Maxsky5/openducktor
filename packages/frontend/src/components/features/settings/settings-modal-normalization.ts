@@ -13,7 +13,7 @@ import {
   createDefaultAutopilotSettings,
   DEFAULT_BRANCH_PREFIX,
 } from "@openducktor/contracts";
-import { normalizeRepoScriptsWithTrust } from "@/components/features/settings/settings-model";
+import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
 import {
   normalizeRepoAgentDefaultForSave,
   normalizeRepoDefaultRuntimeKindForSave,
@@ -54,13 +54,10 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   const planner = normalizeRepoAgentDefaultForSave("planner", repo.agentDefaults.planner);
   const build = normalizeRepoAgentDefaultForSave("build", repo.agentDefaults.build);
   const qa = normalizeRepoAgentDefaultForSave("qa", repo.agentDefaults.qa);
-  const { hooks, devServers, trustedHooks } = normalizeRepoScriptsWithTrust(
-    {
-      hooks: repo.hooks,
-      devServers: repo.devServers ?? [],
-    },
-    repo.trustedHooks,
-  );
+  const { hooks, devServers } = normalizeRepoScripts({
+    hooks: repo.hooks,
+    devServers: repo.devServers ?? [],
+  });
 
   return {
     workspaceId: repo.workspaceId,
@@ -71,8 +68,6 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
     git: repo.git,
-    trustedHooks,
-    trustedHooksFingerprint: trustedHooks ? repo.trustedHooksFingerprint : undefined,
     hooks,
     devServers,
     worktreeFileCopies: repo.worktreeFileCopies.map((entry) => entry.trim()).filter(Boolean),

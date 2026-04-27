@@ -1,6 +1,7 @@
+use crate::app_service::run_hook_commands_allow_failure;
 use crate::app_service::service_core::AppService;
 use crate::app_service::task_workflow::{
-    implementation_reset_service::ImplementationResetService,
+    implementation_reset_service::ImplementationResetService, session_service::TaskWorktreeLookup,
     task_deletion_service::TaskDeletionService, task_reset_service::TaskResetService,
 };
 use crate::app_service::workflow_rules::{
@@ -12,6 +13,7 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     CreateTaskInput, QaWorkflowVerdict, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
 };
+use std::path::Path;
 
 impl AppService {
     pub fn tasks_list(&self, repo_path: &str) -> Result<Vec<TaskCard>> {
@@ -186,9 +188,19 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        _summary: Option<&str>,
+        summary: Option<&str>,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
+        if context.task.status != TaskStatus::InProgress {
+            return Err(anyhow!(
+                "build_completed is only allowed from in_progress. Task {} is {}.",
+                context.task.id,
+                context.task.status.as_cli_value()
+            ));
+        }
+        let repo_config =
+            self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
+
         let should_return_to_ai_review = context.task.ai_review_enabled
             && context.task.document_summary.qa_report.verdict != QaWorkflowVerdict::Approved;
         let next_status = if should_return_to_ai_review {
@@ -196,13 +208,72 @@ impl AppService {
         } else {
             TaskStatus::HumanReview
         };
+        validate_transition(
+            &context.task,
+            &context.repo.tasks,
+            &context.task.status,
+            &next_status,
+        )?;
+
+        self.run_post_complete_hooks_for_build_completion(
+            &context,
+            repo_config.hooks.post_complete.as_slice(),
+        )?;
+        let transition_reason = summary.unwrap_or("Builder completed");
 
         self.task_transition(
             context.repo.repo_path.as_str(),
             task_id,
             next_status,
-            Some("Builder completed"),
+            Some(transition_reason),
         )
+    }
+
+    fn run_post_complete_hooks_for_build_completion(
+        &self,
+        context: &super::task_context::LoadedTaskContext,
+        post_complete_hooks: &[String],
+    ) -> Result<()> {
+        if post_complete_hooks.is_empty() {
+            return Ok(());
+        }
+
+        let worktree_path = match self
+            .task_worktree_lookup(context.repo.repo_path.as_str(), context.task.id.as_str())?
+        {
+            TaskWorktreeLookup::Found(worktree) => worktree.working_directory,
+            TaskWorktreeLookup::NoBuilderContext | TaskWorktreeLookup::MissingBuilderWorktree => {
+                let message = format!(
+                    "Worktree cleanup scripts require a builder worktree for task {}. Start Builder first.",
+                    context.task.id
+                );
+                self.task_transition(
+                    context.repo.repo_path.as_str(),
+                    context.task.id.as_str(),
+                    TaskStatus::Blocked,
+                    Some(message.as_str()),
+                )?;
+                return Err(anyhow!(message));
+            }
+        };
+
+        if let Some(failure) =
+            run_hook_commands_allow_failure(post_complete_hooks, Path::new(worktree_path.as_str()))
+        {
+            let message = format!(
+                "Worktree cleanup script command failed: {}\n{}",
+                failure.hook, failure.stderr
+            );
+            self.task_transition(
+                context.repo.repo_path.as_str(),
+                context.task.id.as_str(),
+                TaskStatus::Blocked,
+                Some(message.as_str()),
+            )?;
+            return Err(anyhow!(message));
+        }
+
+        Ok(())
     }
 
     pub fn human_request_changes(

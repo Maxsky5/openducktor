@@ -1,5 +1,4 @@
-use anyhow::{anyhow, Result};
-use host_infra_system::{repo_script_fingerprint, run_command_allow_failure, RepoConfig};
+use host_infra_system::run_command_allow_failure;
 use std::path::Path;
 
 pub(crate) fn run_parsed_hook_command_allow_failure(
@@ -38,33 +37,28 @@ pub(crate) fn run_parsed_hook_command_allow_failure(
     }
 }
 
-pub(crate) fn validate_hook_trust(repo_path: &str, repo_config: &RepoConfig) -> Result<()> {
-    if repo_config.hooks.pre_start.is_empty()
-        && repo_config.hooks.post_complete.is_empty()
-        && repo_config.dev_servers.is_empty()
-    {
-        return Ok(());
+pub(crate) struct HookCommandFailure<'a> {
+    pub(crate) hook: &'a str,
+    pub(crate) stderr: String,
+}
+
+pub(crate) fn run_hook_commands_allow_failure<'a>(
+    hooks: &'a [String],
+    cwd: &Path,
+) -> Option<HookCommandFailure<'a>> {
+    for hook in hooks {
+        let (ok, _stdout, stderr) = run_parsed_hook_command_allow_failure(hook, cwd);
+        if !ok {
+            return Some(HookCommandFailure { hook, stderr });
+        }
     }
 
-    if !repo_config.trusted_hooks {
-        return Err(anyhow!(
-            "Scripts are configured but not trusted for {repo_path}. Confirm trust first."
-        ));
-    }
-
-    let current_fingerprint = repo_script_fingerprint(&repo_config.hooks, &repo_config.dev_servers);
-    if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
-        return Err(anyhow!(
-            "Scripts changed since last approval for {repo_path}. Reconfirm trust before running scripts."
-        ));
-    }
-
-    Ok(())
+    None
 }
 
 #[cfg(test)]
 mod tests {
-    use super::run_parsed_hook_command_allow_failure;
+    use super::{run_hook_commands_allow_failure, run_parsed_hook_command_allow_failure};
 
     #[test]
     fn run_parsed_hook_command_allow_failure_reports_empty_hook() {
@@ -72,5 +66,20 @@ mod tests {
             run_parsed_hook_command_allow_failure("  ", std::path::Path::new("."));
         assert!(!ok);
         assert!(stderr.contains("Hook command is empty"));
+    }
+
+    #[test]
+    fn run_hook_commands_allow_failure_reports_first_failed_hook() {
+        let hooks = vec![
+            "sh -lc 'exit 0'".to_string(),
+            "sh -lc 'echo failed >&2; exit 7'".to_string(),
+            "sh -lc 'exit 0'".to_string(),
+        ];
+
+        let failure = run_hook_commands_allow_failure(&hooks, std::path::Path::new("."))
+            .expect("expected failed hook");
+
+        assert_eq!(failure.hook, "sh -lc 'echo failed >&2; exit 7'");
+        assert!(failure.stderr.contains("failed"));
     }
 }

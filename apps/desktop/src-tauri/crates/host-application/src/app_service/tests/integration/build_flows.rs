@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
-use host_infra_system::{hook_set_fingerprint, AppConfigStore, HookSet, RepoConfig};
+use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::fs;
@@ -224,8 +224,6 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
                 branch: "develop".to_string(),
             },
             git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
             worktree_file_copies: Vec::new(),
@@ -359,8 +357,6 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
                 branch: "main".to_string(),
             },
             git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
             worktree_file_copies: vec![".env".to_string()],
@@ -499,8 +495,6 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
                 branch: "main".to_string(),
             },
             git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_failure_hooks)),
             hooks: pre_start_failure_hooks,
             dev_servers: Vec::new(),
             worktree_file_copies: Vec::new(),
@@ -538,8 +532,6 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
                 branch: "main".to_string(),
             },
             git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&post_complete_failure_hooks)),
             hooks: post_complete_failure_hooks,
             dev_servers: Vec::new(),
             worktree_file_copies: Vec::new(),
@@ -644,8 +636,6 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
                 branch: "main".to_string(),
             },
             git: Default::default(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
             worktree_file_copies: vec![".env".to_string()],
@@ -778,62 +768,6 @@ fn build_start_reports_home_or_override_guidance_when_default_worktree_resolutio
     assert!(message.contains("worktreeBasePath"));
     assert!(message.contains(config_path.as_str()));
 
-    let _ = fs::remove_dir_all(root);
-    Ok(())
-}
-
-#[test]
-fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
-    let root = unique_temp_path("build-untrusted-hooks");
-    let repo = root.join("repo");
-    init_git_repo(&repo)?;
-    let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let repo_path = repo.to_string_lossy().to_string();
-    let worktree_base = root.join("worktrees");
-    let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "bug", TaskStatus::Open)],
-        vec![],
-        test_git_current_branch(),
-        config_store,
-    );
-    service.workspace_add(repo_path.as_str())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        repo_path.as_str(),
-        RepoConfig {
-            default_runtime_kind: "opencode".to_string(),
-            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-            branch_prefix: "odt".to_string(),
-            default_target_branch: host_infra_system::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "main".to_string(),
-            },
-            git: Default::default(),
-            trusted_hooks: false,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet {
-                pre_start: vec!["echo pre-hook".to_string()],
-                post_complete: Vec::new(),
-            },
-            dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-            ..Default::default()
-        },
-    )?;
-
-    let error = service
-        .build_start(
-            repo_path.as_str(),
-            "task-1",
-            "opencode",
-            make_emitter(Arc::new(Mutex::new(Vec::new()))),
-        )
-        .expect_err("hooks should be rejected when not trusted");
-    assert!(error
-        .to_string()
-        .contains("Scripts are configured but not trusted"));
     let _ = fs::remove_dir_all(root);
     Ok(())
 }

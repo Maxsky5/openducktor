@@ -50,8 +50,6 @@ const baseRepoConfig: RepoConfig = {
       },
     },
   },
-  trustedHooks: false,
-  trustedHooksFingerprint: undefined,
   hooks: {
     preStart: [],
     postComplete: [],

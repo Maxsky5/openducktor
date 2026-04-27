@@ -10,8 +10,8 @@ type HookDraftInput = {
 type RepoDevServerDraftInput = RepoDevServerScript;
 
 type DevServerDraftValidationErrors = {
+  id?: string;
   name?: string;
-  command?: string;
 };
 
 type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
@@ -38,11 +38,15 @@ const getDevServerDraftValidationErrors = (
 ): DevServerDraftValidationErrors | null => {
   const errors: DevServerDraftValidationErrors = {};
 
+  if (!normalizeDevServerCommand(devServer.command)) {
+    return null;
+  }
+
+  if (!devServer.id.trim()) {
+    errors.id = "Dev server id is required.";
+  }
   if (!normalizeDevServerName(devServer.name)) {
     errors.name = "Tab label is required.";
-  }
-  if (!normalizeDevServerCommand(devServer.command)) {
-    errors.command = "Command is required.";
   }
 
   return Object.keys(errors).length > 0 ? errors : null;
@@ -53,8 +57,12 @@ export const buildDevServerDraftValidationMap = (
 ): DevServerDraftValidationMap =>
   Object.fromEntries(
     devServers.flatMap((devServer) => {
+      const id = devServer.id.trim();
+      if (!id) {
+        return [];
+      }
       const errors = getDevServerDraftValidationErrors(devServer);
-      return errors ? [[devServer.id, errors] as const] : [];
+      return errors ? [[id, errors] as const] : [];
     }),
   );
 
@@ -63,79 +71,57 @@ export const countDevServerDraftValidationErrors = (
 ): number =>
   devServers.reduce((count, devServer) => {
     const errors = getDevServerDraftValidationErrors(devServer);
-    return count + (errors?.name ? 1 : 0) + (errors?.command ? 1 : 0);
+    return count + (errors?.id ? 1 : 0) + (errors?.name ? 1 : 0);
   }, 0);
 
 export const normalizeDevServers = (
   devServers: RepoDevServerDraftInput[],
 ): RepoDevServerDraftInput[] =>
-  devServers.map((devServer) => {
+  devServers.flatMap((devServer) => {
+    const command = normalizeDevServerCommand(devServer.command);
+    if (!command) {
+      return [];
+    }
+
     const validationErrors = getDevServerDraftValidationErrors(devServer);
+    if (validationErrors?.id) {
+      throw new Error("Dev server id cannot be blank.");
+    }
     if (validationErrors?.name) {
       throw new Error("Dev server tab labels cannot be blank.");
     }
-    if (validationErrors?.command) {
-      throw new Error("Dev server commands cannot be blank.");
-    }
 
-    const command = normalizeDevServerCommand(devServer.command);
     const name = normalizeDevServerName(devServer.name);
 
-    return {
-      id: devServer.id,
-      name,
-      command,
-    };
+    return [
+      {
+        id: devServer.id.trim(),
+        name,
+        command,
+      },
+    ];
   });
 
 export const hasConfiguredHookCommands = (hooks: HookDraftInput): boolean =>
   hooks.preStart.some((entry) => entry.trim().length > 0) ||
   hooks.postComplete.some((entry) => entry.trim().length > 0);
 
-export const hasConfiguredRepoScriptCommands = ({
-  hooks,
-  devServers,
-}: RepoScriptDraftInput): boolean =>
-  hasConfiguredHookCommands(hooks) ||
-  devServers.some((devServer) => normalizeDevServerCommand(devServer.command).length > 0);
+export const normalizeHooks = (hooks: HookDraftInput): HookDraftInput => ({
+  preStart: normalizeHookCommands(hooks.preStart),
+  postComplete: normalizeHookCommands(hooks.postComplete),
+});
 
-export const normalizeHooksWithTrust = (
-  hooks: HookDraftInput,
-  trustedHooks: boolean,
-): { hooks: HookDraftInput; trustedHooks: boolean } => {
-  const normalizedHooks = {
-    preStart: normalizeHookCommands(hooks.preStart),
-    postComplete: normalizeHookCommands(hooks.postComplete),
-  };
-
-  return {
-    hooks: normalizedHooks,
-    trustedHooks: hasConfiguredHookCommands(normalizedHooks) ? trustedHooks : false,
-  };
-};
-
-export const normalizeRepoScriptsWithTrust = (
+export const normalizeRepoScripts = (
   input: RepoScriptDraftInput,
-  trustedHooks: boolean,
 ): {
   hooks: HookDraftInput;
   devServers: RepoDevServerDraftInput[];
-  trustedHooks: boolean;
 } => {
-  const normalizedHooks = {
-    preStart: normalizeHookCommands(input.hooks.preStart),
-    postComplete: normalizeHookCommands(input.hooks.postComplete),
-  };
+  const normalizedHooks = normalizeHooks(input.hooks);
   const normalizedDevServers = normalizeDevServers(input.devServers);
 
   return {
     hooks: normalizedHooks,
     devServers: normalizedDevServers,
-    trustedHooks: hasConfiguredRepoScriptCommands({
-      hooks: normalizedHooks,
-      devServers: normalizedDevServers,
-    })
-      ? trustedHooks
-      : false,
   };
 };

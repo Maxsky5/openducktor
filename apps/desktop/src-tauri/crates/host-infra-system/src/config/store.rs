@@ -5,10 +5,7 @@ use super::normalize::{
 use super::persistence::{
     resolve_default_path, save_config, should_enforce_private_parent_permissions,
 };
-use super::types::{
-    deserialize_global_config, repo_script_fingerprint, GlobalConfig, HookSet, RepoConfig,
-    RuntimeConfig,
-};
+use super::types::{deserialize_global_config, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
 use super::workspace_icons::discover_workspace_icon_data_url;
 use crate::{parse_user_path, resolve_default_worktree_base_dir_for_workspace};
 use anyhow::{anyhow, Context, Result};
@@ -303,15 +300,7 @@ impl AppConfigStore {
                 .workspaces
                 .get_mut(workspace_id)
                 .ok_or_else(|| anyhow!("Workspace is not configured"))?;
-            let previous_hooks = repo.hooks.clone();
             repo.hooks = hooks;
-            if repo.hooks != previous_hooks {
-                repo.trusted_hooks = false;
-                repo.trusted_hooks_fingerprint = None;
-            } else if repo.trusted_hooks {
-                repo.trusted_hooks_fingerprint =
-                    Some(repo_script_fingerprint(&repo.hooks, &repo.dev_servers));
-            }
             Ok(())
         })
     }
@@ -390,23 +379,6 @@ impl AppConfigStore {
             .values()
             .find(|workspace| workspace.repo_path == canonical_repo_path)
             .cloned())
-    }
-
-    pub fn set_repo_trust_hooks(
-        &self,
-        workspace_id: &str,
-        trusted: bool,
-        trusted_fingerprint: Option<String>,
-    ) -> Result<WorkspaceRecord> {
-        self.update_workspace(workspace_id.to_string(), move |config, workspace_id| {
-            let repo = config
-                .workspaces
-                .get_mut(workspace_id)
-                .ok_or_else(|| anyhow!("Workspace is not configured"))?;
-            repo.trusted_hooks = trusted;
-            repo.trusted_hooks_fingerprint = if trusted { trusted_fingerprint } else { None };
-            Ok(())
-        })
     }
 
     pub fn set_theme(&self, theme: &str) -> Result<()> {

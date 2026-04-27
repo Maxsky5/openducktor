@@ -172,7 +172,6 @@ const createRepoSettingsFixture = (): RepoSettingsInput => ({
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],
@@ -208,8 +207,6 @@ const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): Rep
   git: {
     providers: {},
   },
-  trustedHooks: false,
-  trustedHooksFingerprint: undefined,
   hooks: {
     preStart: [],
     postComplete: [],

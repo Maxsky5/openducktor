@@ -191,7 +191,6 @@ const createHookHarness = (args: {
           defaultQaVariant: null,
           git: { providers: {} },
           hooks: { preStart: [], postComplete: [] },
-          trustedHooks: false,
           isActive: true,
           hasConfig: true,
           defaultWorktreeBasePath: null,
@@ -297,7 +296,6 @@ describe("use-agent-orchestrator-operations", () => {
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: { providers: {} },
-        trustedHooks: false,
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeFileCopies: [],
@@ -691,7 +689,6 @@ describe("use-agent-orchestrator-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -830,7 +827,6 @@ describe("use-agent-orchestrator-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -1102,7 +1098,6 @@ describe("use-agent-orchestrator-operations", () => {
           git: {
             providers: {},
           },
-          trustedHooks: false,
           hooks: {
             preStart: [],
             postComplete: [],
@@ -1173,7 +1168,6 @@ describe("use-agent-orchestrator-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -1472,7 +1466,6 @@ describe("use-agent-orchestrator-operations", () => {
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -3026,7 +3019,6 @@ describe("use-agent-orchestrator-operations", () => {
           git: {
             providers: {},
           },
-          trustedHooks: false,
           hooks: {
             preStart: [],
             postComplete: [],

@@ -62,8 +62,6 @@ fn base_repo_config(worktree_base: &Path) -> RepoConfig {
             branch: "main".to_string(),
         },
         git: Default::default(),
-        trusted_hooks: false,
-        trusted_hooks_fingerprint: None,
         hooks: HookSet::default(),
         dev_servers: Vec::new(),
         worktree_file_copies: Vec::new(),

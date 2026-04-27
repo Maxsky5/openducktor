@@ -109,8 +109,6 @@ export const repoConfigSchema = z.object({
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema.default({ remote: "origin", branch: "main" }),
   git: repoGitConfigSchema.default({ providers: {} }),
-  trustedHooks: z.boolean().default(false),
-  trustedHooksFingerprint: nullableToOptional(z.string().min(1)),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
   devServers: z
     .array(repoDevServerScriptSchema)

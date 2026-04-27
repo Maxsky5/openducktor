@@ -27,7 +27,6 @@ pub(super) fn test_repo_config(worktree_base: Option<&Path>) -> RepoConfig {
             remote: Some(TEST_REMOTE_NAME.to_string()),
             branch: TEST_MAIN_BRANCH.to_string(),
         },
-        trusted_hooks: true,
         ..Default::default()
     }
 }

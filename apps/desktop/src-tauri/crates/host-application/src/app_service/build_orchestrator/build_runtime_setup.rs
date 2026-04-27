@@ -1,6 +1,5 @@
 use super::super::{
-    run_parsed_hook_command_allow_failure, validate_hook_trust,
-    validate_transition_without_related_tasks, AppService,
+    run_hook_commands_allow_failure, validate_transition_without_related_tasks, AppService,
 };
 use crate::app_service::task_workflow::builder_branch_service::BuilderBranchService;
 use anyhow::{anyhow, Context, Result};
@@ -296,8 +295,6 @@ impl AppService {
             )
         })?;
 
-        validate_hook_trust(repo_path.as_str(), &repo_config)?;
-
         let task = self
             .task_store
             .get_task(Path::new(repo_path.as_str()), task_id)?;
@@ -419,21 +416,24 @@ impl AppService {
         created_tracking_ref: Option<&str>,
         _task_id: &str,
     ) -> Result<()> {
-        for hook in &prerequisites.repo_config.hooks.pre_start {
-            let (ok, _stdout, stderr) = run_parsed_hook_command_allow_failure(hook, worktree_dir);
-            if !ok {
-                let cleanup_error = self.rollback_failed_build_worktree(
-                    repo_path_ref,
-                    worktree_dir,
-                    prerequisites.branch.as_str(),
-                    created_tracking_ref,
-                );
-                return Err(anyhow!(
-                    "Worktree setup script command failed: {hook}\n{stderr}{}",
-                    cleanup_error
-                ));
-            }
+        if let Some(failure) = run_hook_commands_allow_failure(
+            prerequisites.repo_config.hooks.pre_start.as_slice(),
+            worktree_dir,
+        ) {
+            let cleanup_error = self.rollback_failed_build_worktree(
+                repo_path_ref,
+                worktree_dir,
+                prerequisites.branch.as_str(),
+                created_tracking_ref,
+            );
+            return Err(anyhow!(
+                "Worktree setup script command failed: {}\n{}{}",
+                failure.hook,
+                failure.stderr,
+                cleanup_error
+            ));
         }
+
         Ok(())
     }
 

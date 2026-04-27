@@ -46,7 +46,6 @@ const createSnapshot = (): SettingsSnapshot => ({
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeFileCopies: [],
@@ -70,7 +69,6 @@ const createSnapshot = (): SettingsSnapshot => ({
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
       worktreeFileCopies: [],

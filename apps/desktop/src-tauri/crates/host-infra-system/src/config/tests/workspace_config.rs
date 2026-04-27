@@ -61,8 +61,6 @@ fn workspace_add_select_and_update_persist_state() {
                     branch: "main".to_string(),
                 },
                 git: Default::default(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
                 dev_servers: Vec::new(),
                 worktree_file_copies: Vec::new(),
@@ -234,17 +232,6 @@ fn select_and_repo_config_accessors_report_missing_entries() {
         .repo_config_optional(missing_workspace_id.as_str())
         .expect("optional lookup should succeed");
     assert!(optional.is_none());
-
-    let trust_error = store
-        .set_repo_trust_hooks(
-            missing_workspace_id.as_str(),
-            true,
-            Some("fingerprint".to_string()),
-        )
-        .expect_err("set trust should fail when repo missing");
-    assert!(trust_error
-        .to_string()
-        .contains("Workspace is not configured"));
 }
 
 #[test]

@@ -297,7 +297,6 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
         git: {
           providers: {},
         },
-        trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
@@ -597,7 +596,6 @@ describe("use-workspace-operations", () => {
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],
@@ -699,7 +697,6 @@ describe("use-workspace-operations", () => {
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],
@@ -789,7 +786,6 @@ describe("use-workspace-operations", () => {
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],
@@ -1069,7 +1065,6 @@ describe("use-workspace-operations", () => {
       git: {
         providers: {},
       },
-      trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],

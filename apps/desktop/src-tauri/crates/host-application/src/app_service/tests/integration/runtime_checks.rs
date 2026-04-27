@@ -149,8 +149,6 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
                 branch: "main".to_string(),
             },
             git: Default::default(),
-            trusted_hooks: false,
-            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
             worktree_file_copies: Vec::new(),
@@ -173,27 +171,6 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
     assert!(service
         .workspace_get_repo_config_optional(workspace.workspace_id.as_str())?
         .is_some());
-    let stale_trust_error = service
-        .workspace_persist_trusted_hooks(
-            workspace.workspace_id.as_str(),
-            true,
-            Some("stale-fingerprint"),
-        )
-        .expect_err("stale fingerprint should be rejected");
-    assert!(stale_trust_error
-        .to_string()
-        .contains("Hook trust challenge is stale"));
-    let trusted = service.workspace_persist_trusted_hooks(
-        workspace.workspace_id.as_str(),
-        true,
-        Some(host_infra_system::hook_set_fingerprint(&config.hooks).as_str()),
-    )?;
-    assert!(trusted.has_config);
-    assert_eq!(
-        trusted.effective_worktree_base_path.as_deref(),
-        Some(worktree_base.as_str())
-    );
-
     let records = service.workspace_list()?;
     assert_eq!(records.len(), 1);
     assert!(records[0].is_active);

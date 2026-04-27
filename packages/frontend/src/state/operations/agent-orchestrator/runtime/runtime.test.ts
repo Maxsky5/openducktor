@@ -58,7 +58,6 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   branchPrefix: "obp",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: { providers: {} },
-  trustedHooks: false,
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
   worktreeFileCopies: [],

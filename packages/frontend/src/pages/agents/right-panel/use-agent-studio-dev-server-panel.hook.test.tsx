@@ -56,7 +56,6 @@ const repoSettings: RepoSettingsInput = {
   worktreeBasePath: "",
   branchPrefix: "",
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  trustedHooks: true,
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],

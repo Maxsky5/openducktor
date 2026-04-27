@@ -2,11 +2,10 @@ use super::command_registry::CommandRegistry;
 use super::events::HeadlessEventBus;
 use crate::commands::git::invalidate_worktree_resolution_cache_for_repo;
 use crate::run_service_blocking_tokio;
-use anyhow::anyhow;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use host_application::{AppService, HookTrustConfirmationPort, HookTrustConfirmationRequest};
+use host_application::AppService;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -98,17 +97,6 @@ pub(super) struct RepoTaskReasonArgs {
     pub(super) repo_path: String,
     pub(super) task_id: String,
     pub(super) reason: Option<String>,
-}
-
-pub(super) struct HeadlessHookTrustConfirmationPort;
-
-impl HookTrustConfirmationPort for HeadlessHookTrustConfirmationPort {
-    fn confirm_trusted_hooks(&self, request: &HookTrustConfirmationRequest) -> anyhow::Result<()> {
-        Err(anyhow!(
-            "Trusted hook confirmation for '{}' requires the desktop shell. Browser mode cannot open the native confirmation dialog.",
-            request.workspace_id
-        ))
-    }
 }
 
 pub(super) fn deserialize_args<T: DeserializeOwned>(

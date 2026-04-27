@@ -1,5 +1,5 @@
 import type { GitBranch, RepoConfig } from "@openducktor/contracts";
-import { ChevronDown, ChevronUp, CircleAlert, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
@@ -9,11 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
-import {
-  buildDevServerDraftValidationMap,
-  hasConfiguredRepoScriptCommands,
-  parseHookLines,
-} from "./settings-model";
+import { buildDevServerDraftValidationMap, parseHookLines } from "./settings-model";
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
@@ -96,24 +92,9 @@ export function RepositoryConfigurationSection({
   } else if (selectedRepoBranchesError) {
     defaultTargetBranchPlaceholder = "Branches unavailable";
   }
-  const updateScriptDraft = (updater: (repoConfig: RepoConfig) => RepoConfig): void => {
-    onUpdateSelectedRepoConfig((repoConfig) => {
-      const nextRepoConfig = updater(repoConfig);
-      const trustedHooks = hasConfiguredRepoScriptCommands({
-        hooks: nextRepoConfig.hooks,
-        devServers: nextRepoConfig.devServers,
-      });
-
-      return {
-        ...nextRepoConfig,
-        trustedHooks,
-        trustedHooksFingerprint: trustedHooks ? nextRepoConfig.trustedHooksFingerprint : undefined,
-      };
-    });
-  };
   const updateHookDraft = (key: "preStart" | "postComplete", value: string): void => {
     const nextHookLines = parseHookLines(value);
-    updateScriptDraft((repoConfig) => ({
+    onUpdateSelectedRepoConfig((repoConfig) => ({
       ...repoConfig,
       hooks: {
         ...repoConfig.hooks,
@@ -173,10 +154,8 @@ export function RepositoryConfigurationSection({
           devServerValidationErrors={devServerValidationErrors}
           devServers={selectedRepoConfig.devServers}
           isDisabled={isLoadingSettings || isSaving}
-          updateScriptDraft={updateScriptDraft}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
-
-        <RepositoryScriptFingerprintNotice />
 
         <RepositoryWorktreeFileCopiesSection
           isDisabled={isLoadingSettings || isSaving}
@@ -476,12 +455,12 @@ function RepositoryDevServersSection({
   devServerValidationErrors,
   devServers,
   isDisabled,
-  updateScriptDraft,
+  onUpdateSelectedRepoConfig,
 }: {
   devServerValidationErrors: Record<string, { name?: string; command?: string }>;
   devServers: RepoConfig["devServers"];
   isDisabled: boolean;
-  updateScriptDraft: (updater: (repoConfig: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
   return (
     <div className="grid gap-3">
@@ -499,7 +478,7 @@ function RepositoryDevServersSection({
           size="sm"
           disabled={isDisabled}
           onClick={() => {
-            updateScriptDraft((repoConfig) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
               const nextIndex = repoConfig.devServers.length + 1;
               return {
                 ...repoConfig,
@@ -539,7 +518,7 @@ function RepositoryDevServersSection({
                 index={index}
                 isDisabled={isDisabled}
                 isLastRow={index === devServers.length - 1}
-                updateScriptDraft={updateScriptDraft}
+                onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
                 validationErrors={devServerValidationErrors[devServer.id]}
               />
             ))}
@@ -555,14 +534,14 @@ function RepositoryDevServerRow({
   index,
   isDisabled,
   isLastRow,
-  updateScriptDraft,
+  onUpdateSelectedRepoConfig,
   validationErrors,
 }: {
   devServer: RepoConfig["devServers"][number];
   index: number;
   isDisabled: boolean;
   isLastRow: boolean;
-  updateScriptDraft: (updater: (repoConfig: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
   validationErrors: { name?: string; command?: string } | undefined;
 }): ReactElement {
   const label = devServer.name || `dev server ${index + 1}`;
@@ -583,7 +562,7 @@ function RepositoryDevServerRow({
           disabled={isDisabled}
           onChange={(event) => {
             const name = event.currentTarget.value;
-            updateScriptDraft((repoConfig) => ({
+            onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
               devServers: repoConfig.devServers.map((entry) =>
                 entry.id === devServer.id ? { ...entry, name } : entry,
@@ -616,7 +595,7 @@ function RepositoryDevServerRow({
           disabled={isDisabled}
           onChange={(event) => {
             const command = event.currentTarget.value;
-            updateScriptDraft((repoConfig) => ({
+            onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
               devServers: repoConfig.devServers.map((entry) =>
                 entry.id === devServer.id ? { ...entry, command } : entry,
@@ -643,7 +622,7 @@ function RepositoryDevServerRow({
           size="icon"
           disabled={isDisabled || index === 0}
           onClick={() => {
-            updateScriptDraft((repoConfig) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
               const nextDevServers = [...repoConfig.devServers];
               const [entry] = nextDevServers.splice(index, 1);
               if (!entry) {
@@ -667,7 +646,7 @@ function RepositoryDevServerRow({
           size="icon"
           disabled={isDisabled || isLastRow}
           onClick={() => {
-            updateScriptDraft((repoConfig) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
               const nextDevServers = [...repoConfig.devServers];
               const [entry] = nextDevServers.splice(index, 1);
               if (!entry) {
@@ -691,7 +670,7 @@ function RepositoryDevServerRow({
           size="icon"
           disabled={isDisabled}
           onClick={() => {
-            updateScriptDraft((repoConfig) => ({
+            onUpdateSelectedRepoConfig((repoConfig) => ({
               ...repoConfig,
               devServers: repoConfig.devServers.filter((entry) => entry.id !== devServer.id),
             }));
@@ -702,21 +681,6 @@ function RepositoryDevServerRow({
           <Trash2 className="size-4" />
         </Button>
       </div>
-    </div>
-  );
-}
-
-function RepositoryScriptFingerprintNotice(): ReactElement {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-info-border bg-info-surface p-3 text-sm text-info-surface-foreground">
-      <CircleAlert className="mt-0.5 size-4 shrink-0 text-info-muted" aria-hidden="true" />
-      <p className="leading-6">
-        OpenDucktor saves a fingerprint of the exact setup, cleanup, and dev server commands you
-        approve. This is a security check: if something changes those scripts later without your
-        consent, the fingerprint no longer matches and OpenDucktor will ask you to confirm the
-        scripts again before they can run. Remove dev server rows and clear every other script
-        command to disable trusted scripts for this repository.
-      </p>
     </div>
   );
 }

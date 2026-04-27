@@ -4,7 +4,6 @@ use host_domain::{
     RuntimeStartupReadinessConfig, DEFAULT_BRANCH_PREFIX,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -253,45 +252,6 @@ pub struct RepoDevServerScript {
     pub command: String,
 }
 
-pub fn hook_set_fingerprint(hooks: &HookSet) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(b"openducktor-hookset-fingerprint-v2");
-    update_hasher_with_hook_group(&mut hasher, b"pre_start", &hooks.pre_start);
-    update_hasher_with_hook_group(&mut hasher, b"post_complete", &hooks.post_complete);
-    format!("{:x}", hasher.finalize())
-}
-
-pub fn repo_script_fingerprint(hooks: &HookSet, dev_servers: &[RepoDevServerScript]) -> String {
-    if dev_servers.is_empty() {
-        return hook_set_fingerprint(hooks);
-    }
-
-    let mut hasher = Sha256::new();
-    hasher.update(b"openducktor-repo-script-fingerprint-v3");
-    update_hasher_with_hook_group(&mut hasher, b"pre_start", &hooks.pre_start);
-    update_hasher_with_hook_group(&mut hasher, b"post_complete", &hooks.post_complete);
-    hasher.update(b"dev_servers");
-    hasher.update([0u8]);
-    hasher.update((dev_servers.len() as u64).to_be_bytes());
-    for dev_server in dev_servers {
-        let bytes = dev_server.command.as_bytes();
-        hasher.update((bytes.len() as u64).to_be_bytes());
-        hasher.update(bytes);
-    }
-    format!("{:x}", hasher.finalize())
-}
-
-fn update_hasher_with_hook_group(hasher: &mut Sha256, group: &[u8], commands: &[String]) {
-    hasher.update(group);
-    hasher.update([0u8]);
-    hasher.update((commands.len() as u64).to_be_bytes());
-    for command in commands {
-        let bytes = command.as_bytes();
-        hasher.update((bytes.len() as u64).to_be_bytes());
-        hasher.update(bytes);
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentModelDefault {
@@ -332,6 +292,8 @@ const fn default_prompt_override_enabled() -> bool {
     true
 }
 
+// RepoConfig intentionally allows unknown legacy keys such as "trustedHooks" and
+// "trustedHooksFingerprint" so old on-disk configs deserialize and drop them on save.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {
@@ -352,10 +314,6 @@ pub struct RepoConfig {
     pub default_target_branch: GitTargetBranch,
     #[serde(default)]
     pub git: RepoGitConfig,
-    #[serde(default)]
-    pub trusted_hooks: bool,
-    #[serde(default)]
-    pub trusted_hooks_fingerprint: Option<String>,
     #[serde(default)]
     pub hooks: HookSet,
     #[serde(default)]
@@ -387,8 +345,6 @@ impl Default for RepoConfig {
             branch_prefix: default_branch_prefix(),
             default_target_branch: default_target_branch(),
             git: RepoGitConfig::default(),
-            trusted_hooks: false,
-            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
             worktree_file_copies: Vec::new(),
@@ -642,91 +598,11 @@ impl RuntimeConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        hook_set_fingerprint, repo_script_fingerprint, HookSet, RepoConfig, RepoDevServerScript,
-    };
-
-    #[test]
-    fn hook_set_fingerprint_changes_with_command_boundaries() {
-        let grouped = HookSet {
-            pre_start: vec!["echo a".to_string(), "echo b".to_string()],
-            post_complete: Vec::new(),
-        };
-        let embedded_newline = HookSet {
-            pre_start: vec!["echo a\necho b".to_string()],
-            post_complete: Vec::new(),
-        };
-
-        assert_ne!(
-            hook_set_fingerprint(&grouped),
-            hook_set_fingerprint(&embedded_newline),
-            "fingerprint must be sensitive to command boundaries"
-        );
-    }
-
-    #[test]
-    fn hook_set_fingerprint_changes_with_group_assignment() {
-        let pre_start = HookSet {
-            pre_start: vec!["echo test".to_string()],
-            post_complete: Vec::new(),
-        };
-        let post_complete = HookSet {
-            pre_start: Vec::new(),
-            post_complete: vec!["echo test".to_string()],
-        };
-
-        assert_ne!(
-            hook_set_fingerprint(&pre_start),
-            hook_set_fingerprint(&post_complete),
-            "fingerprint must include the target hook group"
-        );
-    }
+    use super::RepoConfig;
 
     #[test]
     fn repo_config_default_target_branch_is_origin_main() {
         let config = RepoConfig::default();
         assert_eq!(config.default_target_branch.canonical(), "origin/main");
-    }
-
-    #[test]
-    fn repo_script_fingerprint_ignores_dev_server_names_but_tracks_commands() {
-        let hooks = HookSet::default();
-        let renamed = vec![RepoDevServerScript {
-            id: "frontend".to_string(),
-            name: "Frontend".to_string(),
-            command: "bun run dev".to_string(),
-        }];
-        let same_command_new_name = vec![RepoDevServerScript {
-            id: "frontend".to_string(),
-            name: "Web".to_string(),
-            command: "bun run dev".to_string(),
-        }];
-        let changed_command = vec![RepoDevServerScript {
-            id: "frontend".to_string(),
-            name: "Frontend".to_string(),
-            command: "bun run start".to_string(),
-        }];
-
-        assert_eq!(
-            repo_script_fingerprint(&hooks, &renamed),
-            repo_script_fingerprint(&hooks, &same_command_new_name)
-        );
-        assert_ne!(
-            repo_script_fingerprint(&hooks, &renamed),
-            repo_script_fingerprint(&hooks, &changed_command)
-        );
-    }
-
-    #[test]
-    fn repo_script_fingerprint_matches_legacy_hook_fingerprint_without_dev_servers() {
-        let hooks = HookSet {
-            pre_start: vec!["echo pre".to_string()],
-            post_complete: vec!["echo post".to_string()],
-        };
-
-        assert_eq!(
-            hook_set_fingerprint(&hooks),
-            repo_script_fingerprint(&hooks, &[])
-        );
     }
 }
