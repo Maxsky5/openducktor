@@ -3,6 +3,7 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeInstanceSummary,
   type TaskCard,
 } from "@openducktor/contracts";
 import { toast } from "sonner";
@@ -104,7 +105,7 @@ const persistedSessionFixture: AgentSessionRecord = {
   role: "build",
   scenario: "build_implementation_start",
   startedAt: "2026-02-22T08:00:00.000Z",
-  workingDirectory: "/tmp/repo",
+  workingDirectory: "/tmp/repo/worktree",
   selectedModel: null,
 };
 
@@ -137,6 +138,24 @@ const buildBootstrapFixture = {
   },
   workingDirectory: "/tmp/repo/worktree",
 };
+
+const createWorktreeRuntimeFixture = (
+  overrides: Partial<RuntimeInstanceSummary> = {},
+): RuntimeInstanceSummary => ({
+  kind: "opencode",
+  runtimeId: "runtime-1",
+  repoPath: "/tmp/repo",
+  taskId: null,
+  role: "workspace",
+  workingDirectory: "/tmp/repo/worktree",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
+  startedAt: "2026-02-22T08:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+  ...overrides,
+});
 
 const BUILD_SELECTION = {
   runtimeKind: "opencode" as const,
@@ -369,12 +388,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-      host.agentSessionsList = async () => [
-        {
-          ...persistedSessionFixture,
-          workingDirectory: "/tmp/repo",
-        },
-      ];
+      host.agentSessionsList = async () => [persistedBuildSessionFixture];
       host.agentSessionUpsert = async () => {};
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -459,12 +473,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
 
-      host.agentSessionsList = async () => [
-        {
-          ...persistedSessionFixture,
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      ];
+      host.agentSessionsList = async () => [persistedBuildSessionFixture];
       host.agentSessionUpsert = async () => {};
       host.runtimeList = async () => [
         {
@@ -473,7 +482,7 @@ describe("use-agent-orchestrator-operations", () => {
           repoPath: "/tmp/repo",
           taskId: null,
           role: "workspace",
-          workingDirectory: "/tmp/repo",
+          workingDirectory: "/tmp/repo/worktree",
           runtimeRoute: {
             type: "local_http" as const,
             endpoint: "http://127.0.0.1:4444",
@@ -522,7 +531,7 @@ describe("use-agent-orchestrator-operations", () => {
         tasks: [
           {
             ...taskFixture,
-            agentSessions: [persistedSessionFixture],
+            agentSessions: [persistedBuildSessionFixture],
           },
         ],
         refreshTaskData: async () => {},
@@ -535,7 +544,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           await harness.getLatest().reconcileLiveTaskSessions({
             taskId: "task-1",
-            persistedRecords: [persistedSessionFixture],
+            persistedRecords: [persistedBuildSessionFixture],
           });
         });
 
@@ -943,7 +952,22 @@ describe("use-agent-orchestrator-operations", () => {
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.runtimeList = async () => [];
+      host.runtimeList = async () => [
+        {
+          runtimeId: "runtime-1",
+          kind: "opencode",
+          repoPath: "/tmp/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/tmp/repo/worktree",
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4555",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
       host.runtimeEnsure = async () => ({
         runtimeId: "runtime-1",
         kind: "opencode",
@@ -1953,11 +1977,13 @@ describe("use-agent-orchestrator-operations", () => {
   test("revisit to the same repo bootstraps task sessions again", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
+      const originalRuntimeList = host.runtimeList;
       let persistedListCalls = 0;
       host.agentSessionsList = async () => {
         persistedListCalls += 1;
         return [persistedBuildSessionFixture];
       };
+      host.runtimeList = async () => [createWorktreeRuntimeFixture()];
 
       const harness = createHookHarness({
         activeRepo: "/tmp/repo-a",
@@ -1981,6 +2007,7 @@ describe("use-agent-orchestrator-operations", () => {
       } finally {
         await harness.unmount();
         host.agentSessionsList = originalAgentSessionsList;
+        host.runtimeList = originalRuntimeList;
       }
     });
   });
@@ -2209,7 +2236,7 @@ describe("use-agent-orchestrator-operations", () => {
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
-      tasks: [taskFixtureWithPersistedBuildSession],
+      tasks: [taskFixture],
       refreshTaskData: async () => {},
     });
 
@@ -3003,8 +3030,10 @@ describe("use-agent-orchestrator-operations", () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+      const originalRuntimeList = host.runtimeList;
       let repoConfigCalls = 0;
       host.agentSessionUpsert = async () => {};
+      host.runtimeList = async () => [createWorktreeRuntimeFixture()];
       host.workspaceGetRepoConfig = async () => {
         repoConfigCalls += 1;
         if (repoConfigCalls === 1) {
@@ -3050,6 +3079,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.unmount();
         host.agentSessionUpsert = originalAgentSessionUpsert;
         host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+        host.runtimeList = originalRuntimeList;
       }
     });
   });
@@ -3057,11 +3087,13 @@ describe("use-agent-orchestrator-operations", () => {
   test("bootstraps task sessions from task list metadata without per-task persisted fetches", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
+      const originalRuntimeList = host.runtimeList;
       let persistedListCalls = 0;
       host.agentSessionsList = async () => {
         persistedListCalls += 1;
         return [];
       };
+      host.runtimeList = async () => [createWorktreeRuntimeFixture()];
 
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
@@ -3082,6 +3114,7 @@ describe("use-agent-orchestrator-operations", () => {
       } finally {
         await harness.unmount();
         host.agentSessionsList = originalAgentSessionsList;
+        host.runtimeList = originalRuntimeList;
       }
     });
   });

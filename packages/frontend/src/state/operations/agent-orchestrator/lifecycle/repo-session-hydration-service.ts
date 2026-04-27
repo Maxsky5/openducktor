@@ -302,12 +302,45 @@ export const createRepoSessionHydrationService = ({
 
       preloadedRuntimeLists.set(runtimeKind, runtimeEntries);
 
+      const canScanRepoRootWorkspaceRuntime = (runtime: RuntimeInstanceSummary): boolean => {
+        const normalizedRuntimeDirectory = normalizeWorkingDirectory(runtime.workingDirectory);
+        if (runtime.role !== "workspace" || normalizedRuntimeDirectory !== repoPathKey) {
+          return true;
+        }
+
+        return persistedByTask.some(({ records }) =>
+          records.some((record) => {
+            try {
+              return (
+                readPersistedRuntimeKind(record) === runtimeKind &&
+                normalizeWorkingDirectory(record.workingDirectory) === normalizedRuntimeDirectory &&
+                canUseWorkspaceRuntimeForHydration(record, repoPath)
+              );
+            } catch (error) {
+              if (isSessionRuntimeMetadataError(error)) {
+                return false;
+              }
+              throw error;
+            }
+          }),
+        );
+      };
+
       for (const runtime of runtimeEntries) {
+        const isRepoRootWorkspaceRuntime =
+          runtime.role === "workspace" &&
+          normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey;
+        if (!canScanRepoRootWorkspaceRuntime(runtime)) {
+          continue;
+        }
+
         const { runtimeConnection } = resolveRuntimeRouteConnection(
           runtime.runtimeRoute,
           runtime.workingDirectory,
         );
-        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+        if (!isRepoRootWorkspaceRuntime) {
+          preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+        }
         if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
           continue;
         }

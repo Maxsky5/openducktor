@@ -748,6 +748,68 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile does not preload repo-root workspace runtimes for build sessions", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
+    const reconcileCalls: string[] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([
+      createRuntimeInstance({
+        runtimeId: "runtime-root",
+        workingDirectory: repoPath,
+      }),
+    ]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push({
+            ...(input.directories ? { directories: input.directories } : {}),
+          });
+          return [
+            createLiveAgentSessionSnapshotFixture({
+              externalSessionId: "external-planner-root",
+              workingDirectory: repoPath,
+            }),
+          ];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({
+          taskId,
+          persistedRecords,
+          preloadedRuntimeConnections,
+        }) => {
+          reconcileCalls.push(taskId);
+          const record = persistedRecords?.[0];
+          if (!record) {
+            throw new Error("Expected persisted session record");
+          }
+          expect(record.workingDirectory).toBe(repoPath);
+          expect(preloadedRuntimeConnections?.hasAny("opencode", repoPath)).toBe(false);
+          throw new Error(`No live runtime found for working directory ${repoPath}.`);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-root-build", "external-build-root", repoPath),
+        plannerTaskWithSessionAt("task-root-planner", "external-planner-root", repoPath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([{ directories: [repoPath] }]);
+    expect(reconcileCalls.sort()).toEqual(["task-root-build", "task-root-planner"]);
+    service.dispose();
+  });
+
   test("reconcile preloads stdio runtime snapshots into the live session store", async () => {
     const listLiveAgentSessionSnapshotsCalls: Array<{
       runtimeConnection: unknown;

@@ -151,11 +151,17 @@ export const createHydrationRuntimeResolver = ({
     runtimeKind: RuntimeKind,
     workingDirectory: string,
     externalSessionId: string,
+    includeRepoRootWorkspaceRuntimes: boolean,
   ): RuntimeLookupResult => {
     const runtimes = runtimesByKind.get(runtimeKind) ?? [];
     const normalizedDirectory = normalizeWorkingDirectory(workingDirectory);
+    const isRepoRootWorkspaceRuntime = (runtime: RuntimeInstanceSummary): boolean =>
+      runtime.role === "workspace" &&
+      normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath;
     const matches = runtimes.filter(
-      (runtime) => normalizeWorkingDirectory(runtime.workingDirectory) === normalizedDirectory,
+      (runtime) =>
+        normalizeWorkingDirectory(runtime.workingDirectory) === normalizedDirectory &&
+        (includeRepoRootWorkspaceRuntimes || !isRepoRootWorkspaceRuntime(runtime)),
     );
     const ambiguousMatch = disambiguateAmbiguousStdioMatches(
       runtimeKind,
@@ -251,11 +257,13 @@ export const createHydrationRuntimeResolver = ({
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
     const externalSessionId = record.externalSessionId ?? record.sessionId;
+    const canUseWorkspaceRuntime = canUseWorkspaceRuntimeForHydration(record, repoPath);
 
     const runtimeForDirectory = findRuntimeByWorkingDirectory(
       runtimeKind,
       workingDirectory,
       externalSessionId,
+      canUseWorkspaceRuntime,
     );
     if (!runtimeForDirectory.ok) {
       return {
@@ -266,7 +274,7 @@ export const createHydrationRuntimeResolver = ({
     }
 
     let runtime = runtimeForDirectory.runtime;
-    if (!runtime && canUseWorkspaceRuntimeForHydration(record, repoPath)) {
+    if (!runtime && canUseWorkspaceRuntime) {
       const workspaceRuntime = findWorkspaceRuntime(
         runtimeKind,
         workingDirectory,
@@ -295,6 +303,17 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
+    if (
+      !canUseWorkspaceRuntime &&
+      normalizeWorkingDirectory(workingDirectory) === normalizedRepoPath
+    ) {
+      return {
+        ok: false,
+        runtimeKind,
+        reason: `No live runtime found for working directory ${workingDirectory}.`,
+      };
+    }
+
     const preloadedRuntimeConnection = findPreloadedRuntimeConnection(
       runtimeKind,
       workingDirectory,
@@ -317,7 +336,7 @@ export const createHydrationRuntimeResolver = ({
       };
     }
 
-    if (!canUseWorkspaceRuntimeForHydration(record, repoPath)) {
+    if (!canUseWorkspaceRuntime) {
       return {
         ok: false,
         runtimeKind,

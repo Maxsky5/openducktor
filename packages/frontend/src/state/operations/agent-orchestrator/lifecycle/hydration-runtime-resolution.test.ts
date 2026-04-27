@@ -186,6 +186,112 @@ describe("createHydrationRuntimeResolver", () => {
     expect(ensureCalls).toBe(0);
   });
 
+  test("fails fast for repo-root build sessions when only the workspace runtime exists", async () => {
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        ["opencode", [createRuntime("/tmp/repo")]],
+      ]),
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return null;
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", "/tmp/repo"));
+
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo.",
+    });
+    expect(ensureCalls).toBe(0);
+  });
+
+  test("fails fast for repo-root qa sessions when only the workspace runtime exists", async () => {
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        ["opencode", [createRuntime("/tmp/repo")]],
+      ]),
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return null;
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("qa", "/tmp/repo"));
+
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo.",
+    });
+    expect(ensureCalls).toBe(0);
+  });
+
+  test("fails fast for repo-root build sessions when only a preloaded runtime connection exists", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnections = createPreloadIndex([
+      {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:9999",
+        workingDirectory,
+      },
+    ]);
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnections,
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return null;
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", workingDirectory));
+
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo.",
+    });
+    expect(ensureCalls).toBe(0);
+  });
+
+  test("fails fast for repo-root qa sessions when only a preloaded runtime connection exists", async () => {
+    const workingDirectory = "/tmp/repo";
+    const preloadedRuntimeConnections = createPreloadIndex([
+      {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:9999",
+        workingDirectory,
+      },
+    ]);
+    let ensureCalls = 0;
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnections,
+      ensureWorkspaceRuntime: async () => {
+        ensureCalls += 1;
+        return null;
+      },
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("qa", workingDirectory));
+
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo.",
+    });
+    expect(ensureCalls).toBe(0);
+  });
+
   test("does not ensure a shared workspace runtime for build sessions on non-root directories", async () => {
     let ensureCalls = 0;
     const resolveHydrationRuntime = createHydrationRuntimeResolver({

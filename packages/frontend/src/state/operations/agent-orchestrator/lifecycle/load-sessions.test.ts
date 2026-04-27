@@ -3161,7 +3161,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(sessionMessagesToArray(getSession(state, "session-qa-1"))).toEqual([]);
   });
 
-  test("does not ensure a shared workspace runtime for qa sessions when repo root paths only differ by trailing slash", async () => {
+  test("does not bind qa repo-root sessions to an existing workspace runtime", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const ensuredRuntimeKinds: string[] = [];
@@ -3225,7 +3225,22 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/",
       }),
     ];
-    hostModule.host.runtimeList = async () => [];
+    hostModule.host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-root",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
     legacyHost.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
