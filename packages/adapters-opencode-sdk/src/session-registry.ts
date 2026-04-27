@@ -95,7 +95,12 @@ const ensureRuntimeEventTransport = (input: {
     controller,
     onEvent: (event) => {
       for (const subscriber of streamRecord.subscribers.values()) {
-        const relevant = isRelevantSubscriberEvent(subscriber, event);
+        const relevant = isRelevantSubscriberEvent(subscriber, event, {
+          isKnownChildSessionId: (sessionId) =>
+            input.sessions
+              .get(subscriber.sessionId)
+              ?.subagentCorrelationKeyBySessionId.has(sessionId) ?? false,
+        });
         logStreamEvent({
           subscriber,
           event,

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
-import { processOpencodeEvent, subscribeOpencodeEvents } from "./event-stream";
+import {
+  isRelevantSubscriberEvent,
+  processOpencodeEvent,
+  subscribeOpencodeEvents,
+} from "./event-stream";
 import type { SessionInput, SessionRecord } from "./types";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -2228,6 +2232,45 @@ describe("event-stream", () => {
       { type: "todo.updated", relevant: false },
       { type: "todo.updated", relevant: true },
     ]);
+  });
+
+  test("treats known child-session events as relevant to the parent subscriber", () => {
+    const childPermissionEvent = {
+      type: "permission.asked",
+      properties: {
+        sessionID: "external-child-session",
+        id: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    } as unknown as Event;
+    const childMessageEvent = {
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "child-message-1",
+          role: "assistant",
+          sessionID: "external-child-session",
+        },
+      },
+    } as unknown as Event;
+    const parentSubscriber = {
+      sessionId: "local-parent-session",
+      externalSessionId: "external-parent-session",
+      input: makeSessionInput(),
+    };
+
+    expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
+    expect(
+      isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent, {
+        isKnownChildSessionId: (sessionId) => sessionId === "external-child-session",
+      }),
+    ).toBe(true);
+    expect(
+      isRelevantSubscriberEvent(parentSubscriber, childMessageEvent, {
+        isKnownChildSessionId: (sessionId) => sessionId === "external-child-session",
+      }),
+    ).toBe(false);
   });
 
   test("applies queued part delta with append semantics", async () => {

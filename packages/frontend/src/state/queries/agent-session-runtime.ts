@@ -5,7 +5,6 @@ import type {
   AgentRuntimeConnection,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
-  LiveAgentSessionPendingInputBySession,
 } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -138,19 +137,4 @@ export const sessionTodosQueryOptions = (
     queryFn: (): Promise<AgentSessionTodoItem[]> =>
       readSessionTodos(runtimeKind, runtimeConnection, externalSessionId),
     staleTime: SESSION_TODOS_STALE_TIME_MS,
-  });
-
-export const sessionPendingInputQueryOptions = (
-  runtimeKind: RuntimeKind,
-  runtimeConnection: AgentRuntimeConnection,
-  readLiveAgentSessionPendingInput: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-  ) => Promise<LiveAgentSessionPendingInputBySession>,
-) =>
-  queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.pendingInput(runtimeKind, runtimeConnection),
-    queryFn: (): Promise<LiveAgentSessionPendingInputBySession> =>
-      readLiveAgentSessionPendingInput(runtimeKind, runtimeConnection),
-    staleTime: SESSION_PENDING_INPUT_STALE_TIME_MS,
   });

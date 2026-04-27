@@ -7,6 +7,8 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 
+const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
@@ -30,7 +32,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   subagentPendingPermissionCount,
-  subagentPendingPermissionCountBySessionId = {},
+  subagentPendingPermissionCountBySessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = useContext(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];

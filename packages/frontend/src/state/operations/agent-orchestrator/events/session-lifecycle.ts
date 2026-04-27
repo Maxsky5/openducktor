@@ -104,6 +104,19 @@ const patchParentSubagentSessionLink = (
   );
 };
 
+const isLinkedChildPermissionObservedByParent = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: PermissionRequiredEvent,
+): boolean => {
+  const childSessionId = event.childExternalSessionId?.trim();
+  return Boolean(
+    childSessionId &&
+      event.parentSessionId === context.store.sessionId &&
+      event.sessionId === context.store.sessionId &&
+      childSessionId !== context.store.sessionId,
+  );
+};
+
 const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }>) => {
   const model = event.model;
   const parts = Array.isArray(event.parts) ? event.parts : [];
@@ -387,6 +400,17 @@ export const handlePermissionRequired = (
 ): void => {
   flushDraftBuffers(context);
   const role = context.store.sessionsRef.current[context.store.sessionId]?.role;
+
+  if (isLinkedChildPermissionObservedByParent(context, event)) {
+    if (role && shouldAutoRejectPermission(role, event)) {
+      patchParentSubagentSessionLink(context, event);
+      autoRejectMutatingPermission(context, event, role);
+      return;
+    }
+
+    patchParentSubagentSessionLink(context, event);
+    return;
+  }
 
   if (role && shouldAutoRejectPermission(role, event)) {
     autoRejectMutatingPermission(context, event, role);

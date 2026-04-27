@@ -83,6 +83,18 @@ type UseAgentStudioSelectionControllerArgs = {
   onContextSwitchIntent?: () => void;
 };
 
+const hasPendingLiveInput = (
+  pendingInputBySession: LiveAgentSessionPendingInputBySession | undefined,
+): boolean => {
+  if (!pendingInputBySession) {
+    return false;
+  }
+
+  return Object.values(pendingInputBySession).some(
+    (pendingInput) => pendingInput.permissions.length > 0 || pendingInput.questions.length > 0,
+  );
+};
+
 export type AgentStudioSelectionControllerResult = {
   selectedSessionById: AgentSessionSummary | null;
   taskId: string;
@@ -454,7 +466,12 @@ export function useAgentStudioSelectionController({
       );
     },
     enabled: viewLivePendingInputQueryTarget !== null && agentStudioReadinessState === "ready",
-    refetchInterval: viewLivePendingInputQueryTarget?.isActiveSessionWorking ? 2_000 : false,
+    refetchInterval: (query) => {
+      if (viewLivePendingInputQueryTarget?.isActiveSessionWorking) {
+        return 2_000;
+      }
+      return hasPendingLiveInput(query.state.data) ? 2_000 : false;
+    },
     staleTime: SESSION_PENDING_INPUT_STALE_TIME_MS,
   });
   const viewRole = viewSelection.role;

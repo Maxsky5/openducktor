@@ -19,6 +19,8 @@ import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-com
 import { useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
+const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+
 const parseDraftStateKey = (draftStateKey: string) => {
   const [taskId = "", role = "", sessionId = "", contextSwitchVersion = ""] =
     draftStateKey.split(":");
@@ -241,7 +243,8 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
-      subagentPendingPermissionCountBySessionId: subagentPendingPermissionCountBySessionId ?? {},
+      subagentPendingPermissionCountBySessionId:
+        subagentPendingPermissionCountBySessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
       canSubmitQuestionAnswers:
         mode === "interactive" && isComposerInteractionEnabled && pendingQuestions.canSubmit,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,

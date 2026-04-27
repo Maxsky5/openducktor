@@ -52,6 +52,10 @@ type LogEventInput = {
   logEvent?: OpencodeEventLogger;
 };
 
+type RelevantSubscriberEventOptions = {
+  isKnownChildSessionId?: (sessionId: string) => boolean;
+};
+
 type GlobalEventStream = {
   stream: AsyncIterable<GlobalEvent>;
 };
@@ -161,6 +165,7 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
 export const isRelevantSubscriberEvent = (
   subscriber: EventStreamSubscriber,
   event: Event,
+  options?: RelevantSubscriberEventOptions,
 ): boolean => {
   if (isRelevantEvent(subscriber.externalSessionId, event)) {
     return true;
@@ -188,6 +193,10 @@ export const isRelevantSubscriberEvent = (
         : undefined;
 
     if (parentSessionId === subscriber.externalSessionId) {
+      return true;
+    }
+
+    if (event.type === "permission.asked" && options?.isKnownChildSessionId?.(eventSessionId)) {
       return true;
     }
 
