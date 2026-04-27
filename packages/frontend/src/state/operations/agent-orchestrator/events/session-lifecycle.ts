@@ -65,6 +65,10 @@ const patchParentSubagentSessionLink = (
   if (!event.parentSessionId || !event.subagentCorrelationKey) {
     return;
   }
+  const childSessionId = event.childExternalSessionId?.trim();
+  if (!childSessionId) {
+    return;
+  }
 
   context.store.updateSession(
     event.parentSessionId,
@@ -79,13 +83,13 @@ const patchParentSubagentSessionLink = (
       if (subagentMessage?.meta?.kind !== "subagent") {
         return current;
       }
-      if (subagentMessage.meta.sessionId === event.sessionId) {
+      if (subagentMessage.meta.sessionId === childSessionId) {
         return current;
       }
 
       const nextMeta = {
         ...subagentMessage.meta,
-        sessionId: event.sessionId,
+        sessionId: childSessionId,
       };
       return {
         ...current,
