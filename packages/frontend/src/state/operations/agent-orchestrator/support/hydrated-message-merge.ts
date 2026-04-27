@@ -19,6 +19,8 @@ type ScopedPartId = {
   partKey: string;
 };
 
+type ToolStatus = "pending" | "running" | "completed" | "error";
+
 const parseScopedPartId = (id: string, prefix: string): ScopedPartId | null => {
   if (!id.startsWith(prefix)) {
     return null;
@@ -36,12 +38,65 @@ const parseScopedPartId = (id: string, prefix: string): ScopedPartId | null => {
   };
 };
 
-const parseReasoningScopedPartId = (id: string) => parseScopedPartId(id, "thinking:");
-
 const parseToolScopedPartId = (id: string) => parseScopedPartId(id, "tool:");
 
-const isTerminalToolStatus = (status: "pending" | "running" | "completed" | "error") =>
-  status === "completed" || status === "error";
+const isTerminalToolStatus = (status: ToolStatus) => status === "completed" || status === "error";
+
+const toolStatusRank = (status: ToolStatus): number => {
+  switch (status) {
+    case "pending":
+      return 0;
+    case "running":
+      return 1;
+    case "completed":
+    case "error":
+      return 2;
+  }
+};
+
+const trimToolCallId = (callId: string | undefined): string =>
+  typeof callId === "string" ? callId.trim() : "";
+
+const shouldPreserveCurrentToolMessage = (
+  hydratedStatus: ToolStatus,
+  currentStatus: ToolStatus,
+): boolean => {
+  const hydratedTerminal = isTerminalToolStatus(hydratedStatus);
+  const currentTerminal = isTerminalToolStatus(currentStatus);
+
+  if (hydratedTerminal !== currentTerminal) {
+    return currentTerminal;
+  }
+  if (!hydratedTerminal && !currentTerminal) {
+    return toolStatusRank(currentStatus) >= toolStatusRank(hydratedStatus);
+  }
+
+  return false;
+};
+
+const preserveCurrentToolWithHydratedIdentity = (
+  hydratedMessage: AgentChatMessage,
+  currentMessage: AgentChatMessage,
+): AgentChatMessage => {
+  if (hydratedMessage.meta?.kind !== "tool" || currentMessage.meta?.kind !== "tool") {
+    return currentMessage;
+  }
+
+  const hydratedCallId = trimToolCallId(hydratedMessage.meta.callId);
+  const currentCallId = trimToolCallId(currentMessage.meta.callId);
+  if (hydratedCallId.length === 0 || currentCallId.length > 0) {
+    return currentMessage;
+  }
+
+  return {
+    ...currentMessage,
+    id: hydratedMessage.id,
+    meta: {
+      ...currentMessage.meta,
+      callId: hydratedCallId,
+    },
+  };
+};
 
 const isTerminalSubagentStatus = (status: SubagentMessage["meta"]["status"]): boolean =>
   status === "completed" || status === "cancelled" || status === "error";
@@ -56,6 +111,9 @@ const mergeReasoningMessages = (
   if (currentMessage.meta.completed && !hydratedMessage.meta.completed) {
     return currentMessage;
   }
+  if (!currentMessage.meta.completed && !hydratedMessage.meta.completed) {
+    return currentMessage;
+  }
 
   return hydratedMessage;
 };
@@ -68,11 +126,8 @@ const mergeToolMessages = (
     return currentMessage;
   }
 
-  if (
-    isTerminalToolStatus(currentMessage.meta.status) &&
-    !isTerminalToolStatus(hydratedMessage.meta.status)
-  ) {
-    return currentMessage;
+  if (shouldPreserveCurrentToolMessage(hydratedMessage.meta.status, currentMessage.meta.status)) {
+    return preserveCurrentToolWithHydratedIdentity(hydratedMessage, currentMessage);
   }
 
   const nextMeta = {
@@ -122,29 +177,6 @@ const mergeSubagentMessages = (
   };
 };
 
-const matchesHydratedReasoning = (
-  hydratedMessage: AgentChatMessage,
-  candidate: AgentChatMessage,
-): boolean => {
-  if (hydratedMessage.meta?.kind !== "reasoning" || candidate.meta?.kind !== "reasoning") {
-    return false;
-  }
-  if (candidate.id === hydratedMessage.id) {
-    return false;
-  }
-  if (hydratedMessage.meta.partId !== candidate.meta.partId) {
-    return false;
-  }
-
-  const hydratedScopedId = parseReasoningScopedPartId(hydratedMessage.id);
-  const candidateScopedId = parseReasoningScopedPartId(candidate.id);
-  return (
-    hydratedScopedId !== null &&
-    candidateScopedId !== null &&
-    hydratedScopedId.messageId === candidateScopedId.messageId
-  );
-};
-
 const matchesHydratedTool = (
   hydratedMessage: AgentChatMessage,
   candidate: AgentChatMessage,
@@ -169,8 +201,8 @@ const matchesHydratedTool = (
     return false;
   }
 
-  const hydratedCallId = hydratedMessage.meta.callId.trim();
-  const candidateCallId = candidate.meta.callId.trim();
+  const hydratedCallId = trimToolCallId(hydratedMessage.meta.callId);
+  const candidateCallId = trimToolCallId(candidate.meta.callId);
   if (hydratedCallId.length > 0 && candidateCallId.length > 0) {
     return hydratedCallId === candidateCallId;
   }
@@ -243,10 +275,7 @@ const findMatchingCurrentNonSubagentMessages = ({
     if (!candidate || seenIds.has(candidate.id)) {
       continue;
     }
-    if (
-      matchesHydratedReasoning(hydratedMessage, candidate) ||
-      matchesHydratedTool(hydratedMessage, candidate)
-    ) {
+    if (matchesHydratedTool(hydratedMessage, candidate)) {
       matches.push(candidate);
       seenIds.add(candidate.id);
     }
