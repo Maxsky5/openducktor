@@ -8,10 +8,6 @@ impl AppRuntime for HostManagedStdioRuntimeAdapter {
         test_runtime_definition("test-runtime", "Test Runtime")
     }
 
-    fn startup_policy(&self, _service: &AppService) -> Result<OpencodeStartupReadinessPolicy> {
-        Ok(OpencodeStartupReadinessPolicy::default())
-    }
-
     fn start_host_managed(
         &self,
         _service: &AppService,
@@ -63,6 +59,7 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition_with_provisioning(
@@ -77,6 +74,7 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -128,6 +126,7 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(HostManagedStdioRuntimeAdapter),
         ],
@@ -180,6 +179,7 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -190,6 +190,7 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -223,6 +224,7 @@ fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -233,6 +235,7 @@ fn runtime_definitions_list_uses_registered_runtime_definitions() -> Result<()> 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -263,6 +266,7 @@ fn injected_runtime_registry_drives_runtime_config_defaults() -> Result<()> {
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -273,6 +277,7 @@ fn injected_runtime_registry_drives_runtime_config_defaults() -> Result<()> {
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -331,6 +336,7 @@ fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Res
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -343,6 +349,7 @@ fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Res
                 session_probe_behavior: SessionProbeBehavior::ReturnError(
                     "custom runtime probe hook invoked",
                 ),
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -420,6 +427,7 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -430,6 +438,7 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::ReturnUnsupported,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -501,6 +510,7 @@ fn task_delete_uses_task_runtime_route_for_matching_runtime_kind_and_worktree() 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -511,6 +521,7 @@ fn task_delete_uses_task_runtime_route_for_matching_runtime_kind_and_worktree() 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -583,6 +594,7 @@ fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -593,6 +605,7 @@ fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() 
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),
@@ -661,6 +674,7 @@ fn runs_list_hides_runs_when_runtime_probe_returns_actionable_failure() -> Resul
                     error: None,
                 },
                 session_probe_behavior: SessionProbeBehavior::Default,
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
             Arc::new(TestRuntimeAdapter {
                 definition: test_runtime_definition("test-runtime", "Test Runtime"),
@@ -673,6 +687,7 @@ fn runs_list_hides_runs_when_runtime_probe_returns_actionable_failure() -> Resul
                 session_probe_behavior: SessionProbeBehavior::ProbeFailure(
                     "probe failed for test runtime",
                 ),
+                external_start_behavior: ExternalStartBehavior::default(),
             }),
         ],
         AgentRuntimeKind::opencode(),

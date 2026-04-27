@@ -278,10 +278,6 @@ impl AppRuntime for TestRuntimeAdapter {
         self.definition.clone()
     }
 
-    fn startup_policy(&self, _service: &AppService) -> Result<OpencodeStartupReadinessPolicy> {
-        Ok(OpencodeStartupReadinessPolicy::default())
-    }
-
     fn start_external(
         &self,
         _service: &AppService,

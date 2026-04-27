@@ -16,10 +16,7 @@ use crate::app_service::{
     StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary,
-    RuntimeStartupReadinessConfig,
-};
+use host_domain::{AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary};
 use host_infra_system::pick_free_port;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -373,18 +370,6 @@ impl OpenCodeRuntime {
         ))
     }
 
-    fn startup_config(service: &AppService) -> Result<RuntimeStartupReadinessConfig> {
-        let config = service.runtime_config_store.load().with_context(|| {
-            format!(
-                "Failed loading OpenCode startup readiness config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
-                service.runtime_config_store.path().display()
-            )
-        })?;
-        config.runtimes.get("opencode").cloned().ok_or_else(|| {
-            anyhow!("Runtime config is missing startup readiness settings for opencode")
-        })
-    }
-
     fn abort_session(
         runtime_route: &RuntimeRoute,
         external_session_id: &str,
@@ -483,12 +468,6 @@ impl AppRuntime for OpenCodeRuntime {
             .definition_by_str("opencode")
             .expect("builtin runtime registry should include opencode")
             .clone()
-    }
-
-    fn startup_policy(&self, service: &AppService) -> Result<RuntimeStartupReadinessPolicy> {
-        Ok(RuntimeStartupReadinessPolicy::from_config(
-            Self::startup_config(service)?,
-        ))
     }
 
     fn start_host_managed(
