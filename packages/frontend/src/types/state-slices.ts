@@ -28,7 +28,11 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
+import type {
+  AgentSessionLoadOptions,
+  AgentSessionState,
+  RuntimeConnectionPreloadIndex,
+} from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -188,10 +192,7 @@ export type AgentStateContextValue = {
       import("@openducktor/contracts").RuntimeKind,
       import("@openducktor/contracts").RuntimeInstanceSummary[]
     >;
-    preloadedRuntimeConnectionsByKey?: Map<
-      string,
-      import("@openducktor/core").AgentRuntimeConnection
-    >;
+    preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<
       string,
       import("@openducktor/core").LiveAgentSessionSnapshot[]

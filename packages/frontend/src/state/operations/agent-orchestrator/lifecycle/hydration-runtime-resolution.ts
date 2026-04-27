@@ -13,7 +13,7 @@ import {
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
-import { findRuntimeConnectionPreloadCandidates } from "./live-agent-session-cache";
+import type { RuntimeConnectionPreloadIndex } from "./live-agent-session-cache";
 
 export type ResolvedHydrationRuntime =
   | {
@@ -51,12 +51,12 @@ const hasAmbiguousStdioRoutes = (runtimes: RuntimeInstanceSummary[]): boolean =>
 export const createHydrationRuntimeResolver = ({
   repoPath,
   runtimesByKind,
-  preloadedRuntimeConnectionsByKey,
+  preloadedRuntimeConnections,
   ensureWorkspaceRuntime,
 }: {
   repoPath: string;
   runtimesByKind: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
+  preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
   ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
@@ -101,15 +101,11 @@ export const createHydrationRuntimeResolver = ({
     runtimeKind: RuntimeKind,
     workingDirectory: string,
   ): PreloadedRuntimeConnectionLookupResult => {
-    if (!preloadedRuntimeConnectionsByKey) {
+    if (!preloadedRuntimeConnections) {
       return { ok: true, runtimeConnection: null };
     }
 
-    const candidates = findRuntimeConnectionPreloadCandidates(
-      preloadedRuntimeConnectionsByKey,
-      runtimeKind,
-      workingDirectory,
-    );
+    const candidates = preloadedRuntimeConnections.findCandidates(runtimeKind, workingDirectory);
     const candidatesByTransportKey = new Map(
       candidates.map((runtimeConnection) => [
         runtimeConnectionTransportKey(runtimeConnection),

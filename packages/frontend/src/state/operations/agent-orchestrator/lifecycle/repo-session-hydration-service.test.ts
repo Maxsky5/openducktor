@@ -13,7 +13,6 @@ import {
   createLocalHttpRuntimeConnection,
 } from "@/state/operations/agent-orchestrator/test-utils";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
-import { runtimeConnectionPreloadKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createRuntimeResolutionPlannerStage } from "./load-sessions-stages";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
@@ -334,7 +333,7 @@ describe("repo-session-hydration-service", () => {
           taskId,
           persistedRecords,
           preloadedRuntimeLists,
-          preloadedRuntimeConnectionsByKey,
+          preloadedRuntimeConnections,
           preloadedLiveAgentSessionsByKey,
           allowRuntimeEnsure,
         }) => {
@@ -346,7 +345,7 @@ describe("repo-session-hydration-service", () => {
           const plannerOptions = {
             ...(persistedRecords ? { persistedRecords } : {}),
             ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
-            ...(preloadedRuntimeConnectionsByKey ? { preloadedRuntimeConnectionsByKey } : {}),
+            ...(preloadedRuntimeConnections ? { preloadedRuntimeConnections } : {}),
             ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),
             ...(allowRuntimeEnsure !== undefined ? { allowRuntimeEnsure } : {}),
           };
@@ -568,7 +567,7 @@ describe("repo-session-hydration-service", () => {
       runtimeConnection: unknown;
       directories?: string[];
     }> = [];
-    const reconcilePreloadKeys: string[][] = [];
+    const reconcilePreloadIdentities: string[][] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
     const runtimeConnectionA = stdioRuntimeConnection(worktreePath, "runtime-stdio-a");
     const runtimeConnectionB = stdioRuntimeConnection(worktreePath, "runtime-stdio-b");
@@ -610,8 +609,15 @@ describe("repo-session-hydration-service", () => {
       },
       sessionHydration: {
         bootstrapTaskSessions: async () => {},
-        reconcileLiveTaskSessions: async ({ preloadedRuntimeConnectionsByKey }) => {
-          reconcilePreloadKeys.push(Array.from(preloadedRuntimeConnectionsByKey?.keys() ?? []));
+        reconcileLiveTaskSessions: async ({ preloadedRuntimeConnections }) => {
+          reconcilePreloadIdentities.push(
+            preloadedRuntimeConnections
+              ?.findCandidates("opencode", worktreePath)
+              .map((runtimeConnection) =>
+                runtimeConnection.type === "stdio" ? runtimeConnection.identity : "local_http",
+              )
+              .sort() ?? [],
+          );
         },
       },
       liveAgentSessionStore,
@@ -638,15 +644,9 @@ describe("repo-session-hydration-service", () => {
         directories: [worktreePath],
       },
     ]);
-    expect(reconcilePreloadKeys).toEqual([
-      [
-        runtimeConnectionPreloadKey("opencode", runtimeConnectionA),
-        runtimeConnectionPreloadKey("opencode", runtimeConnectionB),
-      ],
-      [
-        runtimeConnectionPreloadKey("opencode", runtimeConnectionA),
-        runtimeConnectionPreloadKey("opencode", runtimeConnectionB),
-      ],
+    expect(reconcilePreloadIdentities).toEqual([
+      ["runtime-stdio-a", "runtime-stdio-b"],
+      ["runtime-stdio-a", "runtime-stdio-b"],
     ]);
     expect(
       liveAgentSessionStore.readSnapshot({

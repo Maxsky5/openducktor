@@ -9,7 +9,10 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { liveAgentSessionLookupKey, runtimeWorkingDirectoryKey } from "./live-agent-session-cache";
+import {
+  liveAgentSessionLookupKey,
+  RuntimeConnectionPreloadIndex,
+} from "./live-agent-session-cache";
 import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
@@ -1034,6 +1037,12 @@ describe("load-sessions-stages", () => {
       workingDirectory,
     };
     let snapshotLoads = 0;
+    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
+    preloadedRuntimeConnections.add("opencode", {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+      workingDirectory,
+    });
 
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
@@ -1047,12 +1056,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedRuntimeConnectionsByKey: new Map([
-          [
-            runtimeWorkingDirectoryKey("opencode", workingDirectory),
-            { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
-          ],
-        ]),
+        preloadedRuntimeConnections,
         preloadedLiveAgentSessionsByKey: new Map([
           [
             liveAgentSessionLookupKey(

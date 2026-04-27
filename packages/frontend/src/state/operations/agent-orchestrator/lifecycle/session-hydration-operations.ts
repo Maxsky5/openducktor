@@ -3,11 +3,12 @@ import type {
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
-import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
   AgentSessionState,
+  RuntimeConnectionPreloadIndex,
 } from "@/types/agent-orchestrator";
 import {
   getAgentSessionHistoryHydrationState,
@@ -46,7 +47,7 @@ export type SessionHydrationOperations = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
+    preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
     allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
@@ -166,7 +167,7 @@ export const createSessionHydrationOperations = ({
       taskId,
       persistedRecords,
       preloadedRuntimeLists,
-      preloadedRuntimeConnectionsByKey,
+      preloadedRuntimeConnections,
       preloadedLiveAgentSessionsByKey,
       allowRuntimeEnsure,
     }) =>
@@ -177,7 +178,7 @@ export const createSessionHydrationOperations = ({
             mode: "reconcile_live",
             historyPolicy: "none",
             ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
-            ...(preloadedRuntimeConnectionsByKey ? { preloadedRuntimeConnectionsByKey } : {}),
+            ...(preloadedRuntimeConnections ? { preloadedRuntimeConnections } : {}),
             ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),
             ...(allowRuntimeEnsure !== undefined ? { allowRuntimeEnsure } : {}),
           },

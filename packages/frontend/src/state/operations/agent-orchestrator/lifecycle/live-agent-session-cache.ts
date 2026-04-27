@@ -21,7 +21,7 @@ export const getLiveAgentSessionCacheKey = (
 export const runtimeWorkingDirectoryKey = (runtimeKind: string, workingDirectory: string): string =>
   `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
 
-export const runtimeConnectionPreloadKey = (
+const runtimeConnectionPreloadKey = (
   runtimeKind: string,
   runtimeConnection: AgentRuntimeConnection,
 ): string =>
@@ -29,23 +29,38 @@ export const runtimeConnectionPreloadKey = (
     runtimeConnection.workingDirectory,
   )}`;
 
-export const findRuntimeConnectionPreloadCandidates = (
-  preloadedRuntimeConnectionsByKey: Map<string, AgentRuntimeConnection>,
-  runtimeKind: string,
-  workingDirectory: string,
-): AgentRuntimeConnection[] => {
-  const runtimeKindPrefix = `${runtimeKind}::`;
-  const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+export class RuntimeConnectionPreloadIndex {
+  private readonly connectionsByKey = new Map<string, AgentRuntimeConnection>();
 
-  return Array.from(preloadedRuntimeConnectionsByKey.entries())
-    .filter(
-      ([key, runtimeConnection]) =>
-        key.startsWith(runtimeKindPrefix) &&
-        normalizeWorkingDirectory(runtimeConnection.workingDirectory) ===
-          normalizedWorkingDirectory,
-    )
-    .map(([, runtimeConnection]) => runtimeConnection);
-};
+  get size(): number {
+    return this.connectionsByKey.size;
+  }
+
+  add(runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection): void {
+    this.connectionsByKey.set(
+      runtimeConnectionPreloadKey(runtimeKind, runtimeConnection),
+      runtimeConnection,
+    );
+  }
+
+  hasAny(runtimeKind: RuntimeKind, workingDirectory: string): boolean {
+    return this.findCandidates(runtimeKind, workingDirectory).length > 0;
+  }
+
+  findCandidates(runtimeKind: RuntimeKind, workingDirectory: string): AgentRuntimeConnection[] {
+    const runtimeKindPrefix = `${runtimeKind}::`;
+    const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+
+    return Array.from(this.connectionsByKey.entries())
+      .filter(
+        ([key, runtimeConnection]) =>
+          key.startsWith(runtimeKindPrefix) &&
+          normalizeWorkingDirectory(runtimeConnection.workingDirectory) ===
+            normalizedWorkingDirectory,
+      )
+      .map(([, runtimeConnection]) => runtimeConnection);
+  }
+}
 
 export const liveAgentSessionLookupKey = (
   runtimeKind: string,

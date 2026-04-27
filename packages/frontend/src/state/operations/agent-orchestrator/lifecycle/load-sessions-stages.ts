@@ -640,8 +640,8 @@ export const createRuntimeResolutionPlannerStage = async ({
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
     runtimesByKind,
-    ...(options?.preloadedRuntimeConnectionsByKey
-      ? { preloadedRuntimeConnectionsByKey: options.preloadedRuntimeConnectionsByKey }
+    ...(options?.preloadedRuntimeConnections
+      ? { preloadedRuntimeConnections: options.preloadedRuntimeConnections }
       : {}),
     ensureWorkspaceRuntime,
   });

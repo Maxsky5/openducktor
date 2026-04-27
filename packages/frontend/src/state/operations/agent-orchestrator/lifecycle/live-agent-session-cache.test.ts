@@ -9,7 +9,7 @@ import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
-  runtimeConnectionPreloadKey,
+  RuntimeConnectionPreloadIndex,
   runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
 
@@ -35,15 +35,17 @@ describe("live-agent-session-cache", () => {
     expect(runtimeWorkingDirectoryKey("opencode", "/tmp/repo/worktree/")).toBe(
       "opencode::/tmp/repo/worktree",
     );
-    expect(runtimeConnectionPreloadKey("opencode", stdioRuntimeConnection)).toBe(
-      "opencode::stdio:runtime-stdio::/tmp/runtime-root",
-    );
+    const preloadIndex = new RuntimeConnectionPreloadIndex();
+    preloadIndex.add("opencode", stdioRuntimeConnection);
+    expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
+      stdioRuntimeConnection,
+    ]);
     expect(
       liveAgentSessionLookupKey("opencode", stdioRuntimeConnection, "/tmp/repo/worktree/"),
     ).toBe("opencode::stdio:runtime-stdio::/tmp/runtime-root::/tmp/repo/worktree");
   });
 
-  test("builds distinct preload keys for stdio runtimes sharing a working directory", () => {
+  test("indexes distinct stdio runtimes sharing a working directory", () => {
     const runtimeConnectionA = createStdioRuntimeConnection("/tmp/runtime-root", {
       identity: "runtime-stdio-a",
     });
@@ -51,12 +53,15 @@ describe("live-agent-session-cache", () => {
       identity: "runtime-stdio-b",
     });
 
-    expect(runtimeConnectionPreloadKey("opencode", runtimeConnectionA)).toBe(
-      "opencode::stdio:runtime-stdio-a::/tmp/runtime-root",
-    );
-    expect(runtimeConnectionPreloadKey("opencode", runtimeConnectionB)).toBe(
-      "opencode::stdio:runtime-stdio-b::/tmp/runtime-root",
-    );
+    const preloadIndex = new RuntimeConnectionPreloadIndex();
+    preloadIndex.add("opencode", runtimeConnectionA);
+    preloadIndex.add("opencode", runtimeConnectionB);
+
+    expect(preloadIndex.size).toBe(2);
+    expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
+      runtimeConnectionA,
+      runtimeConnectionB,
+    ]);
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {

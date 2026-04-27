@@ -22,11 +22,10 @@ import {
 } from "../support/session-runtime-metadata";
 import { canUseWorkspaceRuntimeForHydration } from "./hydration-runtime-policy";
 import {
-  findRuntimeConnectionPreloadCandidates,
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
-  runtimeConnectionPreloadKey,
+  RuntimeConnectionPreloadIndex,
 } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
@@ -43,7 +42,7 @@ type ReconcilePreloadPlan = {
   persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
   taskIdsToReconcile: Set<string>;
   preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeConnectionsByKey: Map<string, AgentRuntimeConnection>;
+  preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
   skippedTaskErrors: Map<string, unknown>;
 };
@@ -271,7 +270,7 @@ export const createRepoSessionHydrationService = ({
 
     const runtimeConnections = new Map<string, RuntimeConnectionScan>();
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
-    const preloadedRuntimeConnectionsByKey = new Map<string, AgentRuntimeConnection>();
+    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
     for (const runtimeKind of runtimeKinds) {
       const runtimes = await loadRuntimeListFromQuery(queryClient, runtimeKind, repoPath);
       if (isCancelled()) {
@@ -279,7 +278,7 @@ export const createRepoSessionHydrationService = ({
           persistedByTask,
           taskIdsToReconcile: new Set<string>(),
           preloadedRuntimeLists,
-          preloadedRuntimeConnectionsByKey,
+          preloadedRuntimeConnections,
           preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
           skippedTaskErrors,
         };
@@ -305,7 +304,7 @@ export const createRepoSessionHydrationService = ({
             persistedByTask,
             taskIdsToReconcile: new Set<string>(),
             preloadedRuntimeLists,
-            preloadedRuntimeConnectionsByKey,
+            preloadedRuntimeConnections,
             preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
             skippedTaskErrors,
           };
@@ -323,10 +322,7 @@ export const createRepoSessionHydrationService = ({
           runtime.runtimeRoute,
           runtime.workingDirectory,
         );
-        preloadedRuntimeConnectionsByKey.set(
-          runtimeConnectionPreloadKey(runtimeKind, runtimeConnection),
-          runtimeConnection,
-        );
+        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
         if (!desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
           continue;
         }
@@ -379,7 +375,7 @@ export const createRepoSessionHydrationService = ({
             persistedByTask,
             taskIdsToReconcile: new Set<string>(),
             preloadedRuntimeLists,
-            preloadedRuntimeConnectionsByKey,
+            preloadedRuntimeConnections,
             preloadedLiveAgentSessionsByKey: new Map<string, LiveAgentSessionSnapshot[]>(),
             skippedTaskErrors,
           };
@@ -392,10 +388,7 @@ export const createRepoSessionHydrationService = ({
           routeSourceRuntime.runtimeRoute,
           workingDirectory,
         );
-        preloadedRuntimeConnectionsByKey.set(
-          runtimeConnectionPreloadKey(runtimeKind, runtimeConnection),
-          runtimeConnection,
-        );
+        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
         const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
         if (!runtimeConnections.has(scanKey)) {
           runtimeConnections.set(scanKey, {
@@ -414,13 +407,11 @@ export const createRepoSessionHydrationService = ({
         continue;
       }
 
-      const hasResolvableHydrationRuntime = records.some(
-        (record) =>
-          findRuntimeConnectionPreloadCandidates(
-            preloadedRuntimeConnectionsByKey,
-            readPersistedRuntimeKind(record),
-            record.workingDirectory,
-          ).length > 0,
+      const hasResolvableHydrationRuntime = records.some((record) =>
+        preloadedRuntimeConnections.hasAny(
+          readPersistedRuntimeKind(record),
+          record.workingDirectory,
+        ),
       );
       if (hasResolvableHydrationRuntime) {
         taskIdsToReconcile.add(taskId);
@@ -441,7 +432,7 @@ export const createRepoSessionHydrationService = ({
           persistedByTask,
           taskIdsToReconcile: new Set<string>(),
           preloadedRuntimeLists,
-          preloadedRuntimeConnectionsByKey,
+          preloadedRuntimeConnections,
           preloadedLiveAgentSessionsByKey,
           skippedTaskErrors,
         };
@@ -478,7 +469,7 @@ export const createRepoSessionHydrationService = ({
       persistedByTask,
       taskIdsToReconcile,
       preloadedRuntimeLists,
-      preloadedRuntimeConnectionsByKey,
+      preloadedRuntimeConnections,
       preloadedLiveAgentSessionsByKey,
       skippedTaskErrors,
     };
@@ -615,7 +606,7 @@ export const createRepoSessionHydrationService = ({
               taskId,
               persistedRecords: records,
               preloadedRuntimeLists: plan.preloadedRuntimeLists,
-              preloadedRuntimeConnectionsByKey: plan.preloadedRuntimeConnectionsByKey,
+              preloadedRuntimeConnections: plan.preloadedRuntimeConnections,
               preloadedLiveAgentSessionsByKey: plan.preloadedLiveAgentSessionsByKey,
               allowRuntimeEnsure: false,
             });

@@ -20,6 +20,7 @@ import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
   AgentSessionState,
+  RuntimeConnectionPreloadIndex,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -60,7 +61,7 @@ type CreatePublicOperationsArgs = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnectionsByKey?: Map<string, AgentRuntimeConnection>;
+    preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
     allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
