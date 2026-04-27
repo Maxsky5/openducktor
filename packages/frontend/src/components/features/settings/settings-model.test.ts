@@ -94,7 +94,7 @@ describe("settings-model", () => {
     ).toThrow("Dev server tab labels cannot be blank");
     expect(() =>
       normalizeDevServers([{ id: "   ", name: "Frontend", command: "bun run dev" }]),
-    ).toThrow("Dev server ids cannot be blank.");
+    ).toThrow("Dev server id cannot be blank.");
   });
 
   test("normalizeRepoScripts normalizes hooks and dev server scripts", () => {

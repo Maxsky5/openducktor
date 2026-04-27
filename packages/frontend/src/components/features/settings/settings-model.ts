@@ -12,7 +12,6 @@ type RepoDevServerDraftInput = RepoDevServerScript;
 type DevServerDraftValidationErrors = {
   id?: string;
   name?: string;
-  command?: string;
 };
 
 type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
@@ -68,7 +67,7 @@ export const countDevServerDraftValidationErrors = (
 ): number =>
   devServers.reduce((count, devServer) => {
     const errors = getDevServerDraftValidationErrors(devServer);
-    return count + (errors?.id ? 1 : 0) + (errors?.name ? 1 : 0) + (errors?.command ? 1 : 0);
+    return count + (errors?.id ? 1 : 0) + (errors?.name ? 1 : 0);
   }, 0);
 
 export const normalizeDevServers = (
@@ -82,7 +81,7 @@ export const normalizeDevServers = (
 
     const validationErrors = getDevServerDraftValidationErrors(devServer);
     if (validationErrors?.id) {
-      throw new Error("Dev server ids cannot be blank.");
+      throw new Error("Dev server id cannot be blank.");
     }
     if (validationErrors?.name) {
       throw new Error("Dev server tab labels cannot be blank.");

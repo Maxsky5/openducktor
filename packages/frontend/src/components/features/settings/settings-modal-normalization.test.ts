@@ -309,7 +309,7 @@ describe("settings-modal-normalization", () => {
         ...createRepoConfig(),
         devServers: [{ id: "   ", name: "Frontend", command: "bun run dev" }],
       }),
-    ).toThrow("Dev server ids cannot be blank.");
+    ).toThrow("Dev server id cannot be blank.");
   });
 
   test("normalizes hook commands when configured", () => {

@@ -188,9 +188,11 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        _summary: Option<&str>,
+        summary: Option<&str>,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
+        let repo_config =
+            self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
         if context.task.status != TaskStatus::InProgress {
             return Err(anyhow!(
                 "build_completed is only allowed from in_progress. Task {} is {}.",
@@ -213,23 +215,26 @@ impl AppService {
             &next_status,
         )?;
 
-        self.run_post_complete_hooks_for_build_completion(&context)?;
+        self.run_post_complete_hooks_for_build_completion(
+            &context,
+            repo_config.hooks.post_complete.as_slice(),
+        )?;
+        let transition_reason = summary.unwrap_or("Builder completed");
 
         self.task_transition(
             context.repo.repo_path.as_str(),
             task_id,
             next_status,
-            Some("Builder completed"),
+            Some(transition_reason),
         )
     }
 
     fn run_post_complete_hooks_for_build_completion(
         &self,
         context: &super::task_context::LoadedTaskContext,
+        post_complete_hooks: &[String],
     ) -> Result<()> {
-        let repo_config =
-            self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
-        if repo_config.hooks.post_complete.is_empty() {
+        if post_complete_hooks.is_empty() {
             return Ok(());
         }
 
@@ -252,10 +257,9 @@ impl AppService {
             }
         };
 
-        if let Some(failure) = run_hook_commands_allow_failure(
-            repo_config.hooks.post_complete.as_slice(),
-            Path::new(worktree_path.as_str()),
-        ) {
+        if let Some(failure) =
+            run_hook_commands_allow_failure(post_complete_hooks, Path::new(worktree_path.as_str()))
+        {
             let message = format!(
                 "Worktree cleanup script command failed: {}\n{}",
                 failure.hook, failure.stderr
