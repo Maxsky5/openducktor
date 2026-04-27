@@ -20,15 +20,12 @@ import {
 import { useAgentChatSessionHydration } from "./use-agent-chat-session-hydration";
 import { useAgentChatSessionRuntimeData } from "./use-agent-chat-session-runtime-data";
 import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
+import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
 const SYNTHETIC_HISTORY_PRELUDE_MODE: AgentSessionHistoryPreludeMode = "none";
 const NOOP_SUBMIT_ANSWERS = async (_requestId: string, _answers: string[][]): Promise<void> => {};
-const NOOP_REPLY_PERMISSION = async (
-  _requestId: string,
-  _reply: "once" | "always" | "reject",
-): Promise<void> => {};
 const toFallbackPersistedRecord = ({
   sessionId,
   fallbackSession,
@@ -82,6 +79,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     hydrateRequestedTaskSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
+    replyAgentPermission,
   } = useAgentOperations();
   const liveSession = useAgentSession(sessionId ?? null);
   const session = liveSession;
@@ -295,6 +293,16 @@ export function useReadonlySessionTranscriptSurfaceModel({
     sessionId,
     shouldShowPendingSessionResolution,
   ]);
+  const permissionSession = runtimeData.session;
+  const activePermissionSessionId = permissionSession?.sessionId ?? null;
+  const pendingPermissionRequests = permissionSession?.pendingPermissions ?? [];
+  const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
+    useAgentSessionPermissionActions({
+      activeSessionId: activePermissionSessionId,
+      pendingPermissions: pendingPermissionRequests,
+      agentStudioReady: runtimeReadiness.isReady,
+      replyAgentPermission,
+    });
 
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
@@ -314,10 +322,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
       onSubmit: NOOP_SUBMIT_ANSWERS,
     },
     permissions: {
-      canReply: false,
-      isSubmittingByRequestId: {},
-      errorByRequestId: {},
-      onReply: NOOP_REPLY_PERMISSION,
+      canReply: activePermissionSessionId !== null,
+      isSubmittingByRequestId: isSubmittingPermissionByRequestId,
+      errorByRequestId: permissionReplyErrorByRequestId,
+      onReply: onReplyPermission,
     },
   });
 

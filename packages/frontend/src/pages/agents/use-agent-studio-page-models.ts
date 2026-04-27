@@ -145,6 +145,16 @@ export function useAgentStudioPageModels({
   agentChatModel: AgentChatModel;
 } {
   const workflowSessionsForTask = core.sessionsForTask;
+  const subagentPendingPermissionCountBySessionId = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const session of workflowSessionsForTask) {
+      const pendingPermissionCount = session.pendingPermissions.length;
+      if (pendingPermissionCount > 0) {
+        counts[session.sessionId] = pendingPermissionCount;
+      }
+    }
+    return counts;
+  }, [workflowSessionsForTask]);
   const workflowActiveSessionId = core.activeSession?.sessionId ?? null;
   const workflowActiveSessionRole = core.activeSession?.role ?? null;
   const workflowActiveSession = useMemo(
@@ -448,6 +458,7 @@ export function useAgentStudioPageModels({
     permissions: permissionsModel,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
+    subagentPendingPermissionCountBySessionId,
   });
   const composerModel = surfaceModel.composer;
 

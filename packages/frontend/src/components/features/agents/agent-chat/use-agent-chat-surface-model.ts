@@ -160,6 +160,7 @@ type UseAgentChatSurfaceModelArgs = {
   permissions: AgentChatPendingPermissionActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
+  subagentPendingPermissionCountBySessionId?: Record<string, number>;
 };
 
 export function useAgentChatSurfaceModel({
@@ -178,6 +179,7 @@ export function useAgentChatSurfaceModel({
   permissions,
   composer,
   sessionAgentColors,
+  subagentPendingPermissionCountBySessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
@@ -218,6 +220,7 @@ export function useAgentChatSurfaceModel({
   }, [activeSessionId]);
 
   const isInteractiveEnabled = mode === "interactive" && runtimeReadiness.isReady;
+  const canReplyToPermissions = runtimeReadiness.isReady && permissions.canReply;
 
   const threadModel = useMemo(
     () => ({
@@ -238,11 +241,12 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
+      subagentPendingPermissionCountBySessionId: subagentPendingPermissionCountBySessionId ?? {},
       canSubmitQuestionAnswers:
         mode === "interactive" && isInteractiveEnabled && pendingQuestions.canSubmit,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
-      canReplyToPermissions: mode === "interactive" && isInteractiveEnabled && permissions.canReply,
+      canReplyToPermissions,
       isSubmittingPermissionByRequestId: permissions.isSubmittingByRequestId,
       permissionReplyErrorByRequestId: permissions.errorByRequestId,
       onReplyPermission: permissions.onReply,
@@ -255,6 +259,7 @@ export function useAgentChatSurfaceModel({
     }),
     [
       activeTodoPanelCollapsed,
+      canReplyToPermissions,
       composer?.isSending,
       composer?.isStarting,
       emptyState,
@@ -272,6 +277,7 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       sessionRuntimeDataError,
       showThinkingMessages,
+      subagentPendingPermissionCountBySessionId,
       threadSession,
     ],
   );

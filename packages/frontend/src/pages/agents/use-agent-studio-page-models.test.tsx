@@ -749,6 +749,41 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("derives subagent pending permission counts from task sessions", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithPermission = createSession("session-child-1", "external-child-1", {
+      pendingPermissions: [
+        { requestId: "perm-1", permission: "shell", patterns: ["bun test"] },
+        { requestId: "perm-2", permission: "shell", patterns: ["git status"] },
+      ],
+    });
+    const childWithoutPermission = createSession("session-child-2", "external-child-2", {
+      pendingPermissions: [],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithPermission),
+            toAgentSessionSummary(childWithoutPermission),
+          ],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
+    ).toEqual({
+      "session-child-1": 2,
+    });
+
+    await harness.unmount();
+  });
+
   test("keeps composer model stable when active session reference changes with same session id", async () => {
     const initialSession = createSession("session-1", "external-1", {
       role: "spec",

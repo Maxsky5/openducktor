@@ -599,6 +599,71 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("59s");
   });
 
+  test("renders running subagent cards as waiting when child session has pending permission", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): review changes", {
+          id: "subagent-waiting-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-waiting-1",
+            correlationKey: "part:assistant-task-tool-running:subtask-permission",
+            status: "running",
+            agent: "build",
+            description: "review changes [commit|branch|pr], defaults to uncommitted",
+            sessionId: "session-child-waiting",
+            startedAtMs: 1_000,
+          },
+        }),
+        sessionRole: "build",
+        sessionTaskId: "task-1",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+        subagentPendingPermissionCountBySessionId: {
+          "session-child-waiting": 1,
+        },
+      }),
+    );
+
+    expect(html).toContain("Waiting for permission");
+    expect(html).not.toContain("lucide-loader-circle");
+    expect(html).not.toContain("Running");
+  });
+
+  test("keeps terminal subagent status when child session still has stale pending permission", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): review changes", {
+          id: "subagent-completed-stale-permission-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-completed-stale-permission-1",
+            correlationKey: "part:assistant-task-tool-completed:subtask-permission",
+            status: "completed",
+            agent: "build",
+            description: "review changes [commit|branch|pr], defaults to uncommitted",
+            sessionId: "session-child-completed",
+            startedAtMs: 1_000,
+            endedAtMs: 120_000,
+          },
+        }),
+        sessionRole: "build",
+        sessionTaskId: "task-1",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+        subagentPendingPermissionCountBySessionId: {
+          "session-child-completed": 1,
+        },
+      }),
+    );
+
+    expect(html).toContain("Completed");
+    expect(html).not.toContain("Waiting for permission");
+    expect(html).toContain("1m59s");
+  });
+
   test("renders cancelled subagent cards with terminal duration", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
