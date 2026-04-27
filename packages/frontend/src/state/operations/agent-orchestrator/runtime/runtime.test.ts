@@ -79,7 +79,7 @@ const createPromptOverrideSettingsSnapshot = (
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   chat: { showThinkingMessages: false },
-  kanban: { doneVisibleDays: 1 },
+  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   workspaces: {},
   globalPromptOverrides,

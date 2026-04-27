@@ -8,6 +8,7 @@ import type { KanbanPageContentModel } from "./kanban-page-model-types";
 const model: KanbanPageContentModel = {
   isLoadingTasks: false,
   isSwitchingWorkspace: false,
+  emptyColumnDisplay: "show",
   columns: [
     {
       id: "open",
@@ -35,7 +36,16 @@ describe("KanbanPageContent", () => {
 
   beforeEach(async () => {
     mock.module("@/components/features/kanban/kanban-column", () => ({
-      KanbanColumn: (): ReactElement => <div data-testid="kanban-column" />,
+      KanbanColumn: ({ column }: { column: (typeof model.columns)[number] }): ReactElement => (
+        <div data-testid="kanban-column">{column.title}</div>
+      ),
+    }));
+    mock.module("@/components/features/kanban/kanban-collapsed-column", () => ({
+      KanbanCollapsedColumn: ({
+        column,
+      }: {
+        column: (typeof model.columns)[number];
+      }): ReactElement => <div data-testid="kanban-collapsed-column">{column.title}</div>,
     }));
 
     ({ KanbanPageContent } = await import("./kanban-page-content"));
@@ -46,6 +56,10 @@ describe("KanbanPageContent", () => {
       [
         "@/components/features/kanban/kanban-column",
         () => import("@/components/features/kanban/kanban-column"),
+      ],
+      [
+        "@/components/features/kanban/kanban-collapsed-column",
+        () => import("@/components/features/kanban/kanban-collapsed-column"),
       ],
     ]);
   });
@@ -96,5 +110,51 @@ describe("KanbanPageContent", () => {
     expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
     expect(html).not.toContain("Refreshing tasks...");
     expect(html).not.toContain('data-testid="kanban-loading-overlay"');
+  });
+
+  test("shows empty columns when the display mode is show", () => {
+    const html = renderToStaticMarkup(createElement(KanbanPageContent, { model }));
+
+    expect(html.match(/data-testid="kanban-column"/g)?.length).toBe(1);
+    expect(html).toContain("Backlog");
+    expect(html).not.toContain('data-testid="kanban-collapsed-column"');
+  });
+
+  test("hides empty columns when the display mode is hidden", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          emptyColumnDisplay: "hidden",
+        },
+      }),
+    );
+
+    expect(html).not.toContain('data-testid="kanban-column"');
+    expect(html).not.toContain('data-testid="kanban-collapsed-column"');
+  });
+
+  test("collapses empty columns without collapsing populated columns", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          emptyColumnDisplay: "collapsed",
+          columns: [
+            ...model.columns,
+            {
+              id: "in_progress",
+              title: "In progress",
+              tasks: [{ id: "TASK-1" }] as (typeof model.columns)[number]["tasks"],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html.match(/data-testid="kanban-collapsed-column"/g)?.length).toBe(1);
+    expect(html.match(/data-testid="kanban-column"/g)?.length).toBe(1);
+    expect(html).toContain("Backlog");
+    expect(html).toContain("In progress");
   });
 });

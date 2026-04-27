@@ -1,3 +1,4 @@
+import { DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -80,6 +81,9 @@ export function useKanbanPageModels({
   const reportedKanbanTasksErrorRef = useRef<string | null>(null);
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
+  const emptyColumnDisplay =
+    settingsSnapshotQuery.data?.kanban.emptyColumnDisplay ??
+    DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay;
   const kanbanTaskListQuery = useQuery({
     ...kanbanTaskListQueryOptions(workspaceRepoPath ?? "__disabled__", doneVisibleDays ?? 0),
     enabled: workspaceRepoPath !== null && doneVisibleDays !== undefined,
@@ -262,6 +266,7 @@ export function useKanbanPageModels({
   const content = useKanbanBoardModel({
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
+    emptyColumnDisplay,
     tasks: kanbanTasks,
     sessions,
     onOpenDetails,

@@ -280,6 +280,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
   },
   kanban: {
     doneVisibleDays: 1,
+    emptyColumnDisplay: "show",
   },
   autopilot: {
     rules: [],

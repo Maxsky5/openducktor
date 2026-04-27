@@ -57,6 +57,7 @@ import type {
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
+  KanbanEmptyColumnDisplay,
   KanbanSettings,
   PlanSubtaskInput,
   PlanSubtaskIssueType,
@@ -170,6 +171,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildResumedResultSchema",
   "CreateTaskInputSchema",
   "DEFAULT_KANBAN_SETTINGS",
+  "KANBAN_EMPTY_COLUMN_DISPLAY_VALUES",
   "devServerEventSchema",
   "devServerGroupStateSchema",
   "devServerTerminalChunkSchema",
@@ -227,6 +229,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitWorktreeStatusSnapshotSchema",
   "gitWorktreeSummarySchema",
   "kanbanSettingsSchema",
+  "kanbanEmptyColumnDisplaySchema",
   "globalConfigSchema",
   "globalGitConfigSchema",
   "GetWorkspacesInputSchema",
@@ -433,6 +436,7 @@ type ExportedTypeContract = {
   GitWorktreeStatusSnapshot: GitWorktreeStatusSnapshot;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
+  KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;
   PlanSubtaskInput: PlanSubtaskInput;
@@ -517,6 +521,7 @@ describe("contracts exports contract", () => {
 
     expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
     expect(parsedSnapshot.kanban.doneVisibleDays).toBe(1);
+    expect(parsedSnapshot.kanban.emptyColumnDisplay).toBe("show");
   });
 
   test("rejects settings snapshots without a theme", () => {

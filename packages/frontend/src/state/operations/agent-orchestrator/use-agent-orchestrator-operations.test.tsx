@@ -312,6 +312,7 @@ describe("use-agent-orchestrator-operations", () => {
       },
       kanban: {
         doneVisibleDays: 1,
+        emptyColumnDisplay: "show",
       },
       autopilot: {
         rules: [],

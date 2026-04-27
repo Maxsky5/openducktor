@@ -66,6 +66,7 @@ describe("app-state-context-values", () => {
         },
         kanban: {
           doneVisibleDays: 1,
+          emptyColumnDisplay: "show",
         },
         autopilot: {
           rules: [],

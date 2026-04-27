@@ -222,7 +222,8 @@ mod tests {
     use anyhow::{anyhow, Result};
     use host_domain::TaskStore;
     use host_infra_system::{
-        AppConfigStore, AutopilotSettings, GitCliPort, HookSet, PromptOverride, RepoDevServerScript,
+        AppConfigStore, AutopilotSettings, GitCliPort, HookSet, KanbanEmptyColumnDisplay,
+        PromptOverride, RepoDevServerScript,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -491,6 +492,43 @@ mod tests {
             fixture.service.workspace_get_settings_snapshot()?;
         assert!(persisted_chat.show_thinking_messages);
         assert_eq!(persisted_autopilot, AutopilotSettings::default());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_preserves_kanban_empty_column_display() -> Result<()> {
+        let fixture = setup_fixture("snapshot-kanban-empty-display", HookSet::default());
+
+        let (theme, git, chat, mut kanban, autopilot, workspaces, global_prompt_overrides) =
+            fixture.service.workspace_get_settings_snapshot()?;
+        kanban.empty_column_display = KanbanEmptyColumnDisplay::Collapsed;
+
+        fixture
+            .service
+            .workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
+                theme,
+                git,
+                chat,
+                kanban,
+                autopilot,
+                workspaces,
+                global_prompt_overrides,
+            })?;
+
+        let (
+            _persisted_theme,
+            _persisted_git,
+            _persisted_chat,
+            persisted_kanban,
+            _persisted_autopilot,
+            _persisted_repos,
+            _persisted_global_prompt_overrides,
+        ) = fixture.service.workspace_get_settings_snapshot()?;
+
+        assert_eq!(
+            persisted_kanban.empty_column_display,
+            KanbanEmptyColumnDisplay::Collapsed
+        );
         Ok(())
     }
 

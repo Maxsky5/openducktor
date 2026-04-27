@@ -17,7 +17,9 @@ const DEFAULT_CHAT_SETTINGS = {
 } as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
+  emptyColumnDisplay: "show",
 } as const;
+export const KANBAN_EMPTY_COLUMN_DISPLAY_VALUES = ["show", "hidden", "collapsed"] as const;
 const DEFAULT_THEME = "light" as const;
 
 export const AUTOPILOT_EVENT_IDS = [
@@ -144,7 +146,12 @@ export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 
 export const kanbanSettingsSchema = z.object({
   doneVisibleDays: z.number().int().min(0).default(DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
+  emptyColumnDisplay: z
+    .enum(KANBAN_EMPTY_COLUMN_DISPLAY_VALUES)
+    .default(DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay),
 });
+export const kanbanEmptyColumnDisplaySchema = z.enum(KANBAN_EMPTY_COLUMN_DISPLAY_VALUES);
+export type KanbanEmptyColumnDisplay = z.infer<typeof kanbanEmptyColumnDisplaySchema>;
 export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;
 
 export const autopilotEventIdSchema = z.enum(AUTOPILOT_EVENT_IDS);

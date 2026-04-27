@@ -21,6 +21,7 @@ const hostMock = {
       },
       kanban: {
         doneVisibleDays: 1,
+        emptyColumnDisplay: "show",
       },
       autopilot: {
         rules: [],
@@ -78,6 +79,7 @@ const createSettingsSnapshot = (
     },
     kanban: {
       doneVisibleDays: 1,
+      emptyColumnDisplay: "show",
     },
     autopilot: {
       rules: [],

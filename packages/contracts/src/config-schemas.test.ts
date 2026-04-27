@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { AUTOPILOT_EVENT_IDS, repoConfigSchema, settingsSnapshotSchema } from "./config-schemas";
+import {
+  AUTOPILOT_EVENT_IDS,
+  KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
+  kanbanSettingsSchema,
+  repoConfigSchema,
+  settingsSnapshotSchema,
+} from "./config-schemas";
 
 const baseRepoConfigInput = {
   workspaceId: "repo",
@@ -84,7 +90,7 @@ describe("config-schemas", () => {
     expect(() => repoConfigSchema.parse({})).toThrow();
   });
 
-  test("defaults kanban done visibility to one day", () => {
+  test("defaults kanban settings for existing snapshots", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
@@ -93,6 +99,28 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.kanban.doneVisibleDays).toBe(1);
+    expect(parsed.kanban.emptyColumnDisplay).toBe("show");
+  });
+
+  test("defaults missing kanban empty-column display to show", () => {
+    const parsed = kanbanSettingsSchema.parse({ doneVisibleDays: 4 });
+
+    expect(parsed).toEqual({ doneVisibleDays: 4, emptyColumnDisplay: "show" });
+  });
+
+  test("accepts every supported kanban empty-column display mode", () => {
+    for (const emptyColumnDisplay of KANBAN_EMPTY_COLUMN_DISPLAY_VALUES) {
+      expect(kanbanSettingsSchema.parse({ doneVisibleDays: 1, emptyColumnDisplay })).toEqual({
+        doneVisibleDays: 1,
+        emptyColumnDisplay,
+      });
+    }
+  });
+
+  test("rejects invalid kanban empty-column display modes", () => {
+    expect(() =>
+      kanbanSettingsSchema.parse({ doneVisibleDays: 1, emptyColumnDisplay: "compact" }),
+    ).toThrow();
   });
 
   test("defaults autopilot rules for every supported event", () => {

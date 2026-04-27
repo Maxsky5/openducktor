@@ -22,12 +22,13 @@ pub use beads::{
     SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
 pub use config::{
-    derive_workspace_name_from_repo_path, normalize_hook_set, normalize_repo_dev_servers,
-    propose_workspace_id, uniquify_workspace_id, AgentDefaults, AgentModelDefault, AppConfigStore,
-    AutopilotActionId, AutopilotEventId, AutopilotRule, AutopilotSettings, ChatSettings,
-    GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
-    GlobalGitConfig, HookSet, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride,
-    PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig,
+    derive_workspace_name_from_repo_path, hook_set_fingerprint, normalize_hook_set,
+    normalize_repo_dev_servers, propose_workspace_id, repo_script_fingerprint,
+    uniquify_workspace_id, AgentDefaults, AgentModelDefault, AppConfigStore, AutopilotActionId,
+    AutopilotEventId, AutopilotRule, AutopilotSettings, ChatSettings, GitMergeMethod,
+    GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig,
+    HookSet, KanbanEmptyColumnDisplay, KanbanSettings, OpencodeStartupReadinessConfig,
+    PromptOverride, PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig,
     RuntimeConfigStore, SchedulerConfig, SoftGuardrails,
 };
 pub use filesystem::{list_directory, FilesystemListDirectoryError};
