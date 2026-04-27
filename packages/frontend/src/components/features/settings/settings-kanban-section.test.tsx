@@ -19,7 +19,7 @@ describe("settings kanban section", () => {
     expect(html).toContain("Kanban Settings");
     expect(html).toContain("Done tasks visible for");
     expect(html).toContain("Empty columns");
-    expect(html).toContain("Collapsed");
+    expect(html).toContain("Choose whether empty lanes stay visible");
     expect(html).toContain('value="3"');
   });
 });
