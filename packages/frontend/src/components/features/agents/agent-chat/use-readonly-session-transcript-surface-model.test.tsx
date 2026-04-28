@@ -26,7 +26,7 @@ const readSessionTodos = mock(async () => []);
 const attachRuntimeTranscriptSession = mock(async () => {});
 const replyAgentPermission = mock(async () => {});
 const replyRuntimeSessionPermission = mock(async () => {});
-const useAgentSessionMock = mock((_sessionId: string | null) => null);
+const useAgentSessionMock = mock((_sessionId: string | null): AgentSessionState | null => null);
 let latestSurfaceModelArgs: Record<string, unknown> | null = null;
 let runtimeList: RuntimeInstanceSummary[] = [];
 let runtimeListError: Error | null = null;
@@ -68,6 +68,37 @@ const transcriptSourceWithPendingPermission: RuntimeSessionTranscriptSource = {
 const liveTranscriptSource: RuntimeSessionTranscriptSource = {
   ...transcriptSource,
   isLive: true,
+};
+
+const liveTranscriptSession: AgentSessionState = {
+  runtimeKind: "opencode",
+  sessionId: "session-subagent-1",
+  externalSessionId: "session-subagent-1",
+  purpose: "transcript",
+  taskId: "",
+  repoPath: "/repo-a",
+  role: null as unknown as AgentSessionState["role"],
+  scenario: null as unknown as AgentSessionState["scenario"],
+  status: "running",
+  startedAt: "2026-02-22T12:00:00.000Z",
+  runtimeId: "runtime-1",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4096",
+  },
+  workingDirectory: "/repo-a",
+  messages: [],
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  contextUsage: null,
+  pendingPermissions: [pendingPermission],
+  pendingQuestions: [],
+  todos: [],
+  modelCatalog: null,
+  selectedModel: null,
+  isLoadingModelCatalog: false,
 };
 
 const runtime = {
@@ -132,6 +163,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     replyAgentPermission.mockClear();
     replyRuntimeSessionPermission.mockClear();
     useAgentSessionMock.mockClear();
+    useAgentSessionMock.mockImplementation(
+      (_sessionId: string | null): AgentSessionState | null => null,
+    );
     latestSurfaceModelArgs = null;
     runtimeList = [runtime];
     runtimeListError = null;
@@ -370,6 +404,52 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       });
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not keep the live transcript loading after the session is visible", async () => {
+    const resolveAttachCallbacks: Array<() => void> = [];
+    attachRuntimeTranscriptSession.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveAttachCallbacks.push(resolve);
+        }),
+    );
+    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
+      requestedSessionId === "session-subagent-1" ? liveTranscriptSession : null,
+    );
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        sessionId: "session-subagent-1",
+        source: {
+          ...liveTranscriptSource,
+          pendingPermissions: [pendingPermission],
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
+
+      expect(latestSurfaceModelArgs?.session).toBe(liveTranscriptSession);
+      expect(latestSurfaceModelArgs?.isTaskHydrating).toBe(false);
+      expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
+      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
+    } finally {
+      resolveAttachCallbacks[0]?.();
       await harness.unmount();
     }
   });

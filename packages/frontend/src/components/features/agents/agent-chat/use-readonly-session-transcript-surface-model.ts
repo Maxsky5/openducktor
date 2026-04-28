@@ -82,12 +82,19 @@ export function useReadonlySessionTranscriptSurfaceModel({
     replyRuntimeSessionPermission,
   } = useAgentOperations();
   const liveSession = useAgentSession(sessionId ?? null);
+  const isMountedRef = useRef(true);
   const attachLiveTranscriptKeyRef = useRef<string | null>(null);
   const [isAttachingLiveTranscript, setIsAttachingLiveTranscript] = useState(false);
   const [liveTranscriptAttachError, setLiveTranscriptAttachError] = useState<string | null>(null);
   const [repliedRuntimePermissionRequestIds, setRepliedRuntimePermissionRequestIds] = useState<
     Set<string>
   >(() => new Set());
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const { data: showThinkingMessages = DEFAULT_SHOW_THINKING_MESSAGES } = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
@@ -282,7 +289,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
       return;
     }
 
-    let cancelled = false;
     attachLiveTranscriptKeyRef.current = liveTranscriptAttachKey;
     setIsAttachingLiveTranscript(true);
     setLiveTranscriptAttachError(null);
@@ -297,7 +303,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
       pendingPermissions: visiblePendingPermissions,
     })
       .catch((error: unknown) => {
-        if (cancelled) {
+        if (
+          !isMountedRef.current ||
+          attachLiveTranscriptKeyRef.current !== liveTranscriptAttachKey
+        ) {
           return;
         }
         setLiveTranscriptAttachError(
@@ -305,15 +314,14 @@ export function useReadonlySessionTranscriptSurfaceModel({
         );
       })
       .finally(() => {
-        if (cancelled) {
+        if (
+          !isMountedRef.current ||
+          attachLiveTranscriptKeyRef.current !== liveTranscriptAttachKey
+        ) {
           return;
         }
         setIsAttachingLiveTranscript(false);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     activeWorkspace,
     attachRuntimeTranscriptSession,
@@ -403,7 +411,9 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const isSessionWorking =
     runtimeData.session?.status === "running" || runtimeData.session?.status === "starting";
   const isHistoryLoading = historyQueryEnabled && historyQuery.isPending;
-  const isTranscriptLoading = isHistoryLoading || isAttachingLiveTranscript;
+  const hasTranscriptSession = runtimeData.session !== null;
+  const isLiveAttachBlocking = isAttachingLiveTranscript && !hasTranscriptSession;
+  const isTranscriptLoading = isHistoryLoading || isLiveAttachBlocking;
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && sessionId && source) &&
     runtimeData.session === null &&

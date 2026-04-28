@@ -42,6 +42,7 @@ import {
   resolveAssistantTurnDurationMs,
 } from "./support/assistant-turn-duration";
 import { mergeHydratedMessages } from "./support/hydrated-message-merge";
+import { getSessionMessageCount } from "./support/messages";
 import { createRuntimeTranscriptSession } from "./support/runtime-transcript-session";
 import { isTranscriptAgentSession } from "./support/session-purpose";
 import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
@@ -533,22 +534,29 @@ export function useAgentOrchestratorOperations({
 
         updateSession(
           input.sessionId,
-          (current) => ({
-            ...current,
-            startedAt: summary?.startedAt ?? hydratedSession.startedAt,
-            status: summary?.status ?? current.status,
-            runtimeKind: input.runtimeKind,
-            runtimeId: input.runtimeId,
-            runtimeRoute: hydratedSession.runtimeRoute,
-            workingDirectory: input.runtimeConnection.workingDirectory,
-            historyHydrationState: "hydrated",
-            runtimeRecoveryState: "idle",
-            messages: mergeHydratedMessages(
-              input.sessionId,
-              hydratedSession.messages,
-              current.messages,
-            ),
-          }),
+          (current) => {
+            const messages =
+              getSessionMessageCount(current) === 0
+                ? hydratedSession.messages
+                : mergeHydratedMessages(
+                    input.sessionId,
+                    hydratedSession.messages,
+                    current.messages,
+                  );
+
+            return {
+              ...current,
+              startedAt: summary?.startedAt ?? hydratedSession.startedAt,
+              status: summary?.status ?? current.status,
+              runtimeKind: input.runtimeKind,
+              runtimeId: input.runtimeId,
+              runtimeRoute: hydratedSession.runtimeRoute,
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              historyHydrationState: "hydrated",
+              runtimeRecoveryState: "idle",
+              messages,
+            };
+          },
           { persist: false },
         );
       } catch (error) {
