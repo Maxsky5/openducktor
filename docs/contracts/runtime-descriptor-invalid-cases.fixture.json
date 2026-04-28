@@ -41,5 +41,22 @@
         "value": "http://127.0.0.1:4444"
       }
     ]
+  },
+  {
+    "name": "live-snapshot-pending-visibility-without-snapshot-support",
+    "patch": [
+      {
+        "path": ["capabilities", "sessionLifecycle", "supportsPendingInputSnapshots"],
+        "value": false
+      },
+      {
+        "path": ["capabilities", "approvals", "pendingVisibility"],
+        "value": ["live_snapshot"]
+      },
+      {
+        "path": ["capabilities", "structuredInput", "pendingVisibility"],
+        "value": ["live_snapshot"]
+      }
+    ]
   }
 ]

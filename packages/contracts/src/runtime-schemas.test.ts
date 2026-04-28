@@ -1259,6 +1259,46 @@ describe("runtime schemas", () => {
     expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("runtime_specific");
   });
 
+  test("runtime descriptor rejects live pending snapshots when snapshot support is disabled", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: withRuntimeCapabilities({
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        sessionLifecycle: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+          supportsPendingInputSnapshots: false,
+        },
+        approvals: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals,
+          pendingVisibility: ["live_snapshot"],
+        },
+        structuredInput: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
+          pendingVisibility: ["live_snapshot"],
+        },
+      }),
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: "Approval live snapshot visibility requires pending input snapshot support.",
+          path: ["capabilities", "approvals", "pendingVisibility"],
+        }),
+        expect.objectContaining({
+          message:
+            "Structured input live snapshot visibility requires pending input snapshot support.",
+          path: ["capabilities", "structuredInput", "pendingVisibility"],
+        }),
+      ]),
+    );
+  });
+
   test("runtime connection schema rejects malformed stdio payloads", () => {
     expect(() =>
       runtimeTransportSchema.parse({

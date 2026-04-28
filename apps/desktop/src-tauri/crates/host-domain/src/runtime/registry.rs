@@ -565,6 +565,36 @@ impl RuntimeCapabilities {
         errors
     }
 
+    fn pending_visibility_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.session_lifecycle.supports_pending_input_snapshots {
+            return errors;
+        }
+
+        if self
+            .approvals
+            .pending_visibility
+            .contains(&RuntimePendingInputVisibility::LiveSnapshot)
+        {
+            errors.push(
+                "[workflow] approvals.pendingVisibility live_snapshot requires sessionLifecycle.supportsPendingInputSnapshots"
+                    .to_string(),
+            );
+        }
+        if self
+            .structured_input
+            .pending_visibility
+            .contains(&RuntimePendingInputVisibility::LiveSnapshot)
+        {
+            errors.push(
+                "[workflow] structuredInput.pendingVisibility live_snapshot requires sessionLifecycle.supportsPendingInputSnapshots"
+                    .to_string(),
+            );
+        }
+
+        errors
+    }
+
     fn prompt_input_errors(&self) -> Vec<String> {
         let mut errors = Vec::new();
         if !self
@@ -780,6 +810,7 @@ impl RuntimeDescriptor {
         errors.extend(self.capabilities.history_errors());
         errors.extend(self.capabilities.approval_errors());
         errors.extend(self.capabilities.structured_input_errors());
+        errors.extend(self.capabilities.pending_visibility_errors());
         errors.extend(self.capabilities.prompt_input_errors());
         errors.extend(self.capabilities.optional_surface_errors());
         errors.extend(self.capabilities.scenario_config_errors());
@@ -1436,6 +1467,29 @@ mod tests {
             vec![
                 "[workflow] missing OpenDucktor workflow tool support".to_string(),
                 "[role_scoped] missing required workflow scopes: task, build".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_rejects_live_snapshot_visibility_without_snapshot_support() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor
+            .capabilities
+            .session_lifecycle
+            .supports_pending_input_snapshots = false;
+        descriptor.capabilities.approvals.pending_visibility =
+            vec![RuntimePendingInputVisibility::LiveSnapshot];
+        descriptor.capabilities.structured_input.pending_visibility =
+            vec![RuntimePendingInputVisibility::LiveSnapshot];
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "[workflow] approvals.pendingVisibility live_snapshot requires sessionLifecycle.supportsPendingInputSnapshots"
+                    .to_string(),
+                "[workflow] structuredInput.pendingVisibility live_snapshot requires sessionLifecycle.supportsPendingInputSnapshots"
+                    .to_string(),
             ]
         );
     }

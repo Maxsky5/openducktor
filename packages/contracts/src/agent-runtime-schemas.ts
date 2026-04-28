@@ -448,6 +448,21 @@ export const runtimeCapabilitiesSchema = z
       }
     }
 
+    if (!capabilities.sessionLifecycle.supportsPendingInputSnapshots) {
+      if (capabilities.approvals.pendingVisibility.includes("live_snapshot")) {
+        addIssue(
+          ["approvals", "pendingVisibility"],
+          "Approval live snapshot visibility requires pending input snapshot support.",
+        );
+      }
+      if (capabilities.structuredInput.pendingVisibility.includes("live_snapshot")) {
+        addIssue(
+          ["structuredInput", "pendingVisibility"],
+          "Structured input live snapshot visibility requires pending input snapshot support.",
+        );
+      }
+    }
+
     if (!capabilities.promptInput.supportedParts.includes("text")) {
       addIssue(
         ["promptInput", "supportedParts"],
