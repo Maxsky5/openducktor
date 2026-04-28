@@ -97,10 +97,7 @@ pub(crate) trait AppRuntime: Send + Sync {
         ))
     }
 
-    fn validate_build_session_bootstrap(
-        &self,
-        _runtime: &RuntimeInstanceSummary,
-    ) -> Result<()> {
+    fn validate_build_session_bootstrap(&self, _runtime: &RuntimeInstanceSummary) -> Result<()> {
         Ok(())
     }
 

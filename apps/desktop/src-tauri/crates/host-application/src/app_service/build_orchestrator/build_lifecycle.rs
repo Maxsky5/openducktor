@@ -1,6 +1,7 @@
 use super::super::{
     AppService, RuntimeInstanceSummary, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
-    StartupEventContext, StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
 use anyhow::{anyhow, Context, Result};
@@ -118,11 +119,11 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry};
     use crate::app_service::test_support::{
         build_service_with_runtime_registry, build_service_with_state,
         builtin_opencode_runtime_descriptor, make_task,
     };
-    use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry};
     use anyhow::anyhow;
     use host_domain::{GitTargetBranch, RuntimeHealth, RuntimeRole, RuntimeRoute, TaskStatus};
     use std::sync::Arc;
@@ -217,9 +218,7 @@ mod tests {
             .expect_err("opencode build startup should reject stdio routes before task transition");
 
         assert!(
-            error
-                .to_string()
-                .contains("OpenCode build session startup"),
+            error.to_string().contains("OpenCode build session startup"),
             "error should come from the OpenCode runtime boundary: {error}"
         );
         let updated_patches = &task_state
@@ -294,7 +293,10 @@ mod tests {
             })
             .expect("non-OpenCode runtimes should accept stdio build bootstrap routes");
 
-        assert!(matches!(bootstrap.runtime_route, RuntimeRoute::Stdio { .. }));
+        assert!(matches!(
+            bootstrap.runtime_route,
+            RuntimeRoute::Stdio { .. }
+        ));
         let updated_patches = &task_state
             .lock()
             .expect("task store lock poisoned")
