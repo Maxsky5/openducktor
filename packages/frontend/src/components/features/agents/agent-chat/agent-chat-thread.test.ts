@@ -612,8 +612,7 @@ describe("AgentChatThread", () => {
             todos: [],
             selectedModel: null,
           }),
-          sessionRuntimeDataError:
-            "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
+          sessionRuntimeDataError: "todos unavailable",
         },
       }),
     );
@@ -621,9 +620,9 @@ describe("AgentChatThread", () => {
 
     const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
     expect(bottomStack).not.toBeNull();
-    expect(bottomStack?.textContent).toContain("active session runtime data access");
+    expect(bottomStack?.textContent).toContain("todos unavailable");
     expect(bottomStack?.className).toContain("pb-3");
-    const runtimeError = screen.getByText(/active session runtime data access/);
+    const runtimeError = screen.getByText(/todos unavailable/);
     expect(runtimeError.className).toContain("border-destructive-border");
     expect(runtimeError.className).toContain("bg-destructive-surface");
     expect(runtimeError.className).toContain("text-destructive-surface-foreground");

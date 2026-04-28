@@ -6,6 +6,7 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -1239,18 +1240,20 @@ describe("load-sessions-stages", () => {
     expect(updateCalls).toBe(0);
   });
 
-  test("fails requested-history hydration before adapter history loads for unsupported stdio OpenCode runtimes", async () => {
+  test("loads requested-history hydration through the adapter for stdio OpenCode runtimes", async () => {
     const stateHarness = createStateHarness({ "session-1": createSession() });
     let historyLoads = 0;
+    const historyInputs: LoadAgentSessionHistoryInput[] = [];
 
     await expect(
       hydrateSessionRecordsStage({
         adapter: {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
-          loadSessionHistory: async () => {
+          loadSessionHistory: async (input) => {
             historyLoads += 1;
-            return [];
+            historyInputs.push(input);
+            throw new Error("Adapter rejected stdio runtime connections.");
           },
           attachSession: async (input) => ({
             sessionId: input.sessionId,
@@ -1297,11 +1300,21 @@ describe("load-sessions-stages", () => {
         },
         getRepoPromptOverrides: async () => ({}),
       }),
-    ).rejects.toThrow(
-      "Runtime connection type 'stdio' is unsupported for load session history in runtime 'opencode'; local_http is required.",
-    );
+    ).rejects.toThrow("Adapter rejected stdio runtime connections.");
 
-    expect(historyLoads).toBe(0);
+    expect(historyLoads).toBe(1);
+    expect(historyInputs).toEqual([
+      {
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "stdio",
+          identity: "runtime-stdio",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+        externalSessionId: "external-1",
+        limit: 600,
+      },
+    ]);
     expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
   });
 

@@ -1,9 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentRuntimeConnection } from "@openducktor/core";
-import {
-  getRuntimeConnectionSupportError,
-  runtimeRouteToConnection,
-} from "@/state/operations/agent-orchestrator/runtime/runtime";
+import { runtimeRouteToConnection } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type SessionRuntimeAccessState = {
@@ -37,28 +34,17 @@ export const toAttachedSessionRuntimeConnection = (
 };
 
 export const getAttachedSessionRuntimeConnectionError = (
-  session:
+  _session:
     | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
     | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
     | null
     | undefined,
-  runtimeKind: RuntimeKind | null | undefined,
-  action = "attached session runtime access",
 ): string | null => {
-  if (!session?.runtimeRoute) {
-    return null;
-  }
-
-  return getRuntimeConnectionSupportError(
-    runtimeKind,
-    runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory),
-    action,
-  );
+  return null;
 };
 
 export const resolveAttachedSessionRuntimeQueryState = (
   session: SessionRuntimeAccessState | null | undefined,
-  action = "attached session runtime access",
 ): AgentChatSessionRuntimeQueryState => {
   const runtimeConnection = toAttachedSessionRuntimeConnection(session);
   const runtimeKind = session?.runtimeKind ?? null;
@@ -71,6 +57,6 @@ export const resolveAttachedSessionRuntimeQueryState = (
             runtimeConnection,
           }
         : null,
-    runtimeQueryError: getAttachedSessionRuntimeConnectionError(session, runtimeKind, action),
+    runtimeQueryError: getAttachedSessionRuntimeConnectionError(session),
   };
 };

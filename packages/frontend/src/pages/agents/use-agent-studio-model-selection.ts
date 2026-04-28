@@ -237,7 +237,6 @@ export function useAgentStudioModelSelection({
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
-        "active session runtime queries",
       ),
     [
       activeSessionRuntimeKind,

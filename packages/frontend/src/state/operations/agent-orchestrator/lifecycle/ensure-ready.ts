@@ -6,7 +6,6 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import {
   type RuntimeInfo,
-  requireRuntimeConnectionSupport,
   resolveRuntimeConnection,
   runtimeRouteToConnection,
 } from "../runtime/runtime";
@@ -277,11 +276,7 @@ export const createEnsureSessionReady = ({
       requestedRuntimeKind,
       ensuredRuntimeKind: runtime.runtimeKind,
     });
-    const runtimeConnection = requireRuntimeConnectionSupport(
-      resolvedRuntimeKind,
-      resolveRuntimeConnection(runtime),
-      "resume session",
-    );
+    const runtimeConnection = resolveRuntimeConnection(runtime);
     await adapter.resumeSession({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,

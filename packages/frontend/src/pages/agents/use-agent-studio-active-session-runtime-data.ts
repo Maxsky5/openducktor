@@ -46,7 +46,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   readSessionTodos,
 }: UseAgentStudioActiveSessionRuntimeDataArgs): AgentStudioSessionRuntimeDataState => {
   const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
-    () => resolveAttachedSessionRuntimeQueryState(session, "active session runtime data access"),
+    () => resolveAttachedSessionRuntimeQueryState(session),
     [session],
   );
   const sessionViewLifecycle = useMemo(

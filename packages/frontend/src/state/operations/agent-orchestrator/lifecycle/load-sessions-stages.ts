@@ -24,7 +24,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
 import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
-import { requireRuntimeConnectionSupport, runtimeRouteToConnection } from "../runtime/runtime";
+import { runtimeRouteToConnection } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import { DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE } from "../support/history-hydration";
 import { mergeHydratedMessages } from "../support/hydrated-message-merge";
@@ -865,11 +865,6 @@ export const reconcileLiveSessionsStage = async ({
         directories,
       }),
     attachMissingLiveSession: async ({ record, runtimeKind, runtimeConnection }) => {
-      const supportedRuntimeConnection = requireRuntimeConnectionSupport(
-        runtimeKind,
-        runtimeConnection,
-        "resume session",
-      );
       const promptOverrides = await getRepoPromptOverrides();
       if (isStaleRepoOperation()) {
         return;
@@ -890,8 +885,8 @@ export const reconcileLiveSessionsStage = async ({
         externalSessionId: record.externalSessionId ?? record.sessionId,
         repoPath: intent.repoPath,
         runtimeKind,
-        runtimeConnection: supportedRuntimeConnection,
-        workingDirectory: supportedRuntimeConnection.workingDirectory,
+        runtimeConnection,
+        workingDirectory: runtimeConnection.workingDirectory,
         taskId: intent.taskId,
         role: record.role,
         scenario: resolvedScenario,
@@ -1050,14 +1045,9 @@ export const hydrateSessionRecordsStage = async ({
       resolvedScenario,
       promptOverrides,
     });
-    const supportedRuntimeConnection = requireRuntimeConnectionSupport(
-      runtimeKind,
-      runtimeConnection,
-      "load session history",
-    );
     const history = await adapter.loadSessionHistory({
       runtimeKind,
-      runtimeConnection: supportedRuntimeConnection,
+      runtimeConnection,
       externalSessionId: record.externalSessionId ?? record.sessionId,
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });

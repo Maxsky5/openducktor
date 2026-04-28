@@ -126,32 +126,6 @@ export const runtimeConnectionTransportKey = (
   }
 };
 
-export const getRuntimeConnectionSupportError = (
-  runtimeKind: RuntimeKind | null | undefined,
-  runtimeConnection: AgentRuntimeConnection | null | undefined,
-  action: string,
-): string | null => {
-  if (!runtimeKind || !runtimeConnection) {
-    return null;
-  }
-  if (runtimeKind !== "opencode" || runtimeConnection.type === "local_http") {
-    return null;
-  }
-  return `Runtime connection type '${runtimeConnection.type}' is unsupported for ${action} in runtime '${runtimeKind}'; local_http is required.`;
-};
-
-export const requireRuntimeConnectionSupport = (
-  runtimeKind: RuntimeKind | null | undefined,
-  runtimeConnection: AgentRuntimeConnection,
-  action: string,
-): AgentRuntimeConnection => {
-  const error = getRuntimeConnectionSupportError(runtimeKind, runtimeConnection, action);
-  if (error) {
-    throw new Error(error);
-  }
-  return runtimeConnection;
-};
-
 export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute | null | undefined): string => {
   if (!runtimeRoute) {
     return "unavailable";
@@ -349,11 +323,7 @@ export const createEnsureRuntime = ({
       runtimeKind,
       runtimeId: input.runtimeId,
       runtimeRoute: input.runtimeRoute,
-      runtimeConnection: requireRuntimeConnectionSupport(
-        runtimeKind,
-        input.runtimeConnection,
-        `${role} sessions`,
-      ),
+      runtimeConnection: input.runtimeConnection,
       workingDirectory: input.workingDirectory,
     });
 

@@ -474,6 +474,11 @@ impl AppRuntime for OpenCodeRuntime {
         AgentRuntimeKind::opencode()
     }
 
+    fn validate_build_session_bootstrap(&self, runtime: &RuntimeInstanceSummary) -> Result<()> {
+        require_local_http_endpoint(&runtime.runtime_route, "OpenCode build session startup")?;
+        Ok(())
+    }
+
     fn start_host_managed(
         &self,
         service: &AppService,

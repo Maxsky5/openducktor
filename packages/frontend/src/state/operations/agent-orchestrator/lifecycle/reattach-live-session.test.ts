@@ -331,7 +331,7 @@ describe("reattach-live-session", () => {
     expect(resumeCalls).toBe(0);
   });
 
-  test("skips live reattachment for unsupported stdio OpenCode runtimes", async () => {
+  test("attempts live discovery for stdio OpenCode runtimes", async () => {
     let liveLookupCalls = 0;
     let resumeCalls = 0;
 
@@ -372,7 +372,42 @@ describe("reattach-live-session", () => {
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
     expect(reattached).toBe(false);
-    expect(liveLookupCalls).toBe(0);
+    expect(liveLookupCalls).toBe(1);
     expect(resumeCalls).toBe(0);
+  });
+
+  test("propagates live lookup failures for stdio OpenCode runtimes", async () => {
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => false,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: () => {
+        throw new Error("should not update failed session");
+      },
+      attachSessionListener: () => {
+        throw new Error("should not attach failed session");
+      },
+      promptOverrides: {},
+      resolveHydrationRuntime: async () => ({
+        ok: true,
+        runtimeKind: "opencode",
+        runtimeId: "runtime-stdio",
+        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+        runtimeConnection: {
+          type: "stdio",
+          identity: "runtime-stdio",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      }),
+      attachMissingLiveSession: async () => {},
+      listLiveAgentSessions: async () => {
+        throw new Error("live lookup failed");
+      },
+      isStaleRepoOperation: () => false,
+      toLiveSessionState: () => "idle",
+    });
+
+    await expect(reattachLiveSession(sessionRecordFixture)).rejects.toThrow("live lookup failed");
   });
 });

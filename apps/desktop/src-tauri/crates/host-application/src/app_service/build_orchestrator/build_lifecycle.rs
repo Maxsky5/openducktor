@@ -1,6 +1,6 @@
 use super::super::{
-    require_local_http_endpoint, AppService, RuntimeInstanceSummary, RuntimeStartupReadinessPolicy,
-    RuntimeStartupWaitReport, StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    AppService, RuntimeInstanceSummary, RuntimeStartupReadinessPolicy, RuntimeStartupWaitReport,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
     STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree};
@@ -93,9 +93,9 @@ impl AppService {
             task_id,
         } = input;
 
-        if runtime_kind == AgentRuntimeKind::opencode() {
-            require_local_http_endpoint(&runtime_summary.runtime_route, "build session startup")?;
-        }
+        self.runtime_registry
+            .runtime(&runtime_kind)?
+            .validate_build_session_bootstrap(&runtime_summary)?;
 
         self.task_transition_to_in_progress_without_related_tasks(
             prerequisites.repo_path.as_str(),
@@ -119,14 +119,58 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_service::runtime_registry::{AppRuntime, AppRuntimeRegistry};
     use crate::app_service::test_support::{
-        build_service_with_state, builtin_opencode_runtime_descriptor, make_task,
+        build_service_with_runtime_registry, build_service_with_state,
+        builtin_opencode_runtime_descriptor, make_task,
     };
-    use host_domain::{GitTargetBranch, RuntimeRole, RuntimeRoute, TaskStatus};
+    use anyhow::anyhow;
+    use host_domain::{GitTargetBranch, RuntimeHealth, RuntimeRole, RuntimeRoute, TaskStatus};
+    use std::sync::Arc;
 
-    fn make_runtime_summary(runtime_route: RuntimeRoute) -> RuntimeInstanceSummary {
+    #[derive(Clone)]
+    struct TestRuntimeAdapter;
+
+    impl AppRuntime for TestRuntimeAdapter {
+        fn definition(&self) -> host_domain::RuntimeDefinition {
+            let mut descriptor = builtin_opencode_runtime_descriptor();
+            descriptor.kind = AgentRuntimeKind::from("test-runtime");
+            descriptor.label = "Test Runtime".to_string();
+            descriptor.description = "Test Runtime runtime".to_string();
+            host_domain::RuntimeDefinition::new(descriptor, Default::default())
+        }
+
+        fn runtime_health(&self) -> RuntimeHealth {
+            RuntimeHealth {
+                kind: "test-runtime".to_string(),
+                ok: true,
+                version: Some("1.0.0".to_string()),
+                error: None,
+            }
+        }
+
+        fn stop_session(
+            &self,
+            _runtime_route: &RuntimeRoute,
+            _external_session_id: &str,
+            _working_directory: &str,
+        ) -> Result<()> {
+            Err(anyhow!("stop_session should not be used in this test"))
+        }
+    }
+
+    fn test_runtime_definition() -> host_domain::RuntimeDefinition {
+        let adapter = TestRuntimeAdapter;
+        <TestRuntimeAdapter as AppRuntime>::definition(&adapter)
+    }
+
+    fn make_runtime_summary(
+        kind: AgentRuntimeKind,
+        runtime_route: RuntimeRoute,
+        descriptor: host_domain::RuntimeDescriptor,
+    ) -> RuntimeInstanceSummary {
         RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
+            kind,
             runtime_id: "runtime-1".to_string(),
             repo_path: "/tmp/repo".to_string(),
             task_id: None,
@@ -134,7 +178,7 @@ mod tests {
             working_directory: "/tmp/repo".to_string(),
             runtime_route,
             started_at: "2026-04-13T00:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
+            descriptor,
         }
     }
 
@@ -165,15 +209,17 @@ mod tests {
                     worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
                 },
                 runtime_summary: make_runtime_summary(
+                    AgentRuntimeKind::opencode(),
                     RuntimeRoute::stdio("runtime-stdio").expect("stdio route"),
+                    builtin_opencode_runtime_descriptor(),
                 ),
                 task_id: "task-1",
             })
             .expect_err("opencode build startup should reject stdio routes before task transition");
 
-        assert_eq!(
-            error.to_string(),
-            "Runtime build session startup requires a local_http runtime route"
+        assert!(
+            error.to_string().contains("OpenCode build session startup"),
+            "error should come from the OpenCode runtime boundary: {error}"
         );
         let updated_patches = &task_state
             .lock()
@@ -194,9 +240,13 @@ mod tests {
                 prepared_worktree: PreparedBuildWorktree {
                     worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
                 },
-                runtime_summary: make_runtime_summary(RuntimeRoute::LocalHttp {
-                    endpoint: "http://127.0.0.1".to_string(),
-                }),
+                runtime_summary: make_runtime_summary(
+                    AgentRuntimeKind::opencode(),
+                    RuntimeRoute::LocalHttp {
+                        endpoint: "http://127.0.0.1".to_string(),
+                    },
+                    builtin_opencode_runtime_descriptor(),
+                ),
                 task_id: "task-1",
             })
             .expect("local_http routes should remain bootstrap-compatible without explicit ports");
@@ -212,6 +262,46 @@ mod tests {
             .updated_patches;
         assert_eq!(updated_patches.len(), 1);
         assert_eq!(updated_patches[0].0, "task-1");
+        assert_eq!(updated_patches[0].1.status, Some(TaskStatus::InProgress));
+    }
+
+    #[test]
+    fn initiate_build_mode_accepts_stdio_routes_for_non_opencode_runtimes() {
+        let runtime_registry = AppRuntimeRegistry::new(
+            vec![Arc::new(TestRuntimeAdapter)],
+            host_domain::AgentRuntimeKind::from("test-runtime"),
+        )
+        .expect("test runtime registry");
+        let (service, task_state, _git_state) = build_service_with_runtime_registry(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            runtime_registry,
+        );
+
+        let bootstrap = service
+            .initiate_build_mode(BuildModeStartInput {
+                runtime_kind: host_domain::AgentRuntimeKind::from("test-runtime"),
+                prerequisites: make_build_prerequisites(),
+                prepared_worktree: PreparedBuildWorktree {
+                    worktree_dir: PathBuf::from("/tmp/worktrees/task-1"),
+                },
+                runtime_summary: make_runtime_summary(
+                    host_domain::AgentRuntimeKind::from("test-runtime"),
+                    RuntimeRoute::stdio("runtime-stdio").expect("stdio route"),
+                    test_runtime_definition().descriptor().clone(),
+                ),
+                task_id: "task-1",
+            })
+            .expect("non-OpenCode runtimes should accept stdio build bootstrap routes");
+
+        assert!(matches!(
+            bootstrap.runtime_route,
+            RuntimeRoute::Stdio { .. }
+        ));
+        let updated_patches = &task_state
+            .lock()
+            .expect("task store lock poisoned")
+            .updated_patches;
+        assert_eq!(updated_patches.len(), 1);
         assert_eq!(updated_patches[0].1.status, Some(TaskStatus::InProgress));
     }
 }
