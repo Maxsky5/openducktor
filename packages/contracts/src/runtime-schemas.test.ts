@@ -838,6 +838,71 @@ describe("runtime schemas", () => {
     );
   });
 
+  test("runtime descriptor rejects blank and duplicate read-only blocked tool ids", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      readOnlyRoleBlockedTools: [" apply_patch ", "apply_patch", "   "],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: "Read-only blocked runtime tool IDs must be unique.",
+          path: ["readOnlyRoleBlockedTools"],
+        }),
+        expect.objectContaining({
+          code: "too_small",
+          path: ["readOnlyRoleBlockedTools", 2],
+        }),
+      ]),
+    );
+  });
+
+  test("runtime descriptor trims workflow aliases before validation", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      workflowToolAliasesByCanonical: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        odt_build_blocked: [" shared_alias "],
+        odt_build_completed: ["shared_alias"],
+        odt_set_plan: [" odt_set_spec "],
+        odt_set_spec: [" runtime_set_spec ", "runtime_set_spec", "   "],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            'Runtime workflow alias "shared_alias" is already assigned to canonical tool "odt_build_blocked".',
+          path: ["workflowToolAliasesByCanonical", "odt_build_completed", 0],
+        }),
+        expect.objectContaining({
+          message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
+          path: ["workflowToolAliasesByCanonical", "odt_set_plan", 0],
+        }),
+        expect.objectContaining({
+          message: "Workflow tool aliases for a canonical tool must be unique.",
+          path: ["workflowToolAliasesByCanonical", "odt_set_spec"],
+        }),
+        expect.objectContaining({
+          code: "too_small",
+          path: ["workflowToolAliasesByCanonical", "odt_set_spec", 2],
+        }),
+      ]),
+    );
+  });
+
   test("runtime descriptor and capabilities reject stale flat capability fields", () => {
     const result = runtimeDescriptorSchema.safeParse({
       ...OPENCODE_RUNTIME_DESCRIPTOR,

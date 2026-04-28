@@ -634,6 +634,44 @@ pub struct RuntimeDescriptor {
 }
 
 impl RuntimeDescriptor {
+    fn normalized_tool_id(tool_id: &str) -> Option<&str> {
+        let trimmed = tool_id.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    }
+
+    fn read_only_role_blocked_tool_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        let mut seen_tool_ids = HashSet::new();
+        let mut reported_blank = false;
+        let mut reported_duplicate = false;
+
+        for tool_id in &self.read_only_role_blocked_tools {
+            let Some(tool_id) = Self::normalized_tool_id(tool_id) else {
+                if !reported_blank {
+                    errors.push(
+                        "[workflow] read-only blocked runtime tool IDs must not be blank"
+                            .to_string(),
+                    );
+                    reported_blank = true;
+                }
+                continue;
+            };
+
+            if !seen_tool_ids.insert(tool_id) && !reported_duplicate {
+                errors.push(
+                    "[workflow] read-only blocked runtime tool IDs must be unique".to_string(),
+                );
+                reported_duplicate = true;
+            }
+        }
+
+        errors
+    }
+
     fn workflow_alias_errors(&self) -> Vec<String> {
         let canonical_tool_names = ODT_WORKFLOW_TOOL_NAMES
             .iter()
@@ -657,7 +695,12 @@ impl RuntimeDescriptor {
             }
             let mut seen_aliases = HashSet::new();
             for alias in aliases {
-                let alias = alias.as_str();
+                let Some(alias) = Self::normalized_tool_id(alias) else {
+                    errors.push(format!(
+                        "[workflow] workflow aliases for canonical tool {canonical_tool} must not be blank"
+                    ));
+                    continue;
+                };
                 if !seen_aliases.insert(alias) {
                     errors.push(format!(
                         "[workflow] workflow aliases for canonical tool {canonical_tool} must be unique"
@@ -704,6 +747,7 @@ impl RuntimeDescriptor {
             ));
         }
 
+        errors.extend(self.read_only_role_blocked_tool_errors());
         errors.extend(self.workflow_alias_errors());
         errors.extend(self.capabilities.uniqueness_errors());
         errors.extend(self.capabilities.lifecycle_errors());
@@ -1314,6 +1358,61 @@ mod tests {
                 "[workflow] workflow alias odt_set_spec for canonical tool odt_set_plan must not repeat canonical odt_* tool IDs".to_string(),
                 "[workflow] workflow aliases for canonical tool odt_set_spec must be unique".to_string(),
                 "[workflow] unknown workflow tool alias canonical key: odt_set_specc".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_rejects_invalid_read_only_blocked_tool_ids() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.read_only_role_blocked_tools = vec![
+            " apply_patch ".to_string(),
+            "apply_patch".to_string(),
+            "   ".to_string(),
+        ];
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "[workflow] read-only blocked runtime tool IDs must be unique".to_string(),
+                "[workflow] read-only blocked runtime tool IDs must not be blank".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_normalizes_workflow_alias_tool_ids() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.workflow_tool_aliases_by_canonical = BTreeMap::from([
+            (
+                "odt_build_blocked".to_string(),
+                vec![" shared_alias ".to_string()],
+            ),
+            (
+                "odt_build_completed".to_string(),
+                vec!["shared_alias".to_string()],
+            ),
+            (
+                "odt_set_plan".to_string(),
+                vec![" odt_set_spec ".to_string()],
+            ),
+            (
+                "odt_set_spec".to_string(),
+                vec![
+                    " runtime_set_spec ".to_string(),
+                    "runtime_set_spec".to_string(),
+                    "   ".to_string(),
+                ],
+            ),
+        ]);
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "[workflow] workflow alias shared_alias for canonical tool odt_build_completed is already assigned to canonical tool odt_build_blocked".to_string(),
+                "[workflow] workflow alias odt_set_spec for canonical tool odt_set_plan must not repeat canonical odt_* tool IDs".to_string(),
+                "[workflow] workflow aliases for canonical tool odt_set_spec must be unique".to_string(),
+                "[workflow] workflow aliases for canonical tool odt_set_spec must not be blank".to_string(),
             ]
         );
     }
