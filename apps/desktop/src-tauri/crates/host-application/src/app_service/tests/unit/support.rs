@@ -4,9 +4,8 @@ pub(super) use anyhow::{Context, Result};
 pub(super) use host_domain::{
     AgentRuntimeKind, AgentSessionDocument, CreateTaskInput, DevServerGroupState,
     DevServerScriptState, DevServerScriptStatus, GitBranch, IssueType, PlanSubtaskInput,
-    PullRequestRecord, QaWorkflowVerdict, RuntimeCapabilities, RuntimeDefinition,
-    RuntimeDescriptor, RuntimeHealth, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole,
-    RuntimeStartupReadinessConfig, RuntimeSubagentExecutionMode, RuntimeSupportedScope,
+    PullRequestRecord, QaWorkflowVerdict, RuntimeDefinition, RuntimeDescriptor, RuntimeHealth,
+    RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole, RuntimeStartupReadinessConfig,
     SystemOpenInToolId, SystemOpenInToolInfo, TaskAction, TaskCard, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
@@ -430,6 +429,14 @@ pub(super) fn test_runtime_definition_with_provisioning(
     label: &str,
     provisioning_mode: RuntimeProvisioningMode,
 ) -> RuntimeDefinition {
+    let mut capabilities = host_domain::builtin_runtime_registry()
+        .definition_by_str("opencode")
+        .expect("builtin opencode runtime should exist")
+        .descriptor()
+        .capabilities
+        .clone();
+    capabilities.provisioning_mode = provisioning_mode;
+
     RuntimeDefinition::new(
         RuntimeDescriptor {
             kind: AgentRuntimeKind::from(kind),
@@ -437,32 +444,34 @@ pub(super) fn test_runtime_definition_with_provisioning(
             description: format!("{label} runtime"),
             read_only_role_blocked_tools: vec!["apply_patch".to_string()],
             workflow_tool_aliases_by_canonical: Default::default(),
-            capabilities: RuntimeCapabilities {
-                supports_profiles: true,
-                supports_variants: true,
-                supports_slash_commands: true,
-                supports_file_search: true,
-                supports_odt_workflow_tools: true,
-                supports_session_fork: true,
-                supports_queued_user_messages: true,
-                supports_permission_requests: true,
-                supports_question_requests: true,
-                supports_todos: true,
-                supports_diff: true,
-                supports_file_status: true,
-                supports_mcp_status: true,
-                supports_subagents: true,
-                supported_subagent_execution_modes: vec![
-                    RuntimeSubagentExecutionMode::Foreground,
-                    RuntimeSubagentExecutionMode::Background,
-                ],
-                supported_scopes: vec![
-                    RuntimeSupportedScope::Workspace,
-                    RuntimeSupportedScope::Task,
-                    RuntimeSupportedScope::Build,
-                ],
-                provisioning_mode,
-            },
+            capabilities,
+        },
+        RuntimeStartupReadinessConfig::default(),
+    )
+}
+
+pub(super) fn test_runtime_definition_without_mcp_status(
+    kind: &str,
+    label: &str,
+    provisioning_mode: RuntimeProvisioningMode,
+) -> RuntimeDefinition {
+    let mut capabilities = host_domain::builtin_runtime_registry()
+        .definition_by_str("opencode")
+        .expect("builtin opencode runtime should exist")
+        .descriptor()
+        .capabilities
+        .clone();
+    capabilities.provisioning_mode = provisioning_mode;
+    capabilities.optional_surfaces.supports_mcp_status = false;
+
+    RuntimeDefinition::new(
+        RuntimeDescriptor {
+            kind: AgentRuntimeKind::from(kind),
+            label: label.to_string(),
+            description: format!("{label} runtime"),
+            read_only_role_blocked_tools: vec!["apply_patch".to_string()],
+            workflow_tool_aliases_by_canonical: Default::default(),
+            capabilities,
         },
         RuntimeStartupReadinessConfig::default(),
     )

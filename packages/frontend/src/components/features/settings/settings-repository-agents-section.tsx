@@ -148,7 +148,7 @@ export function RepositoryAgentsSection({
       runtimeDefinition &&
       value.providerId.trim().length > 0 &&
       value.modelId.trim().length > 0 &&
-      (!runtimeDefinition?.capabilities.supportsProfiles ||
+      (!runtimeDefinition?.capabilities.optionalSurfaces.supportsProfiles ||
         (value.profileId?.trim().length ?? 0) > 0)
     );
   }).map(({ label }) => label);
@@ -270,7 +270,7 @@ export function RepositoryAgentsSection({
                   />
                 </div>
 
-                {runtimeDescriptor?.capabilities.supportsProfiles ? (
+                {runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ? (
                   <div className="grid min-w-0 gap-1">
                     <Label className="text-xs">Agent</Label>
                     <Combobox
@@ -322,7 +322,7 @@ export function RepositoryAgentsSection({
                   />
                 </div>
 
-                {runtimeDescriptor?.capabilities.supportsVariants ? (
+                {runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ? (
                   <div className="grid min-w-0 gap-1">
                     <Label className="text-xs">Variant</Label>
                     <Combobox

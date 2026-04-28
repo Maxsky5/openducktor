@@ -134,31 +134,32 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 
 | Capability | Class | Meaning | Where it matters | How the integration uses it |
 |---|---|---|---|---|
-| `supportsProfiles` | Optional enhancement | Runtime supports named profiles or agents | Session start flow and repo settings | Profile selectors read this before showing profile choices |
-| `supportsVariants` | Optional enhancement | Runtime supports model variants | Session start flow and repo settings | Variant selectors read this before showing variant choices |
-| `supportsSlashCommands` | Optional enhancement | Runtime exposes startup-loaded slash command metadata and can execute slash commands from the chat composer | Agent Studio composer and runtime catalog queries | The composer only opens slash autocomplete when this flag is true, loads commands through the same query-owned startup path as runtime catalogs, and keeps unsupported runtimes on plain-text `/` behavior |
-| `supportsOdtWorkflowTools` | Product-required capability | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
-| `supportsSessionFork` | Product-required capability | Runtime can fork or branch an existing session | Session controls and workflow continuity | Runtime validation rejects integrations that cannot support OpenDucktor's fork-capable session model |
-| `supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and expose enough transcript state to mirror its queued badge behavior | Agent Studio composer, transcript rendering, and history hydration | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place as the runtime's pending-assistant boundary moves |
-| `supportsPermissionRequests` | Optional enhancement | Runtime can emit permission prompts | Session event handling | Permission reply flows are only needed if the runtime emits permission prompts |
-| `supportsQuestionRequests` | Optional enhancement | Runtime can emit question prompts | Session event handling | Question reply flows are only needed if the runtime emits question prompts |
-| `supportsTodos` | Optional enhancement | Runtime can list session todo items | Session warmup and event refresh | Todo warmup and refresh logic read from this surface |
-| `supportsDiff` | Optional enhancement | Runtime can provide session diff data | Diff inspection | Diff views call this when showing runtime-produced changes |
-| `supportsFileStatus` | Optional enhancement | Runtime can provide file status data | File-status inspection | File-status inspection calls this when showing workspace state |
-| `supportsFileSearch` | Optional enhancement | Runtime can search files for `@` references in the chat composer and accept structured file-reference prompt parts | Agent Studio composer, runtime catalog queries, and prompt-send adapter boundary | The composer only opens `@` autocomplete when this flag is true, search requests stay runtime-backed in repo/session scoped query paths, and adapters must encode file references faithfully instead of flattening them into lossy plain text |
-| `supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
-| `supportedScopes` | Product-required scope coverage | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
 | `provisioningMode` | Whether runtime is `host_managed` or `external` | Host/runtime startup model | Startup flows use this to decide whether the host starts the runtime or connects to one that already exists |
+| `workflow.supportsOdtWorkflowTools` | Workflow requirement | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
+| `workflow.supportedScopes` | Role-scoped requirement | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
+| `sessionLifecycle.supportedStartModes` | Baseline and scenario-scoped requirement | Declares whether the runtime can start `fresh`, `reuse`, or `fork` sessions | Session start, Builder continuation, PR-generation scenarios | `fresh` is baseline-required; scenario validation rejects runtimes missing start modes used by registered workflows |
+| `sessionLifecycle.supportsSessionFork` / `forkTargets` | Scenario-scoped requirement | Runtime can fork or branch an existing session and declares whether forks can target only the parent `session` or also `message`/`item` boundaries | Session controls and workflow continuity | Fork support must be internally consistent with supported start modes and target declarations; a session-only fork runtime must not be treated as message/item-boundary capable |
+| `sessionLifecycle.supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and expose enough transcript state to mirror its queued badge behavior | Agent Studio composer, transcript rendering, and history hydration | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place as the runtime's pending-assistant boundary moves |
+| `history` group | Baseline/optional fidelity model | Declares whether history is loadable, whether fidelity is `none`, `message`, or `item`, replay style, stable item IDs/order, completion state, and hydrated event types | Session hydration, transcript reconstruction, adapter compatibility | Item-level history claims require stable IDs/order and completion state; runtimes without loadable history must declare `none` fidelity and replay |
+| `approvals` group | Workflow requirement when prompts exist | Declares approval request types, reply outcomes, omitted-permission behavior, pending visibility, mutating-request classification, and read-only auto-reject safety | Permission prompts and read-only role enforcement | Approval request support must include `reject` plus at least one approve outcome; read-only auto-reject requires classification plus reject support |
+| `structuredInput` group | Workflow requirement when questions exist | Declares structured question support, supported answer modes, pending visibility, and resolution semantics | Runtime-originated user-input requests | Runtimes that claim question support must expose answer modes and resolution state; runtimes without questions keep detail flags/lists empty |
+| `promptInput.supportedParts` | Baseline with optional prompt enrichments | Declares prompt part types such as `text`, `slash_command`, file/folder references, native skill/app/plugin mentions, and `runtime_specific` structured parts | Chat composer and adapter prompt-send boundary | `text` is baseline-required; slash command and file-search flags must match supported structured prompt parts; runtime-specific parts must stay typed until the adapter/runtime boundary |
+| `optionalSurfaces.supportsProfiles` / `supportsVariants` | Optional enhancement | Runtime supports named profiles or model variants | Session start flow and repo settings | Profile and variant selectors read these before showing choices |
+| `optionalSurfaces.supportsTodos` / `supportsDiff` / `supportsFileStatus` | Optional enhancement | Runtime can list session todos, diff, and file-status data | Session warmup and inspection views | UI and refresh paths call these surfaces only when the descriptor claims support |
+| `optionalSurfaces.supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
+| `optionalSurfaces.supportsSubagents` / `supportedSubagentExecutionModes` | Optional enhancement | Runtime can run subagents and declares supported execution modes | Agent orchestration surfaces | Subagent support must include at least one execution mode; disabled support must leave the mode list empty |
 
 The current codebase treats runtime integration in three layers:
 
-- `Baseline runtime contract`: session lifecycle, streaming events, model catalog, history, runtime diagnostics, and session fork support are treated as part of the required OpenDucktor runtime surface rather than as optional capability toggles.
-- `Required workflow scope coverage`: `supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
+- `Baseline runtime contract`: descriptors must support fresh starts, text prompt input, and internally consistent lifecycle/history/input claims.
+- `Workflow requirements`: ODT workflow tool execution, approval/input semantics, and read-only safety are modeled separately from optional UI surfaces.
+- `Role-scoped workflow coverage`: `workflow.supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
+- `Scenario-scoped compatibility`: `sessionLifecycle.supportedStartModes`, `sessionLifecycle.supportsSessionFork`, and `sessionLifecycle.forkTargets` must cover every registered workflow scenario.
 - `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
 
-Slash commands now belong in the `Optional enhancement` category: the app can function without them, and the UI treats them as additive capability rather than a baseline runtime requirement.
+Slash commands now belong in the optional prompt-input category: the app can function without them, and the UI treats them as additive capability rather than a baseline runtime requirement.
 
-When `supportsSlashCommands` is true, OpenDucktor loads a slash-command catalog through the same request/response ownership model used for stable runtime catalog data:
+When `promptInput.supportsSlashCommands` is true, OpenDucktor loads a slash-command catalog through the same request/response ownership model used for stable runtime catalog data:
 
 - repo-scoped composer warmup uses runtime-kind keyed query data before a session exists,
 - active-session warmup uses the session runtime connection instead of falling back to the repo default runtime,
@@ -173,7 +174,9 @@ File search follows the same runtime-owned pattern, but with per-query reads ins
 - adapters normalize runtime search hits into core `AgentFileSearchResult` items,
 - structured file references stay typed through the draft/core boundary and are converted into runtime-native prompt parts only inside the runtime adapter.
 
-If a runtime can search files but cannot faithfully encode those structured file references for prompt sends, the adapter must return an actionable error instead of flattening the reference back into plain text.
+If `promptInput.supportsFileSearch` is true but the runtime cannot faithfully encode the declared file/folder prompt reference parts for prompt sends, the adapter must return an actionable error instead of flattening the reference back into plain text.
+
+When a runtime declares `promptInput.supportedParts` with `runtime_specific`, generic OpenDucktor layers may carry that part as typed data but must not reinterpret or flatten it. Only the runtime adapter that owns the capability may translate it into the native prompt payload, and unsupported runtime-specific parts must fail with an actionable error.
 
 ## Read-Only Tool Policy
 
@@ -261,7 +264,7 @@ Current workflow implications:
 - `build_pull_request_generation` allows `reuse` and `fork`
 - `qa_review` allows `fresh` and `reuse`
 
-This makes `supportsSessionFork` a hard requirement for full Builder compatibility. A runtime that cannot fork an existing Builder session cannot implement the complete OpenDucktor Builder workflow.
+This makes `sessionLifecycle.supportsSessionFork` and a compatible `fork` start mode a hard requirement for full Builder compatibility. `sessionLifecycle.forkTargets` describes the fork boundary: `session` for cloning an existing session as a whole, plus optional `message` and `item` targets when the runtime can fork from finer-grained history boundaries. A runtime that cannot fork an existing Builder session cannot implement the complete OpenDucktor Builder workflow, and a session-boundary-only runtime must not be treated as capable of message/item fork targeting.
 
 ## Integration Surfaces
 
@@ -337,13 +340,13 @@ Queued user messages are a runtime-owned transcript lifecycle, not a desktop pla
 
 Rules:
 
-- Agent Studio may only allow a follow-up free-form send while a session is already working when the active runtime descriptor sets `supportsQueuedUserMessages: true`.
+- Agent Studio may only allow a follow-up free-form send while a session is already working when the active runtime descriptor sets `sessionLifecycle.supportsQueuedUserMessages: true`.
 - Waiting-input states still win. If the session is blocked on a permission or question, the composer must keep free-form sends disabled even when queued follow-ups are supported.
 - Queued turns still use the existing `user_message` contract. OpenDucktor does not add a separate queued-message event type.
 - For OpenCode, queued state mirrors the TUI heuristic: a user message is `queued` when its id sorts after the last assistant message whose `time.completed` is still missing; otherwise it is `read`.
 - The adapter must update the same user message id in place as that pending-assistant boundary changes rather than inventing a separate queued-message event type or local placeholder system.
 - History hydration must apply the same pending-assistant rule so live state and reloaded history stay aligned.
-- If a runtime cannot provide enough information to reproduce its own queued badge behavior through the normal message/event/history surfaces, leave `supportsQueuedUserMessages` disabled instead of simulating the feature in desktop code.
+- If a runtime cannot provide enough information to reproduce its own queued badge behavior through the normal message/event/history surfaces, leave `sessionLifecycle.supportsQueuedUserMessages` disabled instead of simulating the feature in desktop code.
 
 ## Build Runtime Rules
 
@@ -359,7 +362,7 @@ Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/
 
 For a new runtime, the build path works like this:
 
-- because integrated runtimes must include every required workflow scope, `supportedScopes` must already contain `build`, `task`, and `workspace`,
+- because integrated runtimes must include every required workflow scope, `workflow.supportedScopes` must already contain `build`, `task`, and `workspace`,
 - when full workflow scope coverage is present, the build orchestrator starts that runtime for build worktrees,
 - if the host does not know how to start that runtime yet, build startup returns an error instead of launching a different runtime.
 

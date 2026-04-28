@@ -527,7 +527,7 @@ export const buildDiagnosticsPanelModel = (
         : { emptyMessage: "Select a repository first." }),
     };
 
-    if (!definition.capabilities.supportsMcpStatus) {
+    if (!definition.capabilities.optionalSurfaces.supportsMcpStatus) {
       return [runtimeSection];
     }
 

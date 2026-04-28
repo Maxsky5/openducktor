@@ -1,8 +1,7 @@
 use super::{OpencodeStartupReadinessConfig, RuntimeConfig, TestRuntimeStoreHarness};
 use host_domain::{
-    AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
-    RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
-    RuntimeSubagentExecutionMode, RuntimeSupportedScope,
+    AgentRuntimeKind, RuntimeDefinition, RuntimeDescriptor, RuntimeRegistry,
+    RuntimeStartupReadinessConfig,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -23,32 +22,12 @@ fn runtime_registry_with_test_runtime() -> RuntimeRegistry {
                     description: "Test runtime".to_string(),
                     read_only_role_blocked_tools: vec!["apply_patch".to_string()],
                     workflow_tool_aliases_by_canonical: Default::default(),
-                    capabilities: RuntimeCapabilities {
-                        supports_profiles: true,
-                        supports_variants: true,
-                        supports_slash_commands: true,
-                        supports_file_search: true,
-                        supports_odt_workflow_tools: true,
-                        supports_session_fork: true,
-                        supports_queued_user_messages: true,
-                        supports_permission_requests: true,
-                        supports_question_requests: true,
-                        supports_todos: true,
-                        supports_diff: true,
-                        supports_file_status: true,
-                        supports_mcp_status: true,
-                        supports_subagents: true,
-                        supported_subagent_execution_modes: vec![
-                            RuntimeSubagentExecutionMode::Foreground,
-                            RuntimeSubagentExecutionMode::Background,
-                        ],
-                        supported_scopes: vec![
-                            RuntimeSupportedScope::Workspace,
-                            RuntimeSupportedScope::Task,
-                            RuntimeSupportedScope::Build,
-                        ],
-                        provisioning_mode: RuntimeProvisioningMode::HostManaged,
-                    },
+                    capabilities: host_domain::builtin_runtime_registry()
+                        .definition_by_str("opencode")
+                        .expect("builtin opencode runtime should exist")
+                        .descriptor()
+                        .capabilities
+                        .clone(),
                 },
                 RuntimeStartupReadinessConfig::default(),
             ),

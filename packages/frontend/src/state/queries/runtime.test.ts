@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RuntimeInstanceSummary } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { host } from "../operations/host";
 import { ensureRuntimeListFromQuery, loadRuntimeListFromQuery } from "./runtime";
@@ -16,32 +16,7 @@ const runtimeFixture: RuntimeInstanceSummary = {
     endpoint: "http://127.0.0.1:4444",
   },
   startedAt: "2026-03-22T09:00:00.000Z",
-  descriptor: {
-    kind: "opencode",
-    label: "OpenCode",
-    description: "runtime",
-    capabilities: {
-      provisioningMode: "host_managed",
-      supportedScopes: ["workspace"],
-      supportsDiff: true,
-      supportsFileStatus: true,
-      supportsFileSearch: true,
-      supportsMcpStatus: true,
-      supportsOdtWorkflowTools: true,
-      supportsPermissionRequests: true,
-      supportsProfiles: true,
-      supportsQueuedUserMessages: true,
-      supportsQuestionRequests: true,
-      supportsSessionFork: true,
-      supportsSlashCommands: true,
-      supportsSubagents: true,
-      supportsTodos: true,
-      supportsVariants: true,
-      supportedSubagentExecutionModes: ["foreground", "background"],
-    },
-    readOnlyRoleBlockedTools: [],
-    workflowToolAliasesByCanonical: {},
-  },
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 };
 
 describe("runtime queries", () => {

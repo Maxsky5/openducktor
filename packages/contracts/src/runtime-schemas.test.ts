@@ -1,5 +1,7 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
+import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
+import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
 import {
   agentSessionPermissionRequestSchema,
   agentSessionRecordSchema,
@@ -24,6 +26,7 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
   repoConfigSchema,
   runtimeDescriptorSchema,
   runtimeInstanceSummaryRoleSchema,
@@ -41,7 +44,82 @@ const baseRepoConfigInput = {
   defaultRuntimeKind: "opencode",
 };
 
+const withRuntimeCapabilities = (
+  overrides: Partial<RuntimeDescriptor["capabilities"]>,
+): RuntimeDescriptor["capabilities"] => ({
+  ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+  ...overrides,
+});
+
+const expectRuntimeDescriptorIssue = (
+  descriptor: RuntimeDescriptor,
+  expectedMessage: string,
+): void => {
+  const result = runtimeDescriptorSchema.safeParse(descriptor);
+  expect(result.success).toBe(false);
+  if (result.success) {
+    return;
+  }
+
+  expect(result.error.issues).toEqual(
+    expect.arrayContaining([expect.objectContaining({ message: expectedMessage })]),
+  );
+};
+
+type JsonObject = Record<string, unknown>;
+
+type RuntimeDescriptorInvalidCase = {
+  name: string;
+  patch: Array<{
+    path: string[];
+    value: unknown;
+  }>;
+};
+
+const isJsonObject = (value: unknown): value is JsonObject =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase["patch"]): void => {
+  for (const operation of patch) {
+    let current: JsonObject = target;
+    for (const segment of operation.path.slice(0, -1)) {
+      const next = current[segment];
+      if (!isJsonObject(next)) {
+        throw new Error(`Invalid fixture path segment: ${operation.path.join(".")}`);
+      }
+      current = next;
+    }
+    const finalSegment = operation.path.at(-1);
+    if (finalSegment === undefined) {
+      throw new Error("Invalid empty fixture patch path");
+    }
+    current[finalSegment] = operation.value;
+  }
+};
+
+const invalidRuntimeDescriptorCases =
+  runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
+
 describe("runtime schemas", () => {
+  test("OpenCode descriptor fixture stays aligned with the TypeScript built-in", () => {
+    const parsed = runtimeDescriptorSchema.parse(opencodeRuntimeDescriptorFixture);
+
+    expect(parsed).toEqual(OPENCODE_RUNTIME_DESCRIPTOR);
+  });
+
+  test.each(
+    invalidRuntimeDescriptorCases,
+  )("shared invalid runtime descriptor fixture is rejected: $name", (fixtureCase) => {
+    const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
+    applyJsonPatch(descriptor, fixtureCase.patch);
+
+    const result = runtimeDescriptorSchema.safeParse(descriptor);
+
+    expect(result.success).toBe(false);
+  });
+
   test("task card parses workflow status from host payloads", () => {
     const parsed = taskCardSchema.parse({
       id: "task-1",
@@ -687,19 +765,52 @@ describe("runtime schemas", () => {
       type: "local_http",
       endpoint: "http://127.0.0.1:4100",
     });
-    expect(parsed.descriptor.capabilities.supportsSlashCommands).toBe(true);
-    expect(parsed.descriptor.capabilities.supportsFileSearch).toBe(true);
-    expect(parsed.descriptor.capabilities.supportsSubagents).toBe(true);
-    expect(parsed.descriptor.capabilities.supportedSubagentExecutionModes).toEqual([
-      "foreground",
-      "background",
-    ]);
+    expect(parsed.descriptor.capabilities.promptInput.supportsSlashCommands).toBe(true);
+    expect(parsed.descriptor.capabilities.promptInput.supportsFileSearch).toBe(true);
+    expect(parsed.descriptor.capabilities.optionalSurfaces.supportsSubagents).toBe(true);
+    expect(parsed.descriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes).toEqual(
+      ["foreground", "background"],
+    );
     expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
     expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
     expect(parsed.descriptor.workflowToolAliasesByCanonical.odt_set_spec).toEqual([
       "openducktor_odt_set_spec",
       "functions.openducktor_odt_set_spec",
     ]);
+  });
+
+  test("runtime instance summary rejects live/transient fields outside the summary contract", () => {
+    const result = runtimeInstanceSummarySchema.safeParse({
+      kind: "opencode",
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/repo",
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4100",
+      },
+      startedAt: "2026-01-01T00:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      endpoint: "http://127.0.0.1:4100",
+      baseUrl: "http://127.0.0.1:4100",
+      pendingQuestions: [],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unrecognized_keys",
+          keys: expect.arrayContaining(["endpoint", "baseUrl", "pendingQuestions"]),
+        }),
+      ]),
+    );
   });
 
   test("runtime descriptor rejects workflow alias collisions across canonical tools", () => {
@@ -782,6 +893,113 @@ describe("runtime schemas", () => {
     );
   });
 
+  test("runtime descriptor rejects blank and duplicate read-only blocked tool ids", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      readOnlyRoleBlockedTools: [" apply_patch ", "apply_patch", "   "],
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: "Read-only blocked runtime tool IDs must be unique.",
+          path: ["readOnlyRoleBlockedTools"],
+        }),
+        expect.objectContaining({
+          code: "too_small",
+          path: ["readOnlyRoleBlockedTools", 2],
+        }),
+      ]),
+    );
+  });
+
+  test("runtime descriptor trims workflow aliases before validation", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      workflowToolAliasesByCanonical: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        odt_build_blocked: [" shared_alias "],
+        odt_build_completed: ["shared_alias"],
+        odt_set_plan: [" odt_set_spec "],
+        odt_set_spec: [" runtime_set_spec ", "runtime_set_spec", "   "],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            'Runtime workflow alias "shared_alias" is already assigned to canonical tool "odt_build_blocked".',
+          path: ["workflowToolAliasesByCanonical", "odt_build_completed", 0],
+        }),
+        expect.objectContaining({
+          message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
+          path: ["workflowToolAliasesByCanonical", "odt_set_plan", 0],
+        }),
+        expect.objectContaining({
+          message: "Workflow tool aliases for a canonical tool must be unique.",
+          path: ["workflowToolAliasesByCanonical", "odt_set_spec"],
+        }),
+        expect.objectContaining({
+          code: "too_small",
+          path: ["workflowToolAliasesByCanonical", "odt_set_spec", 2],
+        }),
+      ]),
+    );
+  });
+
+  test("runtime descriptor and capabilities reject stale flat capability fields", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        supportsMcpStatus: true,
+        workflow: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+          supportedScopes: [
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow.supportedScopes,
+            "workspace",
+          ],
+        },
+      },
+      endpoint: "http://127.0.0.1:4444",
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unrecognized_keys",
+          keys: ["endpoint"],
+          path: [],
+        }),
+        expect.objectContaining({
+          code: "unrecognized_keys",
+          keys: ["supportsMcpStatus"],
+          path: ["capabilities"],
+        }),
+        expect.objectContaining({
+          message: "Supported runtime scopes must be unique.",
+          path: ["capabilities", "workflow", "supportedScopes"],
+        }),
+      ]),
+    );
+  });
+
   test("runtime route and connection schemas accept stdio transports", () => {
     expect(
       runtimeInstanceSummarySchema.parse({
@@ -855,11 +1073,13 @@ describe("runtime schemas", () => {
     expect(() =>
       runtimeDescriptorSchema.parse({
         ...OPENCODE_RUNTIME_DESCRIPTOR,
-        capabilities: {
-          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-          supportsSubagents: true,
-          supportedSubagentExecutionModes: [],
-        },
+        capabilities: withRuntimeCapabilities({
+          optionalSurfaces: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+            supportsSubagents: true,
+            supportedSubagentExecutionModes: [],
+          },
+        }),
       }),
     ).toThrow(
       "Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
@@ -868,14 +1088,214 @@ describe("runtime schemas", () => {
     expect(() =>
       runtimeDescriptorSchema.parse({
         ...OPENCODE_RUNTIME_DESCRIPTOR,
-        capabilities: {
-          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-          supportsSubagents: false,
-          supportedSubagentExecutionModes: ["foreground"],
-        },
+        capabilities: withRuntimeCapabilities({
+          optionalSurfaces: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+            supportsSubagents: false,
+            supportedSubagentExecutionModes: ["foreground"],
+          },
+        }),
       }),
     ).toThrow(
       "Runtime descriptors that do not support subagents must not declare subagent execution modes.",
+    );
+  });
+
+  test("runtime capabilities validate lifecycle, history, approval, and prompt invariants", () => {
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          sessionLifecycle: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+            supportedStartModes: ["fresh", "reuse", "fork"],
+            supportsSessionFork: false,
+            forkTargets: [],
+          },
+        }),
+      },
+      'Runtime descriptors that allow "fork" start mode must support session forks.',
+    );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          history: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.history,
+            fidelity: "item",
+            stableItemIds: false,
+          },
+        }),
+      },
+      "Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+    );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          approvals: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals,
+            supportedRequestTypes: ["permission_grant"],
+            supportedReplyOutcomes: ["approve_once"],
+          },
+        }),
+      },
+      'Runtime descriptors with approval requests must support the "reject" reply outcome.',
+    );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          promptInput: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+            supportsFileSearch: true,
+            supportedParts: ["text", "slash_command"],
+          },
+        }),
+      },
+      "Runtime descriptors that support file search must declare file or folder prompt references.",
+    );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          history: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.history,
+            limitations: ["message-level only", "message-level only"],
+          },
+        }),
+      },
+      "Runtime history limitations must be unique.",
+    );
+  });
+
+  test("runtime descriptor accepts Codex-style item history and structured approval semantics", () => {
+    const codexDescriptor = runtimeDescriptorSchema.parse({
+      kind: "codex-app-server",
+      label: "Codex App Server",
+      description: "Codex app-server runtime fixture with item-level event history.",
+      readOnlyRoleBlockedTools: ["shell", "apply_patch"],
+      workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+      capabilities: withRuntimeCapabilities({
+        provisioningMode: "external",
+        workflow: {
+          supportsOdtWorkflowTools: true,
+          supportedScopes: ["workspace", "task", "build"],
+        },
+        sessionLifecycle: {
+          supportedStartModes: ["fresh", "reuse", "fork"],
+          supportsSessionFork: true,
+          forkTargets: ["session", "message", "item"],
+          supportsAttachLiveSessions: true,
+          supportsListLiveSessions: true,
+          supportsQueuedUserMessages: true,
+          supportsPendingInputSnapshots: true,
+        },
+        history: {
+          loadable: true,
+          fidelity: "item",
+          replay: "event_replay",
+          stableItemIds: true,
+          stableItemOrder: true,
+          exposesCompletionState: true,
+          hydratedEventTypes: [
+            "message",
+            "tool_call",
+            "tool_result",
+            "approval_request",
+            "question_request",
+            "status_change",
+          ],
+          limitations: [],
+        },
+        approvals: {
+          supportedRequestTypes: [
+            "command_execution",
+            "file_change",
+            "permission_grant",
+            "runtime_tool",
+          ],
+          supportedReplyOutcomes: ["approve_once", "approve_turn", "approve_session", "reject"],
+          omittedPermissionBehavior: "requires_explicit_response",
+          pendingVisibility: ["live_snapshot", "history"],
+          canClassifyMutatingRequests: true,
+          readOnlyAutoRejectSafe: true,
+        },
+        structuredInput: {
+          supportsQuestions: true,
+          supportsMultipleQuestions: true,
+          supportedAnswerModes: ["free_text", "single_select", "multi_select"],
+          supportsRequiredQuestions: true,
+          supportsDefaultValues: true,
+          supportsSecretInput: true,
+          supportsCustomAnswers: true,
+          supportsQuestionResolution: true,
+          pendingVisibility: ["live_snapshot", "history"],
+        },
+        promptInput: {
+          supportedParts: [
+            "text",
+            "slash_command",
+            "file_reference",
+            "folder_reference",
+            "skill_mention",
+            "app_mention",
+            "plugin_mention",
+            "runtime_specific",
+          ],
+          supportsSlashCommands: true,
+          supportsFileSearch: true,
+        },
+      }),
+    });
+
+    expect(codexDescriptor.capabilities.history.fidelity).toBe("item");
+    expect(codexDescriptor.capabilities.approvals.pendingVisibility).toContain("history");
+    expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("skill_mention");
+    expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("runtime_specific");
+  });
+
+  test("runtime descriptor rejects live pending snapshots when snapshot support is disabled", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: withRuntimeCapabilities({
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        sessionLifecycle: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+          supportsPendingInputSnapshots: false,
+        },
+        approvals: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals,
+          pendingVisibility: ["live_snapshot"],
+        },
+        structuredInput: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
+          pendingVisibility: ["live_snapshot"],
+        },
+      }),
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: "Approval live snapshot visibility requires pending input snapshot support.",
+          path: ["capabilities", "approvals", "pendingVisibility"],
+        }),
+        expect.objectContaining({
+          message:
+            "Structured input live snapshot visibility requires pending input snapshot support.",
+          path: ["capabilities", "structuredInput", "pendingVisibility"],
+        }),
+      ]),
     );
   });
 

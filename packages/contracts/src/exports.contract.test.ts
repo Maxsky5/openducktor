@@ -83,17 +83,34 @@ import type {
   RepoStoreHealthStatus,
   RepoStoreSharedServerHealth,
   RepoStoreSharedServerOwnershipState,
+  RuntimeApprovalCapabilities,
+  RuntimeApprovalReplyOutcome,
+  RuntimeApprovalRequestType,
   RuntimeCapabilities,
   RuntimeCapabilityClass,
   RuntimeCapabilityKey,
   RuntimeCheck,
+  RuntimeForkTarget,
+  RuntimeHistoryCapabilities,
+  RuntimeHistoryFidelity,
+  RuntimeHistoryReplay,
+  RuntimeHydratedEventType,
   RuntimeInstanceSummary,
   RuntimeInstanceSummaryRole,
   RuntimeKind,
+  RuntimeOmittedPermissionBehavior,
+  RuntimeOptionalSurfaceCapabilities,
+  RuntimePendingInputVisibility,
+  RuntimePromptInputCapabilities,
+  RuntimePromptInputPartType,
   RuntimeProvisioningMode,
+  RuntimeQuestionAnswerMode,
   RuntimeRef,
+  RuntimeSessionLifecycleCapabilities,
+  RuntimeStructuredInputCapabilities,
   RuntimeSubagentExecutionMode,
   RuntimeSupportedScope,
+  RuntimeWorkflowCapabilities,
   SettingsSnapshot,
   SlashCommandCatalog,
   SlashCommandDescriptor,
@@ -283,13 +300,27 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "isAgentKickoffScenario",
   "isScenarioStartModeAllowed",
   "runtimeCheckSchema",
+  "runtimeApprovalCapabilitiesSchema",
+  "runtimeApprovalReplyOutcomeSchema",
+  "runtimeApprovalReplyOutcomeValues",
+  "runtimeApprovalRequestTypeSchema",
+  "runtimeApprovalRequestTypeValues",
   "runtimeCapabilitiesSchema",
   "runtimeCapabilityClasses",
   "runtimeCapabilityKeySchema",
   "runtimeCapabilityKeyValues",
   "runtimeDescriptorCatalogSchema",
   "runtimeDescriptorSchema",
+  "runtimeForkTargetSchema",
+  "runtimeForkTargetValues",
+  "runtimeHistoryCapabilitiesSchema",
+  "runtimeHistoryFidelitySchema",
+  "runtimeHistoryFidelityValues",
+  "runtimeHistoryReplaySchema",
+  "runtimeHistoryReplayValues",
   "runtimeHealthSchema",
+  "runtimeHydratedEventTypeSchema",
+  "runtimeHydratedEventTypeValues",
   "runtimeKindSchema",
   "repoRuntimeHealthCheckSchema",
   "repoStoreAttachmentHealthSchema",
@@ -308,9 +339,21 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeRouteSchema",
   "stdioRuntimeIdentitySchema",
   "runtimeProvisioningModeSchema",
+  "runtimeOmittedPermissionBehaviorSchema",
+  "runtimeOmittedPermissionBehaviorValues",
+  "runtimeOptionalSurfaceCapabilitiesSchema",
+  "runtimePendingInputVisibilitySchema",
+  "runtimePendingInputVisibilityValues",
+  "runtimePromptInputCapabilitiesSchema",
+  "runtimePromptInputPartTypeSchema",
+  "runtimePromptInputPartTypeValues",
+  "runtimeQuestionAnswerModeSchema",
+  "runtimeQuestionAnswerModeValues",
   "getMissingRequiredRuntimeSupportedScopes",
   "runtimeRequiredScopesByRole",
   "runtimeRefSchema",
+  "runtimeSessionLifecycleCapabilitiesSchema",
+  "runtimeStructuredInputCapabilitiesSchema",
   "runtimeSubagentExecutionModeSchema",
   "runtimeSubagentExecutionModeValues",
   "requiredRuntimeSupportedScopes",
@@ -319,6 +362,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeSupportedScopesSchema",
   "runtimeSupportedSubagentExecutionModesSchema",
   "runtimeTransportSchema",
+  "runtimeWorkflowCapabilitiesSchema",
   "searchTasksResultSchema",
   "SearchTasksInputSchema",
   "setPlanResultSchema",
@@ -456,6 +500,23 @@ type ExportedTypeContract = {
   RuntimeCapabilities: RuntimeCapabilities;
   RuntimeCapabilityClass: RuntimeCapabilityClass;
   RuntimeCapabilityKey: RuntimeCapabilityKey;
+  RuntimeApprovalCapabilities: RuntimeApprovalCapabilities;
+  RuntimeApprovalReplyOutcome: RuntimeApprovalReplyOutcome;
+  RuntimeApprovalRequestType: RuntimeApprovalRequestType;
+  RuntimeForkTarget: RuntimeForkTarget;
+  RuntimeHistoryCapabilities: RuntimeHistoryCapabilities;
+  RuntimeHistoryFidelity: RuntimeHistoryFidelity;
+  RuntimeHistoryReplay: RuntimeHistoryReplay;
+  RuntimeHydratedEventType: RuntimeHydratedEventType;
+  RuntimeOmittedPermissionBehavior: RuntimeOmittedPermissionBehavior;
+  RuntimeOptionalSurfaceCapabilities: RuntimeOptionalSurfaceCapabilities;
+  RuntimePendingInputVisibility: RuntimePendingInputVisibility;
+  RuntimePromptInputCapabilities: RuntimePromptInputCapabilities;
+  RuntimePromptInputPartType: RuntimePromptInputPartType;
+  RuntimeQuestionAnswerMode: RuntimeQuestionAnswerMode;
+  RuntimeSessionLifecycleCapabilities: RuntimeSessionLifecycleCapabilities;
+  RuntimeStructuredInputCapabilities: RuntimeStructuredInputCapabilities;
+  RuntimeWorkflowCapabilities: RuntimeWorkflowCapabilities;
   RepoRuntimeHealthCheck: RepoRuntimeHealthCheck;
   RepoStoreAttachmentHealth: RepoStoreAttachmentHealth;
   RepoStoreHealth: RepoStoreHealth;

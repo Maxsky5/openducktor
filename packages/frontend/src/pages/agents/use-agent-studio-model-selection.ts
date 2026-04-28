@@ -255,7 +255,7 @@ export function useAgentStudioModelSelection({
     }
     return (
       runtimeDefinitions.find((definition) => definition.kind === slashCommandRuntimeKind)
-        ?.capabilities.supportsSlashCommands ?? false
+        ?.capabilities.promptInput.supportsSlashCommands ?? false
     );
   }, [runtimeDefinitions, slashCommandRuntimeKind]);
   const fileSearchRuntimeKind = activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
@@ -265,7 +265,7 @@ export function useAgentStudioModelSelection({
     }
     return (
       runtimeDefinitions.find((definition) => definition.kind === fileSearchRuntimeKind)
-        ?.capabilities.supportsFileSearch ?? false
+        ?.capabilities.promptInput.supportsFileSearch ?? false
     );
   }, [fileSearchRuntimeKind, runtimeDefinitions]);
 

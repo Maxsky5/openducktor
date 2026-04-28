@@ -264,6 +264,8 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
     </QueryProvider>,
   );
 
+  await waitForMockCall(workspaceGetRepoConfigMock);
+
   if (options?.waitForKanbanReady !== false) {
     await waitFor(() => {
       const totalTaskCount = latestKanbanColumnPropsList.reduce((count, props) => {

@@ -1348,25 +1348,7 @@ describe("TauriHostClient", () => {
             ],
             workflowToolAliasesByCanonical:
               OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-            capabilities: {
-              supportsProfiles: true,
-              supportsVariants: true,
-              supportsSlashCommands: true,
-              supportsFileSearch: true,
-              supportsOdtWorkflowTools: true,
-              supportsPermissionRequests: true,
-              supportsQuestionRequests: true,
-              supportsSessionFork: true,
-              supportsQueuedUserMessages: true,
-              supportsSubagents: true,
-              supportsTodos: true,
-              supportsDiff: true,
-              supportsFileStatus: true,
-              supportsMcpStatus: true,
-              supportedSubagentExecutionModes: ["foreground", "background"],
-              supportedScopes: ["workspace", "task", "build"],
-              provisioningMode: "host_managed",
-            },
+            capabilities: structuredClone(OPENCODE_RUNTIME_DESCRIPTOR.capabilities),
           },
         ];
       }

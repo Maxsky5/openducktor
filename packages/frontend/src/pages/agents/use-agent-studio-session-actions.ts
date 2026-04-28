@@ -176,7 +176,7 @@ export function useAgentStudioSessionActions({
     runtimeDefinitions.find((runtime) => runtime.kind === activeSessionRuntimeKind) ??
     null;
   const supportsQueuedUserMessages =
-    activeRuntimeDescriptor?.capabilities.supportsQueuedUserMessages !== false;
+    activeRuntimeDescriptor?.capabilities.sessionLifecycle.supportsQueuedUserMessages !== false;
   const canQueueBusyFollowups =
     activeSessionStatus === "running" && !isWaitingInput && supportsQueuedUserMessages;
   const busySendBlockedReason =
