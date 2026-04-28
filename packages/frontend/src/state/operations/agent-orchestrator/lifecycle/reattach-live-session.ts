@@ -1,7 +1,6 @@
 import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { getRuntimeConnectionSupportError } from "../runtime/runtime";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
@@ -77,15 +76,6 @@ export const createReattachLiveSession = ({
       return false;
     }
     if (!runtimeResolution.ok) {
-      return false;
-    }
-    if (
-      getRuntimeConnectionSupportError(
-        runtimeResolution.runtimeKind,
-        runtimeResolution.runtimeConnection,
-        "live session discovery",
-      )
-    ) {
       return false;
     }
 

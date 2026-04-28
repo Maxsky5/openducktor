@@ -1,7 +1,7 @@
 import type { AgentRuntimeConnection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
-import { requireRuntimeConnectionSupport, resolveRuntimeConnection } from "../runtime/runtime";
+import { resolveRuntimeConnection } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
@@ -101,16 +101,11 @@ export const executeForkStart = async ({
   });
 
   const runtimeKind = sourceRuntimeKind;
-  const supportedRuntimeConnection = requireRuntimeConnectionSupport(
-    runtimeKind,
-    sourceRuntimeConnection,
-    "fork session",
-  );
 
   const summary = await deps.runtime.adapter.forkSession({
     repoPath: ctx.repoPath,
     runtimeKind,
-    runtimeConnection: supportedRuntimeConnection,
+    runtimeConnection: sourceRuntimeConnection,
     workingDirectory: sourceSession.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
@@ -138,7 +133,7 @@ export const executeForkStart = async ({
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
       runtimeKind,
-      runtimeConnection: supportedRuntimeConnection,
+      runtimeConnection: sourceRuntimeConnection,
       externalSessionId: summary.externalSessionId,
       limit: FORK_START_HISTORY_LIMIT,
     })
@@ -188,7 +183,7 @@ export const executeForkStart = async ({
     runtimeKind,
     runtimeId: sourceSession.runtimeId,
     runtimeRoute: sourceSession.runtimeRoute,
-    runtimeConnection: supportedRuntimeConnection,
+    runtimeConnection: sourceRuntimeConnection,
     workingDirectory: sourceSession.workingDirectory,
   };
 

@@ -145,9 +145,11 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     }
   });
 
-  test("surfaces an explicit error for unsupported stdio OpenCode session runtime data", async () => {
+  test("propagates adapter errors for stdio OpenCode session runtime data", async () => {
     const readSessionModelCatalog = mock(async () => CATALOG);
-    const readSessionTodos = mock(async () => []);
+    const readSessionTodos = mock(async () => {
+      throw new Error("todos unavailable");
+    });
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
       session: createAgentSessionFixture({
         sessionId: "session-1",
@@ -166,10 +168,16 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     try {
       await harness.mount();
 
-      expect(readSessionModelCatalog).not.toHaveBeenCalled();
-      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(readSessionModelCatalog).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
+      await harness.waitFor(
+        (state) =>
+          state.session?.isLoadingModelCatalog === false &&
+          state.runtimeDataError === "todos unavailable",
+      );
+      expect(harness.getLatest()?.session?.modelCatalog).toEqual(CATALOG);
       expect(harness.getLatest()?.session?.isLoadingModelCatalog).toBe(false);
-      expect(harness.getLatest()?.runtimeDataError).toContain("local_http is required");
+      expect(harness.getLatest()?.runtimeDataError).toBe("todos unavailable");
     } finally {
       await harness.unmount();
     }

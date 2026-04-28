@@ -541,7 +541,7 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
-  test("does not query session slash commands for unsupported stdio OpenCode sessions", async () => {
+  test("queries session slash commands for stdio OpenCode sessions", async () => {
     const readSessionSlashCommands = mock(async () => ({
       commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
     }));
@@ -563,7 +563,12 @@ describe("useAgentStudioModelSelection", () => {
       await harness.mount();
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-      expect(readSessionSlashCommands).not.toHaveBeenCalled();
+      expect(readSessionSlashCommands).toHaveBeenCalledTimes(1);
+      expect(readSessionSlashCommands).toHaveBeenCalledWith("opencode", {
+        type: "stdio",
+        identity: "runtime-stdio",
+        workingDirectory: "/repo/session-worktree",
+      });
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();
@@ -602,8 +607,10 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
-  test("fails fast when active session file search uses an unsupported stdio OpenCode session", async () => {
-    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+  test("propagates adapter errors when active session file search uses stdio OpenCode session", async () => {
+    const readSessionFileSearch = mock(async () => {
+      throw new Error("file search unavailable");
+    });
     const harness = createHookHarness(
       createBaseProps({
         activeSession: createActiveSession({
@@ -621,9 +628,18 @@ describe("useAgentStudioModelSelection", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "local_http is required",
+        "file search unavailable",
       );
-      expect(readSessionFileSearch).not.toHaveBeenCalled();
+      expect(readSessionFileSearch).toHaveBeenCalledTimes(1);
+      expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "opencode",
+        {
+          type: "stdio",
+          identity: "runtime-stdio",
+          workingDirectory: "/repo/session-worktree",
+        },
+        "src",
+      );
     } finally {
       await harness.unmount();
     }

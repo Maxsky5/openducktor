@@ -97,6 +97,13 @@ pub(crate) trait AppRuntime: Send + Sync {
         ))
     }
 
+    fn validate_build_session_bootstrap(
+        &self,
+        _runtime: &RuntimeInstanceSummary,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     fn connect_mcp_server(
         &self,
         _runtime: &RuntimeInstanceSummary,

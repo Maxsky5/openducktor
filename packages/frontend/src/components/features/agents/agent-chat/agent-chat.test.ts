@@ -186,14 +186,13 @@ describe("AgentChat", () => {
               status: "idle",
               todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
-            sessionRuntimeDataError:
-              "Runtime connection type 'stdio' is unsupported for active session runtime data access in runtime 'opencode'; local_http is required.",
+            sessionRuntimeDataError: "todos unavailable",
           },
         },
       }),
     );
 
-    expect(html).toContain("active session runtime data access");
-    expect(html.indexOf("active session runtime data access")).toBeLessThan(html.indexOf("<form"));
+    expect(html).toContain("todos unavailable");
+    expect(html.indexOf("todos unavailable")).toBeLessThan(html.indexOf("<form"));
   });
 });
