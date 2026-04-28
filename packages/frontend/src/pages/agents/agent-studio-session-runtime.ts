@@ -34,17 +34,12 @@ export const toAttachedSessionRuntimeConnection = (
 };
 
 export const getAttachedSessionRuntimeConnectionError = (
-  session:
+  _session:
     | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
     | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
     | null
     | undefined,
 ): string | null => {
-  if (!session?.runtimeRoute) {
-    return null;
-  }
-
-  runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory);
   return null;
 };
 
