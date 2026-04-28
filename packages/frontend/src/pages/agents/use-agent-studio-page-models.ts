@@ -36,6 +36,7 @@ type AgentStudioCoreContext = {
   activeSession: AgentSessionState | null;
   sessionRuntimeDataError: string | null;
   isTaskHydrating: boolean;
+  isSessionHistoryHydrated: boolean;
   isSessionHistoryHydrating: boolean;
   isWaitingForRuntimeReadiness: boolean;
   isSessionHistoryHydrationFailed: boolean;
@@ -505,6 +506,7 @@ export function useAgentStudioPageModels({
     mode: "interactive",
     session: core.activeSession,
     isTaskHydrating: core.isTaskHydrating,
+    isSessionHistoryHydrated: core.isSessionHistoryHydrated,
     contextSwitchVersion: core.contextSwitchVersion,
     showThinkingMessages: chatSettings.showThinkingMessages,
     isSessionWorking: sessionActions.isSessionWorking,

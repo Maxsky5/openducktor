@@ -274,6 +274,8 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
     });
   }
 
+  await waitForMockCall(workspaceGetRepoConfigMock);
+
   return renderer;
 };
 
@@ -414,10 +416,6 @@ describe("KanbanPage session start modal flow", () => {
         latestSessionStartModalModel = model;
         return null;
       },
-    }));
-
-    mock.module("../agents/use-agent-studio-repo-settings", () => ({
-      useAgentStudioRepoSettings: () => ({ repoSettings: createRepoSettingsFixture() }),
     }));
 
     mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
@@ -633,10 +631,6 @@ describe("KanbanPage session start modal flow", () => {
         () => import("@/components/features/kanban/kanban-column"),
       ],
       ["./kanban-session-start-modal", () => import("./kanban-session-start-modal")],
-      [
-        "../agents/use-agent-studio-repo-settings",
-        () => import("../../pages/agents/use-agent-studio-repo-settings"),
-      ],
       [
         "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
         () => import("@/components/features/pull-requests/merged-pull-request-confirm-dialog"),

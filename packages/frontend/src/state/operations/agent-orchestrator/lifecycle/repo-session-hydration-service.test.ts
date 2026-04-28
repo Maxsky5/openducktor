@@ -13,9 +13,12 @@ import {
   createLocalHttpRuntimeConnection,
 } from "@/state/operations/agent-orchestrator/test-utils";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
+import { createLoadAgentSessions } from "./load-sessions";
 import { createRuntimeResolutionPlannerStage } from "./load-sessions-stages";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
+import { createSessionHydrationOperations } from "./session-hydration-operations";
 
 const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -147,17 +150,6 @@ const stdioRuntimeConnection = (workingDirectory: string, identity = "runtime-st
     workingDirectory,
   }) as const;
 
-const isExpectedReconcileRetryLog = (args: Parameters<typeof console.error>): boolean => {
-  const [message, error] = args;
-  return (
-    typeof message === "string" &&
-    message.startsWith("Failed to reconcile agent sessions for task") &&
-    message.includes("Retrying in") &&
-    error instanceof Error &&
-    error.message.startsWith("No live runtime found for working directory ")
-  );
-};
-
 const isExpectedRuntimeMetadataLog = (args: Parameters<typeof console.error>): boolean => {
   const [message, error] = args;
   return (
@@ -165,6 +157,16 @@ const isExpectedRuntimeMetadataLog = (args: Parameters<typeof console.error>): b
     message.startsWith("Skipping reconcile preload for task") &&
     error instanceof Error &&
     error.name === "SessionRuntimeMetadataError"
+  );
+};
+
+const isExpectedRetryableUnmatchedLog = (args: Parameters<typeof console.error>): boolean => {
+  const [message, error] = args;
+  return (
+    typeof message === "string" &&
+    message.startsWith("Failed to reconcile agent sessions") &&
+    error instanceof Error &&
+    error.message.startsWith("No matching live agent session was found")
   );
 };
 
@@ -196,16 +198,6 @@ const withSuppressedExpectedConsoleErrors = async ({
   }
 };
 
-const withSuppressedExpectedReconcileRetryLogs = (
-  expectedCount: number,
-  run: () => Promise<void>,
-): Promise<void> =>
-  withSuppressedExpectedConsoleErrors({
-    expectedCount,
-    isExpected: isExpectedReconcileRetryLog,
-    run,
-  });
-
 const withSuppressedExpectedRuntimeMetadataLogs = (
   expectedCount: number,
   run: () => Promise<void>,
@@ -213,6 +205,16 @@ const withSuppressedExpectedRuntimeMetadataLogs = (
   withSuppressedExpectedConsoleErrors({
     expectedCount,
     isExpected: isExpectedRuntimeMetadataLog,
+    run,
+  });
+
+const withSuppressedExpectedRetryableUnmatchedLogs = (
+  expectedCount: number,
+  run: () => Promise<void>,
+): Promise<void> =>
+  withSuppressedExpectedConsoleErrors({
+    expectedCount,
+    isExpected: isExpectedRetryableUnmatchedLog,
     run,
   });
 
@@ -738,7 +740,7 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
-  test("reconcile does not synthesize worktree scans from repo-root stdio runtimes", async () => {
+  test("reconcile skips worktree sessions instead of retrying when only repo-root stdio runtimes exist", async () => {
     const listLiveAgentSessionSnapshotsCalls: Array<{
       runtimeConnection: unknown;
       directories?: string[];
@@ -802,24 +804,22 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await withSuppressedExpectedReconcileRetryLogs(2, async () => {
-      await service.reconcilePendingTasks({
-        repoPath,
-        tasks: [
-          taskWithSessionAt("task-a", "external-a", worktreePath),
-          taskWithSessionAt("task-b", "external-b", worktreePath),
-        ],
-        isCancelled: () => false,
-        isCurrentRepo: () => true,
-      });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-a", "external-a", worktreePath),
+        taskWithSessionAt("task-b", "external-b", worktreePath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
     });
 
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([]);
-    expect(reconcileCalls.sort()).toEqual(["task-a", "task-b"]);
+    expect(reconcileCalls).toEqual([]);
     service.dispose();
   });
 
-  test("reconcile does not preload repo-root workspace runtimes for build sessions", async () => {
+  test("reconcile uses repo-root workspace runtimes only for matching repo-root workspace sessions", async () => {
     const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
     const reconcileCalls: string[] = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
@@ -858,28 +858,375 @@ describe("repo-session-hydration-service", () => {
             throw new Error("Expected persisted session record");
           }
           expect(record.workingDirectory).toBe(repoPath);
-          expect(preloadedRuntimeConnections?.hasAny("opencode", repoPath)).toBe(false);
-          throw new Error(`No live runtime found for working directory ${repoPath}.`);
+          expect(preloadedRuntimeConnections?.hasAny("opencode", repoPath)).toBe(true);
         },
       },
       liveAgentSessionStore,
       onRetryRequested: () => {},
     });
 
-    await withSuppressedExpectedReconcileRetryLogs(2, async () => {
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-root-build", "external-build-root", repoPath),
+        plannerTaskWithSessionAt("task-root-planner", "external-planner-root", repoPath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([{ directories: [repoPath] }]);
+    expect(reconcileCalls).toEqual(["task-root-planner"]);
+    service.dispose();
+  });
+
+  test("reconcile schedules retry for unmatched worktree records while reconciling live records", async () => {
+    const reconcileCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    let retryRequests = 0;
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const mixedTask = plannerTaskWithSessionAt("task-mixed", "external-planner", repoPath);
+    const plannerSession = mixedTask.agentSessions?.[0];
+    if (!plannerSession) {
+      throw new Error("Expected planner session fixture");
+    }
+    mixedTask.agentSessions = [
+      plannerSession,
+      {
+        ...plannerSession,
+        sessionId: "session-task-mixed-build",
+        externalSessionId: "external-missing-build",
+        role: "build",
+        scenario: "build_implementation_start",
+        workingDirectory: worktreePath,
+      },
+    ];
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-planner",
+            workingDirectory: repoPath,
+          }),
+        ],
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push({ taskId, records: persistedRecords ?? [] });
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {
+        retryRequests += 1;
+      },
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
       await service.reconcilePendingTasks({
         repoPath,
-        tasks: [
-          taskWithSessionAt("task-root-build", "external-build-root", repoPath),
-          plannerTaskWithSessionAt("task-root-planner", "external-planner-root", repoPath),
-        ],
+        tasks: [mixedTask],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+
+      await Bun.sleep(600);
+    });
+
+    expect(reconcileCalls).toHaveLength(1);
+    expect(reconcileCalls[0]?.taskId).toBe("task-mixed");
+    expect(reconcileCalls[0]?.records.map((record) => record.externalSessionId)).toEqual([
+      "external-planner",
+    ]);
+    expect(retryRequests).toBe(1);
+    service.dispose();
+  });
+
+  test("reconcile can pick up a mixed-task worktree record after it becomes live later", async () => {
+    const reconcileCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    let retryRequests = 0;
+    let liveSnapshots = [
+      createLiveAgentSessionSnapshotFixture({
+        externalSessionId: "external-planner",
+        workingDirectory: repoPath,
+      }),
+    ];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const mixedTask = plannerTaskWithSessionAt("task-mixed", "external-planner", repoPath);
+    const plannerSession = mixedTask.agentSessions?.[0];
+    if (!plannerSession) {
+      throw new Error("Expected planner session fixture");
+    }
+    mixedTask.agentSessions = [
+      plannerSession,
+      {
+        ...plannerSession,
+        sessionId: "session-task-mixed-build",
+        externalSessionId: "external-build",
+        role: "build",
+        scenario: "build_implementation_start",
+        workingDirectory: worktreePath,
+      },
+    ];
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => liveSnapshots,
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push({ taskId, records: persistedRecords ?? [] });
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {
+        retryRequests += 1;
+      },
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [mixedTask],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+    });
+    liveSnapshots = [
+      createLiveAgentSessionSnapshotFixture({
+        externalSessionId: "external-build",
+        workingDirectory: worktreePath,
+      }),
+    ];
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [mixedTask],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(
+      reconcileCalls.map((call) => call.records.map((record) => record.externalSessionId)),
+    ).toEqual([["external-planner"], ["external-build"]]);
+    expect(retryRequests).toBe(0);
+    service.dispose();
+  });
+
+  test("reconcile record tracking distinguishes ids that contain key delimiters", async () => {
+    const reconcileCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    let retryRequests = 0;
+    let liveSnapshots = [
+      createLiveAgentSessionSnapshotFixture({
+        externalSessionId: "external",
+        workingDirectory: worktreePath,
+      }),
+    ];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const task = taskWithSessionAt("task-key", "external", worktreePath);
+    const firstSession = task.agentSessions?.[0];
+    if (!firstSession) {
+      throw new Error("Expected seeded task session");
+    }
+    task.agentSessions = [
+      {
+        ...firstSession,
+        sessionId: "session::shared",
+        externalSessionId: "external",
+      },
+      {
+        ...firstSession,
+        sessionId: "session",
+        externalSessionId: "shared::external",
+      },
+    ];
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => liveSnapshots,
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push({ taskId, records: persistedRecords ?? [] });
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {
+        retryRequests += 1;
+      },
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [task],
         isCancelled: () => false,
         isCurrentRepo: () => true,
       });
     });
 
-    expect(listLiveAgentSessionSnapshotsCalls).toEqual([{ directories: [repoPath] }]);
-    expect(reconcileCalls.sort()).toEqual(["task-root-build", "task-root-planner"]);
+    liveSnapshots = [
+      createLiveAgentSessionSnapshotFixture({
+        externalSessionId: "shared::external",
+        workingDirectory: worktreePath,
+      }),
+    ];
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(
+      reconcileCalls.map((call) => call.records.map((record) => record.externalSessionId)),
+    ).toEqual([["external"], ["shared::external"]]);
+    expect(retryRequests).toBe(0);
+    service.dispose();
+  });
+
+  test("reconcile filters mixed tasks before the real hydration path resolves runtimes", async () => {
+    let retryRequests = 0;
+    let resumeCalls = 0;
+    let liveSnapshotScans = 0;
+    let attachedListeners = 0;
+    let state: Record<string, AgentSessionState> = {};
+    const sessionsRef = { current: state };
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const mixedTask = plannerTaskWithSessionAt("task-mixed", "external-planner", repoPath);
+    const plannerSession = mixedTask.agentSessions?.[0];
+    if (!plannerSession) {
+      throw new Error("Expected planner session fixture");
+    }
+    mixedTask.agentSessions = [
+      plannerSession,
+      {
+        ...plannerSession,
+        sessionId: "session-task-mixed-build",
+        externalSessionId: "external-missing-build",
+        role: "build",
+        scenario: "build_implementation_start",
+        workingDirectory: worktreePath,
+      },
+    ];
+
+    const setSessionsById: Parameters<typeof createLoadAgentSessions>[0]["setSessionsById"] = (
+      updater,
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession: Parameters<typeof createLoadAgentSessions>[0]["updateSession"] = (
+      sessionId,
+      updater,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = { ...state, [sessionId]: updater(current) };
+      sessionsRef.current = state;
+    };
+    const adapter: Parameters<typeof createLoadAgentSessions>[0]["adapter"] = {
+      hasSession: () => false,
+      loadSessionHistory: async () => [],
+      listLiveAgentSessionSnapshots: async () => {
+        liveSnapshotScans += 1;
+        return [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-planner",
+            workingDirectory: repoPath,
+          }),
+        ];
+      },
+      resumeSession: async (input) => {
+        resumeCalls += 1;
+        return {
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: "running",
+          runtimeKind: input.runtimeKind,
+        };
+      },
+      attachSession: async (input) => ({
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        role: input.role,
+        scenario: input.scenario,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: "running",
+        runtimeKind: input.runtimeKind,
+      }),
+    };
+    const loadAgentSessions = createLoadAgentSessions({
+      activeWorkspace: {
+        repoPath,
+        workspaceId: "workspace-1",
+        workspaceName: "Test Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: repoPath },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [mixedTask] },
+      updateSession,
+      attachSessionListener: () => {
+        attachedListeners += 1;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+    const sessionHydration = createSessionHydrationOperations({
+      loadAgentSessions,
+      getSessionSnapshot: (sessionId) => sessionsRef.current[sessionId],
+    });
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          if (!adapter.listLiveAgentSessionSnapshots) {
+            throw new Error("Expected live snapshot scanner");
+          }
+          return adapter.listLiveAgentSessionSnapshots(input);
+        },
+      },
+      sessionHydration,
+      liveAgentSessionStore,
+      onRetryRequested: () => {
+        retryRequests += 1;
+      },
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [mixedTask],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+    });
+
+    expect(liveSnapshotScans).toBe(1);
+    expect(resumeCalls).toBe(1);
+    expect(attachedListeners).toBe(1);
+    expect(retryRequests).toBe(0);
+    expect(state["session-task-mixed"]?.status).toBe("running");
+    expect(state["session-task-mixed-build"]).toBeUndefined();
     service.dispose();
   });
 
@@ -994,11 +1341,13 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [taskOne, taskTwo],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedRetryableUnmatchedLogs(2, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [taskOne, taskTwo],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     expect(runtimeEnsureCalls).toBe(1);
@@ -1105,6 +1454,150 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile retries unmatched worktree sessions after scanning compatible repo-root http runtimes", async () => {
+    const listLiveAgentSessionSnapshotsCalls: Array<{ directories?: string[] }> = [];
+    const reconcileCalls: string[] = [];
+    let retryRequests = 0;
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async (input) => {
+          listLiveAgentSessionSnapshotsCalls.push(
+            input.directories ? { directories: [...input.directories].sort() } : {},
+          );
+          return [];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {
+        retryRequests += 1;
+      },
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(2, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [
+          taskWithSessionAt("task-a", "external-a", "/tmp/repo/worktree-a"),
+          taskWithSessionAt("task-b", "external-b", "/tmp/repo/worktree-b"),
+        ],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+
+      await Bun.sleep(600);
+    });
+
+    expect(listLiveAgentSessionSnapshotsCalls).toEqual([
+      {
+        directories: ["/tmp/repo/worktree-a", "/tmp/repo/worktree-b"],
+      },
+    ]);
+    expect(reconcileCalls).toEqual([]);
+    expect(retryRequests).toBe(2);
+    service.dispose();
+  });
+
+  test("reconcile only targets matching live worktree sessions discovered through repo-root http runtimes", async () => {
+    const reconcileCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-a",
+            workingDirectory: worktreePath,
+          }),
+        ],
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push({ taskId, records: persistedRecords ?? [] });
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [
+          taskWithSessionAt("task-a", "external-a", worktreePath),
+          taskWithSessionAt("task-b", "external-b", worktreePath),
+        ],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+    });
+
+    expect(reconcileCalls).toHaveLength(1);
+    expect(reconcileCalls[0]?.taskId).toBe("task-a");
+    expect(reconcileCalls[0]?.records.map((record) => record.externalSessionId)).toEqual([
+      "external-a",
+    ]);
+    service.dispose();
+  });
+
+  test("reconcile does not match duplicate external session ids from other scanned worktree directories", async () => {
+    const reconcileCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const worktreeA = "/tmp/repo/worktree-a";
+    const worktreeB = "/tmp/repo/worktree-b";
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: repoPath })]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "external-shared",
+            workingDirectory: worktreeA,
+          }),
+        ],
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push({ taskId, records: persistedRecords ?? [] });
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [
+          taskWithSessionAt("task-a", "external-shared", worktreeA),
+          taskWithSessionAt("task-b", "external-shared", worktreeB),
+        ],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+    });
+
+    expect(reconcileCalls).toHaveLength(1);
+    expect(reconcileCalls[0]?.taskId).toBe("task-a");
+    expect(reconcileCalls[0]?.records.map((record) => record.workingDirectory)).toEqual([
+      worktreeA,
+    ]);
+    service.dispose();
+  });
+
   test("reconcile does not ensure missing stdio worktree runtimes", async () => {
     let runtimeEnsureCalls = 0;
     const listLiveAgentSessionSnapshotsCalls: Array<{
@@ -1148,21 +1641,19 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await withSuppressedExpectedReconcileRetryLogs(2, async () => {
-      await service.reconcilePendingTasks({
-        repoPath,
-        tasks: [
-          taskWithSessionAt("task-1", "external-1", "/tmp/repo/worktree-a"),
-          taskWithSessionAt("task-2", "external-2", "/tmp/repo/worktree-b"),
-        ],
-        isCancelled: () => false,
-        isCurrentRepo: () => true,
-      });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [
+        taskWithSessionAt("task-a", "external-a", worktreePath),
+        taskWithSessionAt("task-b", "external-b", worktreePath),
+      ],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
     });
 
     expect(runtimeEnsureCalls).toBe(0);
     expect(listLiveAgentSessionSnapshotsCalls).toEqual([]);
-    expect(reconcileCalls.sort()).toEqual(["task-1", "task-2"]);
+    expect(reconcileCalls).toEqual([]);
     service.dispose();
   });
 
@@ -1197,11 +1688,13 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [plannerTaskWithSessionAt("task-1", "external-1", repoPath)],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
+    await withSuppressedExpectedRetryableUnmatchedLogs(1, async () => {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [plannerTaskWithSessionAt("task-1", "external-1", repoPath)],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
     });
 
     expect(
