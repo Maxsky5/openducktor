@@ -1038,6 +1038,19 @@ describe("runtime schemas", () => {
       },
       "Runtime descriptors that support file search must declare file or folder prompt references.",
     );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          history: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.history,
+            limitations: ["message-level only", "message-level only"],
+          },
+        }),
+      },
+      "Runtime history limitations must be unique.",
+    );
   });
 
   test("runtime descriptor accepts Codex-style item history and structured approval semantics", () => {
@@ -1056,7 +1069,7 @@ describe("runtime schemas", () => {
         sessionLifecycle: {
           supportedStartModes: ["fresh", "reuse", "fork"],
           supportsSessionFork: true,
-          forkTargets: ["session", "task", "build"],
+          forkTargets: ["session", "message", "item"],
           supportsAttachLiveSessions: true,
           supportsListLiveSessions: true,
           supportsQueuedUserMessages: true,
@@ -1112,6 +1125,7 @@ describe("runtime schemas", () => {
             "skill_mention",
             "app_mention",
             "plugin_mention",
+            "runtime_specific",
           ],
           supportsSlashCommands: true,
           supportsFileSearch: true,
@@ -1122,6 +1136,7 @@ describe("runtime schemas", () => {
     expect(codexDescriptor.capabilities.history.fidelity).toBe("item");
     expect(codexDescriptor.capabilities.approvals.pendingVisibility).toContain("history");
     expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("skill_mention");
+    expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("runtime_specific");
   });
 
   test("runtime connection schema rejects malformed stdio payloads", () => {

@@ -110,11 +110,12 @@ export const runtimePromptInputPartTypeValues = [
   "skill_mention",
   "app_mention",
   "plugin_mention",
+  "runtime_specific",
 ] as const;
 export const runtimePromptInputPartTypeSchema = z.enum(runtimePromptInputPartTypeValues);
 export type RuntimePromptInputPartType = z.infer<typeof runtimePromptInputPartTypeSchema>;
 
-export const runtimeForkTargetValues = ["session", "task", "build"] as const;
+export const runtimeForkTargetValues = ["session", "message", "item"] as const;
 export const runtimeForkTargetSchema = z.enum(runtimeForkTargetValues);
 export type RuntimeForkTarget = z.infer<typeof runtimeForkTargetSchema>;
 
@@ -161,6 +162,11 @@ const runtimePromptInputPartTypesSchema = createUniqueArraySchema(
   "Runtime prompt input part types must be unique.",
 ).min(1);
 
+const runtimeHistoryLimitationsSchema = createUniqueArraySchema(
+  z.string().trim().min(1),
+  "Runtime history limitations must be unique.",
+);
+
 export const runtimeWorkflowCapabilitiesSchema = z
   .object({
     supportsOdtWorkflowTools: z.boolean(),
@@ -193,7 +199,7 @@ export const runtimeHistoryCapabilitiesSchema = z
     stableItemOrder: z.boolean(),
     exposesCompletionState: z.boolean(),
     hydratedEventTypes: runtimeHydratedEventTypesSchema,
-    limitations: z.array(z.string().trim().min(1)),
+    limitations: runtimeHistoryLimitationsSchema,
   })
   .strict();
 export type RuntimeHistoryCapabilities = z.infer<typeof runtimeHistoryCapabilitiesSchema>;

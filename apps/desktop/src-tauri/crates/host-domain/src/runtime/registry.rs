@@ -106,8 +106,8 @@ impl fmt::Display for RuntimeSessionStartMode {
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeForkTarget {
     Session,
-    Task,
-    Build,
+    Message,
+    Item,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -188,6 +188,7 @@ pub enum RuntimePromptInputPartType {
     SkillMention,
     AppMention,
     PluginMention,
+    RuntimeSpecific,
 }
 
 pub const REQUIRED_RUNTIME_SUPPORTED_SCOPES: [RuntimeSupportedScope; 3] = [
@@ -633,16 +634,59 @@ pub struct RuntimeDescriptor {
 }
 
 impl RuntimeDescriptor {
+    fn workflow_alias_errors(&self) -> Vec<String> {
+        let canonical_tool_names = ODT_WORKFLOW_TOOL_NAMES
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        let mut errors = Vec::new();
+        let mut canonical_by_alias = BTreeMap::<&str, &str>::new();
+
+        for (canonical_tool, aliases) in &self.workflow_tool_aliases_by_canonical {
+            if !canonical_tool_names.contains(canonical_tool.as_str()) {
+                errors.push(format!(
+                    "[workflow] unknown workflow tool alias canonical key: {canonical_tool}"
+                ));
+                continue;
+            }
+            if aliases.is_empty() {
+                errors.push(format!(
+                    "[workflow] workflow aliases for canonical tool {canonical_tool} must not be empty"
+                ));
+                continue;
+            }
+            let mut seen_aliases = HashSet::new();
+            for alias in aliases {
+                let alias = alias.as_str();
+                if !seen_aliases.insert(alias) {
+                    errors.push(format!(
+                        "[workflow] workflow aliases for canonical tool {canonical_tool} must be unique"
+                    ));
+                    continue;
+                }
+                if canonical_tool_names.contains(alias) {
+                    errors.push(format!(
+                        "[workflow] workflow alias {alias} for canonical tool {canonical_tool} must not repeat canonical odt_* tool IDs"
+                    ));
+                    continue;
+                }
+                if let Some(existing_canonical_tool) = canonical_by_alias.get(alias) {
+                    if *existing_canonical_tool != canonical_tool.as_str() {
+                        errors.push(format!(
+                            "[workflow] workflow alias {alias} for canonical tool {canonical_tool} is already assigned to canonical tool {existing_canonical_tool}"
+                        ));
+                        continue;
+                    }
+                }
+                canonical_by_alias.insert(alias, canonical_tool.as_str());
+            }
+        }
+
+        errors
+    }
+
     pub fn validate_for_openducktor(&self) -> Vec<String> {
         let mut errors = Vec::new();
-
-        let missing_mandatory_capabilities = self.capabilities.missing_mandatory_capabilities();
-        if !missing_mandatory_capabilities.is_empty() {
-            errors.push(format!(
-                "[baseline] missing mandatory capabilities: {}",
-                missing_mandatory_capabilities.join(", ")
-            ));
-        }
 
         if !self.capabilities.workflow.supports_odt_workflow_tools {
             errors.push("[workflow] missing OpenDucktor workflow tool support".to_string());
@@ -660,6 +704,7 @@ impl RuntimeDescriptor {
             ));
         }
 
+        errors.extend(self.workflow_alias_errors());
         errors.extend(self.capabilities.uniqueness_errors());
         errors.extend(self.capabilities.lifecycle_errors());
         errors.extend(self.capabilities.history_errors());
@@ -921,7 +966,7 @@ fn opencode_runtime_definition() -> RuntimeDefinition {
                         RuntimeHydratedEventType::ToolResult,
                     ],
                     limitations: vec![
-                        "OpenCode history is exposed as message-level snapshots; individual runtime event ids are not yet stable across hydration."
+                        "OpenCode session history is hydrated at message-level fidelity."
                             .to_string(),
                     ],
                 },
@@ -1228,11 +1273,62 @@ mod tests {
         assert_eq!(
             descriptor.validate_for_openducktor(),
             vec![
-                "[baseline] missing mandatory capabilities: workflow.supportsOdtWorkflowTools"
-                    .to_string(),
                 "[workflow] missing OpenDucktor workflow tool support".to_string(),
                 "[role_scoped] missing required workflow scopes: task, build".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_rejects_invalid_workflow_alias_maps() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.workflow_tool_aliases_by_canonical = BTreeMap::from([
+            (
+                "odt_set_spec".to_string(),
+                vec![
+                    "runtime_set_spec".to_string(),
+                    "runtime_set_spec".to_string(),
+                ],
+            ),
+            ("odt_set_plan".to_string(), vec!["odt_set_spec".to_string()]),
+            (
+                "odt_build_completed".to_string(),
+                vec!["shared_alias".to_string()],
+            ),
+            (
+                "odt_build_blocked".to_string(),
+                vec!["shared_alias".to_string()],
+            ),
+            (
+                "odt_set_specc".to_string(),
+                vec!["runtime_unknown".to_string()],
+            ),
+            ("odt_qa_approved".to_string(), vec![]),
+        ]);
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "[workflow] workflow alias shared_alias for canonical tool odt_build_completed is already assigned to canonical tool odt_build_blocked".to_string(),
+                "[workflow] workflow aliases for canonical tool odt_qa_approved must not be empty".to_string(),
+                "[workflow] workflow alias odt_set_spec for canonical tool odt_set_plan must not repeat canonical odt_* tool IDs".to_string(),
+                "[workflow] workflow aliases for canonical tool odt_set_spec must be unique".to_string(),
+                "[workflow] unknown workflow tool alias canonical key: odt_set_specc".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_rejects_duplicate_history_limitations() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor.capabilities.history.limitations = vec![
+            "message-level only".to_string(),
+            "message-level only".to_string(),
+        ];
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec!["[baseline] history.limitations must not contain duplicates".to_string()]
         );
     }
 

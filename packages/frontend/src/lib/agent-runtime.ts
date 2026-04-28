@@ -5,6 +5,7 @@ import {
   agentScenarioValues,
   getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
+  type RuntimeCapabilityClass,
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
@@ -154,6 +155,72 @@ const roleScopeRequirementsDescription = (): string => {
     .join("; ");
 };
 
+const classifyRuntimeDescriptorSchemaIssue = ({
+  path,
+  message,
+}: {
+  path: PropertyKey[];
+  message: string;
+}): RuntimeCapabilityClass => {
+  const descriptorPath = path.map(String).join(".");
+  const capabilityPath = path.slice(1).map(String).join(".");
+  if (
+    descriptorPath.startsWith("workflowToolAliasesByCanonical") ||
+    descriptorPath.startsWith("readOnlyRoleBlockedTools")
+  ) {
+    return "workflow";
+  }
+  if (capabilityPath.startsWith("workflow.supportsOdtWorkflowTools")) {
+    return "workflow";
+  }
+  if (capabilityPath.startsWith("workflow.supportedScopes")) {
+    return "role_scoped";
+  }
+  if (capabilityPath.startsWith("sessionLifecycle.supportsSessionFork")) {
+    return "scenario_scoped";
+  }
+  if (capabilityPath.startsWith("sessionLifecycle.forkTargets")) {
+    return "scenario_scoped";
+  }
+  if (
+    capabilityPath.startsWith("sessionLifecycle.supportedStartModes") &&
+    message.toLowerCase().includes("fork")
+  ) {
+    return "scenario_scoped";
+  }
+  if (capabilityPath.startsWith("approvals.")) {
+    return "workflow";
+  }
+  if (capabilityPath.startsWith("structuredInput.")) {
+    return "workflow";
+  }
+  if (capabilityPath.startsWith("promptInput.supportedParts")) {
+    if (message.includes("slash commands") || message.includes("file search")) {
+      return "optional_enhancement";
+    }
+    return "baseline";
+  }
+  if (capabilityPath.startsWith("promptInput.supports")) {
+    return "optional_enhancement";
+  }
+  if (capabilityPath.startsWith("optionalSurfaces.")) {
+    return "optional_enhancement";
+  }
+  if (capabilityPath.startsWith("history.")) {
+    return "baseline";
+  }
+  return "baseline";
+};
+
+const formatRuntimeDescriptorSchemaIssue = (issue: {
+  path: PropertyKey[];
+  message: string;
+}): string => {
+  const issueClass = classifyRuntimeDescriptorSchemaIssue(issue);
+  const issuePath = issue.path.map(String).join(".") || "descriptor";
+  return `[${issueClass}] runtime descriptor schema violation at ${issuePath}: ${issue.message}`;
+};
+
 export const getRuntimeDescriptorCapabilityConfigErrors = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
@@ -230,19 +297,8 @@ export const validateRuntimeDefinitionForOpenDucktor = (
   const descriptorParseResult = runtimeDescriptorSchema.safeParse(runtimeDescriptor);
   const schemaErrors = descriptorParseResult.success
     ? []
-    : descriptorParseResult.error.issues.map(
-        (issue) =>
-          `[baseline] runtime descriptor schema violation at ${issue.path.join(".") || "descriptor"}: ${issue.message}`,
-      );
-  const missingMandatory = getMissingMandatoryRuntimeCapabilities(runtimeDescriptor);
-  const errors = [
-    ...schemaErrors,
-    ...getRuntimeDescriptorCapabilityConfigErrors(runtimeDescriptor),
-  ];
-  if (missingMandatory.length > 0) {
-    errors.unshift(`missing mandatory capabilities: ${missingMandatory.join(", ")}`);
-  }
-  return errors;
+    : descriptorParseResult.error.issues.map(formatRuntimeDescriptorSchemaIssue);
+  return [...schemaErrors, ...getRuntimeDescriptorCapabilityConfigErrors(runtimeDescriptor)];
 };
 
 export const validateRuntimeDefinitionsForOpenDucktor = (

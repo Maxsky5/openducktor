@@ -46,7 +46,6 @@ describe("agent-runtime capability policies", () => {
       "workflow.supportsOdtWorkflowTools",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "missing mandatory capabilities: workflow.supportsOdtWorkflowTools",
       "[workflow] missing OpenDucktor workflow tool support",
     ]);
   });
@@ -87,8 +86,8 @@ describe("agent-runtime capability policies", () => {
     } as RuntimeDescriptor;
 
     expect(validateRuntimeDefinitionForOpenDucktor(invariantViolation)).toEqual([
-      "[baseline] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support slash commands must declare slash command prompt parts.",
-      "[baseline] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support file search must declare file or folder prompt references.",
+      "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support slash commands must declare slash command prompt parts.",
+      "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support file search must declare file or folder prompt references.",
       "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork",
     ]);
 
@@ -181,7 +180,7 @@ describe("agent-runtime capability policies", () => {
     });
 
     expect(validateRuntimeDefinitionsForOpenDucktor([descriptor])).toEqual([
-      "Runtime 'opencode' is incompatible with OpenDucktor: missing mandatory capabilities: workflow.supportsOdtWorkflowTools; [workflow] missing OpenDucktor workflow tool support",
+      "Runtime 'opencode' is incompatible with OpenDucktor: [workflow] missing OpenDucktor workflow tool support",
     ]);
   });
 
