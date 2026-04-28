@@ -91,6 +91,7 @@ type AgentStudioPageModelsViewContext = Pick<
   | "contextSwitchVersion"
   | "isActiveTaskHydrated"
   | "isActiveTaskHydrationFailed"
+  | "isViewSessionHistoryHydrated"
   | "isViewSessionHistoryHydrationFailed"
   | "isViewSessionHistoryHydrating"
   | "isViewSessionWaitingForRuntimeReadiness"
@@ -200,6 +201,7 @@ export const buildAgentStudioPageModelsArgs = ({
       isTaskHydrating: Boolean(
         view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
       ),
+      isSessionHistoryHydrated: view.isViewSessionHistoryHydrated,
       isSessionHistoryHydrating: view.isViewSessionHistoryHydrating,
       isWaitingForRuntimeReadiness: view.isViewSessionWaitingForRuntimeReadiness,
       isSessionHistoryHydrationFailed: view.isViewSessionHistoryHydrationFailed,
@@ -381,6 +383,7 @@ export function useAgentStudioOrchestrationController({
       contextSwitchVersion,
       isActiveTaskHydrated,
       isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
+      isViewSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,
       isViewSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
       isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
       isViewSessionWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,

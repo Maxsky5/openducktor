@@ -313,6 +313,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     mode: "non_interactive",
     session: runtimeData.session,
     isTaskHydrating: shouldShowPendingSessionResolution,
+    isSessionHistoryHydrated: hydration.isActiveSessionHistoryHydrated,
     contextSwitchVersion: 0,
     showThinkingMessages: activeWorkspace ? showThinkingMessages : DEFAULT_SHOW_THINKING_MESSAGES,
     isSessionWorking,

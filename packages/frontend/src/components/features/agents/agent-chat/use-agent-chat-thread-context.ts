@@ -4,6 +4,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 type UseAgentChatThreadContextArgs = {
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
+  isSessionHistoryHydrated: boolean;
   contextSwitchVersion: number;
 };
 
@@ -16,12 +17,18 @@ type AgentChatThreadContext = {
 export const useAgentChatThreadContext = ({
   activeSession,
   isTaskHydrating,
+  isSessionHistoryHydrated,
   contextSwitchVersion,
 }: UseAgentChatThreadContextArgs): AgentChatThreadContext => {
   const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
   const contextSwitchVersionRef = useRef(contextSwitchVersion);
   const clearIntentRafRef = useRef<number | null>(null);
   const activeSessionId = activeSession?.sessionId ?? null;
+  const hasPendingContextSwitchVersion = contextSwitchVersionRef.current !== contextSwitchVersion;
+  const canRenderActiveSession = activeSession !== null && isSessionHistoryHydrated;
+  const shouldClearThread =
+    isTaskHydrating ||
+    (!canRenderActiveSession && (hasPendingContextSwitchVersion || isContextSwitchIntentActive));
 
   useEffect(() => {
     if (contextSwitchVersionRef.current === contextSwitchVersion) {
@@ -78,9 +85,8 @@ export const useAgentChatThreadContext = ({
   }, []);
 
   return {
-    threadSession: activeSession,
-    activeSessionId,
-    isContextSwitching:
-      isTaskHydrating || (isContextSwitchIntentActive && activeSessionId === null),
+    threadSession: shouldClearThread ? null : activeSession,
+    activeSessionId: shouldClearThread ? null : activeSessionId,
+    isContextSwitching: shouldClearThread,
   };
 };
