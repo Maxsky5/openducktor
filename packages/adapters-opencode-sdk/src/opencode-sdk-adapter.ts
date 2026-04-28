@@ -23,6 +23,7 @@ import type {
   LoadAgentSessionTodosInput,
   ReplyPermissionInput,
   ReplyQuestionInput,
+  ReplyRuntimeSessionPermissionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -57,6 +58,7 @@ import {
   loadSessionTodos,
   replyPermission,
   replyQuestion,
+  replyRuntimeSessionPermission,
 } from "./message-ops";
 import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import {
@@ -666,6 +668,16 @@ export class OpencodeSdkAdapter
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
     const session = requireSession(this.sessions, input.sessionId);
     await replyPermission(session, input);
+  }
+
+  async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
+    await replyRuntimeSessionPermission(this.createClient, {
+      ...toOpencodeRuntimeClientInput(input.runtimeConnection, "reply runtime session permission"),
+      sessionId: input.externalSessionId,
+      requestId: input.requestId,
+      reply: input.reply,
+      ...(input.message ? { message: input.message } : {}),
+    });
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {

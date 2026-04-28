@@ -20,9 +20,11 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentPendingPermissionRequest,
   AgentRole,
   AgentRuntimeConnection,
   AgentScenario,
+  AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
@@ -208,6 +210,16 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionHistory: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionHistoryMessage[]>;
+  readRuntimeSessionPendingInput: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentPendingPermissionRequest[]>;
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
@@ -263,6 +275,14 @@ export type AgentStateContextValue = {
     reply: "once" | "always" | "reject",
     message?: string,
   ) => Promise<void>;
+  replyRuntimeSessionPermission: (input: {
+    runtimeKind: RuntimeKind;
+    runtimeConnection: AgentRuntimeConnection;
+    externalSessionId: string;
+    requestId: string;
+    reply: "once" | "always" | "reject";
+    message?: string;
+  }) => Promise<void>;
   answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };
 

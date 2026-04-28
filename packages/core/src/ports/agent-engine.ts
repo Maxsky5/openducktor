@@ -165,6 +165,15 @@ export type ReplyPermissionInput = {
   message?: string;
 };
 
+export type ReplyRuntimeSessionPermissionInput = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+  externalSessionId: string;
+  requestId: string;
+  reply: "once" | "always" | "reject";
+  message?: string;
+};
+
 export type ReplyQuestionInput = {
   sessionId: string;
   requestId: string;
@@ -212,6 +221,7 @@ export interface AgentSessionPort {
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
+  replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
   stopSession(sessionId: string): Promise<void>;

@@ -89,7 +89,7 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("role and input helpers", () => {
-    test("maps assistant role labels using metadata and session fallback", () => {
+    test("maps assistant role labels using assistant metadata only", () => {
       const assistantMessage = createMessage({
         meta: {
           kind: "assistant",
@@ -97,21 +97,20 @@ describe("agent-chat-message-card-model", () => {
         },
       });
 
-      expect(assistantRoleFromMessage(assistantMessage, "spec")).toBe("planner");
-      expect(roleLabel("assistant", "build", assistantMessage)).toBe("Planner");
+      expect(assistantRoleFromMessage(assistantMessage)).toBe("planner");
+      expect(roleLabel("assistant", assistantMessage)).toBe("Planner");
 
       const noMetaMessage = createMessage();
-      expect(assistantRoleFromMessage(noMetaMessage, "qa")).toBe("qa");
-      expect(roleLabel("assistant", "qa", noMetaMessage)).toBe("QA");
-      expect(roleLabel("assistant", null, noMetaMessage)).toBe("Assistant");
+      expect(assistantRoleFromMessage(noMetaMessage)).toBeNull();
+      expect(roleLabel("assistant", noMetaMessage)).toBe("Assistant");
     });
 
     test("returns non-assistant role labels", () => {
       const message = createMessage({ role: "system" });
-      expect(assistantRoleFromMessage(createMessage({ role: "tool" }), "build")).toBeNull();
-      expect(roleLabel("thinking", null, message)).toBe("Thinking");
-      expect(roleLabel("tool", null, message)).toBe("Activity");
-      expect(roleLabel("system", null, message)).toBe("System");
+      expect(assistantRoleFromMessage(createMessage({ role: "tool" }))).toBeNull();
+      expect(roleLabel("thinking", message)).toBe("Thinking");
+      expect(roleLabel("tool", message)).toBe("Activity");
+      expect(roleLabel("system", message)).toBe("System");
     });
 
     test("detects meaningful input values recursively", () => {

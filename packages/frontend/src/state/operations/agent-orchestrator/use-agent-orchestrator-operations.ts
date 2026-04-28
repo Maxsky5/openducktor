@@ -42,6 +42,7 @@ import {
   resolveAssistantTurnDurationMs,
 } from "./support/assistant-turn-duration";
 import { isTranscriptAgentSession } from "./support/session-purpose";
+import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
@@ -205,6 +206,26 @@ export function useAgentOrchestratorOperations({
     [workspaceRepoPath, commitSessions, persistSessionRecord, sessionsRef],
   );
 
+  const replyRuntimeSessionPermission = useCallback(
+    async (input: {
+      runtimeKind: RuntimeKind;
+      runtimeConnection: AgentRuntimeConnection;
+      externalSessionId: string;
+      requestId: string;
+      reply: "once" | "always" | "reject";
+      message?: string;
+    }) => {
+      await agentEngine.replyRuntimeSessionPermission(input);
+      clearSubagentPendingPermissionFromSessions({
+        sessionsRef,
+        updateSession,
+        targetSessionId: input.externalSessionId,
+        requestId: input.requestId,
+      });
+    },
+    [agentEngine, sessionsRef, updateSession],
+  );
+
   const resolveTurnDurationMs = useCallback(
     (
       sessionId: string,
@@ -273,6 +294,35 @@ export function useAgentOrchestratorOperations({
         runtimeConnection,
         externalSessionId,
       }),
+    [agentEngine],
+  );
+
+  const readSessionHistory = useCallback(
+    (
+      runtimeKind: RuntimeKind,
+      runtimeConnection: AgentRuntimeConnection,
+      externalSessionId: string,
+    ) =>
+      agentEngine.loadSessionHistory({
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+      }),
+    [agentEngine],
+  );
+
+  const readRuntimeSessionPendingInput = useCallback(
+    async (
+      runtimeKind: RuntimeKind,
+      runtimeConnection: AgentRuntimeConnection,
+      externalSessionId: string,
+    ) => {
+      const pendingInputBySession = await agentEngine.listLiveAgentSessionPendingInput({
+        runtimeKind,
+        runtimeConnection,
+      });
+      return pendingInputBySession[externalSessionId]?.permissions ?? [];
+    },
     [agentEngine],
   );
 
@@ -744,8 +794,11 @@ export function useAgentOrchestratorOperations({
       loadAgentSessions,
       readSessionModelCatalog,
       readSessionTodos,
+      readSessionHistory,
+      readRuntimeSessionPendingInput,
       readSessionSlashCommands,
       readSessionFileSearch,
+      replyRuntimeSessionPermission,
       removeAgentSession,
       removeAgentSessions,
       sessionActions,
@@ -768,10 +821,13 @@ export function useAgentOrchestratorOperations({
     loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
+    readSessionHistory,
+    readRuntimeSessionPendingInput,
     retrySessionRuntimeAttachment,
     ensureSessionReadyForView,
     readSessionSlashCommands,
     readSessionFileSearch,
+    replyRuntimeSessionPermission,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

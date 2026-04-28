@@ -2,7 +2,9 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentPendingPermissionRequest,
   AgentRuntimeConnection,
+  AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
@@ -13,6 +15,7 @@ import { runtimeConnectionTransportKey } from "@/state/operations/agent-orchestr
 export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
+export const SESSION_HISTORY_STALE_TIME_MS = 0;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 const agentSessionRuntimeQueryKeys = {
@@ -54,6 +57,32 @@ const agentSessionRuntimeQueryKeys = {
     [
       ...agentSessionRuntimeQueryKeys.all,
       "todos",
+      runtimeKind,
+      runtimeConnectionTransportKey(runtimeConnection),
+      normalizeWorkingDirectory(runtimeConnection.workingDirectory),
+      externalSessionId,
+    ] as const,
+  history: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) =>
+    [
+      ...agentSessionRuntimeQueryKeys.all,
+      "history",
+      runtimeKind,
+      runtimeConnectionTransportKey(runtimeConnection),
+      normalizeWorkingDirectory(runtimeConnection.workingDirectory),
+      externalSessionId,
+    ] as const,
+  pendingInput: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) =>
+    [
+      ...agentSessionRuntimeQueryKeys.all,
+      "pending-input",
       runtimeKind,
       runtimeConnectionTransportKey(runtimeConnection),
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
@@ -123,4 +152,48 @@ export const sessionTodosQueryOptions = (
     queryFn: (): Promise<AgentSessionTodoItem[]> =>
       readSessionTodos(runtimeKind, runtimeConnection, externalSessionId),
     staleTime: SESSION_TODOS_STALE_TIME_MS,
+  });
+
+export const sessionHistoryQueryOptions = (
+  runtimeKind: RuntimeKind,
+  runtimeConnection: AgentRuntimeConnection,
+  externalSessionId: string,
+  readSessionHistory: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionHistoryMessage[]>,
+) =>
+  queryOptions({
+    queryKey: agentSessionRuntimeQueryKeys.history(
+      runtimeKind,
+      runtimeConnection,
+      externalSessionId,
+    ),
+    queryFn: (): Promise<AgentSessionHistoryMessage[]> =>
+      readSessionHistory(runtimeKind, runtimeConnection, externalSessionId),
+    staleTime: SESSION_HISTORY_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+  });
+
+export const sessionPendingInputQueryOptions = (
+  runtimeKind: RuntimeKind,
+  runtimeConnection: AgentRuntimeConnection,
+  externalSessionId: string,
+  readRuntimeSessionPendingInput: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentPendingPermissionRequest[]>,
+) =>
+  queryOptions({
+    queryKey: agentSessionRuntimeQueryKeys.pendingInput(
+      runtimeKind,
+      runtimeConnection,
+      externalSessionId,
+    ),
+    queryFn: (): Promise<AgentPendingPermissionRequest[]> =>
+      readRuntimeSessionPendingInput(runtimeKind, runtimeConnection, externalSessionId),
+    staleTime: SESSION_HISTORY_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
   });

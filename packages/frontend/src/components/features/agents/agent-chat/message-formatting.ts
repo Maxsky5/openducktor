@@ -51,26 +51,19 @@ export const toSingleLineMarkdown = (value: string): string => {
     .trim();
 };
 
-export const assistantRoleFromMessage = (
-  message: AgentChatMessage,
-  sessionRole: AgentRole | null,
-): AgentRole | null => {
+export const assistantRoleFromMessage = (message: AgentChatMessage): AgentRole | null => {
   if (message.role !== "assistant") {
     return null;
   }
   if (message.meta?.kind === "assistant") {
-    return message.meta.agentRole;
+    return message.meta.agentRole ?? null;
   }
-  return sessionRole;
+  return null;
 };
 
-export const roleLabel = (
-  role: AgentChatMessage["role"],
-  sessionRole: AgentRole | null,
-  message: AgentChatMessage,
-): string => {
+export const roleLabel = (role: AgentChatMessage["role"], message: AgentChatMessage): string => {
   if (role === "assistant") {
-    const assistantRole = assistantRoleFromMessage(message, sessionRole);
+    const assistantRole = assistantRoleFromMessage(message);
     return assistantRole ? AGENT_ROLE_LABELS[assistantRole] : "Assistant";
   }
   if (role === "thinking") {

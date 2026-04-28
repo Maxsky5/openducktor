@@ -1,42 +1,135 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
+import { act } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";
+import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
-const hydrateRequestedTaskSessionHistory = mock(async () => {});
-const ensureSessionReadyForView = mock(async () => true);
+const readSessionHistory = mock(
+  async (): Promise<AgentSessionHistoryMessage[]> => [
+    {
+      messageId: "message-user-1",
+      role: "user" as const,
+      timestamp: "2026-02-22T12:00:00.000Z",
+      text: "Inspect this",
+      displayParts: [],
+      state: "read" as const,
+      parts: [],
+    },
+  ],
+);
+const readSessionModelCatalog = mock(async () => ({ profiles: [], models: [] }));
+const readSessionTodos = mock(async () => []);
+const readRuntimeSessionPendingInput = mock(async (): Promise<AgentPermissionRequest[]> => []);
 const replyAgentPermission = mock(async () => {});
+const replyRuntimeSessionPermission = mock(async () => {});
 const useAgentSessionMock = mock((_sessionId: string | null) => null);
-let latestHydrationArgs: Record<string, unknown> | null = null;
 let latestSurfaceModelArgs: Record<string, unknown> | null = null;
-let runtimeDataSession: AgentSessionState | null = null;
+let runtimeList: RuntimeInstanceSummary[] = [];
+let runtimeListError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualWorkspaceQueries: Awaited<typeof import("@/state/queries/workspace")>;
+let actualRuntimeQueries: Awaited<typeof import("@/state/queries/runtime")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("./use-repo-runtime-readiness")>;
 let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-data")>;
-let actualSessionHydration: Awaited<typeof import("./use-agent-chat-session-hydration")>;
 let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
 
-const persistedRecords: AgentSessionRecord[] = [
-  {
-    sessionId: "session-1",
-    externalSessionId: "external-1",
-    role: "build",
-    scenario: "build_implementation_start",
-    startedAt: "2026-02-22T12:00:00.000Z",
-    runtimeKind: "opencode",
-    workingDirectory: "/repo-a",
-    selectedModel: null,
+const transcriptSource: RuntimeSessionTranscriptSource = {
+  runtimeKind: "opencode",
+  runtimeId: "runtime-1",
+  workingDirectory: "/repo-a",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4096",
   },
-];
+};
+
+const transcriptSourceWithRuntimeIdOnly: RuntimeSessionTranscriptSource = {
+  runtimeKind: "opencode",
+  runtimeId: "runtime-1",
+  workingDirectory: "/repo-a",
+};
+
+const pendingPermission = {
+  requestId: "permission-1",
+  permission: "file.read",
+  patterns: ["src/app.ts"],
+};
+
+const transcriptSourceWithPendingPermission: RuntimeSessionTranscriptSource = {
+  ...transcriptSource,
+  pendingPermissions: [pendingPermission],
+};
+
+const liveTranscriptSource: RuntimeSessionTranscriptSource = {
+  ...transcriptSource,
+  isLive: true,
+};
+
+const runtime = {
+  kind: "opencode",
+  runtimeId: "runtime-1",
+  repoPath: "/repo-a",
+  taskId: null,
+  role: "workspace",
+  workingDirectory: "/repo-a",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4096",
+  },
+  startedAt: "2026-02-22T11:59:00.000Z",
+  descriptor: {} as RuntimeInstanceSummary["descriptor"],
+} satisfies RuntimeInstanceSummary;
 
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
   <QueryProvider useIsolatedClient>{children}</QueryProvider>
 );
+
+const installFakeIntervals = () => {
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nextIntervalId = 1;
+  const intervalCallbacks = new Map<number, () => void>();
+
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    const intervalId = nextIntervalId;
+    nextIntervalId += 1;
+    intervalCallbacks.set(intervalId, () => {
+      if (typeof callback === "function") {
+        callback();
+      }
+    });
+    return intervalId as unknown as ReturnType<typeof setInterval>;
+  }) as unknown as typeof globalThis.setInterval;
+
+  globalThis.clearInterval = ((intervalId: ReturnType<typeof setInterval>) => {
+    intervalCallbacks.delete(Number(intervalId));
+  }) as typeof globalThis.clearInterval;
+
+  const fireIntervals = async (): Promise<void> => {
+    const callbacks = [...intervalCallbacks.values()];
+    await act(async () => {
+      for (const callback of callbacks) {
+        callback();
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  return {
+    fireIntervals,
+    restore: () => {
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    },
+  };
+};
 
 describe("useReadonlySessionTranscriptSurfaceModel", () => {
   beforeAll(async () => {
@@ -44,40 +137,57 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       actualAppStateProvider,
       actualAppStateContexts,
       actualWorkspaceQueries,
+      actualRuntimeQueries,
       actualRepoRuntimeReadiness,
       actualRuntimeData,
-      actualSessionHydration,
       actualSurfaceModel,
     ] = await Promise.all([
       import("@/state/app-state-provider"),
       import("@/state/app-state-contexts"),
       import("@/state/queries/workspace"),
+      import("@/state/queries/runtime"),
       import("./use-repo-runtime-readiness"),
       import("./use-agent-chat-session-runtime-data"),
-      import("./use-agent-chat-session-hydration"),
       import("./use-agent-chat-surface-model"),
     ]);
   });
 
   beforeEach(() => {
-    hydrateRequestedTaskSessionHistory.mockClear();
-    ensureSessionReadyForView.mockClear();
+    readSessionHistory.mockClear();
+    readSessionHistory.mockImplementation(
+      async (): Promise<AgentSessionHistoryMessage[]> => [
+        {
+          messageId: "message-user-1",
+          role: "user" as const,
+          timestamp: "2026-02-22T12:00:00.000Z",
+          text: "Inspect this",
+          displayParts: [],
+          state: "read" as const,
+          parts: [],
+        },
+      ],
+    );
+    readSessionModelCatalog.mockClear();
+    readSessionTodos.mockClear();
+    readRuntimeSessionPendingInput.mockClear();
+    readRuntimeSessionPendingInput.mockImplementation(
+      async (): Promise<AgentPermissionRequest[]> => [],
+    );
     replyAgentPermission.mockClear();
+    replyRuntimeSessionPermission.mockClear();
     useAgentSessionMock.mockClear();
-    latestHydrationArgs = null;
     latestSurfaceModelArgs = null;
-    runtimeDataSession = null;
+    runtimeList = [runtime];
+    runtimeListError = null;
 
     mock.module("@/state/app-state-provider", () => ({
       useAgentOperations: () => ({
-        ensureSessionReadyForView,
-        hydrateRequestedTaskSessionHistory,
-        readSessionModelCatalog: async () => ({
-          profiles: [],
-          models: [],
-        }),
-        readSessionTodos: async () => [],
+        readSessionHistory,
+        readSessionModelCatalog,
+        readSessionTodos,
+        readRuntimeSessionPendingInput,
         replyAgentPermission,
+        replyRuntimeSessionPermission,
       }),
       useAgentSession: useAgentSessionMock,
       useChecksState: () => ({
@@ -110,6 +220,18 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       }),
     }));
 
+    mock.module("@/state/queries/runtime", () => ({
+      runtimeListQueryOptions: () => ({
+        queryKey: ["runtime", "list", "opencode", "/repo-a"],
+        queryFn: async () => {
+          if (runtimeListError) {
+            throw runtimeListError;
+          }
+          return runtimeList;
+        },
+      }),
+    }));
+
     mock.module("./use-repo-runtime-readiness", () => ({
       useRepoRuntimeReadiness: () => ({
         readinessState: "ready" as const,
@@ -121,24 +243,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }));
 
     mock.module("./use-agent-chat-session-runtime-data", () => ({
-      useAgentChatSessionRuntimeData: () => ({
-        session: runtimeDataSession,
+      useAgentChatSessionRuntimeData: ({ session }: { session: AgentSessionState | null }) => ({
+        session,
         runtimeDataError: null,
       }),
-    }));
-
-    mock.module("./use-agent-chat-session-hydration", () => ({
-      useAgentChatSessionHydration: (args: Record<string, unknown>) => {
-        latestHydrationArgs = args;
-        return {
-          isActiveTaskHydrated: true,
-          isActiveTaskHydrationFailed: false,
-          isActiveSessionHistoryHydrated: false,
-          isActiveSessionHistoryHydrationFailed: false,
-          isActiveSessionHistoryHydrating: false,
-          isWaitingForRuntimeReadiness: false,
-        };
-      },
     }));
 
     mock.module("./use-agent-chat-surface-model", () => ({
@@ -147,7 +255,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         return {
           mode: "non_interactive" as const,
           thread: {
-            session: null,
+            session: args.session ?? null,
             isSessionWorking: false,
             showThinkingMessages: false,
             isSessionViewLoading: false,
@@ -158,7 +266,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
             blockedReason: null,
             isLoadingChecks: false,
             onRefreshChecks: () => {},
-            emptyState: null,
+            emptyState: args.emptyState ?? null,
             isStarting: false,
             isSending: false,
             sessionAgentColors: {},
@@ -186,14 +294,14 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
       ["@/state/queries/workspace", () => Promise.resolve(actualWorkspaceQueries)],
+      ["@/state/queries/runtime", () => Promise.resolve(actualRuntimeQueries)],
       ["./use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
       ["./use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
-      ["./use-agent-chat-session-hydration", () => Promise.resolve(actualSessionHydration)],
       ["./use-agent-chat-surface-model", () => Promise.resolve(actualSurfaceModel)],
     ]);
   });
 
-  test("hydrates a persisted transcript session when the live store is missing it", async () => {
+  test("loads a runtime transcript without task-owned session records", async () => {
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -206,311 +314,86 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
+        sessionId: "session-subagent-1",
+        source: transcriptSource,
       },
       { wrapper },
     );
 
     try {
       await harness.mount();
-      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
-
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+      await harness.waitFor(() => {
+        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
+        return session?.sessionId === "session-subagent-1";
       });
-      expect(ensureSessionReadyForView).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
 
-  test("hydrates a runtime subagent transcript when no workflow session record exists", async () => {
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-subagent-1",
-        subagentRuntime: {
-          parentRole: "build",
-          runtimeKind: "opencode",
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        "opencode",
+        {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4096",
           workingDirectory: "/repo-a",
         },
-        isResolvingRequestedSession: false,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
-
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
-        taskId: "TASK-1",
-        sessionId: "session-subagent-1",
-        historyPreludeMode: "none",
-        persistedRecords: [
-          {
-            sessionId: "session-subagent-1",
-            externalSessionId: "session-subagent-1",
-            role: "build",
-            scenario: "build_implementation_start",
-            startedAt: "1970-01-01T00:00:00.000Z",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo-a",
-            selectedModel: null,
-          },
-        ],
-      });
+        "session-subagent-1",
+      );
+      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      expect(session.externalSessionId).toBe("session-subagent-1");
+      expect(session.messages).toBeTruthy();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("does not pass parent workflow records into subagent runtime transcript hydration", async () => {
-    const parentRecord: AgentSessionRecord = {
-      sessionId: "session-parent-1",
-      externalSessionId: "external-parent-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      startedAt: "2026-02-22T12:01:00.000Z",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo-a",
-      selectedModel: null,
-    };
+  test("does not load history while the dialog is closed", async () => {
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
       useReadonlySessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-subagent-1",
-        persistedRecords: [parentRecord],
-        historyPreludeMode: "task_context",
-        subagentRuntime: {
-          parentRole: "build",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo-a",
-        },
-        isResolvingRequestedSession: false,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
-
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
-        taskId: "TASK-1",
-        sessionId: "session-subagent-1",
-        historyPreludeMode: "none",
-        persistedRecords: [
-          {
-            sessionId: "session-subagent-1",
-            externalSessionId: "session-subagent-1",
-            role: "build",
-            scenario: "build_implementation_start",
-            startedAt: "1970-01-01T00:00:00.000Z",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo-a",
-            selectedModel: null,
-          },
-        ],
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("keeps only the requested subagent record when mixed workflow records are provided", async () => {
-    const parentRecord: AgentSessionRecord = {
-      sessionId: "session-parent-1",
-      externalSessionId: "external-parent-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      startedAt: "2026-02-22T12:01:00.000Z",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo-a",
-      selectedModel: null,
-    };
-    const subagentRecord: AgentSessionRecord = {
-      sessionId: "session-subagent-1",
-      externalSessionId: "session-subagent-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      startedAt: "2026-02-22T12:02:00.000Z",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo-a",
-      selectedModel: null,
-    };
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-subagent-1",
-        persistedRecords: [parentRecord, subagentRecord],
-        subagentRuntime: {
-          parentRole: "build",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo-a",
-        },
-        isResolvingRequestedSession: false,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
-
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledWith({
-        taskId: "TASK-1",
-        sessionId: "session-subagent-1",
-        historyPreludeMode: "none",
-        persistedRecords: [subagentRecord],
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("shows a failure empty state when requested history hydration fails", async () => {
-    hydrateRequestedTaskSessionHistory.mockImplementationOnce(async () => {
-      throw new Error("hydrate boom");
-    });
-    const originalConsoleWarn = console.warn;
-    const consoleWarn = mock(() => {});
-    console.warn = consoleWarn;
-
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => latestSurfaceModelArgs?.emptyState !== null);
-
-      expect(latestSurfaceModelArgs?.emptyState).toEqual({
-        title: "Failed to load conversation.",
-      });
-      expect(consoleWarn).toHaveBeenCalled();
-    } finally {
-      console.warn = originalConsoleWarn;
-      await harness.unmount();
-    }
-  });
-
-  test("disables hydration inputs and clears stale failure state when the dialog closes", async () => {
-    hydrateRequestedTaskSessionHistory.mockImplementationOnce(async () => {
-      throw new Error("hydrate boom");
-    });
-    const originalConsoleWarn = console.warn;
-    const consoleWarn = mock(() => {});
-    console.warn = consoleWarn;
-
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => latestSurfaceModelArgs?.emptyState !== null);
-
-      expect(latestSurfaceModelArgs?.emptyState).toEqual({
-        title: "Failed to load conversation.",
-      });
-
-      await harness.update({
         activeWorkspace: {
           workspaceId: "workspace-a",
           workspaceName: "Workspace A",
           repoPath: "/repo-a",
         },
         isOpen: false,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
-      });
+        sessionId: "session-subagent-1",
+        source: transcriptSource,
+      },
+      { wrapper },
+    );
 
-      expect(latestHydrationArgs).toMatchObject({
-        activeWorkspace: null,
-        activeTaskId: "",
-        activeSession: null,
-        runtimeAttachmentCandidates: [],
-      });
-      expect(latestSurfaceModelArgs?.emptyState).toBeNull();
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(1);
-      expect(consoleWarn).toHaveBeenCalled();
+    try {
+      await harness.mount();
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
-      console.warn = originalConsoleWarn;
       await harness.unmount();
     }
   });
 
-  test("rehydrates the transcript when the dialog is reopened", async () => {
+  test("refreshes live runtime pending permissions and history while open", async () => {
+    const { fireIntervals, restore } = installFakeIntervals();
+    let historyResponse: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "message-user-1",
+        role: "user" as const,
+        timestamp: "2026-02-22T12:00:00.000Z",
+        text: "Inspect this",
+        displayParts: [],
+        state: "read" as const,
+        parts: [],
+      },
+    ];
+    let pendingPermissionsResponse: AgentPermissionRequest[] = [];
+
+    readSessionHistory.mockImplementation(
+      async (): Promise<AgentSessionHistoryMessage[]> => historyResponse,
+    );
+    readRuntimeSessionPendingInput.mockImplementation(
+      async (): Promise<AgentPermissionRequest[]> => pendingPermissionsResponse,
+    );
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -523,61 +406,70 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
+        sessionId: "session-subagent-1",
+        source: {
+          ...liveTranscriptSource,
+          pendingPermissions: [pendingPermission],
+        },
       },
       { wrapper },
     );
 
     try {
       await harness.mount();
-      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 1);
+      await harness.waitFor(
+        () =>
+          readSessionHistory.mock.calls.length === 1 &&
+          readRuntimeSessionPendingInput.mock.calls.length === 1,
+      );
+      await harness.waitFor(() => {
+        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
+        return session?.pendingPermissions.length === 0;
+      });
+      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: false });
 
-      await harness.update({
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
+      historyResponse = [
+        {
+          messageId: "message-user-1",
+          role: "user" as const,
+          timestamp: "2026-02-22T12:00:00.000Z",
+          text: "Inspect this",
+          displayParts: [],
+          state: "read" as const,
+          parts: [],
         },
-        isOpen: false,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
-      });
-
-      await harness.update({
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
+        {
+          messageId: "message-assistant-1",
+          role: "assistant" as const,
+          timestamp: "2026-02-22T12:00:01.000Z",
+          text: "Working on it",
+          parts: [],
         },
-        isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
+      ];
+      pendingPermissionsResponse = [pendingPermission];
+      await fireIntervals();
+      await harness.waitFor(
+        () =>
+          readSessionHistory.mock.calls.length === 2 &&
+          readRuntimeSessionPendingInput.mock.calls.length === 2,
+      );
+      await harness.waitFor(() => {
+        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
+        return session?.pendingPermissions.length === 1;
       });
 
-      await harness.waitFor(() => hydrateRequestedTaskSessionHistory.mock.calls.length === 2);
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenNthCalledWith(2, {
-        taskId: "TASK-1",
-        sessionId: "session-1",
-        persistedRecords,
-      });
+      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      expect(session.pendingPermissions).toEqual([pendingPermission]);
+      expect(readSessionHistory).toHaveBeenCalledTimes(2);
+      expect(readRuntimeSessionPendingInput).toHaveBeenCalledTimes(2);
+      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
     } finally {
       await harness.unmount();
+      restore();
     }
   });
 
-  test("wires permission replies to the displayed transcript session", async () => {
-    runtimeDataSession = {
-      sessionId: "session-child-1",
-      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
-    } as AgentSessionState;
-
+  test("keeps parent-observed subagent permissions on the transcript session", async () => {
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -590,39 +482,85 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-child-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
+        sessionId: "session-subagent-1",
+        source: transcriptSourceWithPendingPermission,
       },
       { wrapper },
     );
 
     try {
       await harness.mount();
+      await harness.waitFor(() => {
+        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
+        return session?.pendingPermissions.length === 1;
+      });
+
+      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      expect(session.pendingPermissions).toEqual([pendingPermission]);
+      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("replies to parent-observed permissions through the runtime transcript session", async () => {
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        sessionId: "session-subagent-1",
+        source: transcriptSourceWithPendingPermission,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => {
+        const permissions = latestSurfaceModelArgs?.permissions as
+          | { canReply: boolean }
+          | undefined;
+        return permissions?.canReply === true;
+      });
 
       const permissions = latestSurfaceModelArgs?.permissions as {
-        canReply: boolean;
         onReply: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
       };
-      expect(permissions.canReply).toBe(true);
+      await permissions.onReply("permission-1", "once");
 
-      await harness.run(async () => {
-        await permissions.onReply("perm-1", "once");
+      expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4096",
+          workingDirectory: "/repo-a",
+        },
+        externalSessionId: "session-subagent-1",
+        requestId: "permission-1",
+        reply: "once",
       });
-
-      expect(replyAgentPermission).toHaveBeenCalledWith("session-child-1", "perm-1", "once");
+      expect(replyAgentPermission).not.toHaveBeenCalled();
+      await harness.waitFor(() => {
+        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
+        return session?.pendingPermissions.length === 0;
+      });
     } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps permission replies disabled when the transcript has no pending permissions", async () => {
-    runtimeDataSession = {
-      sessionId: "session-child-1",
-      pendingPermissions: [],
-    } as unknown as AgentSessionState;
-
+  test("surfaces a failed empty state when transcript history cannot load", async () => {
+    readSessionHistory.mockImplementationOnce(async () => {
+      throw new Error("history unavailable");
+    });
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -635,21 +573,88 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        taskId: "TASK-1",
-        sessionId: "session-child-1",
-        persistedRecords,
-        isResolvingRequestedSession: false,
+        sessionId: "session-subagent-1",
+        source: transcriptSource,
       },
       { wrapper },
     );
 
     try {
       await harness.mount();
+      await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
-      const permissions = latestSurfaceModelArgs?.permissions as {
-        canReply: boolean;
-      };
-      expect(permissions.canReply).toBe(false);
+      expect(readSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Failed to load conversation: history unavailable",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces an unavailable state when the source runtime is not attached", async () => {
+    runtimeList = [];
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        sessionId: "session-subagent-1",
+        source: transcriptSourceWithRuntimeIdOnly,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.model.thread.emptyState !== null);
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Failed to load conversation: No opencode runtime is attached for /repo-a.",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces runtime list failures without converting them to missing runtimes", async () => {
+    runtimeListError = new Error("runtime registry unavailable");
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        sessionId: "session-subagent-1",
+        source: transcriptSourceWithRuntimeIdOnly,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.model.thread.emptyState !== null);
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Failed to load conversation: runtime registry unavailable",
+      });
     } finally {
       await harness.unmount();
     }

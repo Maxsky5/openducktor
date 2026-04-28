@@ -22,6 +22,7 @@ import {
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 import { toOpenCodeRequestError } from "./request-errors";
+import type { OpencodeRuntimeClientInput } from "./runtime-connection";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
@@ -612,6 +613,19 @@ export const replyPermission = async (
 ): Promise<void> => {
   await session.client.permission.reply({
     directory: session.input.workingDirectory,
+    requestID: input.requestId,
+    reply: input.reply,
+    ...(input.message ? { message: input.message } : {}),
+  });
+};
+
+export const replyRuntimeSessionPermission = async (
+  createClient: ClientFactory,
+  input: OpencodeRuntimeClientInput & ReplyPermissionInput,
+): Promise<void> => {
+  const client = createClient({ runtimeEndpoint: input.runtimeEndpoint });
+  await client.permission.reply({
+    directory: input.workingDirectory,
     requestID: input.requestId,
     reply: input.reply,
     ...(input.message ? { message: input.message } : {}),

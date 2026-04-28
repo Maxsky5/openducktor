@@ -133,7 +133,7 @@ export const fromPersistedSessionRecord = (
 };
 
 const assistantMessageMeta = (
-  role: AgentRole,
+  role: AgentRole | null,
   selectedModel: AgentModelSelection | null,
   messageModel: AgentModelSelection | undefined,
   isFinal: boolean,
@@ -143,7 +143,7 @@ const assistantMessageMeta = (
   const effectiveModel = mergeModelSelection(selectedModel, messageModel);
   return {
     kind: "assistant",
-    agentRole: role,
+    ...(role ? { agentRole: role } : {}),
     isFinal,
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
@@ -340,7 +340,7 @@ const mergeHydratedSubagentMessages = (
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
-    role: AgentRole;
+    role: AgentRole | null;
     selectedModel: AgentModelSelection | null;
   },
 ): AgentChatMessage[] => {

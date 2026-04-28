@@ -42,11 +42,12 @@ type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionTaskId: AgentSessionState["taskId"] | null;
-  sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
+  sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  sessionRuntimeRoute: AgentSessionState["runtimeRoute"] | null;
+  subagentPendingPermissions: AgentSessionState["pendingPermissions"];
   subagentPendingPermissionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
 };
@@ -59,11 +60,12 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionTaskId: AgentSessionState["taskId"] | null;
-  sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
+  sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  sessionRuntimeRoute: AgentSessionState["runtimeRoute"] | null;
+  subagentPendingPermissionsBySessionId: AgentChatThreadModel["subagentPendingPermissionsBySessionId"];
   subagentPendingPermissionCountBySessionId: AgentChatThreadModel["subagentPendingPermissionCountBySessionId"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
@@ -130,6 +132,7 @@ type AgentChatBottomStackProps = {
 };
 
 const EMPTY_ROWS: AgentChatWindowRow[] = [];
+const EMPTY_PENDING_PERMISSIONS: AgentSessionState["pendingPermissions"] = [];
 const TURN_CONTENT_VISIBILITY_STYLE = {
   contentVisibility: "auto",
   containIntrinsicSize: "auto 500px",
@@ -160,16 +163,31 @@ const readSubagentPendingPermissionCount = (
   return sessionId ? (countsBySessionId?.[sessionId] ?? 0) : 0;
 };
 
+const readSubagentPendingPermissions = (
+  row: AgentChatWindowRow,
+  pendingPermissionsBySessionId: AgentChatThreadModel["subagentPendingPermissionsBySessionId"],
+): AgentSessionState["pendingPermissions"] => {
+  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
+    return EMPTY_PENDING_PERMISSIONS;
+  }
+
+  const sessionId = row.message.meta.sessionId;
+  return sessionId
+    ? (pendingPermissionsBySessionId?.[sessionId] ?? EMPTY_PENDING_PERMISSIONS)
+    : EMPTY_PENDING_PERMISSIONS;
+};
+
 const AgentChatThreadMotionRow = memo(
   function AgentChatThreadMotionRow({
     row,
     isStreamingAssistantMessage,
     sessionAgentColors,
-    sessionTaskId,
-    sessionRole,
     sessionSelectedModel,
     sessionWorkingDirectory,
     sessionRuntimeKind,
+    sessionRuntimeId,
+    sessionRuntimeRoute,
+    subagentPendingPermissions,
     subagentPendingPermissionCount,
     resolveRowRef,
   }: AgentChatThreadMotionRowProps): ReactElement {
@@ -178,12 +196,13 @@ const AgentChatThreadMotionRow = memo(
         <AgentChatThreadRow
           row={row}
           isStreamingAssistantMessage={isStreamingAssistantMessage}
-          sessionTaskId={sessionTaskId}
-          sessionRole={sessionRole}
           sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
+          sessionRuntimeId={sessionRuntimeId}
+          sessionRuntimeRoute={sessionRuntimeRoute}
+          subagentPendingPermissions={subagentPendingPermissions}
           subagentPendingPermissionCount={subagentPendingPermissionCount}
         />
       </div>
@@ -191,11 +210,12 @@ const AgentChatThreadMotionRow = memo(
   },
   (previousProps, nextProps) => {
     return (
-      previousProps.sessionTaskId === nextProps.sessionTaskId &&
-      previousProps.sessionRole === nextProps.sessionRole &&
       previousProps.sessionSelectedModel === nextProps.sessionSelectedModel &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
+      previousProps.sessionRuntimeId === nextProps.sessionRuntimeId &&
+      previousProps.sessionRuntimeRoute === nextProps.sessionRuntimeRoute &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
+      previousProps.subagentPendingPermissions === nextProps.subagentPendingPermissions &&
       previousProps.subagentPendingPermissionCount === nextProps.subagentPendingPermissionCount &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
@@ -209,11 +229,12 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   activeStreamingAssistantMessageId,
   sessionAgentColors,
-  sessionTaskId,
-  sessionRole,
   sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
+  subagentPendingPermissionsBySessionId,
   subagentPendingPermissionCountBySessionId,
   resolveRowRef,
   allowTurnContainment,
@@ -221,11 +242,12 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn: AgentChatRenderedTurn;
   activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
-  sessionTaskId: AgentSessionState["taskId"] | null;
-  sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
+  sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  sessionRuntimeRoute: AgentSessionState["runtimeRoute"] | null;
+  subagentPendingPermissionsBySessionId: AgentChatThreadModel["subagentPendingPermissionsBySessionId"];
   subagentPendingPermissionCountBySessionId: AgentChatThreadModel["subagentPendingPermissionCountBySessionId"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   allowTurnContainment: boolean;
@@ -239,12 +261,16 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           isStreamingAssistantMessage={
             row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
           }
-          sessionTaskId={sessionTaskId}
-          sessionRole={sessionRole}
           sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
+          sessionRuntimeId={sessionRuntimeId}
+          sessionRuntimeRoute={sessionRuntimeRoute}
+          subagentPendingPermissions={readSubagentPendingPermissions(
+            row,
+            subagentPendingPermissionsBySessionId,
+          )}
           subagentPendingPermissionCount={readSubagentPendingPermissionCount(
             row,
             subagentPendingPermissionCountBySessionId,
@@ -264,11 +290,12 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
-  sessionTaskId,
-  sessionRole,
   sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
+  subagentPendingPermissionsBySessionId,
   subagentPendingPermissionCountBySessionId,
   messagesContainerRef,
   messagesContentRef,
@@ -355,12 +382,13 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 key={turn.key}
                 turn={turn}
                 activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-                sessionTaskId={sessionTaskId}
-                sessionRole={sessionRole}
                 sessionSelectedModel={sessionSelectedModel}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
+                sessionRuntimeId={sessionRuntimeId}
+                sessionRuntimeRoute={sessionRuntimeRoute}
+                subagentPendingPermissionsBySessionId={subagentPendingPermissionsBySessionId}
                 subagentPendingPermissionCountBySessionId={
                   subagentPendingPermissionCountBySessionId
                 }
@@ -457,6 +485,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isStarting,
     isSending,
     sessionAgentColors,
+    subagentPendingPermissionsBySessionId,
     subagentPendingPermissionCountBySessionId,
     canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
@@ -544,9 +573,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     sessionId: activeSessionId,
     isSessionViewLoading: statusOverlay?.kind === "session_loading",
   });
-  const sessionRole = session?.role ?? null;
   const sessionRuntimeKind = session?.runtimeKind ?? null;
-  const sessionTaskId = session?.taskId ?? null;
+  const sessionRuntimeId = session?.runtimeId ?? null;
+  const sessionRuntimeRoute = session?.runtimeRoute ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
   const sessionAccentColor = useMemo(() => {
     const profileId = sessionSelectedModel?.profileId;
@@ -676,12 +705,13 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         isSending={isSending}
         isInteractionEnabled={isInteractionEnabled}
         sessionAgentColors={sessionAgentColors}
+        subagentPendingPermissionsBySessionId={subagentPendingPermissionsBySessionId}
         subagentPendingPermissionCountBySessionId={subagentPendingPermissionCountBySessionId}
-        sessionTaskId={sessionTaskId}
-        sessionRole={sessionRole}
         sessionSelectedModel={sessionSelectedModel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
+        sessionRuntimeId={sessionRuntimeId}
+        sessionRuntimeRoute={sessionRuntimeRoute}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={rows.length > 0 && !hideTranscriptWhileDeferred ? renderedTurns : []}

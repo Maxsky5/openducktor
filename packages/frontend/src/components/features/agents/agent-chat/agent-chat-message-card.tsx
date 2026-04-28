@@ -1,9 +1,9 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import { memo, type ReactElement, useContext } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 
@@ -12,12 +12,13 @@ const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<str
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
-  sessionTaskId?: string | null;
-  sessionRole: AgentRole | null;
   sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
+  sessionRuntimeId?: string | null | undefined;
+  sessionRuntimeRoute?: RuntimeRoute | null | undefined;
+  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
   subagentPendingPermissionCountBySessionId?: Record<string, number>;
 };
@@ -25,12 +26,13 @@ type AgentChatMessageCardProps = {
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   isStreamingAssistantMessage = false,
-  sessionTaskId,
-  sessionRole,
   sessionSelectedModel,
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
+  subagentPendingPermissions,
   subagentPendingPermissionCount,
   subagentPendingPermissionCountBySessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
@@ -41,7 +43,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     : undefined;
   const vm = buildAgentChatMessageCardViewModel({
     message,
-    sessionRole,
     sessionSelectedModel: sessionSelectedModel ?? null,
     sessionAgentColors,
     workflowToolAliasesByCanonical,
@@ -56,7 +57,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     <article className={vm.articleClassName} style={vm.articleStyle}>
       <MessageHeader
         message={message}
-        sessionRole={sessionRole}
         timeLabel={vm.timeLabel}
         showHeader={vm.showSharedHeader}
         assistantRole={vm.assistantRole}
@@ -64,15 +64,16 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
-        sessionTaskId={sessionTaskId ?? null}
-        sessionRole={sessionRole}
         sessionRuntimeKind={sessionRuntimeKind ?? null}
+        sessionRuntimeId={sessionRuntimeId ?? null}
+        sessionRuntimeRoute={sessionRuntimeRoute ?? null}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        subagentPendingPermissions={subagentPendingPermissions}
         subagentPendingPermissionCount={resolvedSubagentPendingPermissionCount}
       />
     </article>

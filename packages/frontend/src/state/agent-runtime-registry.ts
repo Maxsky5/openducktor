@@ -218,6 +218,14 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).replyPermission(input);
   }
 
+  replyRuntimeSessionPermission(
+    input: Parameters<AgentEnginePort["replyRuntimeSessionPermission"]>[0],
+  ) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "runtime session permission reply"),
+    ).replyRuntimeSessionPermission(input);
+  }
+
   replyQuestion(input: Parameters<AgentEnginePort["replyQuestion"]>[0]) {
     return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).replyQuestion(input);
   }

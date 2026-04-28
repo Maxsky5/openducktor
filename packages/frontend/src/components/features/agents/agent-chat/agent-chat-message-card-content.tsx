@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -20,7 +20,7 @@ import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
@@ -125,7 +125,6 @@ const usePacedStreamingText = (text: string, streaming: boolean): string => {
 
 type MessageHeaderProps = {
   message: AgentChatMessage;
-  sessionRole: AgentRole | null;
   timeLabel: string;
   showHeader: boolean;
   assistantRole: AgentRole | null;
@@ -134,7 +133,6 @@ type MessageHeaderProps = {
 
 export const MessageHeader = ({
   message,
-  sessionRole,
   timeLabel,
   showHeader,
   assistantRole,
@@ -156,7 +154,7 @@ export const MessageHeader = ({
         {message.role === "thinking" ? <Brain className="size-3" /> : null}
         {message.role === "tool" ? <Hammer className="size-3" /> : null}
         {message.role === "assistant" && assistantRole ? assistantRoleIcon(assistantRole) : null}
-        {roleLabel(message.role, sessionRole, message)}
+        {roleLabel(message.role, message)}
       </span>
       {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
     </header>
@@ -434,21 +432,23 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
-  taskId: string | null;
-  sessionRole: AgentRole | null;
-  sessionRuntimeKind?: import("@openducktor/contracts").RuntimeKind | null;
+  sessionRuntimeKind?: RuntimeKind | null;
+  sessionRuntimeId?: string | null;
+  sessionRuntimeRoute?: RuntimeRoute | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
+  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
 };
 
 const SubagentMessage = ({
   meta,
-  taskId,
-  sessionRole,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
   sessionWorkingDirectory,
   timeLabel,
+  subagentPendingPermissions,
   subagentPendingPermissionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
@@ -509,10 +509,11 @@ const SubagentMessage = ({
               <div />
             )}
             <SubagentTranscriptButton
-              taskId={taskId}
-              sessionRole={sessionRole}
               sessionRuntimeKind={sessionRuntimeKind ?? null}
+              sessionRuntimeId={sessionRuntimeId ?? null}
+              sessionRuntimeRoute={sessionRuntimeRoute ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
+              pendingPermissions={subagentPendingPermissions}
               meta={meta}
             />
           </div>
@@ -539,29 +540,31 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  sessionTaskId?: string | null;
-  sessionRole?: AgentRole | null;
-  sessionRuntimeKind?: import("@openducktor/contracts").RuntimeKind | null;
+  sessionRuntimeKind?: RuntimeKind | null;
+  sessionRuntimeId?: string | null;
+  sessionRuntimeRoute?: RuntimeRoute | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
 };
 
 export const MessageBody = ({
   message,
-  sessionTaskId,
-  sessionRole,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
+  subagentPendingPermissions,
   subagentPendingPermissionCount = 0,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
@@ -598,11 +601,12 @@ export const MessageBody = ({
     return (
       <SubagentMessage
         meta={meta}
-        taskId={sessionTaskId ?? null}
-        sessionRole={sessionRole ?? null}
         sessionRuntimeKind={sessionRuntimeKind ?? null}
+        sessionRuntimeId={sessionRuntimeId ?? null}
+        sessionRuntimeRoute={sessionRuntimeRoute ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
+        subagentPendingPermissions={subagentPendingPermissions}
         subagentPendingPermissionCount={subagentPendingPermissionCount}
       />
     );

@@ -14,16 +14,23 @@ const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta
   ...overrides,
 });
 
+const pendingPermission = {
+  requestId: "permission-1",
+  permission: "file.read",
+  patterns: ["src/app.ts"],
+};
+
 describe("SubagentTranscriptButton", () => {
   test("opens a read-only session view request for subagent cards", () => {
     const onOpenTranscript = mock(() => {});
 
     render(
       <SubagentTranscriptButton
-        taskId="task-1"
-        sessionRole="build"
         sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
+        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
+        pendingPermissions={[pendingPermission]}
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -36,15 +43,15 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      taskId: "task-1",
       sessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
-      source: "subagent_session",
-      subagentRuntime: {
-        parentRole: "build",
+      source: {
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
         workingDirectory: "/repo-a",
+        pendingPermissions: [pendingPermission],
       },
     });
   });
@@ -54,9 +61,8 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        taskId="task-1"
-        sessionRole="build"
         sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
@@ -66,41 +72,65 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      taskId: "task-1",
       sessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
-      source: "subagent_session",
-      subagentRuntime: {
-        parentRole: "build",
+      source: {
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo-a",
       },
     });
   });
 
-  test("does not render when task id or subagent session id is unavailable", () => {
+  test("marks running subagent transcript requests as live", () => {
+    const onOpenTranscript = mock(() => {});
+
+    render(
+      <SubagentTranscriptButton
+        sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
+        sessionWorkingDirectory="/repo-a"
+        meta={createSubagentMeta({ status: "running" })}
+        onOpenTranscript={onOpenTranscript}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
+
+    expect(onOpenTranscript).toHaveBeenCalledWith({
+      sessionId: "session-child-1",
+      title: "Subagent activity",
+      description: "View what this subagent did.",
+      source: {
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/repo-a",
+        isLive: true,
+      },
+    });
+  });
+
+  test("does not render when subagent session id is unavailable", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
-        taskId={null}
-        sessionRole="build"
         sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
+        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
-
     const metaWithoutSessionId = createSubagentMeta();
     delete metaWithoutSessionId.sessionId;
 
     rerender(
       <SubagentTranscriptButton
-        taskId="task-1"
-        sessionRole="build"
         sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
+        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         meta={metaWithoutSessionId}
         onOpenTranscript={() => {}}
@@ -111,9 +141,16 @@ describe("SubagentTranscriptButton", () => {
   });
 
   test("does not downgrade subagent cards to workflow transcripts when runtime context is unavailable", () => {
+    render(<SubagentTranscriptButton meta={createSubagentMeta()} onOpenTranscript={() => {}} />);
+
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
+  });
+
+  test("does not render when runtime identity is unavailable", () => {
     render(
       <SubagentTranscriptButton
-        taskId="task-1"
+        sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
@@ -130,9 +167,9 @@ describe("SubagentTranscriptButton", () => {
     try {
       render(
         <SubagentTranscriptButton
-          taskId="task-1"
-          sessionRole="build"
           sessionRuntimeKind="opencode"
+          sessionRuntimeId="runtime-1"
+          sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
           sessionWorkingDirectory="/repo-a"
           meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
@@ -151,9 +188,9 @@ describe("SubagentTranscriptButton", () => {
   test("renders the transcript action as a labeled outline button", () => {
     render(
       <SubagentTranscriptButton
-        taskId="task-1"
-        sessionRole="build"
         sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
+        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
