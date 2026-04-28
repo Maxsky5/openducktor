@@ -171,10 +171,11 @@ const createHookHarness = (
     createElement(
       QueryProvider,
       { useIsolatedClient: true },
-      createElement(RuntimeDefinitionsContext.Provider, {
-        value: runtimeDefinitionsContext,
+      createElement(
+        RuntimeDefinitionsContext.Provider,
+        { value: runtimeDefinitionsContext },
         children,
-      }),
+      ),
     );
 
   return createSharedHookHarness(
