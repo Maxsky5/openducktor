@@ -1348,7 +1348,7 @@ describe("TauriHostClient", () => {
             ],
             workflowToolAliasesByCanonical:
               OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-            capabilities: OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+            capabilities: structuredClone(OPENCODE_RUNTIME_DESCRIPTOR.capabilities),
           },
         ];
       }

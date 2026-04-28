@@ -9,6 +9,7 @@ import {
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
+  runtimeCapabilityClasses,
   runtimeDescriptorSchema,
   runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
@@ -155,6 +156,29 @@ const roleScopeRequirementsDescription = (): string => {
     .join("; ");
 };
 
+const runtimeCapabilityClassEntries = Object.entries(runtimeCapabilityClasses).sort(
+  ([left], [right]) => right.length - left.length,
+) as Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>;
+
+const getRuntimeCapabilityClassForPath = (
+  capabilityPath: string,
+): RuntimeCapabilityClass | null => {
+  return (
+    runtimeCapabilityClassEntries.find(
+      ([capabilityKey]) =>
+        capabilityPath === capabilityKey || capabilityPath.startsWith(`${capabilityKey}.`),
+    )?.[1] ?? null
+  );
+};
+
+const scenarioScopedConstraintPaths = new Set([
+  "sessionLifecycle.forkTargets",
+  "history.loadable",
+  "history.stableItemIds",
+  "history.stableItemOrder",
+  "history.exposesCompletionState",
+]);
+
 const classifyRuntimeDescriptorSchemaIssue = ({
   path,
   message,
@@ -170,45 +194,33 @@ const classifyRuntimeDescriptorSchemaIssue = ({
   ) {
     return "workflow";
   }
-  if (capabilityPath.startsWith("workflow.supportsOdtWorkflowTools")) {
-    return "workflow";
-  }
-  if (capabilityPath.startsWith("workflow.supportedScopes")) {
-    return "role_scoped";
-  }
-  if (capabilityPath.startsWith("sessionLifecycle.supportsSessionFork")) {
-    return "scenario_scoped";
-  }
-  if (capabilityPath.startsWith("sessionLifecycle.forkTargets")) {
-    return "scenario_scoped";
-  }
   if (
     capabilityPath.startsWith("sessionLifecycle.supportedStartModes") &&
     message.toLowerCase().includes("fork")
   ) {
     return "scenario_scoped";
   }
+  if (capabilityPath.startsWith("promptInput.supportedParts")) {
+    if (message.includes("slash commands") || message.includes("file search")) {
+      return "optional_enhancement";
+    }
+  }
+  if (scenarioScopedConstraintPaths.has(capabilityPath)) {
+    return "scenario_scoped";
+  }
+
+  const mappedCapabilityClass = getRuntimeCapabilityClassForPath(capabilityPath);
+  if (mappedCapabilityClass !== null) {
+    return mappedCapabilityClass;
+  }
+
   if (capabilityPath.startsWith("approvals.")) {
     return "workflow";
   }
   if (capabilityPath.startsWith("structuredInput.")) {
     return "workflow";
   }
-  if (capabilityPath.startsWith("promptInput.supportedParts")) {
-    if (message.includes("slash commands") || message.includes("file search")) {
-      return "optional_enhancement";
-    }
-    return "baseline";
-  }
-  if (capabilityPath.startsWith("promptInput.supports")) {
-    return "optional_enhancement";
-  }
-  if (capabilityPath.startsWith("optionalSurfaces.")) {
-    return "optional_enhancement";
-  }
-  if (capabilityPath.startsWith("history.")) {
-    return "baseline";
-  }
+
   return "baseline";
 };
 
@@ -296,6 +308,8 @@ export const validateRuntimeDefinitionForOpenDucktor = (
 ): string[] => {
   const descriptorParseResult = runtimeDescriptorSchema.safeParse(runtimeDescriptor);
   if (!descriptorParseResult.success) {
+    // Intentionally stop after schema validation: capability policy checks assume a parsed
+    // descriptor shape and can mask the root structural error on stale/malformed payloads.
     return descriptorParseResult.error.issues.map(formatRuntimeDescriptorSchemaIssue);
   }
 

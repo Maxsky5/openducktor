@@ -76,7 +76,10 @@ const QUEUED_RUNTIME_DESCRIPTOR = {
   label: "Queued Runtime",
   capabilities: {
     ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-    supportsQueuedUserMessages: true,
+    sessionLifecycle: {
+      ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+      supportsQueuedUserMessages: true,
+    },
   },
 } as const;
 
@@ -415,7 +418,10 @@ describe("useAgentStudioSessionActions", () => {
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              supportsQueuedUserMessages: true,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: true,
+              },
             },
           },
           models: [],
@@ -574,7 +580,10 @@ describe("useAgentStudioSessionActions", () => {
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              supportsQueuedUserMessages: false,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: false,
+              },
             },
           },
           models: [],

@@ -118,6 +118,60 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
+  test("classifies item-level history fidelity invariants as scenario-scoped", () => {
+    const descriptor = withCapabilities({
+      history: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.history,
+        fidelity: "item",
+        stableItemIds: false,
+        exposesCompletionState: false,
+      },
+    });
+
+    expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
+      "[scenario_scoped] runtime descriptor schema violation at capabilities.history.stableItemIds: Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+      "[scenario_scoped] runtime descriptor schema violation at capabilities.history.exposesCompletionState: Runtime descriptors with item-level history fidelity must expose item completion state.",
+    ]);
+  });
+
+  test("classifies fork target invariants as scenario-scoped", () => {
+    const descriptor = withCapabilities({
+      sessionLifecycle: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+        supportedStartModes: ["fresh", "reuse", "fork"],
+        supportsSessionFork: true,
+        forkTargets: [],
+      },
+    });
+
+    expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
+      "[scenario_scoped] runtime descriptor schema violation at capabilities.sessionLifecycle.forkTargets: Runtime descriptors that support session forks must declare at least one fork target.",
+    ]);
+  });
+
+  test("prefers shared capability class mappings over broad schema path fallbacks", () => {
+    const approvalDescriptor = withCapabilities({
+      approvals: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals,
+        supportedRequestTypes: ["command_execution"],
+        supportedReplyOutcomes: ["reject"],
+      },
+    });
+    const structuredInputDescriptor = withCapabilities({
+      structuredInput: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
+        supportsQuestions: "yes",
+      },
+    } as unknown as Partial<RuntimeDescriptor["capabilities"]>);
+
+    expect(validateRuntimeDefinitionForOpenDucktor(approvalDescriptor)).toEqual([
+      "[scenario_scoped] runtime descriptor schema violation at capabilities.approvals.supportedReplyOutcomes: Runtime descriptors with approval requests must support at least one approval reply outcome.",
+    ]);
+    expect(validateRuntimeDefinitionForOpenDucktor(structuredInputDescriptor)).toEqual([
+      "[scenario_scoped] runtime descriptor schema violation at capabilities.structuredInput.supportsQuestions: Invalid input: expected boolean, received string",
+    ]);
+  });
+
   test("reports runtimes that only cover a partial role-specific workflow scope set", () => {
     const workspaceOnly = withCapabilities({
       workflow: {

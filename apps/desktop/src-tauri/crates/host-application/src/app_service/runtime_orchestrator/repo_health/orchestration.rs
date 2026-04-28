@@ -15,6 +15,8 @@ impl AppService {
         }
         let checked_at = now_rfc3339();
         let result = (|| -> Result<RepoRuntimeHealthCheck> {
+            // No runtime summary exists on startup failure, so the registered descriptor is the
+            // authoritative capability source until ensure_workspace_runtime returns an instance.
             let supports_mcp_status = self
                 .runtime_registry
                 .definition(&runtime_kind)?

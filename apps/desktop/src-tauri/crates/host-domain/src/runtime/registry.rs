@@ -302,10 +302,26 @@ impl RuntimeCapabilities {
 
     fn duplicate_string_errors(values: &[String], label: &'static str) -> Vec<String> {
         let mut seen = HashSet::new();
-        if values.iter().any(|value| !seen.insert(value.as_str())) {
-            return vec![format!("[baseline] {label} must not contain duplicates")];
+        let mut errors = Vec::new();
+        let mut reported_blank = false;
+        let mut reported_duplicate = false;
+
+        for value in values {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                if !reported_blank {
+                    errors.push(format!("[baseline] {label} must not contain blank entries"));
+                    reported_blank = true;
+                }
+                continue;
+            }
+            if !seen.insert(trimmed) && !reported_duplicate {
+                errors.push(format!("[baseline] {label} must not contain duplicates"));
+                reported_duplicate = true;
+            }
         }
-        Vec::new()
+
+        errors
     }
 
     pub fn missing_mandatory_capabilities(&self) -> Vec<&'static str> {
@@ -434,26 +450,34 @@ impl RuntimeCapabilities {
         let mut errors = Vec::new();
         if matches!(self.history.fidelity, RuntimeHistoryFidelity::Item) {
             if !self.history.loadable {
-                errors.push("[baseline] item-level history requires loadable history".to_string());
+                errors.push(
+                    "[scenario_scoped] item-level history requires loadable history".to_string(),
+                );
             }
             if !self.history.stable_item_ids {
-                errors.push("[baseline] item-level history requires stable item ids".to_string());
+                errors.push(
+                    "[scenario_scoped] item-level history requires stable item ids".to_string(),
+                );
             }
             if !self.history.stable_item_order {
-                errors.push("[baseline] item-level history requires stable item order".to_string());
+                errors.push(
+                    "[scenario_scoped] item-level history requires stable item order".to_string(),
+                );
             }
             if !self.history.exposes_completion_state {
                 errors.push(
-                    "[baseline] item-level history requires completion state exposure".to_string(),
+                    "[scenario_scoped] item-level history requires completion state exposure"
+                        .to_string(),
                 );
             }
         }
         if !self.history.loadable {
             if !matches!(self.history.fidelity, RuntimeHistoryFidelity::None) {
-                errors.push("[baseline] unloaded history must use none fidelity".to_string());
+                errors
+                    .push("[scenario_scoped] unloaded history must use none fidelity".to_string());
             }
             if !matches!(self.history.replay, RuntimeHistoryReplay::None) {
-                errors.push("[baseline] unloaded history must use none replay".to_string());
+                errors.push("[scenario_scoped] unloaded history must use none replay".to_string());
             }
             if !self.history.hydrated_event_types.is_empty() {
                 errors.push(
@@ -1514,13 +1538,17 @@ mod tests {
     fn runtime_descriptor_validation_rejects_duplicate_history_limitations() {
         let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
         descriptor.capabilities.history.limitations = vec![
+            " message-level only ".to_string(),
             "message-level only".to_string(),
-            "message-level only".to_string(),
+            "   ".to_string(),
         ];
 
         assert_eq!(
             descriptor.validate_for_openducktor(),
-            vec!["[baseline] history.limitations must not contain duplicates".to_string()]
+            vec![
+                "[baseline] history.limitations must not contain duplicates".to_string(),
+                "[baseline] history.limitations must not contain blank entries".to_string(),
+            ]
         );
     }
 
@@ -1580,8 +1608,9 @@ mod tests {
                     .to_string(),
                 "[scenario_scoped] fork targets must be empty when session fork is unsupported"
                     .to_string(),
-                "[baseline] item-level history requires stable item ids".to_string(),
-                "[baseline] item-level history requires completion state exposure".to_string(),
+                "[scenario_scoped] item-level history requires stable item ids".to_string(),
+                "[scenario_scoped] item-level history requires completion state exposure"
+                    .to_string(),
                 "[workflow] approval requests require reject reply outcome".to_string(),
                 "[workflow] read-only auto-reject safety requires reject reply outcome".to_string(),
                 "[optional_enhancement] slash command support requires slash_command prompt part"
