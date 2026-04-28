@@ -635,6 +635,8 @@ pub struct RuntimeDescriptor {
 
 impl RuntimeDescriptor {
     fn normalized_tool_id(tool_id: &str) -> Option<&str> {
+        // Match the TypeScript `z.string().trim().min(1)` validation semantics while
+        // leaving descriptor payloads unchanged for callers that inspect raw values.
         let trimmed = tool_id.trim();
         if trimmed.is_empty() {
             None
@@ -1106,6 +1108,51 @@ mod tests {
     use anyhow::Result;
     use std::collections::BTreeMap;
 
+    const OPENCODE_RUNTIME_DESCRIPTOR_FIXTURE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../../../docs/contracts/opencode-runtime-descriptor.fixture.json"
+    ));
+    const RUNTIME_DESCRIPTOR_INVALID_CASES_FIXTURE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json"
+    ));
+
+    #[derive(Debug, serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct RuntimeDescriptorInvalidCase {
+        name: String,
+        patch: Vec<RuntimeDescriptorFixturePatch>,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct RuntimeDescriptorFixturePatch {
+        path: Vec<String>,
+        value: serde_json::Value,
+    }
+
+    fn apply_fixture_patch(
+        target: &mut serde_json::Value,
+        patch: &[RuntimeDescriptorFixturePatch],
+    ) {
+        for operation in patch {
+            let Some((final_segment, parent_path)) = operation.path.split_last() else {
+                panic!("runtime descriptor fixture patch path must not be empty");
+            };
+            let mut current = &mut *target;
+            for segment in parent_path {
+                current = current.get_mut(segment).unwrap_or_else(|| {
+                    panic!("invalid runtime descriptor fixture path segment: {segment}")
+                });
+            }
+
+            let parent = current
+                .as_object_mut()
+                .expect("runtime descriptor fixture patch parent should be an object");
+            parent.insert(final_segment.clone(), operation.value.clone());
+        }
+    }
+
     fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabilities {
         RuntimeCapabilities {
             provisioning_mode: RuntimeProvisioningMode::HostManaged,
@@ -1208,6 +1255,52 @@ mod tests {
             },
             RuntimeStartupReadinessConfig::default(),
         )
+    }
+
+    #[test]
+    fn opencode_descriptor_fixture_stays_aligned_with_rust_builtin() {
+        let fixture_value: serde_json::Value =
+            serde_json::from_str(OPENCODE_RUNTIME_DESCRIPTOR_FIXTURE)
+                .expect("OpenCode runtime descriptor fixture should be valid JSON");
+        let fixture_descriptor: RuntimeDescriptor = serde_json::from_value(fixture_value.clone())
+            .expect("OpenCode runtime descriptor fixture should deserialize");
+        assert_eq!(
+            fixture_descriptor.validate_for_openducktor(),
+            Vec::<String>::new()
+        );
+
+        let builtin_value = serde_json::to_value(
+            super::builtin_runtime_registry()
+                .definition_by_str("opencode")
+                .expect("opencode runtime should be registered")
+                .descriptor(),
+        )
+        .expect("OpenCode runtime descriptor should serialize");
+
+        assert_eq!(builtin_value, fixture_value);
+    }
+
+    #[test]
+    fn shared_invalid_runtime_descriptor_fixtures_are_rejected() {
+        let fixture_value: serde_json::Value =
+            serde_json::from_str(OPENCODE_RUNTIME_DESCRIPTOR_FIXTURE)
+                .expect("OpenCode runtime descriptor fixture should be valid JSON");
+        let invalid_cases: Vec<RuntimeDescriptorInvalidCase> =
+            serde_json::from_str(RUNTIME_DESCRIPTOR_INVALID_CASES_FIXTURE)
+                .expect("runtime descriptor invalid cases fixture should be valid JSON");
+
+        for invalid_case in invalid_cases {
+            let mut descriptor_value = fixture_value.clone();
+            apply_fixture_patch(&mut descriptor_value, &invalid_case.patch);
+
+            if let Ok(descriptor) = serde_json::from_value::<RuntimeDescriptor>(descriptor_value) {
+                assert!(
+                    !descriptor.validate_for_openducktor().is_empty(),
+                    "invalid runtime descriptor fixture should fail validation: {}",
+                    invalid_case.name
+                );
+            }
+        }
     }
 
     #[test]

@@ -1,5 +1,7 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
+import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
+import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
 import {
   agentSessionPermissionRequestSchema,
   agentSessionRecordSchema,
@@ -64,7 +66,60 @@ const expectRuntimeDescriptorIssue = (
   );
 };
 
+type JsonObject = Record<string, unknown>;
+
+type RuntimeDescriptorInvalidCase = {
+  name: string;
+  patch: Array<{
+    path: string[];
+    value: unknown;
+  }>;
+};
+
+const isJsonObject = (value: unknown): value is JsonObject =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase["patch"]): void => {
+  for (const operation of patch) {
+    let current: JsonObject = target;
+    for (const segment of operation.path.slice(0, -1)) {
+      const next = current[segment];
+      if (!isJsonObject(next)) {
+        throw new Error(`Invalid fixture path segment: ${operation.path.join(".")}`);
+      }
+      current = next;
+    }
+    const finalSegment = operation.path.at(-1);
+    if (finalSegment === undefined) {
+      throw new Error("Invalid empty fixture patch path");
+    }
+    current[finalSegment] = operation.value;
+  }
+};
+
+const invalidRuntimeDescriptorCases =
+  runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
+
 describe("runtime schemas", () => {
+  test("OpenCode descriptor fixture stays aligned with the TypeScript built-in", () => {
+    const parsed = runtimeDescriptorSchema.parse(opencodeRuntimeDescriptorFixture);
+
+    expect(parsed).toEqual(OPENCODE_RUNTIME_DESCRIPTOR);
+  });
+
+  test.each(
+    invalidRuntimeDescriptorCases,
+  )("shared invalid runtime descriptor fixture is rejected: $name", (fixtureCase) => {
+    const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
+    applyJsonPatch(descriptor, fixtureCase.patch);
+
+    const result = runtimeDescriptorSchema.safeParse(descriptor);
+
+    expect(result.success).toBe(false);
+  });
+
   test("task card parses workflow status from host payloads", () => {
     const parsed = taskCardSchema.parse({
       id: "task-1",

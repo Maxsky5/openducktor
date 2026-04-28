@@ -1,0 +1,45 @@
+[
+  {
+    "name": "blank-and-duplicate-runtime-tool-ids",
+    "patch": [
+      {
+        "path": ["readOnlyRoleBlockedTools"],
+        "value": [" apply_patch ", "apply_patch", "   "]
+      }
+    ]
+  },
+  {
+    "name": "normalized-workflow-alias-tool-ids",
+    "patch": [
+      {
+        "path": ["workflowToolAliasesByCanonical", "odt_build_blocked"],
+        "value": [" shared_alias "]
+      },
+      {
+        "path": ["workflowToolAliasesByCanonical", "odt_build_completed"],
+        "value": ["shared_alias"]
+      },
+      {
+        "path": ["workflowToolAliasesByCanonical", "odt_set_plan"],
+        "value": [" odt_set_spec "]
+      },
+      {
+        "path": ["workflowToolAliasesByCanonical", "odt_set_spec"],
+        "value": [" runtime_set_spec ", "runtime_set_spec", "   "]
+      }
+    ]
+  },
+  {
+    "name": "stale-flat-capability-and-live-route-fields",
+    "patch": [
+      {
+        "path": ["capabilities", "supportsMcpStatus"],
+        "value": true
+      },
+      {
+        "path": ["runtimeEndpoint"],
+        "value": "http://127.0.0.1:4444"
+      }
+    ]
+  }
+]
