@@ -1,8 +1,9 @@
 import type { MutableRefObject, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatScrollControllerInput = {
+  activeSessionId: string | null;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   isSessionWorking: boolean;
@@ -20,6 +21,7 @@ type UseAgentChatScrollControllerResult = {
 const AUTO_SCROLL_MARK_TTL_MS = 1500;
 
 export function useAgentChatScrollController({
+  activeSessionId,
   messagesContainerRef,
   messagesContentRef,
   isSessionWorking,
@@ -34,6 +36,7 @@ export function useAgentChatScrollController({
   const userScrollIntentVersionRef = useRef(0);
   const autoScrollRef = useRef<{ time: number; top: number } | null>(null);
   const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
 
   const updateNearEdges = useCallback((nearBottom: boolean, nearTop: boolean) => {
     const changed = nearBottomRef.current !== nearBottom || nearTopRef.current !== nearTop;
@@ -104,6 +107,28 @@ export function useAgentChatScrollController({
 
     return Math.abs(element.scrollTop - autoScroll.top) < 2;
   }, []);
+
+  useLayoutEffect(() => {
+    if (activeSessionIdRef.current === activeSessionId) {
+      return;
+    }
+
+    activeSessionIdRef.current = activeSessionId;
+    userScrollIntentVersionRef.current = 0;
+    autoScrollRef.current = null;
+    if (autoScrollTimerRef.current !== null) {
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+
+    setUserScrolledState(false);
+    updateNearEdges(true, true);
+
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.style.overflowAnchor = "none";
+    }
+  }, [activeSessionId, messagesContainerRef, setUserScrolledState, updateNearEdges]);
 
   const scrollToBottomNow = useCallback(
     (force: boolean) => {
