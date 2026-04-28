@@ -295,10 +295,11 @@ export const validateRuntimeDefinitionForOpenDucktor = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
   const descriptorParseResult = runtimeDescriptorSchema.safeParse(runtimeDescriptor);
-  const schemaErrors = descriptorParseResult.success
-    ? []
-    : descriptorParseResult.error.issues.map(formatRuntimeDescriptorSchemaIssue);
-  return [...schemaErrors, ...getRuntimeDescriptorCapabilityConfigErrors(runtimeDescriptor)];
+  if (!descriptorParseResult.success) {
+    return descriptorParseResult.error.issues.map(formatRuntimeDescriptorSchemaIssue);
+  }
+
+  return getRuntimeDescriptorCapabilityConfigErrors(descriptorParseResult.data);
 };
 
 export const validateRuntimeDefinitionsForOpenDucktor = (

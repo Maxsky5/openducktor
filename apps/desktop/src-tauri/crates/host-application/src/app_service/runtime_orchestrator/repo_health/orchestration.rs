@@ -15,6 +15,13 @@ impl AppService {
         }
         let checked_at = now_rfc3339();
         let result = (|| -> Result<RepoRuntimeHealthCheck> {
+            let supports_mcp_status = self
+                .runtime_registry
+                .definition(&runtime_kind)?
+                .descriptor()
+                .capabilities
+                .optional_surfaces
+                .supports_mcp_status;
             let mut host_status =
                 Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
             let existing_runtime =
@@ -54,13 +61,14 @@ impl AppService {
                                     runtime_failure_kind: Some(Self::repo_runtime_timeout_kind(
                                         &error,
                                     )),
-                                    supports_mcp_status: true,
-                                    mcp_ok: false,
-                                    mcp_error: Some(
+                                    supports_mcp_status,
+                                    mcp_ok: !supports_mcp_status,
+                                    mcp_error: supports_mcp_status.then(|| {
                                         "Runtime is unavailable, so MCP cannot be verified."
-                                            .to_string(),
-                                    ),
-                                    mcp_failure_kind: Some(Self::repo_runtime_timeout_kind(&error)),
+                                            .to_string()
+                                    }),
+                                    mcp_failure_kind: supports_mcp_status
+                                        .then(|| Self::repo_runtime_timeout_kind(&error)),
                                     mcp_server_status: None,
                                     available_tool_ids: Vec::new(),
                                     progress: Some(progress),

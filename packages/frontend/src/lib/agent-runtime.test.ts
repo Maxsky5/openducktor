@@ -83,12 +83,11 @@ describe("agent-runtime capability policies", () => {
           supportedParts: ["text"],
         },
       },
-    } as RuntimeDescriptor;
+    } as unknown as RuntimeDescriptor;
 
     expect(validateRuntimeDefinitionForOpenDucktor(invariantViolation)).toEqual([
       "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support slash commands must declare slash command prompt parts.",
       "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support file search must declare file or folder prompt references.",
-      "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork",
     ]);
 
     const staleFlatCapability = {
@@ -97,10 +96,25 @@ describe("agent-runtime capability policies", () => {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
         supportsFileSearch: true,
       },
-    } as RuntimeDescriptor;
+    } as unknown as RuntimeDescriptor;
 
     expect(validateRuntimeDefinitionForOpenDucktor(staleFlatCapability)).toEqual([
       '[baseline] runtime descriptor schema violation at capabilities: Unrecognized key: "supportsFileSearch"',
+    ]);
+  });
+
+  test("returns schema errors instead of crashing for partially migrated descriptors", () => {
+    const malformedDescriptor = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        workflow: undefined,
+      },
+    } as unknown as RuntimeDescriptor;
+
+    expect(() => validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).not.toThrow();
+    expect(validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).toEqual([
+      "[baseline] runtime descriptor schema violation at capabilities.workflow: Invalid input: expected object, received undefined",
     ]);
   });
 

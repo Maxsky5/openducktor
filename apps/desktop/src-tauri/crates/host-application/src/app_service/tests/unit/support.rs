@@ -449,3 +449,30 @@ pub(super) fn test_runtime_definition_with_provisioning(
         RuntimeStartupReadinessConfig::default(),
     )
 }
+
+pub(super) fn test_runtime_definition_without_mcp_status(
+    kind: &str,
+    label: &str,
+    provisioning_mode: RuntimeProvisioningMode,
+) -> RuntimeDefinition {
+    let mut capabilities = host_domain::builtin_runtime_registry()
+        .definition_by_str("opencode")
+        .expect("builtin opencode runtime should exist")
+        .descriptor()
+        .capabilities
+        .clone();
+    capabilities.provisioning_mode = provisioning_mode;
+    capabilities.optional_surfaces.supports_mcp_status = false;
+
+    RuntimeDefinition::new(
+        RuntimeDescriptor {
+            kind: AgentRuntimeKind::from(kind),
+            label: label.to_string(),
+            description: format!("{label} runtime"),
+            read_only_role_blocked_tools: vec!["apply_patch".to_string()],
+            workflow_tool_aliases_by_canonical: Default::default(),
+            capabilities,
+        },
+        RuntimeStartupReadinessConfig::default(),
+    )
+}
