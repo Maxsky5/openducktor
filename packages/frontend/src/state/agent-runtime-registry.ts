@@ -66,6 +66,7 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
 
 class RuntimeRegistryAgentEngine implements AgentEnginePort {
   private readonly runtimeKindsBySessionId = new Map<string, RuntimeKind>();
+  private readonly pendingRuntimeKindsBySessionId = new Map<string, RuntimeKind>();
 
   constructor(
     private readonly getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
@@ -118,17 +119,27 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
 
   async attachSession(input: Parameters<AgentEnginePort["attachSession"]>[0]) {
     const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model, input.sessionId);
-    const summary = await this.getAdapter(runtimeKind).attachSession(input);
-    this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
-    return {
-      ...summary,
-      runtimeKind,
-    };
+    this.pendingRuntimeKindsBySessionId.set(input.sessionId, runtimeKind);
+    try {
+      const summary = await this.getAdapter(runtimeKind).attachSession(input);
+      this.pendingRuntimeKindsBySessionId.delete(input.sessionId);
+      this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
+      return {
+        ...summary,
+        runtimeKind,
+      };
+    } catch (error) {
+      if (this.pendingRuntimeKindsBySessionId.get(input.sessionId) === runtimeKind) {
+        this.pendingRuntimeKindsBySessionId.delete(input.sessionId);
+      }
+      throw error;
+    }
   }
 
   async detachSession(sessionId: string): Promise<void> {
     const runtimeKind = this.requireSessionRuntimeKind(sessionId);
     await this.getAdapter(runtimeKind).detachSession(sessionId);
+    this.pendingRuntimeKindsBySessionId.delete(sessionId);
     this.runtimeKindsBySessionId.delete(sessionId);
   }
 
@@ -294,6 +305,11 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     const cachedRuntimeKind = this.runtimeKindsBySessionId.get(sessionId);
     if (cachedRuntimeKind && this.getAdapter(cachedRuntimeKind).hasSession(sessionId)) {
       return cachedRuntimeKind;
+    }
+
+    const pendingRuntimeKind = this.pendingRuntimeKindsBySessionId.get(sessionId);
+    if (pendingRuntimeKind) {
+      return pendingRuntimeKind;
     }
 
     for (const runtimeKind of this.registeredRuntimeKinds) {

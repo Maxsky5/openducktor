@@ -298,7 +298,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       sessionId,
       externalSessionId,
       runtimeKind: source.runtimeKind,
-      runtimeId: resolvedSource.runtimeId,
+      runtimeId: resolvedSource.runtimeId ?? source.runtimeId,
       runtimeConnection,
       pendingPermissions: visiblePendingPermissions,
     })

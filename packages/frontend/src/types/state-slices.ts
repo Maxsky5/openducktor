@@ -219,7 +219,7 @@ export type AgentStateContextValue = {
     sessionId: string;
     externalSessionId: string;
     runtimeKind: RuntimeKind;
-    runtimeId: string | null;
+    runtimeId: string;
     runtimeConnection: AgentRuntimeConnection;
     pendingPermissions?: AgentSessionState["pendingPermissions"];
   }) => Promise<void>;

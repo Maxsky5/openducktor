@@ -330,12 +330,6 @@ export class OpencodeSdkAdapter
 
     try {
       const session = requireSession(this.sessions, input.sessionId);
-      await loadAndSeedSessionHistory(this.createClient, this.now, {
-        runtimeEndpoint,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-        session,
-      });
       attachSessionToRuntimeEvents({
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
@@ -347,6 +341,12 @@ export class OpencodeSdkAdapter
         now: this.now,
         emit: this.emit.bind(this),
         ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      });
+      await loadAndSeedSessionHistory(this.createClient, this.now, {
+        runtimeEndpoint,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
+        session,
       });
     } catch (error) {
       const session = this.sessions.get(input.sessionId);

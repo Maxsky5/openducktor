@@ -469,10 +469,34 @@ export function useAgentOrchestratorOperations({
       if (existingSession && !isTranscriptAgentSession(existingSession)) {
         throw new Error(`Session ${input.sessionId} is already active and is not a transcript.`);
       }
+      if (!input.runtimeId.trim()) {
+        throw new Error("Runtime identity is unavailable for this transcript.");
+      }
 
       const hadLocalSession = existingSession !== undefined;
       const hadRuntimeSession = agentEngine.hasSession(input.sessionId);
       let attachedListener = false;
+      const unsubscribeTranscriptListener = (): void => {
+        const unsubscribe = unsubscribersRef.current.get(input.sessionId);
+        unsubscribe?.();
+        unsubscribersRef.current.delete(input.sessionId);
+      };
+      const detachRuntimeSessionIfPresent = async (): Promise<void> => {
+        unsubscribeTranscriptListener();
+        if (agentEngine.hasSession(input.sessionId)) {
+          await agentEngine.detachSession(input.sessionId);
+        }
+      };
+      const isCurrentTranscriptRequest = (): boolean => {
+        const current = sessionsRef.current[input.sessionId];
+        return (
+          current !== undefined &&
+          isTranscriptAgentSession(current) &&
+          current.externalSessionId === input.externalSessionId &&
+          current.runtimeKind === input.runtimeKind &&
+          current.runtimeId === input.runtimeId
+        );
+      };
       if (hadLocalSession && hadRuntimeSession) {
         attachSessionListener(input.repoPath, input.sessionId);
         return;
@@ -496,14 +520,14 @@ export function useAgentOrchestratorOperations({
       }
 
       try {
-        const summary = hadRuntimeSession
-          ? null
-          : await agentEngine.attachSession({
+        const summaryPromise = hadRuntimeSession
+          ? Promise.resolve(null)
+          : agentEngine.attachSession({
               sessionId: input.sessionId,
               externalSessionId: input.externalSessionId,
               repoPath: input.repoPath,
               runtimeKind: input.runtimeKind,
-              ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
+              runtimeId: input.runtimeId,
               runtimeConnection: input.runtimeConnection,
               workingDirectory: input.runtimeConnection.workingDirectory,
               taskId: "",
@@ -514,12 +538,21 @@ export function useAgentOrchestratorOperations({
 
         attachSessionListener(input.repoPath, input.sessionId);
         attachedListener = true;
+        const summary = await summaryPromise;
+        if (!isCurrentTranscriptRequest()) {
+          await detachRuntimeSessionIfPresent();
+          return;
+        }
 
         const history = await agentEngine.loadSessionHistory({
           runtimeKind: input.runtimeKind,
           runtimeConnection: input.runtimeConnection,
           externalSessionId: input.externalSessionId,
         });
+        if (!isCurrentTranscriptRequest()) {
+          await detachRuntimeSessionIfPresent();
+          return;
+        }
         const hydratedSession = createRuntimeTranscriptSession({
           repoPath: input.repoPath,
           sessionId: input.sessionId,
@@ -561,9 +594,7 @@ export function useAgentOrchestratorOperations({
         );
       } catch (error) {
         if (attachedListener && !hadLocalSession) {
-          const unsubscribe = unsubscribersRef.current.get(input.sessionId);
-          unsubscribe?.();
-          unsubscribersRef.current.delete(input.sessionId);
+          unsubscribeTranscriptListener();
         }
         if (!hadRuntimeSession && agentEngine.hasSession(input.sessionId)) {
           await agentEngine.detachSession(input.sessionId);

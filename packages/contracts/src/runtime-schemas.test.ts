@@ -245,11 +245,13 @@ describe("runtime schemas", () => {
   test("build session bootstrap preserves runtime route and working directory", () => {
     const parsed = buildSessionBootstrapSchema.parse({
       runtimeKind: "opencode",
+      runtimeId: " runtime-1 ",
       runtimeRoute: { type: "stdio", identity: " runtime-build-1 " },
       workingDirectory: "/repo/.worktrees/task-1",
     });
 
     expect(parsed.runtimeKind).toBe("opencode");
+    expect(parsed.runtimeId).toBe("runtime-1");
     expect(parsed.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-build-1" });
     expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
   });

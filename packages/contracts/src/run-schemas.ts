@@ -124,6 +124,7 @@ export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
 
 export const buildSessionBootstrapSchema = z.object({
   runtimeKind: runtimeKindSchema,
+  runtimeId: z.string().trim().min(1),
   runtimeRoute: runtimeRouteSchema,
   workingDirectory: z.string().trim().min(1),
 });
