@@ -889,6 +889,32 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("copy-assistant-message-content");
   });
 
+  test("renders streaming assistant open code fences through the chat markdown path", async () => {
+    const html = await renderToHtml(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-streaming-open-fence",
+          role: "assistant",
+          content: "Working through this:\n\n```ts\nconst value = 1;",
+          timestamp: "2026-02-22T10:24:52.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: false,
+          },
+        },
+        isStreamingAssistantMessage: true,
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("markdown-body");
+    expect(html).toContain("const value = 1;");
+    expect(html).not.toContain("copy-assistant-message-content");
+  });
+
   test("does not render a copy button for whitespace-only assistant rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

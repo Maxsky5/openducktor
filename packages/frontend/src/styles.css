@@ -390,14 +390,6 @@ pre {
   font-size: inherit;
 }
 
-.markdown-body pre > code:only-child {
-  display: block;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  padding: 0.875rem;
-  background: oklch(from var(--muted) l c h / 30%);
-}
-
 .markdown-body pre code::before,
 .markdown-body pre code::after {
   content: none;
