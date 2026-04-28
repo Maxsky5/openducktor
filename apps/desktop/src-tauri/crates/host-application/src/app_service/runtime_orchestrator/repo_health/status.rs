@@ -97,6 +97,7 @@ impl AppService {
                     .definition(&runtime_kind)?
                     .descriptor()
                     .capabilities
+                    .optional_surfaces
                     .supports_mcp_status,
                 mcp_ok: false,
                 mcp_error: (!matches!(

@@ -8,9 +8,16 @@ pub use events::{
     DevServerTerminalChunk, RunEvent,
 };
 pub use registry::{
-    builtin_runtime_registry, default_runtime_kind, AgentRuntimeKind, RuntimeCapabilities,
-    RuntimeDefinition, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRegistry,
-    RuntimeStartupReadinessConfig, RuntimeSubagentExecutionMode, RuntimeSupportedScope,
+    builtin_runtime_registry, default_runtime_kind, AgentRuntimeKind, RuntimeApprovalCapabilities,
+    RuntimeApprovalReplyOutcome, RuntimeApprovalRequestType, RuntimeCapabilities,
+    RuntimeDefinition, RuntimeDescriptor, RuntimeForkTarget, RuntimeHistoryCapabilities,
+    RuntimeHistoryFidelity, RuntimeHistoryReplay, RuntimeHydratedEventType,
+    RuntimeOmittedPermissionBehavior, RuntimeOptionalSurfaceCapabilities,
+    RuntimePendingInputVisibility, RuntimePromptInputCapabilities, RuntimePromptInputPartType,
+    RuntimeProvisioningMode, RuntimeQuestionAnswerMode, RuntimeRegistry,
+    RuntimeSessionLifecycleCapabilities, RuntimeSessionStartMode, RuntimeStartupReadinessConfig,
+    RuntimeStructuredInputCapabilities, RuntimeSubagentExecutionMode, RuntimeSupportedScope,
+    RuntimeWorkflowCapabilities,
 };
 pub use route::RuntimeRoute;
 pub use state::{

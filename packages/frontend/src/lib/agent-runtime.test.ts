@@ -29,72 +29,159 @@ const withCapabilities = (
 describe("agent-runtime capability policies", () => {
   test("pins the required workflow scope set", () => {
     expect(requiredRuntimeSupportedScopes).toEqual(["workspace", "task", "build"]);
-    expect(OPENCODE_RUNTIME_DESCRIPTOR.capabilities.supportedScopes).toEqual(
+    expect(OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow.supportedScopes).toEqual(
       requiredRuntimeSupportedScopes,
     );
   });
 
-  test("reports missing mandatory capabilities", () => {
+  test("reports workflow and baseline compatibility errors by requirement class", () => {
     const descriptor = withCapabilities({
-      supportsOdtWorkflowTools: false,
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportsOdtWorkflowTools: false,
+      },
     });
 
     expect(getMissingMandatoryRuntimeCapabilities(descriptor)).toEqual([
-      "supportsOdtWorkflowTools",
+      "workflow.supportsOdtWorkflowTools",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "missing mandatory capabilities: supportsOdtWorkflowTools",
+      "missing mandatory capabilities: workflow.supportsOdtWorkflowTools",
+      "[workflow] missing OpenDucktor workflow tool support",
     ]);
   });
 
   test("accepts optional capability combinations without extra invariants", () => {
     const descriptor = withCapabilities({
-      supportsProfiles: true,
-      supportsSlashCommands: true,
-      supportsMcpStatus: false,
+      optionalSurfaces: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+        supportsProfiles: true,
+        supportsMcpStatus: false,
+      },
+      promptInput: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+        supportsSlashCommands: true,
+      },
     });
 
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([]);
   });
 
-  test("accepts runtimes that cover at least one role-specific workflow scope set", () => {
+  test("fails fast on runtime descriptor schema violations before registration", () => {
+    const invariantViolation = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        sessionLifecycle: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+          supportedStartModes: ["fresh", "reuse"],
+          supportsSessionFork: false,
+          forkTargets: [],
+        },
+        promptInput: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+          supportsFileSearch: true,
+          supportedParts: ["text"],
+        },
+      },
+    } as RuntimeDescriptor;
+
+    expect(validateRuntimeDefinitionForOpenDucktor(invariantViolation)).toEqual([
+      "[baseline] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support slash commands must declare slash command prompt parts.",
+      "[baseline] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support file search must declare file or folder prompt references.",
+      "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork",
+    ]);
+
+    const staleFlatCapability = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        supportsFileSearch: true,
+      },
+    } as RuntimeDescriptor;
+
+    expect(validateRuntimeDefinitionForOpenDucktor(staleFlatCapability)).toEqual([
+      '[baseline] runtime descriptor schema violation at capabilities: Unrecognized key: "supportsFileSearch"',
+    ]);
+  });
+
+  test("reports runtimes that only cover a partial role-specific workflow scope set", () => {
     const workspaceOnly = withCapabilities({
-      supportedScopes: ["workspace"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["workspace"],
+      },
     });
     const taskOnly = withCapabilities({
-      supportedScopes: ["task"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["task"],
+      },
     });
     const buildAndWorkspace = withCapabilities({
-      supportedScopes: ["build", "workspace"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["build", "workspace"],
+      },
     });
 
-    expect(getRuntimeDescriptorCapabilityConfigErrors(workspaceOnly)).toEqual([]);
-    expect(validateRuntimeDefinitionForOpenDucktor(workspaceOnly)).toEqual([]);
-    expect(validateRuntimeDefinitionForOpenDucktor(taskOnly)).toEqual([]);
-    expect(validateRuntimeDefinitionForOpenDucktor(buildAndWorkspace)).toEqual([]);
+    expect(getRuntimeDescriptorCapabilityConfigErrors(workspaceOnly)).toEqual([
+      "[role_scoped] missing required workflow scopes: task, build",
+      "[role_scoped] unsupported agent roles: qa, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+    ]);
+    expect(validateRuntimeDefinitionForOpenDucktor(taskOnly)).toEqual([
+      "[role_scoped] missing required workflow scopes: workspace, build",
+      "[role_scoped] unsupported agent roles: spec, planner, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+    ]);
+    expect(validateRuntimeDefinitionForOpenDucktor(buildAndWorkspace)).toEqual([
+      "[role_scoped] missing required workflow scopes: task",
+      "[role_scoped] unsupported agent roles: qa (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
+    ]);
   });
 
   test("reports runtimes that cannot satisfy any agent role", () => {
     const descriptor = withCapabilities({
-      supportedScopes: ["build"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["build"],
+      },
     });
 
     expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toEqual([
-      "missing workflow scopes for every agent role: spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace",
+      "[role_scoped] missing required workflow scopes: workspace, task",
+      "[role_scoped] unsupported agent roles: spec, planner, qa, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "missing workflow scopes for every agent role: spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace",
+      "[role_scoped] missing required workflow scopes: workspace, task",
+      "[role_scoped] unsupported agent roles: spec, planner, qa, build (spec requires workspace; planner requires workspace; qa requires task; build requires build, workspace)",
     ]);
+  });
+
+  test("reports scenario-scoped start mode gaps separately from role scopes", () => {
+    const descriptor = withCapabilities({
+      sessionLifecycle: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+        supportedStartModes: ["fresh", "reuse"],
+        supportsSessionFork: false,
+        forkTargets: [],
+      },
+    });
+
+    expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toContain(
+      "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork",
+    );
   });
 
   test("reports incompatible runtime definitions with runtime-specific context", () => {
     const descriptor = withCapabilities({
-      supportsOdtWorkflowTools: false,
-      supportedScopes: ["workspace"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportsOdtWorkflowTools: false,
+      },
     });
 
     expect(validateRuntimeDefinitionsForOpenDucktor([descriptor])).toEqual([
-      "Runtime 'opencode' is incompatible with OpenDucktor: missing mandatory capabilities: supportsOdtWorkflowTools",
+      "Runtime 'opencode' is incompatible with OpenDucktor: missing mandatory capabilities: workflow.supportsOdtWorkflowTools; [workflow] missing OpenDucktor workflow tool support",
     ]);
   });
 
@@ -143,13 +230,22 @@ describe("agent-runtime capability policies", () => {
 
   test("uses role-specific scopes for role selection while defaults require all scopes", () => {
     const workspaceOnly = withCapabilities({
-      supportedScopes: ["workspace"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["workspace"],
+      },
     });
     const buildAndWorkspace = withCapabilities({
-      supportedScopes: ["build", "workspace"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["build", "workspace"],
+      },
     });
     const taskOnly = withCapabilities({
-      supportedScopes: ["task"],
+      workflow: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.workflow,
+        supportedScopes: ["task"],
+      },
     });
 
     expect(runtimeSupportsRole(OPENCODE_RUNTIME_DESCRIPTOR, "planner")).toBe(true);

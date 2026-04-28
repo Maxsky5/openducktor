@@ -304,8 +304,10 @@ export function useSessionStartModalState({
     selection,
     selectedRuntimeKind,
     runtimeOptions,
-    supportsProfiles: selectedRuntimeDescriptor?.capabilities.supportsProfiles ?? false,
-    supportsVariants: selectedRuntimeDescriptor?.capabilities.supportsVariants ?? false,
+    supportsProfiles:
+      selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ?? false,
+    supportsVariants:
+      selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ?? false,
     isCatalogLoading,
     agentOptions,
     modelOptions,

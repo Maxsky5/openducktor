@@ -266,7 +266,7 @@ const getRuntimeHealthIssueCandidates = (
       continue;
     }
 
-    if (!definition.capabilities.supportsMcpStatus) {
+    if (!definition.capabilities.optionalSurfaces.supportsMcpStatus) {
       continue;
     }
 
@@ -328,7 +328,7 @@ export const hasRuntimeHealthTimeoutIssue = (
     return (
       (runtimeHealth.runtime.status !== "error" &&
         runtimeHealth.runtime.failureKind === "timeout") ||
-      (definition.capabilities.supportsMcpStatus &&
+      (definition.capabilities.optionalSurfaces.supportsMcpStatus &&
         runtimeHealth.mcp?.status !== "error" &&
         runtimeHealth.mcp?.failureKind === "timeout")
     );

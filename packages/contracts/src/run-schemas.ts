@@ -137,17 +137,19 @@ export const taskWorktreeSummarySchema = z.object({
 });
 export type TaskWorktreeSummary = z.infer<typeof taskWorktreeSummarySchema>;
 
-export const runtimeInstanceSummarySchema = z.object({
-  kind: runtimeKindSchema,
-  runtimeId: z.string(),
-  repoPath: z.string(),
-  taskId: z.string().nullable(),
-  role: runtimeInstanceSummaryRoleSchema,
-  workingDirectory: z.string(),
-  runtimeRoute: runtimeRouteSchema,
-  startedAt: z.string(),
-  descriptor: runtimeDescriptorSchema,
-});
+export const runtimeInstanceSummarySchema = z
+  .object({
+    kind: runtimeKindSchema,
+    runtimeId: z.string(),
+    repoPath: z.string(),
+    taskId: z.string().nullable(),
+    role: runtimeInstanceSummaryRoleSchema,
+    workingDirectory: z.string(),
+    runtimeRoute: runtimeRouteSchema,
+    startedAt: z.string(),
+    descriptor: runtimeDescriptorSchema,
+  })
+  .strict();
 export type RuntimeInstanceSummary = z.infer<typeof runtimeInstanceSummarySchema>;
 
 export const repoRuntimeStartupStageSchema = z.enum([

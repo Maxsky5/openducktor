@@ -30,10 +30,16 @@ pub use runtime::{
     DevServerScriptStatus, DevServerTerminalChunk, RepoRuntimeHealthCheck, RepoRuntimeHealthMcp,
     RepoRuntimeHealthObservation, RepoRuntimeHealthRuntime, RepoRuntimeHealthState,
     RepoRuntimeMcpStatus, RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage,
-    RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeCapabilities,
-    RuntimeDefinition, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode,
-    RuntimeRegistry, RuntimeRole, RuntimeRoute, RuntimeStartupReadinessConfig,
-    RuntimeSubagentExecutionMode, RuntimeSupportedScope, TaskWorktreeSummary,
+    RepoRuntimeStartupStatus, RunEvent, RunState, RunSummary, RuntimeApprovalCapabilities,
+    RuntimeApprovalReplyOutcome, RuntimeApprovalRequestType, RuntimeCapabilities,
+    RuntimeDefinition, RuntimeDescriptor, RuntimeForkTarget, RuntimeHistoryCapabilities,
+    RuntimeHistoryFidelity, RuntimeHistoryReplay, RuntimeHydratedEventType, RuntimeInstanceSummary,
+    RuntimeOmittedPermissionBehavior, RuntimeOptionalSurfaceCapabilities,
+    RuntimePendingInputVisibility, RuntimePromptInputCapabilities, RuntimePromptInputPartType,
+    RuntimeProvisioningMode, RuntimeQuestionAnswerMode, RuntimeRegistry, RuntimeRole, RuntimeRoute,
+    RuntimeSessionLifecycleCapabilities, RuntimeSessionStartMode, RuntimeStartupReadinessConfig,
+    RuntimeStructuredInputCapabilities, RuntimeSubagentExecutionMode, RuntimeSupportedScope,
+    RuntimeWorkflowCapabilities, TaskWorktreeSummary,
 };
 pub use store::TaskStore;
 pub use system::{

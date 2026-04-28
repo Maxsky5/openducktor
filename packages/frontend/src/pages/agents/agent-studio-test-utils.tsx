@@ -56,7 +56,41 @@ export const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDe
   ) as RuntimeDescriptor["workflowToolAliasesByCanonical"],
   capabilities: {
     ...descriptor.capabilities,
-    supportedScopes: [...descriptor.capabilities.supportedScopes],
+    workflow: {
+      ...descriptor.capabilities.workflow,
+      supportedScopes: [...descriptor.capabilities.workflow.supportedScopes],
+    },
+    sessionLifecycle: {
+      ...descriptor.capabilities.sessionLifecycle,
+      supportedStartModes: [...descriptor.capabilities.sessionLifecycle.supportedStartModes],
+      forkTargets: [...descriptor.capabilities.sessionLifecycle.forkTargets],
+    },
+    history: {
+      ...descriptor.capabilities.history,
+      hydratedEventTypes: [...descriptor.capabilities.history.hydratedEventTypes],
+      limitations: [...descriptor.capabilities.history.limitations],
+    },
+    approvals: {
+      ...descriptor.capabilities.approvals,
+      supportedRequestTypes: [...descriptor.capabilities.approvals.supportedRequestTypes],
+      supportedReplyOutcomes: [...descriptor.capabilities.approvals.supportedReplyOutcomes],
+      pendingVisibility: [...descriptor.capabilities.approvals.pendingVisibility],
+    },
+    structuredInput: {
+      ...descriptor.capabilities.structuredInput,
+      supportedAnswerModes: [...descriptor.capabilities.structuredInput.supportedAnswerModes],
+      pendingVisibility: [...descriptor.capabilities.structuredInput.pendingVisibility],
+    },
+    promptInput: {
+      ...descriptor.capabilities.promptInput,
+      supportedParts: [...descriptor.capabilities.promptInput.supportedParts],
+    },
+    optionalSurfaces: {
+      ...descriptor.capabilities.optionalSurfaces,
+      supportedSubagentExecutionModes: [
+        ...descriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes,
+      ],
+    },
   },
 });
 

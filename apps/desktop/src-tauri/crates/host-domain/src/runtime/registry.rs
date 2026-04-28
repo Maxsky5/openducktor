@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 
@@ -40,7 +40,7 @@ impl fmt::Display for AgentRuntimeKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeProvisioningMode {
     HostManaged,
@@ -78,42 +78,253 @@ pub enum RuntimeSubagentExecutionMode {
     Background,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeSessionStartMode {
+    Fresh,
+    Reuse,
+    Fork,
+}
+
+impl RuntimeSessionStartMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Fresh => "fresh",
+            Self::Reuse => "reuse",
+            Self::Fork => "fork",
+        }
+    }
+}
+
+impl fmt::Display for RuntimeSessionStartMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeForkTarget {
+    Session,
+    Task,
+    Build,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeHistoryFidelity {
+    None,
+    Message,
+    Item,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeHistoryReplay {
+    None,
+    Snapshot,
+    TurnItems,
+    EventReplay,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeHydratedEventType {
+    Message,
+    ToolCall,
+    ToolResult,
+    ApprovalRequest,
+    QuestionRequest,
+    StatusChange,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeApprovalRequestType {
+    CommandExecution,
+    FileChange,
+    PermissionGrant,
+    RuntimeTool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeApprovalReplyOutcome {
+    ApproveOnce,
+    ApproveTurn,
+    ApproveSession,
+    Reject,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeOmittedPermissionBehavior {
+    Deny,
+    RequiresExplicitResponse,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimePendingInputVisibility {
+    LiveSnapshot,
+    History,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeQuestionAnswerMode {
+    FreeText,
+    SingleSelect,
+    MultiSelect,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimePromptInputPartType {
+    Text,
+    SlashCommand,
+    FileReference,
+    FolderReference,
+    SkillMention,
+    AppMention,
+    PluginMention,
+}
+
 pub const REQUIRED_RUNTIME_SUPPORTED_SCOPES: [RuntimeSupportedScope; 3] = [
     RuntimeSupportedScope::Workspace,
     RuntimeSupportedScope::Task,
     RuntimeSupportedScope::Build,
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeCapabilities {
-    pub supports_profiles: bool,
-    pub supports_variants: bool,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeWorkflowCapabilities {
+    pub supports_odt_workflow_tools: bool,
+    pub supported_scopes: Vec<RuntimeSupportedScope>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeSessionLifecycleCapabilities {
+    pub supported_start_modes: Vec<RuntimeSessionStartMode>,
+    pub supports_session_fork: bool,
+    pub fork_targets: Vec<RuntimeForkTarget>,
+    pub supports_attach_live_sessions: bool,
+    pub supports_list_live_sessions: bool,
+    pub supports_queued_user_messages: bool,
+    pub supports_pending_input_snapshots: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeHistoryCapabilities {
+    pub loadable: bool,
+    pub fidelity: RuntimeHistoryFidelity,
+    pub replay: RuntimeHistoryReplay,
+    pub stable_item_ids: bool,
+    pub stable_item_order: bool,
+    pub exposes_completion_state: bool,
+    pub hydrated_event_types: Vec<RuntimeHydratedEventType>,
+    pub limitations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeApprovalCapabilities {
+    pub supported_request_types: Vec<RuntimeApprovalRequestType>,
+    pub supported_reply_outcomes: Vec<RuntimeApprovalReplyOutcome>,
+    pub omitted_permission_behavior: RuntimeOmittedPermissionBehavior,
+    pub pending_visibility: Vec<RuntimePendingInputVisibility>,
+    pub can_classify_mutating_requests: bool,
+    pub read_only_auto_reject_safe: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeStructuredInputCapabilities {
+    pub supports_questions: bool,
+    pub supports_multiple_questions: bool,
+    pub supports_required_questions: bool,
+    pub supports_default_values: bool,
+    pub supports_custom_answers: bool,
+    pub supports_secret_input: bool,
+    pub supports_question_resolution: bool,
+    pub supported_answer_modes: Vec<RuntimeQuestionAnswerMode>,
+    pub pending_visibility: Vec<RuntimePendingInputVisibility>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimePromptInputCapabilities {
+    pub supported_parts: Vec<RuntimePromptInputPartType>,
     pub supports_slash_commands: bool,
     pub supports_file_search: bool,
-    pub supports_odt_workflow_tools: bool,
-    pub supports_session_fork: bool,
-    pub supports_queued_user_messages: bool,
-    pub supports_permission_requests: bool,
-    pub supports_question_requests: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeOptionalSurfaceCapabilities {
+    pub supports_profiles: bool,
+    pub supports_variants: bool,
     pub supports_todos: bool,
     pub supports_diff: bool,
     pub supports_file_status: bool,
     pub supports_mcp_status: bool,
     pub supports_subagents: bool,
     pub supported_subagent_execution_modes: Vec<RuntimeSubagentExecutionMode>,
-    pub supported_scopes: Vec<RuntimeSupportedScope>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeCapabilities {
     pub provisioning_mode: RuntimeProvisioningMode,
+    pub workflow: RuntimeWorkflowCapabilities,
+    pub session_lifecycle: RuntimeSessionLifecycleCapabilities,
+    pub history: RuntimeHistoryCapabilities,
+    pub approvals: RuntimeApprovalCapabilities,
+    pub structured_input: RuntimeStructuredInputCapabilities,
+    pub prompt_input: RuntimePromptInputCapabilities,
+    pub optional_surfaces: RuntimeOptionalSurfaceCapabilities,
 }
 
 impl RuntimeCapabilities {
+    fn duplicate_value_errors<T>(values: &[T], label: &'static str) -> Vec<String>
+    where
+        T: Copy + Eq + std::hash::Hash,
+    {
+        let mut seen = HashSet::new();
+        if values.iter().copied().any(|value| !seen.insert(value)) {
+            return vec![format!("[baseline] {label} must not contain duplicates")];
+        }
+        Vec::new()
+    }
+
+    fn duplicate_string_errors(values: &[String], label: &'static str) -> Vec<String> {
+        let mut seen = HashSet::new();
+        if values.iter().any(|value| !seen.insert(value.as_str())) {
+            return vec![format!("[baseline] {label} must not contain duplicates")];
+        }
+        Vec::new()
+    }
+
     pub fn missing_mandatory_capabilities(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
-        if !self.supports_odt_workflow_tools {
-            missing.push("supports_odt_workflow_tools");
+        if !self.workflow.supports_odt_workflow_tools {
+            missing.push("workflow.supportsOdtWorkflowTools");
         }
-        if !self.supports_session_fork {
-            missing.push("supports_session_fork");
+        if !self
+            .session_lifecycle
+            .supported_start_modes
+            .contains(&RuntimeSessionStartMode::Fresh)
+        {
+            missing.push("sessionLifecycle.supportedStartModes");
+        }
+        if !self
+            .prompt_input
+            .supported_parts
+            .contains(&RuntimePromptInputPartType::Text)
+        {
+            missing.push("promptInput.supportedParts");
         }
         missing
     }
@@ -122,17 +333,296 @@ impl RuntimeCapabilities {
         REQUIRED_RUNTIME_SUPPORTED_SCOPES
             .iter()
             .copied()
-            .filter(|scope| !self.supported_scopes.contains(scope))
+            .filter(|scope| !self.workflow.supported_scopes.contains(scope))
             .collect()
     }
 
     pub fn supports_all_workflow_scopes(&self) -> bool {
         self.missing_required_supported_scopes().is_empty()
     }
+
+    fn uniqueness_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        errors.extend(Self::duplicate_value_errors(
+            &self.workflow.supported_scopes,
+            "workflow.supportedScopes",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.session_lifecycle.supported_start_modes,
+            "sessionLifecycle.supportedStartModes",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.session_lifecycle.fork_targets,
+            "sessionLifecycle.forkTargets",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.history.hydrated_event_types,
+            "history.hydratedEventTypes",
+        ));
+        errors.extend(Self::duplicate_string_errors(
+            &self.history.limitations,
+            "history.limitations",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.approvals.supported_request_types,
+            "approvals.supportedRequestTypes",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.approvals.supported_reply_outcomes,
+            "approvals.supportedReplyOutcomes",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.approvals.pending_visibility,
+            "approvals.pendingVisibility",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.structured_input.supported_answer_modes,
+            "structuredInput.supportedAnswerModes",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.structured_input.pending_visibility,
+            "structuredInput.pendingVisibility",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.prompt_input.supported_parts,
+            "promptInput.supportedParts",
+        ));
+        errors.extend(Self::duplicate_value_errors(
+            &self.optional_surfaces.supported_subagent_execution_modes,
+            "optionalSurfaces.supportedSubagentExecutionModes",
+        ));
+        errors
+    }
+
+    fn lifecycle_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        let supported_start_modes = &self.session_lifecycle.supported_start_modes;
+        if !supported_start_modes.contains(&RuntimeSessionStartMode::Fresh) {
+            errors.push("[baseline] session lifecycle must support fresh starts".to_string());
+        }
+        if supported_start_modes.contains(&RuntimeSessionStartMode::Fork)
+            && !self.session_lifecycle.supports_session_fork
+        {
+            errors.push(
+                "[scenario_scoped] fork start mode requires sessionLifecycle.supportsSessionFork"
+                    .to_string(),
+            );
+        }
+        if self.session_lifecycle.supports_session_fork {
+            if !supported_start_modes.contains(&RuntimeSessionStartMode::Fork) {
+                errors.push(
+                    "[scenario_scoped] session fork support requires fork start mode".to_string(),
+                );
+            }
+            if self.session_lifecycle.fork_targets.is_empty() {
+                errors.push(
+                    "[scenario_scoped] session fork support requires at least one fork target"
+                        .to_string(),
+                );
+            }
+        } else if !self.session_lifecycle.fork_targets.is_empty() {
+            errors.push(
+                "[scenario_scoped] fork targets must be empty when session fork is unsupported"
+                    .to_string(),
+            );
+        }
+        errors
+    }
+
+    fn history_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if matches!(self.history.fidelity, RuntimeHistoryFidelity::Item) {
+            if !self.history.loadable {
+                errors.push("[baseline] item-level history requires loadable history".to_string());
+            }
+            if !self.history.stable_item_ids {
+                errors.push("[baseline] item-level history requires stable item ids".to_string());
+            }
+            if !self.history.stable_item_order {
+                errors.push("[baseline] item-level history requires stable item order".to_string());
+            }
+            if !self.history.exposes_completion_state {
+                errors.push(
+                    "[baseline] item-level history requires completion state exposure".to_string(),
+                );
+            }
+        }
+        if !self.history.loadable {
+            if !matches!(self.history.fidelity, RuntimeHistoryFidelity::None) {
+                errors.push("[baseline] unloaded history must use none fidelity".to_string());
+            }
+            if !matches!(self.history.replay, RuntimeHistoryReplay::None) {
+                errors.push("[baseline] unloaded history must use none replay".to_string());
+            }
+            if !self.history.hydrated_event_types.is_empty() {
+                errors.push(
+                    "[baseline] unloaded history cannot expose hydrated event types".to_string(),
+                );
+            }
+        }
+        errors
+    }
+
+    fn approval_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        let has_request_types = !self.approvals.supported_request_types.is_empty();
+        let has_reject = self
+            .approvals
+            .supported_reply_outcomes
+            .contains(&RuntimeApprovalReplyOutcome::Reject);
+        let has_approval_outcome = self
+            .approvals
+            .supported_reply_outcomes
+            .iter()
+            .any(|outcome| !matches!(outcome, RuntimeApprovalReplyOutcome::Reject));
+        if has_request_types && !has_reject {
+            errors.push("[workflow] approval requests require reject reply outcome".to_string());
+        }
+        if has_request_types && !has_approval_outcome {
+            errors.push(
+                "[workflow] approval requests require at least one approve reply outcome"
+                    .to_string(),
+            );
+        }
+        if self.approvals.read_only_auto_reject_safe {
+            if !self.approvals.can_classify_mutating_requests {
+                errors.push(
+                    "[workflow] read-only auto-reject safety requires mutating request classification"
+                        .to_string(),
+                );
+            }
+            if !has_reject {
+                errors.push(
+                    "[workflow] read-only auto-reject safety requires reject reply outcome"
+                        .to_string(),
+                );
+            }
+        }
+        errors
+    }
+
+    fn structured_input_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.structured_input.supports_questions {
+            if self.structured_input.supported_answer_modes.is_empty() {
+                errors.push(
+                    "[workflow] structured question support requires answer modes".to_string(),
+                );
+            }
+            if !self.structured_input.supports_question_resolution {
+                errors.push(
+                    "[workflow] structured question support requires resolution tracking"
+                        .to_string(),
+                );
+            }
+        } else {
+            if self.structured_input.supports_multiple_questions
+                || self.structured_input.supports_required_questions
+                || self.structured_input.supports_default_values
+                || self.structured_input.supports_custom_answers
+                || self.structured_input.supports_secret_input
+                || self.structured_input.supports_question_resolution
+            {
+                errors.push(
+                    "[workflow] structured question details must be false when questions are unsupported"
+                        .to_string(),
+                );
+            }
+            if !self.structured_input.supported_answer_modes.is_empty()
+                || !self.structured_input.pending_visibility.is_empty()
+            {
+                errors.push(
+                    "[workflow] structured question lists must be empty when questions are unsupported"
+                        .to_string(),
+                );
+            }
+        }
+        errors
+    }
+
+    fn prompt_input_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if !self
+            .prompt_input
+            .supported_parts
+            .contains(&RuntimePromptInputPartType::Text)
+        {
+            errors.push("[baseline] prompt input must support text".to_string());
+        }
+        if self.prompt_input.supports_slash_commands
+            && !self
+                .prompt_input
+                .supported_parts
+                .contains(&RuntimePromptInputPartType::SlashCommand)
+        {
+            errors.push(
+                "[optional_enhancement] slash command support requires slash_command prompt part"
+                    .to_string(),
+            );
+        }
+        if self.prompt_input.supports_file_search
+            && !self.prompt_input.supported_parts.iter().any(|part| {
+                matches!(
+                    part,
+                    RuntimePromptInputPartType::FileReference
+                        | RuntimePromptInputPartType::FolderReference
+                )
+            })
+        {
+            errors.push(
+                "[optional_enhancement] file search support requires file or folder prompt references"
+                    .to_string(),
+            );
+        }
+        errors
+    }
+
+    fn optional_surface_errors(&self) -> Vec<String> {
+        let has_subagent_execution_modes = !self
+            .optional_surfaces
+            .supported_subagent_execution_modes
+            .is_empty();
+        if self.optional_surfaces.supports_subagents && !has_subagent_execution_modes {
+            return vec![
+                "[optional_enhancement] subagent support requires at least one supported execution mode"
+                    .to_string(),
+            ];
+        }
+        if !self.optional_surfaces.supports_subagents && has_subagent_execution_modes {
+            return vec![
+                "[optional_enhancement] subagent execution modes must be empty when subagents are unsupported"
+                    .to_string(),
+            ];
+        }
+        Vec::new()
+    }
+
+    fn scenario_config_errors(&self) -> Vec<String> {
+        let required_pull_request_modes = [
+            RuntimeSessionStartMode::Reuse,
+            RuntimeSessionStartMode::Fork,
+        ];
+        let missing_pull_request_modes = required_pull_request_modes
+            .iter()
+            .copied()
+            .filter(|mode| !self.session_lifecycle.supported_start_modes.contains(mode))
+            .collect::<Vec<_>>();
+        if missing_pull_request_modes.is_empty() {
+            return Vec::new();
+        }
+        vec![format!(
+            "[scenario_scoped] scenario build_pull_request_generation requires start modes: {}",
+            missing_pull_request_modes
+                .into_iter()
+                .map(|mode| mode.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )]
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RuntimeDescriptor {
     pub kind: AgentRuntimeKind,
     pub label: String,
@@ -149,15 +639,19 @@ impl RuntimeDescriptor {
         let missing_mandatory_capabilities = self.capabilities.missing_mandatory_capabilities();
         if !missing_mandatory_capabilities.is_empty() {
             errors.push(format!(
-                "missing mandatory capabilities: {}",
+                "[baseline] missing mandatory capabilities: {}",
                 missing_mandatory_capabilities.join(", ")
             ));
+        }
+
+        if !self.capabilities.workflow.supports_odt_workflow_tools {
+            errors.push("[workflow] missing OpenDucktor workflow tool support".to_string());
         }
 
         let missing_supported_scopes = self.capabilities.missing_required_supported_scopes();
         if !missing_supported_scopes.is_empty() {
             errors.push(format!(
-                "missing required workflow scopes: {}",
+                "[role_scoped] missing required workflow scopes: {}",
                 missing_supported_scopes
                     .into_iter()
                     .map(|scope| scope.to_string())
@@ -166,22 +660,14 @@ impl RuntimeDescriptor {
             ));
         }
 
-        let has_subagent_execution_modes = !self
-            .capabilities
-            .supported_subagent_execution_modes
-            .is_empty();
-        if self.capabilities.supports_subagents && !has_subagent_execution_modes {
-            errors.push(
-                "supports_subagents requires at least one supported subagent execution mode"
-                    .to_string(),
-            );
-        }
-        if !self.capabilities.supports_subagents && has_subagent_execution_modes {
-            errors.push(
-                "supported subagent execution modes must be empty when supports_subagents is false"
-                    .to_string(),
-            );
-        }
+        errors.extend(self.capabilities.uniqueness_errors());
+        errors.extend(self.capabilities.lifecycle_errors());
+        errors.extend(self.capabilities.history_errors());
+        errors.extend(self.capabilities.approval_errors());
+        errors.extend(self.capabilities.structured_input_errors());
+        errors.extend(self.capabilities.prompt_input_errors());
+        errors.extend(self.capabilities.optional_surface_errors());
+        errors.extend(self.capabilities.scenario_config_errors());
 
         errors
     }
@@ -404,26 +890,94 @@ fn opencode_runtime_definition() -> RuntimeDefinition {
             ],
             workflow_tool_aliases_by_canonical: opencode_workflow_tool_aliases_by_canonical(),
             capabilities: RuntimeCapabilities {
-                supports_profiles: true,
-                supports_variants: true,
-                supports_slash_commands: true,
-                supports_file_search: true,
-                supports_odt_workflow_tools: true,
-                supports_session_fork: true,
-                supports_queued_user_messages: true,
-                supports_permission_requests: true,
-                supports_question_requests: true,
-                supports_todos: true,
-                supports_diff: true,
-                supports_file_status: true,
-                supports_mcp_status: true,
-                supports_subagents: true,
-                supported_subagent_execution_modes: vec![
-                    RuntimeSubagentExecutionMode::Foreground,
-                    RuntimeSubagentExecutionMode::Background,
-                ],
-                supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
                 provisioning_mode: RuntimeProvisioningMode::HostManaged,
+                workflow: RuntimeWorkflowCapabilities {
+                    supports_odt_workflow_tools: true,
+                    supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
+                },
+                session_lifecycle: RuntimeSessionLifecycleCapabilities {
+                    supported_start_modes: vec![
+                        RuntimeSessionStartMode::Fresh,
+                        RuntimeSessionStartMode::Reuse,
+                        RuntimeSessionStartMode::Fork,
+                    ],
+                    supports_session_fork: true,
+                    fork_targets: vec![RuntimeForkTarget::Session],
+                    supports_attach_live_sessions: true,
+                    supports_list_live_sessions: true,
+                    supports_queued_user_messages: true,
+                    supports_pending_input_snapshots: true,
+                },
+                history: RuntimeHistoryCapabilities {
+                    loadable: true,
+                    fidelity: RuntimeHistoryFidelity::Message,
+                    replay: RuntimeHistoryReplay::Snapshot,
+                    stable_item_ids: false,
+                    stable_item_order: true,
+                    exposes_completion_state: false,
+                    hydrated_event_types: vec![
+                        RuntimeHydratedEventType::Message,
+                        RuntimeHydratedEventType::ToolCall,
+                        RuntimeHydratedEventType::ToolResult,
+                    ],
+                    limitations: vec![
+                        "OpenCode history is exposed as message-level snapshots; individual runtime event ids are not yet stable across hydration."
+                            .to_string(),
+                    ],
+                },
+                approvals: RuntimeApprovalCapabilities {
+                    supported_request_types: vec![
+                        RuntimeApprovalRequestType::PermissionGrant,
+                        RuntimeApprovalRequestType::RuntimeTool,
+                    ],
+                    supported_reply_outcomes: vec![
+                        RuntimeApprovalReplyOutcome::ApproveOnce,
+                        RuntimeApprovalReplyOutcome::ApproveSession,
+                        RuntimeApprovalReplyOutcome::Reject,
+                    ],
+                    omitted_permission_behavior: RuntimeOmittedPermissionBehavior::Deny,
+                    pending_visibility: vec![RuntimePendingInputVisibility::LiveSnapshot],
+                    can_classify_mutating_requests: true,
+                    read_only_auto_reject_safe: true,
+                },
+                structured_input: RuntimeStructuredInputCapabilities {
+                    supports_questions: true,
+                    supports_multiple_questions: true,
+                    supports_required_questions: true,
+                    supports_default_values: false,
+                    supports_custom_answers: true,
+                    supports_secret_input: false,
+                    supports_question_resolution: true,
+                    supported_answer_modes: vec![
+                        RuntimeQuestionAnswerMode::FreeText,
+                        RuntimeQuestionAnswerMode::SingleSelect,
+                        RuntimeQuestionAnswerMode::MultiSelect,
+                    ],
+                    pending_visibility: vec![RuntimePendingInputVisibility::LiveSnapshot],
+                },
+                prompt_input: RuntimePromptInputCapabilities {
+                    supported_parts: vec![
+                        RuntimePromptInputPartType::Text,
+                        RuntimePromptInputPartType::SlashCommand,
+                        RuntimePromptInputPartType::FileReference,
+                        RuntimePromptInputPartType::FolderReference,
+                    ],
+                    supports_slash_commands: true,
+                    supports_file_search: true,
+                },
+                optional_surfaces: RuntimeOptionalSurfaceCapabilities {
+                    supports_profiles: true,
+                    supports_variants: true,
+                    supports_todos: true,
+                    supports_diff: true,
+                    supports_file_status: true,
+                    supports_mcp_status: true,
+                    supports_subagents: true,
+                    supported_subagent_execution_modes: vec![
+                        RuntimeSubagentExecutionMode::Foreground,
+                        RuntimeSubagentExecutionMode::Background,
+                    ],
+                },
             },
         },
         RuntimeStartupReadinessConfig::default(),
@@ -449,35 +1003,107 @@ pub fn default_runtime_kind() -> AgentRuntimeKind {
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentRuntimeKind, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
-        RuntimeProvisioningMode, RuntimeRegistry, RuntimeStartupReadinessConfig,
-        RuntimeSubagentExecutionMode, RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
+        AgentRuntimeKind, RuntimeApprovalCapabilities, RuntimeApprovalReplyOutcome,
+        RuntimeApprovalRequestType, RuntimeCapabilities, RuntimeDefinition, RuntimeDescriptor,
+        RuntimeForkTarget, RuntimeHistoryCapabilities, RuntimeHistoryFidelity,
+        RuntimeHistoryReplay, RuntimeHydratedEventType, RuntimeOmittedPermissionBehavior,
+        RuntimeOptionalSurfaceCapabilities, RuntimePendingInputVisibility,
+        RuntimePromptInputCapabilities, RuntimePromptInputPartType, RuntimeProvisioningMode,
+        RuntimeQuestionAnswerMode, RuntimeRegistry, RuntimeSessionLifecycleCapabilities,
+        RuntimeSessionStartMode, RuntimeStartupReadinessConfig, RuntimeStructuredInputCapabilities,
+        RuntimeSubagentExecutionMode, RuntimeSupportedScope, RuntimeWorkflowCapabilities,
+        REQUIRED_RUNTIME_SUPPORTED_SCOPES,
     };
     use anyhow::Result;
     use std::collections::BTreeMap;
 
     fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabilities {
         RuntimeCapabilities {
-            supports_profiles: true,
-            supports_variants: true,
-            supports_slash_commands: true,
-            supports_file_search: true,
-            supports_odt_workflow_tools: true,
-            supports_session_fork: true,
-            supports_queued_user_messages: true,
-            supports_permission_requests: true,
-            supports_question_requests: true,
-            supports_todos: true,
-            supports_diff: true,
-            supports_file_status: true,
-            supports_mcp_status: true,
-            supports_subagents: true,
-            supported_subagent_execution_modes: vec![
-                RuntimeSubagentExecutionMode::Foreground,
-                RuntimeSubagentExecutionMode::Background,
-            ],
-            supported_scopes: scopes,
             provisioning_mode: RuntimeProvisioningMode::HostManaged,
+            workflow: RuntimeWorkflowCapabilities {
+                supports_odt_workflow_tools: true,
+                supported_scopes: scopes,
+            },
+            session_lifecycle: RuntimeSessionLifecycleCapabilities {
+                supported_start_modes: vec![
+                    RuntimeSessionStartMode::Fresh,
+                    RuntimeSessionStartMode::Reuse,
+                    RuntimeSessionStartMode::Fork,
+                ],
+                supports_session_fork: true,
+                fork_targets: vec![RuntimeForkTarget::Session],
+                supports_attach_live_sessions: true,
+                supports_list_live_sessions: true,
+                supports_queued_user_messages: true,
+                supports_pending_input_snapshots: true,
+            },
+            history: RuntimeHistoryCapabilities {
+                loadable: true,
+                fidelity: RuntimeHistoryFidelity::Message,
+                replay: RuntimeHistoryReplay::Snapshot,
+                stable_item_ids: false,
+                stable_item_order: true,
+                exposes_completion_state: false,
+                hydrated_event_types: vec![
+                    RuntimeHydratedEventType::Message,
+                    RuntimeHydratedEventType::ToolCall,
+                    RuntimeHydratedEventType::ToolResult,
+                ],
+                limitations: vec!["message-level history only".to_string()],
+            },
+            approvals: RuntimeApprovalCapabilities {
+                supported_request_types: vec![
+                    RuntimeApprovalRequestType::PermissionGrant,
+                    RuntimeApprovalRequestType::RuntimeTool,
+                ],
+                supported_reply_outcomes: vec![
+                    RuntimeApprovalReplyOutcome::ApproveOnce,
+                    RuntimeApprovalReplyOutcome::ApproveSession,
+                    RuntimeApprovalReplyOutcome::Reject,
+                ],
+                omitted_permission_behavior: RuntimeOmittedPermissionBehavior::Deny,
+                pending_visibility: vec![RuntimePendingInputVisibility::LiveSnapshot],
+                can_classify_mutating_requests: true,
+                read_only_auto_reject_safe: true,
+            },
+            structured_input: RuntimeStructuredInputCapabilities {
+                supports_questions: true,
+                supports_multiple_questions: true,
+                supports_required_questions: true,
+                supports_default_values: false,
+                supports_custom_answers: true,
+                supports_secret_input: false,
+                supports_question_resolution: true,
+                supported_answer_modes: vec![
+                    RuntimeQuestionAnswerMode::FreeText,
+                    RuntimeQuestionAnswerMode::SingleSelect,
+                    RuntimeQuestionAnswerMode::MultiSelect,
+                ],
+                pending_visibility: vec![RuntimePendingInputVisibility::LiveSnapshot],
+            },
+            prompt_input: RuntimePromptInputCapabilities {
+                supported_parts: vec![
+                    RuntimePromptInputPartType::Text,
+                    RuntimePromptInputPartType::SlashCommand,
+                    RuntimePromptInputPartType::FileReference,
+                    RuntimePromptInputPartType::FolderReference,
+                ],
+                supports_slash_commands: true,
+                supports_file_search: true,
+            },
+            optional_surfaces: RuntimeOptionalSurfaceCapabilities {
+                supports_profiles: true,
+                supports_variants: true,
+                supports_todos: true,
+                supports_diff: true,
+                supports_file_status: true,
+                supports_mcp_status: true,
+                supports_subagents: true,
+                supported_subagent_execution_modes: vec![
+                    RuntimeSubagentExecutionMode::Foreground,
+                    RuntimeSubagentExecutionMode::Background,
+                ],
+            },
         }
     }
 
@@ -523,19 +1149,31 @@ mod tests {
             .clone();
 
         assert_eq!(
-            descriptor.capabilities.supported_scopes,
+            descriptor.capabilities.workflow.supported_scopes,
             REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec()
         );
-        assert!(descriptor.capabilities.supports_slash_commands);
-        assert!(descriptor.capabilities.supports_file_search);
-        assert!(descriptor.capabilities.supports_subagents);
+        assert!(descriptor.capabilities.prompt_input.supports_slash_commands);
+        assert!(descriptor.capabilities.prompt_input.supports_file_search);
+        assert!(descriptor.capabilities.optional_surfaces.supports_subagents);
         assert_eq!(
-            descriptor.capabilities.supported_subagent_execution_modes,
+            descriptor
+                .capabilities
+                .optional_surfaces
+                .supported_subagent_execution_modes,
             vec![
                 RuntimeSubagentExecutionMode::Foreground,
                 RuntimeSubagentExecutionMode::Background,
             ]
         );
+        assert_eq!(
+            descriptor.capabilities.history.fidelity,
+            RuntimeHistoryFidelity::Message
+        );
+        assert!(descriptor
+            .capabilities
+            .approvals
+            .supported_reply_outcomes
+            .contains(&RuntimeApprovalReplyOutcome::Reject));
         assert!(descriptor
             .read_only_role_blocked_tools
             .contains(&"apply_patch".to_string()));
@@ -579,33 +1217,21 @@ mod tests {
             description: "desc".to_string(),
             read_only_role_blocked_tools: vec![],
             workflow_tool_aliases_by_canonical: BTreeMap::new(),
-            capabilities: RuntimeCapabilities {
-                supports_profiles: true,
-                supports_variants: true,
-                supports_slash_commands: true,
-                supports_file_search: true,
-                supports_odt_workflow_tools: false,
-                supports_session_fork: false,
-                supports_queued_user_messages: true,
-                supports_permission_requests: true,
-                supports_question_requests: true,
-                supports_todos: true,
-                supports_diff: true,
-                supports_file_status: true,
-                supports_mcp_status: true,
-                supports_subagents: false,
-                supported_subagent_execution_modes: vec![],
-                supported_scopes: vec![RuntimeSupportedScope::Workspace],
-                provisioning_mode: RuntimeProvisioningMode::HostManaged,
+            capabilities: {
+                let mut capabilities =
+                    capabilities_with_scopes(vec![RuntimeSupportedScope::Workspace]);
+                capabilities.workflow.supports_odt_workflow_tools = false;
+                capabilities
             },
         };
 
         assert_eq!(
             descriptor.validate_for_openducktor(),
             vec![
-                "missing mandatory capabilities: supports_odt_workflow_tools, supports_session_fork"
+                "[baseline] missing mandatory capabilities: workflow.supportsOdtWorkflowTools"
                     .to_string(),
-                "missing required workflow scopes: task, build".to_string(),
+                "[workflow] missing OpenDucktor workflow tool support".to_string(),
+                "[role_scoped] missing required workflow scopes: task, build".to_string(),
             ]
         );
     }
@@ -615,13 +1241,14 @@ mod tests {
         let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
         descriptor
             .capabilities
+            .optional_surfaces
             .supported_subagent_execution_modes
             .clear();
 
         assert_eq!(
             descriptor.validate_for_openducktor(),
             vec![
-                "supports_subagents requires at least one supported subagent execution mode"
+                "[optional_enhancement] subagent support requires at least one supported execution mode"
                     .to_string()
             ]
         );
@@ -630,14 +1257,104 @@ mod tests {
     #[test]
     fn runtime_descriptor_validation_rejects_execution_modes_when_subagents_are_disabled() {
         let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
-        descriptor.capabilities.supports_subagents = false;
+        descriptor.capabilities.optional_surfaces.supports_subagents = false;
 
         assert_eq!(
             descriptor.validate_for_openducktor(),
             vec![
-                "supported subagent execution modes must be empty when supports_subagents is false"
+                "[optional_enhancement] subagent execution modes must be empty when subagents are unsupported"
                     .to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_reports_capability_invariants() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor
+            .capabilities
+            .session_lifecycle
+            .supports_session_fork = false;
+        descriptor.capabilities.history.fidelity = RuntimeHistoryFidelity::Item;
+        descriptor.capabilities.history.stable_item_ids = false;
+        descriptor
+            .capabilities
+            .approvals
+            .supported_reply_outcomes
+            .retain(|outcome| !matches!(outcome, RuntimeApprovalReplyOutcome::Reject));
+        descriptor.capabilities.prompt_input.supported_parts =
+            vec![RuntimePromptInputPartType::Text];
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "[scenario_scoped] fork start mode requires sessionLifecycle.supportsSessionFork"
+                    .to_string(),
+                "[scenario_scoped] fork targets must be empty when session fork is unsupported"
+                    .to_string(),
+                "[baseline] item-level history requires stable item ids".to_string(),
+                "[baseline] item-level history requires completion state exposure".to_string(),
+                "[workflow] approval requests require reject reply outcome".to_string(),
+                "[workflow] read-only auto-reject safety requires reject reply outcome".to_string(),
+                "[optional_enhancement] slash command support requires slash_command prompt part"
+                    .to_string(),
+                "[optional_enhancement] file search support requires file or folder prompt references"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_reports_scenario_start_mode_gaps() {
+        let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+        descriptor
+            .capabilities
+            .session_lifecycle
+            .supported_start_modes = vec![
+            RuntimeSessionStartMode::Fresh,
+            RuntimeSessionStartMode::Reuse,
+        ];
+        descriptor
+            .capabilities
+            .session_lifecycle
+            .supports_session_fork = false;
+        descriptor
+            .capabilities
+            .session_lifecycle
+            .fork_targets
+            .clear();
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork"
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_descriptor_deserialization_rejects_unknown_capability_fields() {
+        let mut descriptor_value = serde_json::to_value(
+            super::builtin_runtime_registry()
+                .definition_by_str("opencode")
+                .expect("opencode runtime should be registered")
+                .descriptor(),
+        )
+        .expect("runtime descriptor should serialize");
+
+        descriptor_value["capabilities"]["supportsMcpStatus"] = serde_json::json!(true);
+        descriptor_value["capabilities"]["promptInput"]["legacyFileSearch"] =
+            serde_json::json!(true);
+        descriptor_value["runtimeEndpoint"] = serde_json::json!("http://127.0.0.1:4444");
+
+        let error = serde_json::from_value::<RuntimeDescriptor>(descriptor_value)
+            .expect_err("unknown descriptor fields should fail fast");
+        let message = error.to_string();
+
+        assert!(
+            message.contains("unknown field"),
+            "unexpected deserialization error: {message}"
         );
     }
 

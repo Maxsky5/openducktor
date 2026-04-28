@@ -1,9 +1,14 @@
 import {
+  type AgentScenario,
+  type AgentSessionStartMode,
+  agentScenarioDefinitionByScenario,
+  agentScenarioValues,
   getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
+  runtimeDescriptorSchema,
   runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
@@ -116,7 +121,16 @@ const runtimeSupportsCapability = (
   runtimeDescriptor: RuntimeDescriptor,
   capability: RuntimeCapabilityKey,
 ): boolean => {
-  return runtimeDescriptor.capabilities[capability];
+  switch (capability) {
+    case "workflow.supportsOdtWorkflowTools":
+      return runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools;
+    case "sessionLifecycle.supportedStartModes":
+      return runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes.includes("fresh");
+    case "promptInput.supportedParts":
+      return runtimeDescriptor.capabilities.promptInput.supportedParts.includes("text");
+    default:
+      return true;
+  }
 };
 
 export const getMissingMandatoryRuntimeCapabilities = (
@@ -128,7 +142,7 @@ export const getMissingMandatoryRuntimeCapabilities = (
 };
 
 const supportedScopesSatisfyRole = (
-  supportedScopes: readonly string[],
+  supportedScopes: RuntimeDescriptor["capabilities"]["workflow"]["supportedScopes"],
   role: AgentRole,
 ): boolean => {
   return runtimeRequiredScopesByRole[role].every((scope) => supportedScopes.includes(scope));
@@ -143,21 +157,88 @@ const roleScopeRequirementsDescription = (): string => {
 export const getRuntimeDescriptorCapabilityConfigErrors = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
-  const supportsAtLeastOneRole = agentRoles.some((role) =>
-    supportedScopesSatisfyRole(runtimeDescriptor.capabilities.supportedScopes, role),
+  const errors: string[] = [];
+  const missingWorkflowScopes = getMissingRequiredRuntimeSupportedScopes(
+    runtimeDescriptor.capabilities.workflow.supportedScopes,
   );
-  if (supportsAtLeastOneRole) {
-    return [];
+
+  if (!runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools) {
+    errors.push("[workflow] missing OpenDucktor workflow tool support");
   }
 
-  return [`missing workflow scopes for every agent role: ${roleScopeRequirementsDescription()}`];
+  if (missingWorkflowScopes.length > 0) {
+    errors.push(
+      `[role_scoped] missing required workflow scopes: ${missingWorkflowScopes.join(", ")}`,
+    );
+  }
+
+  const unsupportedRoles = agentRoles.filter(
+    (role) =>
+      !supportedScopesSatisfyRole(runtimeDescriptor.capabilities.workflow.supportedScopes, role),
+  );
+  if (unsupportedRoles.length > 0) {
+    errors.push(
+      `[role_scoped] unsupported agent roles: ${unsupportedRoles.join(", ")} (${roleScopeRequirementsDescription()})`,
+    );
+  }
+
+  const scenarioErrors = getRuntimeDescriptorScenarioConfigErrors(runtimeDescriptor);
+  errors.push(...scenarioErrors);
+
+  return errors;
+};
+
+const getUnsupportedScenarioStartModes = (
+  runtimeDescriptor: RuntimeDescriptor,
+  scenario: AgentScenario,
+): AgentSessionStartMode[] => {
+  const supportedStartModes = runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes;
+  return agentScenarioDefinitionByScenario[scenario].allowedStartModes.filter(
+    (startMode) => !supportedStartModes.includes(startMode),
+  );
+};
+
+export const runtimeSupportsScenario = (
+  runtimeDescriptor: RuntimeDescriptor,
+  scenario: AgentScenario,
+): boolean => {
+  const scenarioDefinition = agentScenarioDefinitionByScenario[scenario];
+  return (
+    runtimeSupportsRole(runtimeDescriptor, scenarioDefinition.role) &&
+    getUnsupportedScenarioStartModes(runtimeDescriptor, scenario).length === 0
+  );
+};
+
+export const getRuntimeDescriptorScenarioConfigErrors = (
+  runtimeDescriptor: RuntimeDescriptor,
+): string[] => {
+  return agentScenarioValues.flatMap((scenario) => {
+    const missingStartModes = getUnsupportedScenarioStartModes(runtimeDescriptor, scenario);
+    if (missingStartModes.length === 0) {
+      return [];
+    }
+
+    return [
+      `[scenario_scoped] scenario ${scenario} requires start modes: ${missingStartModes.join(", ")}`,
+    ];
+  });
 };
 
 export const validateRuntimeDefinitionForOpenDucktor = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
+  const descriptorParseResult = runtimeDescriptorSchema.safeParse(runtimeDescriptor);
+  const schemaErrors = descriptorParseResult.success
+    ? []
+    : descriptorParseResult.error.issues.map(
+        (issue) =>
+          `[baseline] runtime descriptor schema violation at ${issue.path.join(".") || "descriptor"}: ${issue.message}`,
+      );
   const missingMandatory = getMissingMandatoryRuntimeCapabilities(runtimeDescriptor);
-  const errors = [...getRuntimeDescriptorCapabilityConfigErrors(runtimeDescriptor)];
+  const errors = [
+    ...schemaErrors,
+    ...getRuntimeDescriptorCapabilityConfigErrors(runtimeDescriptor),
+  ];
   if (missingMandatory.length > 0) {
     errors.unshift(`missing mandatory capabilities: ${missingMandatory.join(", ")}`);
   }
@@ -183,7 +264,7 @@ export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
   role: AgentRole,
 ): boolean => {
-  return supportedScopesSatisfyRole(runtimeDescriptor.capabilities.supportedScopes, role);
+  return supportedScopesSatisfyRole(runtimeDescriptor.capabilities.workflow.supportedScopes, role);
 };
 
 export const filterRuntimeDefinitionsForRole = (
@@ -195,8 +276,9 @@ export const filterRuntimeDefinitionsForRole = (
 
 const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
   return (
-    getMissingRequiredRuntimeSupportedScopes(runtimeDescriptor.capabilities.supportedScopes)
-      .length === 0
+    getMissingRequiredRuntimeSupportedScopes(
+      runtimeDescriptor.capabilities.workflow.supportedScopes,
+    ).length === 0
   );
 };
 

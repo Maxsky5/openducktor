@@ -73,7 +73,12 @@ impl AppService {
 
             host_status =
                 Some(self.runtime_startup_status(runtime_kind.as_str(), repo_key.as_str())?);
-            if !runtime.descriptor.capabilities.supports_mcp_status {
+            if !runtime
+                .descriptor
+                .capabilities
+                .optional_surfaces
+                .supports_mcp_status
+            {
                 let progress = repo_runtime_progress(RepoRuntimeProgressInput {
                     stage: RuntimeHealthWorkflowStage::Ready,
                     observation,

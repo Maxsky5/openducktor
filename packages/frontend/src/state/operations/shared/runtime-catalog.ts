@@ -243,7 +243,7 @@ export const createHostRuntimeCatalogOperations = (
 ): RuntimeCatalogOperations =>
   createRuntimeCatalogOperations({
     supportsMcpStatus: (runtimeKind) =>
-      getRuntimeDefinition(runtimeKind).capabilities.supportsMcpStatus,
+      getRuntimeDefinition(runtimeKind).capabilities.optionalSurfaces.supportsMcpStatus,
     repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
     repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
       host.repoRuntimeHealthStatus(repoPath, runtimeKind),

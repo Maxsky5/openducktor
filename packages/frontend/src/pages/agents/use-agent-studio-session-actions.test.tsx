@@ -452,7 +452,10 @@ describe("useAgentStudioSessionActions", () => {
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              supportsQueuedUserMessages: false,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: false,
+              },
             },
           },
           models: [],
@@ -516,7 +519,10 @@ describe("useAgentStudioSessionActions", () => {
             ...OPENCODE_RUNTIME_DESCRIPTOR,
             capabilities: {
               ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              supportsQueuedUserMessages: false,
+              sessionLifecycle: {
+                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+                supportsQueuedUserMessages: false,
+              },
             },
           },
           models: [],
