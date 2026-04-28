@@ -2,6 +2,7 @@ import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent, isTodoToolName } from "../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
+import { toToolMessageId } from "../support/chat-message-ids";
 import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
 import {
   mergeTodoListPreservingOrder,
@@ -129,7 +130,6 @@ const composeToolPartSessionUpdate = ({
   current,
   prepareCurrent,
   part,
-  streamMessageKey,
   status,
   observedEventTimestampMs,
   input,
@@ -142,7 +142,6 @@ const composeToolPartSessionUpdate = ({
   current: AgentSessionState;
   prepareCurrent: PrepareCurrent;
   part: ToolPart;
-  streamMessageKey: string;
   status: ToolPartStatus;
   observedEventTimestampMs: number;
   input: Record<string, unknown> | undefined;
@@ -153,7 +152,7 @@ const composeToolPartSessionUpdate = ({
   workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1];
 }): ToolPartSessionUpdate => {
   const prepared = prepareCurrent(current);
-  const fallbackMessageId = `tool:${streamMessageKey}`;
+  const fallbackMessageId = toToolMessageId(part);
   const messageId = resolveToolMessageId(
     prepared,
     {
@@ -208,7 +207,6 @@ export const handleToolPart = (
   context: SessionToolPartEventContext,
   event: SessionPartEvent,
   part: ToolPart,
-  streamMessageKey: string,
   prepareCurrent: PrepareCurrent,
 ): void => {
   const input = normalizeToolInput(part.input);
@@ -233,7 +231,6 @@ export const handleToolPart = (
         current,
         prepareCurrent,
         part,
-        streamMessageKey,
         status: resolvedStatus,
         observedEventTimestampMs,
         input,

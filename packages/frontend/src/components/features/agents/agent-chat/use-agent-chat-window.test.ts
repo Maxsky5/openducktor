@@ -554,6 +554,106 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("switching sessions clears manual scroll state so late-rendered content stays pinned", async () => {
+    const firstSessionRows = createTurnRows(12, "session-1");
+    const secondSessionRows = createTurnRows(12, "session-2");
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows: firstSessionRows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.update({
+      rows: secondSessionRows,
+      activeSessionId: "session-2",
+      isSessionViewLoading: false,
+    });
+
+    extraContentHeightPx.current = 200;
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+    expect(container.style.overflowAnchor).toBe("none");
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("deferred session hydration after a switch stays pinned through late content growth", async () => {
+    const firstSessionRows = createTurnRows(12, "session-1");
+    const secondSessionRows = createTurnRows(12, "session-2");
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows: firstSessionRows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.update({
+      rows: [],
+      activeSessionId: "session-2",
+      isSessionViewLoading: true,
+    });
+
+    await harness.update({
+      rows: secondSessionRows,
+      activeSessionId: "session-2",
+      isSessionViewLoading: false,
+    });
+
+    extraContentHeightPx.current = 200;
+    await act(async () => {
+      triggerResizeObservers();
+      await flush();
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+    expect(container.style.overflowAnchor).toBe("none");
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
   test("scrollToBottom collapses back to the latest turns and jumps to bottom", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness(

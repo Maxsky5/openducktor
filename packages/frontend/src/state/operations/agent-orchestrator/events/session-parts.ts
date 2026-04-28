@@ -1,5 +1,6 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
+import { toReasoningMessageId } from "../support/chat-message-ids";
 import { sanitizeStreamingText } from "../support/core";
 import {
   findLastSessionMessageByRole,
@@ -24,7 +25,6 @@ import {
   createPrePartTodoSettlement,
   eventTimestampMs,
   scheduleDraftFlush,
-  toPartStreamKey,
 } from "./session-helpers";
 import { handleToolPart } from "./session-tool-parts";
 
@@ -118,9 +118,6 @@ const clearDraftChannelBuffer = (
           };
   }
 };
-
-const toReasoningMessageId = (messageId: string, partId: string): string =>
-  `thinking:${messageId}:${partId}`;
 
 const resolvePartModelSelection = (
   context: SessionPartEventContext,
@@ -494,7 +491,6 @@ export const handleAssistantPart = (
         : event.timestamp;
     context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, activityTimestamp);
   }
-  const streamMessageKey = toPartStreamKey(part);
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 
   switch (part.kind) {
@@ -505,7 +501,7 @@ export const handleAssistantPart = (
       handleReasoningPart(context, event, part, prepareCurrent);
       return;
     case "tool":
-      handleToolPart(context, event, part, streamMessageKey, prepareCurrent);
+      handleToolPart(context, event, part, prepareCurrent);
       return;
     case "subagent":
       handleSubagentPart(context, event, part, prepareCurrent);

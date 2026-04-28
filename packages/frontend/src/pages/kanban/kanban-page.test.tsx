@@ -635,7 +635,7 @@ describe("KanbanPage session start modal flow", () => {
       ["./kanban-session-start-modal", () => import("./kanban-session-start-modal")],
       [
         "../agents/use-agent-studio-repo-settings",
-        () => import("../agents/use-agent-studio-repo-settings"),
+        () => import("../../pages/agents/use-agent-studio-repo-settings"),
       ],
       [
         "@/components/features/pull-requests/merged-pull-request-confirm-dialog",

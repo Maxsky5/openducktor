@@ -144,13 +144,6 @@ export const settleDraftToIdle = (
   return shouldClear;
 };
 
-export const toPartStreamKey = (part: SessionPart): string => {
-  if (part.kind === "tool") {
-    return `${part.messageId}:${part.callId || part.partId}`;
-  }
-  return `${part.messageId}:${part.partId}`;
-};
-
 export const createPrePartTodoSettlement = (
   part: SessionPart,
   timestamp: string,

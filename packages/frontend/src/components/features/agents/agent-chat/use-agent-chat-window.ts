@@ -49,6 +49,7 @@ export function useAgentChatWindow({
     forceScrollToBottom,
     refreshScrollState,
   } = useAgentChatScrollController({
+    activeSessionId,
     messagesContainerRef,
     messagesContentRef,
     isSessionWorking,
@@ -85,7 +86,7 @@ export function useAgentChatWindow({
     resetToLatestTurns();
   }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevSessionIdRef.current === activeSessionId) {
       return;
     }
@@ -94,7 +95,7 @@ export function useAgentChatWindow({
     resetLatestTurnsAndPinBottom();
   }, [activeSessionId, resetLatestTurnsAndPinBottom]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
     prevIsSessionViewLoadingRef.current = isSessionViewLoading;
     if (!finishedLoading) {
