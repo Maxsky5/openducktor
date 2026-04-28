@@ -58,5 +58,14 @@
         "value": ["live_snapshot"]
       }
     ]
+  },
+  {
+    "name": "read-only-auto-reject-disabled",
+    "patch": [
+      {
+        "path": ["capabilities", "approvals", "readOnlyAutoRejectSafe"],
+        "value": false
+      }
+    ]
   }
 ]

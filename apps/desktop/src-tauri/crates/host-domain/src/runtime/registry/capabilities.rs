@@ -471,7 +471,12 @@ impl RuntimeCapabilities {
                     .to_string(),
             );
         }
-        if self.approvals.read_only_auto_reject_safe {
+        if !self.approvals.read_only_auto_reject_safe {
+            errors.push(
+                "[workflow] read-only roles must auto-reject mutating permission requests"
+                    .to_string(),
+            );
+        } else {
             if !self.approvals.can_classify_mutating_requests {
                 errors.push(
                     "[workflow] read-only auto-reject safety requires mutating request classification"

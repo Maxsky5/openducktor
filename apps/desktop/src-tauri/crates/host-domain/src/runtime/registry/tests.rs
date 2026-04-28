@@ -341,6 +341,19 @@ fn runtime_descriptor_validation_rejects_live_snapshot_visibility_without_snapsh
 }
 
 #[test]
+fn runtime_descriptor_validation_requires_read_only_auto_reject_safety() {
+    let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
+    descriptor.capabilities.approvals.read_only_auto_reject_safe = false;
+
+    assert_eq!(
+        descriptor.validate_for_openducktor(),
+        vec![
+            "[workflow] read-only roles must auto-reject mutating permission requests".to_string()
+        ]
+    );
+}
+
+#[test]
 fn runtime_descriptor_validation_rejects_invalid_workflow_alias_maps() {
     let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
     descriptor.workflow_tool_aliases_by_canonical = BTreeMap::from([

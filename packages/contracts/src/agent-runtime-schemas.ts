@@ -388,7 +388,12 @@ export const runtimeCapabilitiesSchema = z
       }
     }
 
-    if (capabilities.approvals.readOnlyAutoRejectSafe) {
+    if (!capabilities.approvals.readOnlyAutoRejectSafe) {
+      addIssue(
+        ["approvals", "readOnlyAutoRejectSafe"],
+        "Read-only roles must auto-reject mutating permission requests.",
+      );
+    } else {
       if (!capabilities.approvals.canClassifyMutatingRequests) {
         addIssue(
           ["approvals", "canClassifyMutatingRequests"],
@@ -536,12 +541,14 @@ export const runtimeCapabilityKeyValues = [
   "optionalSurfaces.supportsFileStatus",
   "optionalSurfaces.supportsMcpStatus",
   "optionalSurfaces.supportsSubagents",
+  "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const;
 export const runtimeCapabilityKeySchema = z.enum(runtimeCapabilityKeyValues);
 export type RuntimeCapabilityKey = z.infer<typeof runtimeCapabilityKeySchema>;
 
 export const mandatoryRuntimeCapabilityKeys = [
   "workflow.supportsOdtWorkflowTools",
+  "approvals.readOnlyAutoRejectSafe",
   "sessionLifecycle.supportedStartModes",
   "promptInput.supportedParts",
 ] as const satisfies readonly RuntimeCapabilityKey[];
@@ -562,6 +569,7 @@ export const optionalRuntimeCapabilityKeys = [
   "optionalSurfaces.supportsFileStatus",
   "optionalSurfaces.supportsMcpStatus",
   "optionalSurfaces.supportsSubagents",
+  "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const satisfies readonly RuntimeCapabilityKey[];
 
 export const runtimeRequiredScopesByRole = {
@@ -601,10 +609,10 @@ export const runtimeCapabilityClasses = {
   "sessionLifecycle.supportsQueuedUserMessages": "optional_enhancement",
   "history.fidelity": "scenario_scoped",
   "history.replay": "scenario_scoped",
-  "approvals.supportedRequestTypes": "scenario_scoped",
-  "approvals.supportedReplyOutcomes": "scenario_scoped",
+  "approvals.supportedRequestTypes": "workflow",
+  "approvals.supportedReplyOutcomes": "workflow",
   "approvals.readOnlyAutoRejectSafe": "workflow",
-  "structuredInput.supportsQuestions": "scenario_scoped",
+  "structuredInput.supportsQuestions": "workflow",
   "promptInput.supportedParts": "baseline",
   "promptInput.supportsSlashCommands": "optional_enhancement",
   "promptInput.supportsFileSearch": "optional_enhancement",
@@ -615,6 +623,7 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportsFileStatus": "optional_enhancement",
   "optionalSurfaces.supportsMcpStatus": "optional_enhancement",
   "optionalSurfaces.supportsSubagents": "optional_enhancement",
+  "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;
 
 export const runtimeRefSchema = z.object({

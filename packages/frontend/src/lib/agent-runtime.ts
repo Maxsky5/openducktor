@@ -126,6 +126,8 @@ const runtimeSupportsCapability = (
   switch (capability) {
     case "workflow.supportsOdtWorkflowTools":
       return runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools;
+    case "approvals.readOnlyAutoRejectSafe":
+      return runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe;
     case "sessionLifecycle.supportedStartModes":
       return runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes.includes("fresh");
     case "promptInput.supportedParts":
@@ -243,6 +245,10 @@ export const getRuntimeDescriptorCapabilityConfigErrors = (
 
   if (!runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools) {
     errors.push("[workflow] missing OpenDucktor workflow tool support");
+  }
+
+  if (!runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe) {
+    errors.push("[workflow] read-only roles must auto-reject mutating permission requests");
   }
 
   if (missingWorkflowScopes.length > 0) {

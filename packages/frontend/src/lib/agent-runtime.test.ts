@@ -50,6 +50,25 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
+  test("requires read-only auto-reject safety as workflow compatibility", () => {
+    const descriptor = withCapabilities({
+      approvals: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals,
+        readOnlyAutoRejectSafe: false,
+      },
+    });
+
+    expect(getMissingMandatoryRuntimeCapabilities(descriptor)).toEqual([
+      "approvals.readOnlyAutoRejectSafe",
+    ]);
+    expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toEqual([
+      "[workflow] read-only roles must auto-reject mutating permission requests",
+    ]);
+    expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
+      "[workflow] runtime descriptor schema violation at capabilities.approvals.readOnlyAutoRejectSafe: Read-only roles must auto-reject mutating permission requests.",
+    ]);
+  });
+
   test("accepts optional capability combinations without extra invariants", () => {
     const descriptor = withCapabilities({
       optionalSurfaces: {
@@ -165,10 +184,24 @@ describe("agent-runtime capability policies", () => {
     } as unknown as Partial<RuntimeDescriptor["capabilities"]>);
 
     expect(validateRuntimeDefinitionForOpenDucktor(approvalDescriptor)).toEqual([
-      "[scenario_scoped] runtime descriptor schema violation at capabilities.approvals.supportedReplyOutcomes: Runtime descriptors with approval requests must support at least one approval reply outcome.",
+      "[workflow] runtime descriptor schema violation at capabilities.approvals.supportedReplyOutcomes: Runtime descriptors with approval requests must support at least one approval reply outcome.",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(structuredInputDescriptor)).toEqual([
-      "[scenario_scoped] runtime descriptor schema violation at capabilities.structuredInput.supportsQuestions: Invalid input: expected boolean, received string",
+      "[workflow] runtime descriptor schema violation at capabilities.structuredInput.supportsQuestions: Invalid input: expected boolean, received string",
+    ]);
+  });
+
+  test("classifies subagent execution mode schema issues as optional enhancements", () => {
+    const descriptor = withCapabilities({
+      optionalSurfaces: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+        supportsSubagents: true,
+        supportedSubagentExecutionModes: [],
+      },
+    });
+
+    expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
+      "[optional_enhancement] runtime descriptor schema violation at capabilities.optionalSurfaces.supportedSubagentExecutionModes: Runtime descriptors that support subagents must declare at least one supported subagent execution mode.",
     ]);
   });
 
