@@ -7,7 +7,6 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentPendingPermissionRequest,
   AgentRuntimeConnection,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
@@ -82,11 +81,7 @@ type CreatePublicOperationsArgs = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionHistoryMessage[]>;
-  readRuntimeSessionPendingInput?: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<AgentPendingPermissionRequest[]>;
+  attachRuntimeTranscriptSession: AgentOperationsContextValue["attachRuntimeTranscriptSession"];
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
@@ -122,10 +117,6 @@ const missingRuntimeSessionPermissionReply = async (): Promise<void> => {
   throw new Error("Runtime session permission replies are unavailable.");
 };
 
-const missingRuntimeSessionPendingInput = async (): Promise<AgentPendingPermissionRequest[]> => {
-  throw new Error("Runtime session pending input reads are unavailable.");
-};
-
 export const createOrchestratorPublicOperations = ({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
@@ -135,7 +126,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionModelCatalog,
   readSessionTodos,
   readSessionHistory,
-  readRuntimeSessionPendingInput = missingRuntimeSessionPendingInput,
+  attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
   replyRuntimeSessionPermission = missingRuntimeSessionPermissionReply,
@@ -160,7 +151,7 @@ export const createOrchestratorPublicOperations = ({
   readSessionModelCatalog,
   readSessionTodos,
   readSessionHistory,
-  readRuntimeSessionPendingInput,
+  attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
   replyRuntimeSessionPermission,

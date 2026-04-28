@@ -41,6 +41,8 @@ import {
   readAssistantActivityStartedAtMsFromMessages,
   resolveAssistantTurnDurationMs,
 } from "./support/assistant-turn-duration";
+import { mergeHydratedMessages } from "./support/hydrated-message-merge";
+import { createRuntimeTranscriptSession } from "./support/runtime-transcript-session";
 import { isTranscriptAgentSession } from "./support/session-purpose";
 import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
 
@@ -87,6 +89,10 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
 };
+
+type AttachRuntimeTranscriptSessionInput = Parameters<
+  AgentOperationsContextValue["attachRuntimeTranscriptSession"]
+>[0];
 
 export function useAgentOrchestratorOperations({
   activeWorkspace,
@@ -165,6 +171,7 @@ export function useAgentOrchestratorOperations({
       if (!current) {
         return;
       }
+      const shouldPersist = options?.persist === true && !isTranscriptAgentSession(current);
       const nextSession = updater(current);
       if (nextSession === current) {
         return;
@@ -188,7 +195,7 @@ export function useAgentOrchestratorOperations({
       };
       commitSessions(nextSessions);
 
-      if (options?.persist === true) {
+      if (shouldPersist) {
         runOrchestratorSideEffect(
           "operations-persist-session-snapshot",
           persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession)),
@@ -308,21 +315,6 @@ export function useAgentOrchestratorOperations({
         runtimeConnection,
         externalSessionId,
       }),
-    [agentEngine],
-  );
-
-  const readRuntimeSessionPendingInput = useCallback(
-    async (
-      runtimeKind: RuntimeKind,
-      runtimeConnection: AgentRuntimeConnection,
-      externalSessionId: string,
-    ) => {
-      const pendingInputBySession = await agentEngine.listLiveAgentSessionPendingInput({
-        runtimeKind,
-        runtimeConnection,
-      });
-      return pendingInputBySession[externalSessionId]?.permissions ?? [];
-    },
     [agentEngine],
   );
 
@@ -465,6 +457,121 @@ export function useAgentOrchestratorOperations({
       recordTurnActivityTimestamp,
       recordTurnUserMessageTimestamp,
       resolveTurnDurationMs,
+      unsubscribersRef,
+      updateSession,
+    ],
+  );
+
+  const attachRuntimeTranscriptSession = useCallback(
+    async (input: AttachRuntimeTranscriptSessionInput): Promise<void> => {
+      const existingSession = sessionsRef.current[input.sessionId];
+      if (existingSession && !isTranscriptAgentSession(existingSession)) {
+        throw new Error(`Session ${input.sessionId} is already active and is not a transcript.`);
+      }
+
+      const hadLocalSession = existingSession !== undefined;
+      const hadRuntimeSession = agentEngine.hasSession(input.sessionId);
+      let attachedListener = false;
+      if (hadLocalSession && hadRuntimeSession) {
+        attachSessionListener(input.repoPath, input.sessionId);
+        return;
+      }
+      if (!hadLocalSession) {
+        const initialSession = createRuntimeTranscriptSession({
+          repoPath: input.repoPath,
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          runtimeKind: input.runtimeKind,
+          runtimeId: input.runtimeId,
+          runtimeConnection: input.runtimeConnection,
+          history: [],
+          isLive: true,
+          pendingPermissions: input.pendingPermissions ?? [],
+        });
+        commitSessions((current) => ({
+          ...current,
+          [input.sessionId]: initialSession,
+        }));
+      }
+
+      try {
+        const summary = hadRuntimeSession
+          ? null
+          : await agentEngine.attachSession({
+              sessionId: input.sessionId,
+              externalSessionId: input.externalSessionId,
+              repoPath: input.repoPath,
+              runtimeKind: input.runtimeKind,
+              ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
+              runtimeConnection: input.runtimeConnection,
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              taskId: "",
+              role: "build",
+              scenario: "build_implementation_start",
+              systemPrompt: "",
+            });
+
+        attachSessionListener(input.repoPath, input.sessionId);
+        attachedListener = true;
+
+        const history = await agentEngine.loadSessionHistory({
+          runtimeKind: input.runtimeKind,
+          runtimeConnection: input.runtimeConnection,
+          externalSessionId: input.externalSessionId,
+        });
+        const hydratedSession = createRuntimeTranscriptSession({
+          repoPath: input.repoPath,
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          runtimeKind: input.runtimeKind,
+          runtimeId: input.runtimeId,
+          runtimeConnection: input.runtimeConnection,
+          history,
+          isLive: true,
+          pendingPermissions: input.pendingPermissions ?? [],
+        });
+
+        updateSession(
+          input.sessionId,
+          (current) => ({
+            ...current,
+            startedAt: summary?.startedAt ?? hydratedSession.startedAt,
+            status: summary?.status ?? current.status,
+            runtimeKind: input.runtimeKind,
+            runtimeId: input.runtimeId,
+            runtimeRoute: hydratedSession.runtimeRoute,
+            workingDirectory: input.runtimeConnection.workingDirectory,
+            historyHydrationState: "hydrated",
+            runtimeRecoveryState: "idle",
+            messages: mergeHydratedMessages(
+              input.sessionId,
+              hydratedSession.messages,
+              current.messages,
+            ),
+          }),
+          { persist: false },
+        );
+      } catch (error) {
+        if (attachedListener && !hadLocalSession) {
+          const unsubscribe = unsubscribersRef.current.get(input.sessionId);
+          unsubscribe?.();
+          unsubscribersRef.current.delete(input.sessionId);
+        }
+        if (!hadRuntimeSession && agentEngine.hasSession(input.sessionId)) {
+          await agentEngine.detachSession(input.sessionId);
+        }
+        if (!hadLocalSession) {
+          removeSessionIds([input.sessionId]);
+        }
+        throw error;
+      }
+    },
+    [
+      agentEngine,
+      attachSessionListener,
+      commitSessions,
+      removeSessionIds,
+      sessionsRef,
       unsubscribersRef,
       updateSession,
     ],
@@ -795,7 +902,7 @@ export function useAgentOrchestratorOperations({
       readSessionModelCatalog,
       readSessionTodos,
       readSessionHistory,
-      readRuntimeSessionPendingInput,
+      attachRuntimeTranscriptSession,
       readSessionSlashCommands,
       readSessionFileSearch,
       replyRuntimeSessionPermission,
@@ -822,7 +929,7 @@ export function useAgentOrchestratorOperations({
     readSessionModelCatalog,
     readSessionTodos,
     readSessionHistory,
-    readRuntimeSessionPendingInput,
+    attachRuntimeTranscriptSession,
     retrySessionRuntimeAttachment,
     ensureSessionReadyForView,
     readSessionSlashCommands,

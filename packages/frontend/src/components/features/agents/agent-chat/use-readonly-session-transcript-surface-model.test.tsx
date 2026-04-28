@@ -2,11 +2,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
-import { act } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
 const readSessionHistory = mock(
@@ -24,7 +23,7 @@ const readSessionHistory = mock(
 );
 const readSessionModelCatalog = mock(async () => ({ profiles: [], models: [] }));
 const readSessionTodos = mock(async () => []);
-const readRuntimeSessionPendingInput = mock(async (): Promise<AgentPermissionRequest[]> => []);
+const attachRuntimeTranscriptSession = mock(async () => {});
 const replyAgentPermission = mock(async () => {});
 const replyRuntimeSessionPermission = mock(async () => {});
 const useAgentSessionMock = mock((_sessionId: string | null) => null);
@@ -90,47 +89,6 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement => (
   <QueryProvider useIsolatedClient>{children}</QueryProvider>
 );
 
-const installFakeIntervals = () => {
-  const originalSetInterval = globalThis.setInterval;
-  const originalClearInterval = globalThis.clearInterval;
-  let nextIntervalId = 1;
-  const intervalCallbacks = new Map<number, () => void>();
-
-  globalThis.setInterval = ((callback: TimerHandler) => {
-    const intervalId = nextIntervalId;
-    nextIntervalId += 1;
-    intervalCallbacks.set(intervalId, () => {
-      if (typeof callback === "function") {
-        callback();
-      }
-    });
-    return intervalId as unknown as ReturnType<typeof setInterval>;
-  }) as unknown as typeof globalThis.setInterval;
-
-  globalThis.clearInterval = ((intervalId: ReturnType<typeof setInterval>) => {
-    intervalCallbacks.delete(Number(intervalId));
-  }) as typeof globalThis.clearInterval;
-
-  const fireIntervals = async (): Promise<void> => {
-    const callbacks = [...intervalCallbacks.values()];
-    await act(async () => {
-      for (const callback of callbacks) {
-        callback();
-      }
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-  };
-
-  return {
-    fireIntervals,
-    restore: () => {
-      globalThis.setInterval = originalSetInterval;
-      globalThis.clearInterval = originalClearInterval;
-    },
-  };
-};
-
 describe("useReadonlySessionTranscriptSurfaceModel", () => {
   beforeAll(async () => {
     [
@@ -169,10 +127,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     );
     readSessionModelCatalog.mockClear();
     readSessionTodos.mockClear();
-    readRuntimeSessionPendingInput.mockClear();
-    readRuntimeSessionPendingInput.mockImplementation(
-      async (): Promise<AgentPermissionRequest[]> => [],
-    );
+    attachRuntimeTranscriptSession.mockClear();
+    attachRuntimeTranscriptSession.mockImplementation(async () => {});
     replyAgentPermission.mockClear();
     replyRuntimeSessionPermission.mockClear();
     useAgentSessionMock.mockClear();
@@ -183,9 +139,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     mock.module("@/state/app-state-provider", () => ({
       useAgentOperations: () => ({
         readSessionHistory,
+        attachRuntimeTranscriptSession,
         readSessionModelCatalog,
         readSessionTodos,
-        readRuntimeSessionPendingInput,
         replyAgentPermission,
         replyRuntimeSessionPermission,
       }),
@@ -373,27 +329,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("refreshes live runtime pending permissions and history while open", async () => {
-    const { fireIntervals, restore } = installFakeIntervals();
-    let historyResponse: AgentSessionHistoryMessage[] = [
-      {
-        messageId: "message-user-1",
-        role: "user" as const,
-        timestamp: "2026-02-22T12:00:00.000Z",
-        text: "Inspect this",
-        displayParts: [],
-        state: "read" as const,
-        parts: [],
-      },
-    ];
-    let pendingPermissionsResponse: AgentPermissionRequest[] = [];
-
-    readSessionHistory.mockImplementation(
-      async (): Promise<AgentSessionHistoryMessage[]> => historyResponse,
-    );
-    readRuntimeSessionPendingInput.mockImplementation(
-      async (): Promise<AgentPermissionRequest[]> => pendingPermissionsResponse,
-    );
+  test("attaches live runtime transcripts to the session event stream without polling", async () => {
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -417,55 +353,24 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(
-        () =>
-          readSessionHistory.mock.calls.length === 1 &&
-          readRuntimeSessionPendingInput.mock.calls.length === 1,
-      );
-      await harness.waitFor(() => {
-        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return session?.pendingPermissions.length === 0;
-      });
-      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: false });
+      await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
 
-      historyResponse = [
-        {
-          messageId: "message-user-1",
-          role: "user" as const,
-          timestamp: "2026-02-22T12:00:00.000Z",
-          text: "Inspect this",
-          displayParts: [],
-          state: "read" as const,
-          parts: [],
+      expect(attachRuntimeTranscriptSession).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4096",
+          workingDirectory: "/repo-a",
         },
-        {
-          messageId: "message-assistant-1",
-          role: "assistant" as const,
-          timestamp: "2026-02-22T12:00:01.000Z",
-          text: "Working on it",
-          parts: [],
-        },
-      ];
-      pendingPermissionsResponse = [pendingPermission];
-      await fireIntervals();
-      await harness.waitFor(
-        () =>
-          readSessionHistory.mock.calls.length === 2 &&
-          readRuntimeSessionPendingInput.mock.calls.length === 2,
-      );
-      await harness.waitFor(() => {
-        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return session?.pendingPermissions.length === 1;
+        pendingPermissions: [pendingPermission],
       });
-
-      const session = latestSurfaceModelArgs?.session as AgentSessionState;
-      expect(session.pendingPermissions).toEqual([pendingPermission]);
-      expect(readSessionHistory).toHaveBeenCalledTimes(2);
-      expect(readRuntimeSessionPendingInput).toHaveBeenCalledTimes(2);
-      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
+      expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      restore();
     }
   });
 

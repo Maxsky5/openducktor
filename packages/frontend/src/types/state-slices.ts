@@ -20,7 +20,6 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentPendingPermissionRequest,
   AgentRole,
   AgentRuntimeConnection,
   AgentScenario,
@@ -215,11 +214,15 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionHistoryMessage[]>;
-  readRuntimeSessionPendingInput: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<AgentPendingPermissionRequest[]>;
+  attachRuntimeTranscriptSession: (input: {
+    repoPath: string;
+    sessionId: string;
+    externalSessionId: string;
+    runtimeKind: RuntimeKind;
+    runtimeId: string | null;
+    runtimeConnection: AgentRuntimeConnection;
+    pendingPermissions?: AgentSessionState["pendingPermissions"];
+  }) => Promise<void>;
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,

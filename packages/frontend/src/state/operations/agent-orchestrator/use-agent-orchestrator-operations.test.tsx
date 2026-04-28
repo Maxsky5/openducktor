@@ -2429,6 +2429,139 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
+  test("attaches runtime transcript sessions to existing live events without persisted prompt metadata", async () => {
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
+    const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+    const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
+    const originalAgentSessionUpsert = host.agentSessionUpsert;
+    const attachSessionCalls: Parameters<OpencodeSdkAdapter["attachSession"]>[0][] = [];
+    const subscribeSessionIds: string[] = [];
+    const operationOrder: string[] = [];
+    const agentSessionUpsert = mock(async () => {});
+    let attachedSessionId: string | null = null;
+    const listeners: Array<Parameters<OpencodeSdkAdapter["subscribeEvents"]>[1]> = [];
+
+    host.agentSessionUpsert = agentSessionUpsert;
+    OpencodeSdkAdapter.prototype.hasSession = (sessionId) => sessionId === attachedSessionId;
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
+      operationOrder.push("attach");
+      attachSessionCalls.push(input);
+      attachedSessionId = input.sessionId;
+      return {
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T09:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      };
+    };
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [
+      {
+        messageId: "history-subagent-1",
+        role: "assistant",
+        timestamp: "2026-02-22T09:00:01.000Z",
+        text: "Subagent output",
+        parts: [
+          {
+            kind: "text",
+            messageId: "history-subagent-1",
+            partId: "part-1",
+            text: "Subagent output",
+            completed: true,
+          },
+        ],
+      },
+    ];
+    OpencodeSdkAdapter.prototype.subscribeEvents = (sessionId, nextListener) => {
+      operationOrder.push("subscribe");
+      if (!attachedSessionId) {
+        throw new Error("subscribe before attach");
+      }
+      subscribeSessionIds.push(sessionId);
+      listeners.push(nextListener);
+      return () => {};
+    };
+    OpencodeSdkAdapter.prototype.detachSession = async () => {};
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [],
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async () => {
+        await harness.getLatest().operations.attachRuntimeTranscriptSession({
+          repoPath: "/tmp/repo",
+          sessionId: "session-transcript",
+          externalSessionId: "external-subagent",
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          runtimeConnection: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        });
+      });
+
+      expect(operationOrder).toEqual(["attach", "subscribe"]);
+      expect(subscribeSessionIds).toEqual(["session-transcript"]);
+      expect(attachSessionCalls).toHaveLength(1);
+      expect(attachSessionCalls[0]).toMatchObject({
+        sessionId: "session-transcript",
+        externalSessionId: "external-subagent",
+        taskId: "",
+        role: "build",
+        scenario: "build_implementation_start",
+        systemPrompt: "",
+      });
+
+      const transcriptSession = harness
+        .getLatest()
+        .sessionStore.getSessionSnapshot("session-transcript");
+      expect(transcriptSession?.purpose).toBe("transcript");
+      expect(transcriptSession?.taskId).toBe("");
+      expect(transcriptSession?.role).toBeNull();
+      expect(transcriptSession?.scenario).toBeNull();
+      expect(transcriptSession?.status).toBe("running");
+      expect(
+        transcriptSession
+          ? sessionMessagesToArray(transcriptSession).some(
+              (message) => message.content === "Subagent output",
+            )
+          : false,
+      ).toBe(true);
+
+      const listener = listeners[0];
+      if (!listener) {
+        throw new Error("Expected transcript listener to be attached");
+      }
+      listener({
+        type: "permission_required",
+        sessionId: "session-transcript",
+        timestamp: "2026-02-22T09:00:02.000Z",
+        requestId: "permission-1",
+        permission: "file.read",
+        patterns: ["src/app.ts"],
+      });
+      expect(agentSessionUpsert).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      host.agentSessionUpsert = originalAgentSessionUpsert;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
+      OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+      OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
+    }
+  });
+
   test("retries requested history hydration after recovery when the prior hydration state failed", async () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;

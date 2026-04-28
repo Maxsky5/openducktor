@@ -2,7 +2,6 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
-  AgentPendingPermissionRequest,
   AgentRuntimeConnection,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
@@ -70,19 +69,6 @@ const agentSessionRuntimeQueryKeys = {
     [
       ...agentSessionRuntimeQueryKeys.all,
       "history",
-      runtimeKind,
-      runtimeConnectionTransportKey(runtimeConnection),
-      normalizeWorkingDirectory(runtimeConnection.workingDirectory),
-      externalSessionId,
-    ] as const,
-  pendingInput: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) =>
-    [
-      ...agentSessionRuntimeQueryKeys.all,
-      "pending-input",
       runtimeKind,
       runtimeConnectionTransportKey(runtimeConnection),
       normalizeWorkingDirectory(runtimeConnection.workingDirectory),
@@ -172,28 +158,6 @@ export const sessionHistoryQueryOptions = (
     ),
     queryFn: (): Promise<AgentSessionHistoryMessage[]> =>
       readSessionHistory(runtimeKind, runtimeConnection, externalSessionId),
-    staleTime: SESSION_HISTORY_STALE_TIME_MS,
-    refetchOnWindowFocus: false,
-  });
-
-export const sessionPendingInputQueryOptions = (
-  runtimeKind: RuntimeKind,
-  runtimeConnection: AgentRuntimeConnection,
-  externalSessionId: string,
-  readRuntimeSessionPendingInput: (
-    runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
-  ) => Promise<AgentPendingPermissionRequest[]>,
-) =>
-  queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.pendingInput(
-      runtimeKind,
-      runtimeConnection,
-      externalSessionId,
-    ),
-    queryFn: (): Promise<AgentPendingPermissionRequest[]> =>
-      readRuntimeSessionPendingInput(runtimeKind, runtimeConnection, externalSessionId),
     staleTime: SESSION_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
