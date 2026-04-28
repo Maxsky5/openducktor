@@ -98,8 +98,23 @@ const preserveCurrentToolWithHydratedIdentity = (
   };
 };
 
-const isTerminalSubagentStatus = (status: SubagentMessage["meta"]["status"]): boolean =>
-  status === "completed" || status === "cancelled" || status === "error";
+const chooseSubagentDescription = (
+  hydratedMeta: SubagentMessage["meta"],
+  currentMeta: SubagentMessage["meta"],
+  resolvedStatus: SubagentMessage["meta"]["status"],
+): string | undefined => {
+  const currentMatchesResolvedStatus = currentMeta.status === resolvedStatus;
+  const hydratedMatchesResolvedStatus = hydratedMeta.status === resolvedStatus;
+
+  if (currentMatchesResolvedStatus && !hydratedMatchesResolvedStatus) {
+    return currentMeta.description ?? hydratedMeta.description;
+  }
+  if (hydratedMatchesResolvedStatus && !currentMatchesResolvedStatus) {
+    return hydratedMeta.description ?? currentMeta.description;
+  }
+
+  return hydratedMeta.description ?? currentMeta.description;
+};
 
 const mergeReasoningMessages = (
   hydratedMessage: AgentChatMessage,
@@ -158,22 +173,21 @@ const mergeSubagentMessages = (
 ): AgentChatMessage => {
   const hydratedMeta = hydratedMessage.meta;
   const currentMeta = currentMessage.meta;
-  const prefersCurrentTerminalState =
-    isTerminalSubagentStatus(currentMeta.status) && !isTerminalSubagentStatus(hydratedMeta.status);
-  const description = prefersCurrentTerminalState
-    ? (currentMeta.description ?? hydratedMeta.description)
-    : (hydratedMeta.description ?? currentMeta.description);
   const nextMeta = mergeSubagentMeta(hydratedMeta, {
     ...currentMeta,
     partId: hydratedMeta.partId,
     correlationKey: hydratedMeta.correlationKey,
-    ...(typeof description === "string" ? { description } : {}),
   });
+  const description = chooseSubagentDescription(hydratedMeta, currentMeta, nextMeta.status);
+  const resolvedMeta = {
+    ...nextMeta,
+    ...(typeof description === "string" ? { description } : {}),
+  };
 
   return {
     ...hydratedMessage,
-    content: formatSubagentContent(nextMeta),
-    meta: nextMeta,
+    content: formatSubagentContent(resolvedMeta),
+    meta: resolvedMeta,
   };
 };
 
@@ -262,17 +276,22 @@ const findMatchingCurrentNonSubagentMessages = ({
   currentOwner,
   hydratedMessage,
   sameIdCurrentMessage,
+  absorbedCurrentMessageIds,
 }: {
   currentOwner: Pick<AgentSessionState, "sessionId" | "messages">;
   hydratedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
-  const matches = sameIdCurrentMessage ? [sameIdCurrentMessage] : [];
+  const matches =
+    sameIdCurrentMessage && !absorbedCurrentMessageIds.has(sameIdCurrentMessage.id)
+      ? [sameIdCurrentMessage]
+      : [];
   const seenIds = new Set(matches.map((message) => message.id));
   const currentSlice = getSessionMessagesSlice(currentOwner, 0);
   for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
     const candidate = currentSlice[index];
-    if (!candidate || seenIds.has(candidate.id)) {
+    if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
       continue;
     }
     if (matchesHydratedTool(hydratedMessage, candidate)) {
@@ -287,14 +306,16 @@ const findMatchingCurrentSubagentMessages = ({
   currentOwner,
   hydratedMessage,
   sameIdCurrentMessage,
+  absorbedCurrentMessageIds,
 }: {
   currentOwner: Pick<AgentSessionState, "sessionId" | "messages">;
   hydratedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
   const matches: AgentChatMessage[] = [];
   const seenIds = new Set<string>();
-  if (sameIdCurrentMessage) {
+  if (sameIdCurrentMessage && !absorbedCurrentMessageIds.has(sameIdCurrentMessage.id)) {
     matches.push(sameIdCurrentMessage);
     seenIds.add(sameIdCurrentMessage.id);
   }
@@ -303,7 +324,7 @@ const findMatchingCurrentSubagentMessages = ({
   const fallbackCandidates: AgentChatMessage[] = [];
   for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
     const candidate = currentSlice[index];
-    if (!candidate || seenIds.has(candidate.id)) {
+    if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
       continue;
     }
     if (matchesHydratedSubagent(hydratedMessage, candidate)) {
@@ -330,16 +351,19 @@ const findMatchingCurrentMessages = ({
   currentOwner,
   hydratedMessage,
   sameIdCurrentMessage,
+  absorbedCurrentMessageIds,
 }: {
   currentOwner: Pick<AgentSessionState, "sessionId" | "messages">;
   hydratedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
   if (isSubagentMessage(hydratedMessage)) {
     return findMatchingCurrentSubagentMessages({
       currentOwner,
       hydratedMessage,
       sameIdCurrentMessage,
+      absorbedCurrentMessageIds,
     });
   }
 
@@ -347,6 +371,7 @@ const findMatchingCurrentMessages = ({
     currentOwner,
     hydratedMessage,
     sameIdCurrentMessage,
+    absorbedCurrentMessageIds,
   });
 };
 
@@ -427,6 +452,7 @@ export const mergeHydratedMessages = (
       currentOwner,
       hydratedMessage: message,
       sameIdCurrentMessage,
+      absorbedCurrentMessageIds,
     });
     hydratedMessageIds.add(message.id);
     for (const matchingCurrentMessage of matchingCurrentMessages) {
