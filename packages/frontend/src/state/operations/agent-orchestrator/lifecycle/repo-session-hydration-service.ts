@@ -48,6 +48,7 @@ type ReconcileTarget = {
 type ReconcilePreloadPlan = {
   persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
   reconcileTargets: ReconcileTarget[];
+  retryableUnmatchedTaskIds: Set<string>;
   preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
@@ -77,7 +78,7 @@ const invalidateRuntimeList = async (
   });
 };
 
-const getOrCreateRepoTaskSet = (
+const getOrCreateRepoStringSet = (
   store: Record<string, Set<string>>,
   repoPath: string,
 ): Set<string> => {
@@ -90,8 +91,21 @@ const getOrCreateRepoTaskSet = (
   return created;
 };
 
+const tupleKey = (parts: string[]): string => JSON.stringify(parts);
+
 const persistedSessionRecordKey = (taskId: string, record: AgentSessionRecord): string =>
-  `${taskId}::${readPersistedRuntimeKind(record)}::${record.sessionId}::${record.externalSessionId ?? record.sessionId}::${normalizeWorkingDirectory(record.workingDirectory)}`;
+  tupleKey([
+    taskId,
+    readPersistedRuntimeKind(record),
+    record.sessionId,
+    record.externalSessionId ?? record.sessionId,
+    normalizeWorkingDirectory(record.workingDirectory),
+  ]);
+
+const createRetryableUnmatchedReconcileError = (taskId: string, repoPath: string): Error =>
+  new Error(
+    `No matching live agent session was found for task '${taskId}' in repo '${repoPath}' after scanning a compatible runtime.`,
+  );
 
 const toTaskWithUnreconciledRecords = (
   task: TaskCard,
@@ -145,6 +159,7 @@ const createCancelledReconcilePreloadPlan = ({
 }): ReconcilePreloadPlan => ({
   persistedByTask,
   reconcileTargets: [],
+  retryableUnmatchedTaskIds: new Set<string>(),
   preloadedRuntimeLists,
   preloadedRuntimeConnections,
   preloadedLiveAgentSessionsByKey,
@@ -189,6 +204,7 @@ const buildReconcileTargets = ({
   repoPath,
   exactResolvableRuntimeConnections,
   preloadedRuntimeConnections,
+  scannedRuntimeConnections,
   preloadedLiveSessionKeys,
 }: {
   persistedByTask: ReconcilePreloadPlan["persistedByTask"];
@@ -196,11 +212,13 @@ const buildReconcileTargets = ({
   repoPath: string;
   exactResolvableRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
+  scannedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveSessionKeys: Set<string>;
-}): ReconcileTarget[] => {
+}): { reconcileTargets: ReconcileTarget[]; retryableUnmatchedTaskIds: Set<string> } => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  const retryableUnmatchedTaskIds = new Set<string>();
 
-  return persistedByTask.flatMap<ReconcileTarget>(({ taskId, records }) => {
+  const reconcileTargets = persistedByTask.flatMap<ReconcileTarget>(({ taskId, records }) => {
     if (skippedTaskErrors.has(taskId)) {
       return [];
     }
@@ -218,18 +236,27 @@ const buildReconcileTargets = ({
       }
 
       const runtimeKind = readPersistedRuntimeKind(record);
-      return (
+      const canReconcile =
         hasMatchingPreloadedLiveSession({
           record,
           runtimeKind,
           runtimeConnections: preloadedRuntimeConnections,
           preloadedLiveSessionKeys,
-        }) || exactResolvableRuntimeConnections.hasAny(runtimeKind, record.workingDirectory)
-      );
+        }) || exactResolvableRuntimeConnections.hasAny(runtimeKind, record.workingDirectory);
+      if (canReconcile) {
+        return true;
+      }
+
+      if (scannedRuntimeConnections.hasAny(runtimeKind, record.workingDirectory)) {
+        retryableUnmatchedTaskIds.add(taskId);
+      }
+      return false;
     });
 
     return recordsToReconcile.length > 0 ? [{ taskId, records: recordsToReconcile }] : [];
   });
+
+  return { reconcileTargets, retryableUnmatchedTaskIds };
 };
 
 const isRepoRootWorkspaceRuntime = (
@@ -317,7 +344,7 @@ const collectReconcilePreloadMetadata = ({
         }
 
         taskRuntimeKinds.add(runtimeKind);
-        taskLiveSessionKeys.add(`${runtimeKind}::${externalSessionId}`);
+        taskLiveSessionKeys.add(tupleKey([runtimeKind, externalSessionId]));
         getOrCreateMapSet(taskDesiredDirectoriesByRuntimeKind, runtimeKind).add(
           normalizeWorkingDirectory(record.workingDirectory),
         );
@@ -448,6 +475,7 @@ export const createRepoSessionHydrationService = ({
     } = collectReconcilePreloadMetadata({ tasks, repoPath });
 
     const runtimeConnections = new Map<string, RuntimeConnectionScan>();
+    const scannedRuntimeConnections = new RuntimeConnectionPreloadIndex();
     const addRuntimeConnectionScan = (
       runtimeKind: RuntimeKind,
       runtimeConnection: AgentRuntimeConnection,
@@ -461,9 +489,10 @@ export const createRepoSessionHydrationService = ({
         runtimeConnectionsByDirectory: new Map<string, AgentRuntimeConnection>(),
       };
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-      scan.directories.add(workingDirectory);
+      scan.directories.add(normalizedWorkingDirectory);
       scan.runtimeConnectionsByDirectory.set(normalizedWorkingDirectory, runtimeConnection);
       runtimeConnections.set(scanKey, scan);
+      scannedRuntimeConnections.add(runtimeKind, runtimeConnection);
     };
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
     const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
@@ -634,25 +663,29 @@ export const createRepoSessionHydrationService = ({
           runtimeSession.externalSessionId,
         );
         if (
-          persistedLiveSessionKeys.has(`${input.runtimeKind}::${runtimeSession.externalSessionId}`)
+          persistedLiveSessionKeys.has(
+            tupleKey([input.runtimeKind, runtimeSession.externalSessionId]),
+          )
         ) {
           preloadedLiveSessionKeys.add(liveSessionKey);
         }
       }
     }
 
-    const reconcileTargets = buildReconcileTargets({
+    const { reconcileTargets, retryableUnmatchedTaskIds } = buildReconcileTargets({
       persistedByTask,
       skippedTaskErrors,
       repoPath,
       exactResolvableRuntimeConnections,
       preloadedRuntimeConnections,
+      scannedRuntimeConnections,
       preloadedLiveSessionKeys,
     });
 
     return {
       persistedByTask,
       reconcileTargets,
+      retryableUnmatchedTaskIds,
       preloadedRuntimeLists,
       preloadedRuntimeConnections,
       preloadedLiveAgentSessionsByKey,
@@ -663,9 +696,9 @@ export const createRepoSessionHydrationService = ({
   return {
     resetRepo(repoPath: string): void {
       liveAgentSessionStore.clearRepo(repoPath);
-      getOrCreateRepoTaskSet(bootstrappedTasksByRepo, repoPath);
-      getOrCreateRepoTaskSet(reconciledRecordKeysByRepo, repoPath).clear();
-      getOrCreateRepoTaskSet(inFlightReconcileTasksByRepo, repoPath).clear();
+      getOrCreateRepoStringSet(bootstrappedTasksByRepo, repoPath);
+      getOrCreateRepoStringSet(reconciledRecordKeysByRepo, repoPath).clear();
+      getOrCreateRepoStringSet(inFlightReconcileTasksByRepo, repoPath).clear();
     },
 
     dispose(): void {
@@ -691,7 +724,7 @@ export const createRepoSessionHydrationService = ({
       isCancelled: () => boolean;
       isCurrentRepo: (repoPath: string) => boolean;
     }): Promise<void> {
-      const bootstrappedTasks = getOrCreateRepoTaskSet(bootstrappedTasksByRepo, repoPath);
+      const bootstrappedTasks = getOrCreateRepoStringSet(bootstrappedTasksByRepo, repoPath);
       const pendingTasks = tasks.filter((task) => !bootstrappedTasks.has(task.id));
       if (pendingTasks.length === 0) {
         return;
@@ -749,8 +782,11 @@ export const createRepoSessionHydrationService = ({
       isCancelled: () => boolean;
       isCurrentRepo: (repoPath: string) => boolean;
     }): Promise<void> {
-      const reconciledRecordKeys = getOrCreateRepoTaskSet(reconciledRecordKeysByRepo, repoPath);
-      const inFlightReconcileTasks = getOrCreateRepoTaskSet(inFlightReconcileTasksByRepo, repoPath);
+      const reconciledRecordKeys = getOrCreateRepoStringSet(reconciledRecordKeysByRepo, repoPath);
+      const inFlightReconcileTasks = getOrCreateRepoStringSet(
+        inFlightReconcileTasksByRepo,
+        repoPath,
+      );
       const pendingTasks = tasks.flatMap((task) => {
         if (inFlightReconcileTasks.has(task.id)) {
           return [];
@@ -786,6 +822,15 @@ export const createRepoSessionHydrationService = ({
           for (const { taskId } of plan.persistedByTask) {
             if (plan.skippedTaskErrors.has(taskId)) {
               clearRetry("reconcile", repoPath, taskId);
+              continue;
+            }
+            if (plan.retryableUnmatchedTaskIds.has(taskId)) {
+              scheduleRetry(
+                "reconcile",
+                repoPath,
+                taskId,
+                createRetryableUnmatchedReconcileError(taskId, repoPath),
+              );
               continue;
             }
             clearRetry("reconcile", repoPath, taskId);
@@ -830,6 +875,15 @@ export const createRepoSessionHydrationService = ({
             continue;
           }
           if (failedTaskErrors.has(taskId)) {
+            continue;
+          }
+          if (plan.retryableUnmatchedTaskIds.has(taskId)) {
+            scheduleRetry(
+              "reconcile",
+              repoPath,
+              taskId,
+              createRetryableUnmatchedReconcileError(taskId, repoPath),
+            );
             continue;
           }
           clearRetry("reconcile", repoPath, taskId);

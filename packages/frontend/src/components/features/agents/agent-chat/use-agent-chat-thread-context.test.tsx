@@ -89,9 +89,13 @@ describe("useAgentChatThreadContext", () => {
     const windowRef = globalWithWindow.window;
     if (originalRequestAnimationFrame) {
       windowRef.requestAnimationFrame = originalRequestAnimationFrame;
+    } else {
+      Reflect.deleteProperty(windowRef, "requestAnimationFrame");
     }
     if (originalCancelAnimationFrame) {
       windowRef.cancelAnimationFrame = originalCancelAnimationFrame;
+    } else {
+      Reflect.deleteProperty(windowRef, "cancelAnimationFrame");
     }
     if (originalWindow) {
       globalWithWindow.window = originalWindow;
