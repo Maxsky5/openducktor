@@ -6,6 +6,8 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 
 type RepoConfigQueryHost = Pick<typeof host, "workspaceGetRepoConfig">;
 
+const INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY = "__inactive_workspace__";
+
 export function useAgentStudioRepoSettings(args: {
   activeWorkspace: WorkspaceRecord | null;
   hostClient?: RepoConfigQueryHost;
@@ -13,15 +15,17 @@ export function useAgentStudioRepoSettings(args: {
   repoSettings: RepoSettingsInput | null;
 } {
   const { activeWorkspace, hostClient } = args;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const { data: repoSettings } = useQuery({
-    ...(activeWorkspace
-      ? repoConfigQueryOptions(activeWorkspace.workspaceId, hostClient)
-      : repoConfigQueryOptions("", hostClient)),
-    enabled: activeWorkspace !== null,
+    ...repoConfigQueryOptions(
+      activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY,
+      hostClient,
+    ),
+    enabled: activeWorkspaceId !== null,
     select: toRepoSettingsInput,
   });
 
   return {
-    repoSettings: repoSettings ?? null,
+    repoSettings: activeWorkspaceId !== null ? (repoSettings ?? null) : null,
   };
 }
