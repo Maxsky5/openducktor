@@ -154,7 +154,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({
-      id: "tool:assistant-1:hydrated-tool",
+      id: "tool:assistant-1:call-123",
       role: "tool",
       content: "Current completed output",
       meta: {
@@ -162,6 +162,55 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
         partId: "tool-part-1",
         callId: "call-123",
         tool: "bash",
+        status: "completed",
+        output: "done",
+      },
+    });
+  });
+
+  test("canonicalizes a preserved terminal tool row that already learned its call id", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "tool:assistant-1:call-123",
+          role: "tool",
+          content: "Hydrated running output",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-123",
+            tool: "bash",
+            status: "running",
+          },
+        },
+      ],
+      [
+        {
+          id: "tool:assistant-1:tool-part-1",
+          role: "tool",
+          content: "Current completed output",
+          timestamp: "2026-03-01T09:00:03.000Z",
+          meta: {
+            kind: "tool",
+            partId: "tool-part-1",
+            callId: "call-123",
+            tool: "bash",
+            status: "completed",
+            output: "done",
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "tool:assistant-1:call-123",
+      content: "Current completed output",
+      meta: {
+        kind: "tool",
+        partId: "tool-part-1",
+        callId: "call-123",
         status: "completed",
         output: "done",
       },
@@ -502,7 +551,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
 
     expect(merged).toHaveLength(2);
     expect(merged[0]).toMatchObject({
-      id: "tool:assistant-1:current-tool",
+      id: "tool:assistant-1:tool-part-1",
       content: "Current completed output",
       meta: { kind: "tool", status: "completed", output: "done" },
     });

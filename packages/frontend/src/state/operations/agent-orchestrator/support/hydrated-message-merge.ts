@@ -1,4 +1,5 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import { toToolMessageId } from "./chat-message-ids";
 import {
   appendSessionMessage,
   createSessionMessagesState,
@@ -82,18 +83,26 @@ const preserveCurrentToolWithHydratedIdentity = (
     return currentMessage;
   }
 
-  const hydratedCallId = trimToolCallId(hydratedMessage.meta.callId);
-  const currentCallId = trimToolCallId(currentMessage.meta.callId);
-  if (hydratedCallId.length === 0 || currentCallId.length > 0) {
+  const scopedId = parseToolScopedPartId(hydratedMessage.id);
+  if (scopedId === null) {
     return currentMessage;
   }
 
+  const hydratedCallId = trimToolCallId(hydratedMessage.meta.callId);
+  const currentCallId = trimToolCallId(currentMessage.meta.callId);
+  const canonicalCallId = hydratedCallId || currentCallId;
+  const canonicalId = toToolMessageId({
+    messageId: scopedId.messageId,
+    partId: hydratedMessage.meta.partId,
+    ...(canonicalCallId ? { callId: canonicalCallId } : {}),
+  });
+
   return {
     ...currentMessage,
-    id: hydratedMessage.id,
+    id: canonicalId,
     meta: {
       ...currentMessage.meta,
-      callId: hydratedCallId,
+      callId: canonicalCallId,
     },
   };
 };
