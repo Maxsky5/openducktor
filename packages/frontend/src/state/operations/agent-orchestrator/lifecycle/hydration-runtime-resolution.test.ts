@@ -345,6 +345,43 @@ describe("createHydrationRuntimeResolver", () => {
     expect(ensureCalls).toBe(0);
   });
 
+  test("uses a single preloaded runtime connection when preloaded snapshots do not match the record", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const preloadedRuntimeConnection: AgentRuntimeConnection = {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:9999",
+      workingDirectory,
+    };
+    const preloadedRuntimeConnections = createPreloadIndex([preloadedRuntimeConnection]);
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [
+        liveAgentSessionLookupKey("opencode", preloadedRuntimeConnection, workingDirectory),
+        [
+          createLiveAgentSessionSnapshotFixture({
+            externalSessionId: "other-external-session",
+            workingDirectory,
+          }),
+        ],
+      ],
+    ]);
+
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      preloadedRuntimeConnections,
+      preloadedLiveAgentSessionsByKey,
+      ensureWorkspaceRuntime: async () => null,
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("build", workingDirectory));
+    if (!result.ok) {
+      throw new Error("Expected runtime resolution to succeed");
+    }
+
+    expect(result.runtimeId).toBeNull();
+    expect(result.runtimeConnection).toEqual(preloadedRuntimeConnection);
+  });
+
   test("preserves stdio preloaded runtime connections during hydration fallback", async () => {
     const workingDirectory = "/tmp/repo";
     const preloadedRuntimeConnection: AgentRuntimeConnection = {

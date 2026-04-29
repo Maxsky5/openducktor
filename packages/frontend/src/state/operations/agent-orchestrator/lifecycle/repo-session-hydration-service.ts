@@ -29,6 +29,14 @@ import {
   RuntimeConnectionPreloadIndex,
 } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
+import {
+  canUseRuntimeForRouteOnlyHydration,
+  createRouteOnlyHydrationLookupKey,
+  createRouteOnlyHydrationRuntimeConnection,
+  hasExactNonRepoRootRuntime,
+  isRepoRootWorkspaceRuntime,
+  recordRouteOnlyHydrationPreload,
+} from "./route-only-hydration";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 
 type HydrationScope = "bootstrap" | "reconcile";
@@ -37,6 +45,7 @@ type RuntimeConnectionScan = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
   directories: Set<string>;
+  routeOnlyHydrationDirectories: Set<string>;
   runtimeConnectionsByDirectory: Map<string, AgentRuntimeConnection>;
 };
 
@@ -49,6 +58,7 @@ type ReconcilePreloadPlan = {
   persistedByTask: Array<{ taskId: string; records: AgentSessionRecord[] }>;
   reconcileTargets: ReconcileTarget[];
   retryableUnmatchedTaskIds: Set<string>;
+  routeOnlyHydrationRecordKeys: Set<string>;
   preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
@@ -149,17 +159,20 @@ const createCancelledReconcilePreloadPlan = ({
   preloadedRuntimeLists,
   preloadedRuntimeConnections,
   preloadedLiveAgentSessionsByKey = new Map<string, LiveAgentSessionSnapshot[]>(),
+  routeOnlyHydrationRecordKeys = new Set<string>(),
   skippedTaskErrors,
 }: {
   persistedByTask: ReconcilePreloadPlan["persistedByTask"];
   preloadedRuntimeLists: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
+  routeOnlyHydrationRecordKeys?: Set<string>;
   skippedTaskErrors: Map<string, unknown>;
 }): ReconcilePreloadPlan => ({
   persistedByTask,
   reconcileTargets: [],
   retryableUnmatchedTaskIds: new Set<string>(),
+  routeOnlyHydrationRecordKeys,
   preloadedRuntimeLists,
   preloadedRuntimeConnections,
   preloadedLiveAgentSessionsByKey,
@@ -202,7 +215,7 @@ const buildReconcileTargets = ({
   persistedByTask,
   skippedTaskErrors,
   repoPath,
-  exactResolvableRuntimeConnections,
+  routeProbedHydrationRuntimeConnections,
   preloadedRuntimeConnections,
   scannedRuntimeConnections,
   preloadedLiveSessionKeys,
@@ -210,13 +223,18 @@ const buildReconcileTargets = ({
   persistedByTask: ReconcilePreloadPlan["persistedByTask"];
   skippedTaskErrors: Map<string, unknown>;
   repoPath: string;
-  exactResolvableRuntimeConnections: RuntimeConnectionPreloadIndex;
+  routeProbedHydrationRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedRuntimeConnections: RuntimeConnectionPreloadIndex;
   scannedRuntimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveSessionKeys: Set<string>;
-}): { reconcileTargets: ReconcileTarget[]; retryableUnmatchedTaskIds: Set<string> } => {
+}): {
+  reconcileTargets: ReconcileTarget[];
+  retryableUnmatchedTaskIds: Set<string>;
+  routeOnlyHydrationRecordKeys: Set<string>;
+} => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
   const retryableUnmatchedTaskIds = new Set<string>();
+  const routeOnlyHydrationRecordKeys = new Set<string>();
 
   const reconcileTargets = persistedByTask.flatMap<ReconcileTarget>(({ taskId, records }) => {
     if (skippedTaskErrors.has(taskId)) {
@@ -236,14 +254,21 @@ const buildReconcileTargets = ({
       }
 
       const runtimeKind = readPersistedRuntimeKind(record);
-      const canReconcile =
-        hasMatchingPreloadedLiveSession({
-          record,
-          runtimeKind,
-          runtimeConnections: preloadedRuntimeConnections,
-          preloadedLiveSessionKeys,
-        }) || exactResolvableRuntimeConnections.hasAny(runtimeKind, record.workingDirectory);
+      const hasMatchingLiveSession = hasMatchingPreloadedLiveSession({
+        record,
+        runtimeKind,
+        runtimeConnections: preloadedRuntimeConnections,
+        preloadedLiveSessionKeys,
+      });
+      const canHydrateThroughRouteProbedConnection = routeProbedHydrationRuntimeConnections.hasAny(
+        runtimeKind,
+        record.workingDirectory,
+      );
+      const canReconcile = hasMatchingLiveSession || canHydrateThroughRouteProbedConnection;
       if (canReconcile) {
+        if (!hasMatchingLiveSession) {
+          routeOnlyHydrationRecordKeys.add(persistedSessionRecordKey(taskId, record));
+        }
         return true;
       }
 
@@ -256,27 +281,7 @@ const buildReconcileTargets = ({
     return recordsToReconcile.length > 0 ? [{ taskId, records: recordsToReconcile }] : [];
   });
 
-  return { reconcileTargets, retryableUnmatchedTaskIds };
-};
-
-const isRepoRootWorkspaceRuntime = (
-  runtime: RuntimeInstanceSummary,
-  normalizedRepoPath: string,
-): boolean =>
-  runtime.role === "workspace" &&
-  normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath;
-
-const hasExactNonRepoRootRuntime = (
-  runtimes: RuntimeInstanceSummary[],
-  workingDirectory: string,
-  normalizedRepoPath: string,
-): boolean => {
-  const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-  return runtimes.some(
-    (runtime) =>
-      normalizeWorkingDirectory(runtime.workingDirectory) === normalizedWorkingDirectory &&
-      !isRepoRootWorkspaceRuntime(runtime, normalizedRepoPath),
-  );
+  return { reconcileTargets, retryableUnmatchedTaskIds, routeOnlyHydrationRecordKeys };
 };
 
 const collectRepoRootWorktreeScanDirectories = ({
@@ -300,7 +305,11 @@ const collectRepoRootWorktreeScanDirectories = ({
       !requiresLiveWorktreeRuntime(record) ||
       workingDirectory === repoPathKey ||
       readPersistedRuntimeKind(record) !== runtimeKind ||
-      hasExactNonRepoRootRuntime(runtimeEntries, workingDirectory, repoPathKey)
+      hasExactNonRepoRootRuntime({
+        runtimes: runtimeEntries,
+        workingDirectory,
+        repoPath: repoPathKey,
+      })
     ) {
       continue;
     }
@@ -480,23 +489,28 @@ export const createRepoSessionHydrationService = ({
       runtimeKind: RuntimeKind,
       runtimeConnection: AgentRuntimeConnection,
       workingDirectory: string,
+      allowRouteOnlyHydration = false,
     ): void => {
       const scanKey = getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection);
       const scan = runtimeConnections.get(scanKey) ?? {
         runtimeKind,
         runtimeConnection,
         directories: new Set<string>(),
+        routeOnlyHydrationDirectories: new Set<string>(),
         runtimeConnectionsByDirectory: new Map<string, AgentRuntimeConnection>(),
       };
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       scan.directories.add(normalizedWorkingDirectory);
+      if (allowRouteOnlyHydration) {
+        scan.routeOnlyHydrationDirectories.add(normalizedWorkingDirectory);
+      }
       scan.runtimeConnectionsByDirectory.set(normalizedWorkingDirectory, runtimeConnection);
       runtimeConnections.set(scanKey, scan);
       scannedRuntimeConnections.add(runtimeKind, runtimeConnection);
     };
     const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
     const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
-    const exactResolvableRuntimeConnections = new RuntimeConnectionPreloadIndex();
+    const routeProbedHydrationRuntimeConnections = new RuntimeConnectionPreloadIndex();
     for (const runtimeKind of runtimeKinds) {
       const runtimes = await loadRuntimeListFromQuery(queryClient, runtimeKind, repoPath);
       if (isCancelled()) {
@@ -570,12 +584,10 @@ export const createRepoSessionHydrationService = ({
       });
 
       for (const runtime of runtimeEntries) {
-        const isRepoRootWorkspaceRuntime =
-          runtime.role === "workspace" &&
-          normalizeWorkingDirectory(runtime.workingDirectory) === repoPathKey;
+        const isRepoRootWorkspaceRuntimeForRepo = isRepoRootWorkspaceRuntime(runtime, repoPathKey);
         const canScanRepoRootRuntime = canScanRepoRootWorkspaceRuntime(runtime);
         if (
-          isRepoRootWorkspaceRuntime &&
+          isRepoRootWorkspaceRuntimeForRepo &&
           !canScanRepoRootRuntime &&
           repoRootWorktreeScanDirectories.length === 0
         ) {
@@ -586,10 +598,10 @@ export const createRepoSessionHydrationService = ({
           runtime.runtimeRoute,
           runtime.workingDirectory,
         );
-        if (!isRepoRootWorkspaceRuntime) {
+        if (!isRepoRootWorkspaceRuntimeForRepo) {
           if (desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
             preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
-            exactResolvableRuntimeConnections.add(runtimeKind, runtimeConnection);
+            routeProbedHydrationRuntimeConnections.add(runtimeKind, runtimeConnection);
             addRuntimeConnectionScan(runtimeKind, runtimeConnection, runtime.workingDirectory);
           }
           continue;
@@ -597,14 +609,21 @@ export const createRepoSessionHydrationService = ({
 
         if (desiredDirectories.has(repoPathKey) && canScanRepoRootRuntime) {
           addRuntimeConnectionScan(runtimeKind, runtimeConnection, runtime.workingDirectory);
+          preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
+          routeProbedHydrationRuntimeConnections.add(runtimeKind, runtimeConnection);
         }
-        if (runtime.runtimeRoute.type !== "stdio") {
+        if (canUseRuntimeForRouteOnlyHydration(runtime, repoPathKey)) {
           for (const workingDirectory of repoRootWorktreeScanDirectories) {
-            const { runtimeConnection: worktreeRuntimeConnection } = resolveRuntimeRouteConnection(
-              runtime.runtimeRoute,
+            const worktreeRuntimeConnection = createRouteOnlyHydrationRuntimeConnection(
+              runtime,
               workingDirectory,
             );
-            addRuntimeConnectionScan(runtimeKind, worktreeRuntimeConnection, workingDirectory);
+            addRuntimeConnectionScan(
+              runtimeKind,
+              worktreeRuntimeConnection,
+              workingDirectory,
+              true,
+            );
           }
         }
       }
@@ -652,6 +671,31 @@ export const createRepoSessionHydrationService = ({
         );
       }
 
+      for (const workingDirectory of input.routeOnlyHydrationDirectories) {
+        const runtimeConnectionForDirectory =
+          input.runtimeConnectionsByDirectory.get(workingDirectory) ?? input.runtimeConnection;
+        const lookupKey = createRouteOnlyHydrationLookupKey({
+          runtimeKind: input.runtimeKind,
+          runtimeConnection: runtimeConnectionForDirectory,
+          workingDirectory,
+        });
+        const liveSessionsForRouteOnlyDirectory =
+          preloadedLiveAgentSessionsByKey.get(lookupKey) ?? [];
+        // A successful directory-scoped scan through a repo-root HTTP runtime proves that
+        // this transport can address the worktree directory. Preserve the worktree
+        // directory in the request-scoped connection; do not substitute or persist the
+        // repo-root runtime as the session's durable runtime.
+        recordRouteOnlyHydrationPreload({
+          runtimeKind: input.runtimeKind,
+          runtimeConnection: runtimeConnectionForDirectory,
+          workingDirectory,
+          preloadedRuntimeConnections,
+          routeProbedHydrationRuntimeConnections,
+          preloadedLiveAgentSessionsByKey,
+          liveSessionsForDirectory: liveSessionsForRouteOnlyDirectory,
+        });
+      }
+
       for (const runtimeSession of runtimeSessions) {
         const workingDirectory = normalizeWorkingDirectory(runtimeSession.workingDirectory);
         const runtimeConnectionForDirectory =
@@ -672,20 +716,22 @@ export const createRepoSessionHydrationService = ({
       }
     }
 
-    const { reconcileTargets, retryableUnmatchedTaskIds } = buildReconcileTargets({
-      persistedByTask,
-      skippedTaskErrors,
-      repoPath,
-      exactResolvableRuntimeConnections,
-      preloadedRuntimeConnections,
-      scannedRuntimeConnections,
-      preloadedLiveSessionKeys,
-    });
+    const { reconcileTargets, retryableUnmatchedTaskIds, routeOnlyHydrationRecordKeys } =
+      buildReconcileTargets({
+        persistedByTask,
+        skippedTaskErrors,
+        repoPath,
+        routeProbedHydrationRuntimeConnections,
+        preloadedRuntimeConnections,
+        scannedRuntimeConnections,
+        preloadedLiveSessionKeys,
+      });
 
     return {
       persistedByTask,
       reconcileTargets,
       retryableUnmatchedTaskIds,
+      routeOnlyHydrationRecordKeys,
       preloadedRuntimeLists,
       preloadedRuntimeConnections,
       preloadedLiveAgentSessionsByKey,
@@ -859,7 +905,10 @@ export const createRepoSessionHydrationService = ({
         for (const [index, result] of results.entries()) {
           if (result.status === "fulfilled") {
             for (const record of result.value.records) {
-              reconciledRecordKeys.add(persistedSessionRecordKey(result.value.taskId, record));
+              const recordKey = persistedSessionRecordKey(result.value.taskId, record);
+              if (!plan.routeOnlyHydrationRecordKeys.has(recordKey)) {
+                reconciledRecordKeys.add(recordKey);
+              }
             }
             continue;
           }
