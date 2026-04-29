@@ -1658,6 +1658,52 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("reconcile marks exact-runtime sessions without live snapshots as reconciled", async () => {
+    let snapshotLoads = 0;
+    const reconcileCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+
+    setRuntimeList([createRuntimeInstance({ workingDirectory: worktreePath })]);
+
+    const service = createTestRepoSessionHydrationService({
+      agentEngine: {
+        listLiveAgentSessionSnapshots: async () => {
+          snapshotLoads += 1;
+          return [];
+        },
+      },
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId, persistedRecords }) => {
+          reconcileCalls.push({ taskId, records: persistedRecords ?? [] });
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+    const tasks = [taskWithSession("task-1", "external-1")];
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks,
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks,
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(snapshotLoads).toBe(1);
+    expect(reconcileCalls).toHaveLength(1);
+    expect(reconcileCalls[0]?.records.map((record) => record.sessionId)).toEqual([
+      "session-task-1",
+    ]);
+    service.dispose();
+  });
+
   test("reconcile does not ensure missing stdio worktree runtimes", async () => {
     let runtimeEnsureCalls = 0;
     const listLiveAgentSessionSnapshotsCalls: Array<{

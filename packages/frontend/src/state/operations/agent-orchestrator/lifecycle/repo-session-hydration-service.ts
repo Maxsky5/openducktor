@@ -260,13 +260,17 @@ const buildReconcileTargets = ({
         runtimeConnections: preloadedRuntimeConnections,
         preloadedLiveSessionKeys,
       });
-      const canHydrateThroughRouteProbedConnection = routeProbedHydrationRuntimeConnections.hasAny(
+      const canHydrateThroughResolvableConnection = preloadedRuntimeConnections.hasAny(
         runtimeKind,
         record.workingDirectory,
       );
-      const canReconcile = hasMatchingLiveSession || canHydrateThroughRouteProbedConnection;
+      const canHydrateThroughRouteOnlyConnection = routeProbedHydrationRuntimeConnections.hasAny(
+        runtimeKind,
+        record.workingDirectory,
+      );
+      const canReconcile = hasMatchingLiveSession || canHydrateThroughResolvableConnection;
       if (canReconcile) {
-        if (!hasMatchingLiveSession) {
+        if (!hasMatchingLiveSession && canHydrateThroughRouteOnlyConnection) {
           routeOnlyHydrationRecordKeys.add(persistedSessionRecordKey(taskId, record));
         }
         return true;
@@ -601,7 +605,6 @@ export const createRepoSessionHydrationService = ({
         if (!isRepoRootWorkspaceRuntimeForRepo) {
           if (desiredDirectories.has(normalizeWorkingDirectory(runtime.workingDirectory))) {
             preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
-            routeProbedHydrationRuntimeConnections.add(runtimeKind, runtimeConnection);
             addRuntimeConnectionScan(runtimeKind, runtimeConnection, runtime.workingDirectory);
           }
           continue;
@@ -610,7 +613,6 @@ export const createRepoSessionHydrationService = ({
         if (desiredDirectories.has(repoPathKey) && canScanRepoRootRuntime) {
           addRuntimeConnectionScan(runtimeKind, runtimeConnection, runtime.workingDirectory);
           preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
-          routeProbedHydrationRuntimeConnections.add(runtimeKind, runtimeConnection);
         }
         if (canUseRuntimeForRouteOnlyHydration(runtime, repoPathKey)) {
           for (const workingDirectory of repoRootWorktreeScanDirectories) {

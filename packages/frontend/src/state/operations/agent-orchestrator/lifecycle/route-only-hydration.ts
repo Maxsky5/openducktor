@@ -20,16 +20,18 @@ export type RouteOnlyHydrationPreloadResult = {
   liveSessionsForDirectory: LiveAgentSessionSnapshot[];
 };
 
+const isRepoRootWorkspaceRuntimeForNormalizedRepoPath = (
+  runtime: RuntimeInstanceSummary,
+  normalizedRepoPath: string,
+): boolean =>
+  runtime.role === "workspace" &&
+  normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath;
+
 export const isRepoRootWorkspaceRuntime = (
   runtime: RuntimeInstanceSummary,
   repoPath: string,
-): boolean => {
-  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-  return (
-    runtime.role === "workspace" &&
-    normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath
-  );
-};
+): boolean =>
+  isRepoRootWorkspaceRuntimeForNormalizedRepoPath(runtime, normalizeWorkingDirectory(repoPath));
 
 export const hasExactNonRepoRootRuntime = ({
   runtimes,
@@ -45,7 +47,7 @@ export const hasExactNonRepoRootRuntime = ({
   return runtimes.some(
     (runtime) =>
       normalizeWorkingDirectory(runtime.workingDirectory) === normalizedWorkingDirectory &&
-      !isRepoRootWorkspaceRuntime(runtime, normalizedRepoPath),
+      !isRepoRootWorkspaceRuntimeForNormalizedRepoPath(runtime, normalizedRepoPath),
   );
 };
 

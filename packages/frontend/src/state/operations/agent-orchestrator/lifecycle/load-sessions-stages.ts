@@ -270,10 +270,16 @@ const preloadRouteProbedRepoRootRuntimeConnectionsForWorktreeSessions = async ({
           runtimeConnection,
           workingDirectory: target.workingDirectory,
         });
-        if (
-          preloadedRuntimeConnections.hasAny(runtimeKind, target.workingDirectory) &&
-          preloadedLiveAgentSessionsByKey.has(lookupKey)
-        ) {
+        const cachedLiveSessionsForDirectory = preloadedLiveAgentSessionsByKey.get(lookupKey);
+        if (cachedLiveSessionsForDirectory) {
+          recordRouteOnlyHydrationPreload({
+            runtimeKind,
+            runtimeConnection,
+            workingDirectory: target.workingDirectory,
+            preloadedRuntimeConnections,
+            preloadedLiveAgentSessionsByKey,
+            liveSessionsForDirectory: cachedLiveSessionsForDirectory,
+          });
           continue;
         }
         const result = await scanRouteOnlyHydrationDirectory({
