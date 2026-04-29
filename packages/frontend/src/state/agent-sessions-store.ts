@@ -1,4 +1,4 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/session-purpose";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
@@ -19,8 +19,21 @@ export type AgentSessionSummary = Pick<
   runtimeKind?: AgentSessionState["runtimeKind"];
 };
 
+export type WorkflowAgentSessionSummary = AgentSessionSummary &
+  Pick<WorkflowAgentSessionState, "role" | "scenario">;
+
+export const isWorkflowAgentSessionSummary = (
+  session: AgentSessionSummary | null | undefined,
+): session is WorkflowAgentSessionSummary => {
+  if (!session) {
+    return false;
+  }
+
+  return session.role !== null && session.scenario !== null;
+};
+
 export type AgentActivitySessionSummary = Pick<
-  AgentSessionState,
+  WorkflowAgentSessionState,
   "sessionId" | "taskId" | "role" | "scenario" | "status" | "startedAt"
 > & {
   repoPath: string;
@@ -61,6 +74,10 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
 export const toAgentActivitySessionSummary = (
   session: AgentSessionState,
 ): AgentActivitySessionSummary => {
+  if (!shouldIncludeAgentSessionInActivity(session)) {
+    throw new Error(`Session '${session.sessionId}' is not a workflow session`);
+  }
+
   return {
     sessionId: session.sessionId,
     taskId: session.taskId,
@@ -187,12 +204,15 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
         activitySessionSummaries.map((summary) => [summary.sessionId, summary]),
       );
       const nextSessions = Object.values(nextSessionsById).sort(sortByStartedAtDesc);
-      const nextSessionSummaries = nextSessions.map((session) => {
+      const nextSessionSummaries = nextSessions.flatMap((session) => {
+        if (!shouldIncludeAgentSessionInActivity(session)) {
+          return [];
+        }
         const nextSummary = toAgentSessionSummary(session);
         const previousSummary = previousSummaryById.get(session.sessionId);
         return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? previousSummary
-          : nextSummary;
+          ? [previousSummary]
+          : [nextSummary];
       });
       const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
         if (!shouldIncludeAgentSessionInActivity(session)) {

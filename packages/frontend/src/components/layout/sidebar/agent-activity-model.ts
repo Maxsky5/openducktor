@@ -1,13 +1,12 @@
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentActivitySessionItem = {
   sessionId: string;
   taskId: string;
   taskTitle: string;
-  role: AgentSessionState["role"];
-  scenario: AgentSessionState["scenario"];
-  status: AgentSessionState["status"];
+  role: AgentActivitySessionSummary["role"];
+  scenario: AgentActivitySessionSummary["scenario"];
+  status: AgentActivitySessionSummary["status"];
   startedAt: string;
 };
 
@@ -20,7 +19,7 @@ export type AgentActivitySummary = {
 
 export type AgentActivityTaskTitleLookup = Readonly<Record<string, string>>;
 
-const ACTIVE_SESSION_STATUS: ReadonlySet<AgentSessionState["status"]> = new Set([
+const ACTIVE_SESSION_STATUS: ReadonlySet<AgentActivitySessionSummary["status"]> = new Set([
   "starting",
   "running",
 ]);

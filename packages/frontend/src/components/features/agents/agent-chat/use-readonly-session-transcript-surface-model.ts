@@ -84,6 +84,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const liveSession = useAgentSession(sessionId ?? null);
   const isMountedRef = useRef(true);
   const attachLiveTranscriptKeyRef = useRef<string | null>(null);
+  const visiblePendingPermissionsRef = useRef<AgentPermissionRequest[]>([]);
   const [isAttachingLiveTranscript, setIsAttachingLiveTranscript] = useState(false);
   const [liveTranscriptAttachError, setLiveTranscriptAttachError] = useState<string | null>(null);
   const [repliedRuntimePermissionRequestIds, setRepliedRuntimePermissionRequestIds] = useState<
@@ -224,11 +225,22 @@ export function useReadonlySessionTranscriptSurfaceModel({
     for (const request of source?.pendingPermissions ?? []) {
       byRequestId.set(request.requestId, request);
     }
+    for (const request of liveSession?.pendingPermissions ?? []) {
+      byRequestId.set(request.requestId, request);
+    }
     for (const requestId of repliedRuntimePermissionRequestIds) {
       byRequestId.delete(requestId);
     }
     return Array.from(byRequestId.values());
-  }, [repliedRuntimePermissionRequestIds, source?.pendingPermissions]);
+  }, [
+    liveSession?.pendingPermissions,
+    repliedRuntimePermissionRequestIds,
+    source?.pendingPermissions,
+  ]);
+
+  useEffect(() => {
+    visiblePendingPermissionsRef.current = visiblePendingPermissions;
+  }, [visiblePendingPermissions]);
 
   const liveTranscriptAttachKey = useMemo(() => {
     if (
@@ -300,7 +312,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       runtimeKind: source.runtimeKind,
       runtimeId: resolvedSource.runtimeId ?? source.runtimeId,
       runtimeConnection,
-      pendingPermissions: visiblePendingPermissions,
+      pendingPermissions: visiblePendingPermissionsRef.current,
     })
       .catch((error: unknown) => {
         if (
@@ -309,6 +321,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         ) {
           return;
         }
+        attachLiveTranscriptKeyRef.current = null;
         setLiveTranscriptAttachError(
           errorMessageFromUnknown(error, "Failed to attach live transcript."),
         );
@@ -331,7 +344,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     resolvedSource.runtimeId,
     sessionId,
     source,
-    visiblePendingPermissions,
   ]);
 
   const historyQueryEnabled = Boolean(
@@ -364,7 +376,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
   const hydratedSession = useMemo(() => {
     if (liveSession) {
-      return liveSession;
+      return {
+        ...liveSession,
+        pendingPermissions: visiblePendingPermissions,
+      };
     }
     if (source?.isLive === true) {
       return null;
@@ -452,30 +467,31 @@ export function useReadonlySessionTranscriptSurfaceModel({
       requestId: string,
       reply: "once" | "always" | "reject",
     ): Promise<void> => {
+      if (source && externalSessionId && resolvedSource.runtimeConnection) {
+        await replyRuntimeSessionPermission({
+          runtimeKind: source.runtimeKind,
+          runtimeConnection: resolvedSource.runtimeConnection,
+          externalSessionId,
+          requestId,
+          reply,
+        });
+        setRepliedRuntimePermissionRequestIds((current) => {
+          if (current.has(requestId)) {
+            return current;
+          }
+          const next = new Set(current);
+          next.add(requestId);
+          return next;
+        });
+        return;
+      }
+
       if (liveSession) {
         await replyAgentPermission(targetSessionId, requestId, reply);
         return;
       }
 
-      if (!source || !externalSessionId || !resolvedSource.runtimeConnection) {
-        throw new Error("Runtime transcript permission target is unavailable.");
-      }
-
-      await replyRuntimeSessionPermission({
-        runtimeKind: source.runtimeKind,
-        runtimeConnection: resolvedSource.runtimeConnection,
-        externalSessionId,
-        requestId,
-        reply,
-      });
-      setRepliedRuntimePermissionRequestIds((current) => {
-        if (current.has(requestId)) {
-          return current;
-        }
-        const next = new Set(current);
-        next.add(requestId);
-        return next;
-      });
+      throw new Error("Runtime transcript permission target is unavailable.");
     },
     [
       externalSessionId,

@@ -118,7 +118,11 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   async attachSession(input: Parameters<AgentEnginePort["attachSession"]>[0]) {
-    const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model, input.sessionId);
+    const runtimeKind = this.resolveRuntimeKind(
+      input.runtimeKind,
+      "model" in input ? input.model : undefined,
+      input.sessionId,
+    );
     this.pendingRuntimeKindsBySessionId.set(input.sessionId, runtimeKind);
     try {
       const summary = await this.getAdapter(runtimeKind).attachSession(input);

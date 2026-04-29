@@ -39,6 +39,7 @@ import {
 import { buildSessionHeaderMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import {
   isTranscriptAgentSession,
+  isWorkflowAgentSession,
   resolveAgentSessionPurposeForLoad,
 } from "../support/session-purpose";
 import { requiresLiveWorktreeRuntime } from "../support/session-runtime-attachment";
@@ -133,12 +134,12 @@ export type RuntimeResolutionPlannerStageInput = {
 export type HydrationPromptAssembler = {
   buildHydrationPreludeMessages: (input: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionState["scenario"];
+    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }) => Promise<AgentSessionState["messages"]>;
   buildHydrationSystemPrompt: (input: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionState["scenario"];
+    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }) => Promise<string>;
 };
@@ -442,6 +443,9 @@ const mergePersistedSessionRecord = (
 const toRequestedHistoryRecordFromSession = (
   session: AgentSessionState,
 ): AgentSessionRecord | null => {
+  if (!isWorkflowAgentSession(session)) {
+    return null;
+  }
   const runtimeKind = session.runtimeKind ?? null;
   if (!runtimeKind) {
     return null;
@@ -525,6 +529,7 @@ export const preparePersistedSessionMergeStage = async ({
           requestedSessionId: intent.requestedSessionId,
           sessionId: record.sessionId,
           shouldHydrateRequestedSession: intent.shouldHydrateRequestedSession,
+          mode: intent.mode,
         });
         const existingSession = next[record.sessionId];
         if (existingSession) {
@@ -742,7 +747,7 @@ export const createHydrationPromptAssemblerStage = ({
     promptOverrides,
   }: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionState["scenario"];
+    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }): Promise<AgentSessionState["messages"]> => {
     if (historyPreludeMode === "none") {
@@ -782,7 +787,7 @@ export const createHydrationPromptAssemblerStage = ({
     promptOverrides,
   }: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionState["scenario"];
+    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }): Promise<string> => {
     if (historyPreludeMode === "none") {

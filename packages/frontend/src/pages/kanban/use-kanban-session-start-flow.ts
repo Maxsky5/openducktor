@@ -21,7 +21,11 @@ import {
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import { resolveBuildContinuationScenario } from "@/lib/build-scenarios";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  type AgentSessionSummary,
+  isWorkflowAgentSessionSummary,
+  type WorkflowAgentSessionSummary,
+} from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
   ActiveWorkspace,
@@ -72,7 +76,7 @@ const findLatestSessionByRoleForTask = (
   sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): AgentSessionSummary | null => {
+): WorkflowAgentSessionSummary | null => {
   return findSessionsByRoleForTask(sessions, taskId, role)[0] ?? null;
 };
 
@@ -80,7 +84,7 @@ const findPreferredSessionByRoleForTask = (
   sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): AgentSessionSummary | null => {
+): WorkflowAgentSessionSummary | null => {
   const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role);
   if (matchingSessions.length === 0) {
     return null;
@@ -111,9 +115,14 @@ const findSessionsByRoleForTask = (
   sessions: AgentSessionSummary[],
   taskId: string,
   role: AgentRole,
-): AgentSessionSummary[] => {
+): WorkflowAgentSessionSummary[] => {
   return sessions
-    .filter((session) => session.taskId === taskId && session.role === role)
+    .filter(
+      (session): session is WorkflowAgentSessionSummary =>
+        isWorkflowAgentSessionSummary(session) &&
+        session.taskId === taskId &&
+        session.role === role,
+    )
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 };
 

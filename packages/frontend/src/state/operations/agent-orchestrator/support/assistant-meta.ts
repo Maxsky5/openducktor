@@ -57,8 +57,8 @@ export const toAssistantMessageMeta = (
   const selectedModelDescriptor = resolveModelDescriptor(session, effectiveModel);
   return {
     kind: "assistant",
-    agentRole: session.role,
     isFinal: true,
+    ...(session.role ? { agentRole: session.role } : {}),
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),

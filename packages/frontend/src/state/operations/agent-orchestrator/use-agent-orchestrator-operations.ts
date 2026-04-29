@@ -1,5 +1,5 @@
 import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
+import type { AgentEnginePort, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
@@ -388,17 +388,12 @@ export function useAgentOrchestratorOperations({
   );
 
   const removeAgentSessions = useCallback(
-    async ({
-      taskId,
-      roles,
-    }: {
-      taskId: string;
-      roles?: AgentSessionState["role"][];
-    }): Promise<void> => {
+    async ({ taskId, roles }: { taskId: string; roles?: AgentRole[] }): Promise<void> => {
       const matchingRoles = roles ? new Set(roles) : null;
       const matchingSessions = Object.values(sessionsRef.current).filter(
         (session) =>
-          session.taskId === taskId && (matchingRoles === null || matchingRoles.has(session.role)),
+          session.taskId === taskId &&
+          (matchingRoles === null || (session.role !== null && matchingRoles.has(session.role))),
       );
       await Promise.all(
         matchingSessions.map(async (session) => {
@@ -498,6 +493,11 @@ export function useAgentOrchestratorOperations({
         );
       };
       if (hadLocalSession && hadRuntimeSession) {
+        if (!isCurrentTranscriptRequest()) {
+          throw new Error(
+            "Transcript session identity does not match the requested runtime session.",
+          );
+        }
         attachSessionListener(input.repoPath, input.sessionId);
         return;
       }
@@ -530,9 +530,10 @@ export function useAgentOrchestratorOperations({
               runtimeId: input.runtimeId,
               runtimeConnection: input.runtimeConnection,
               workingDirectory: input.runtimeConnection.workingDirectory,
+              purpose: "transcript",
               taskId: "",
-              role: "build",
-              scenario: "build_implementation_start",
+              role: null,
+              scenario: null,
               systemPrompt: "",
             });
 
@@ -587,6 +588,7 @@ export function useAgentOrchestratorOperations({
               workingDirectory: input.runtimeConnection.workingDirectory,
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
+              pendingPermissions: hydratedSession.pendingPermissions,
               messages,
             };
           },

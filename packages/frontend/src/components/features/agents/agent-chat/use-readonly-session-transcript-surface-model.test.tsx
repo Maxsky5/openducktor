@@ -444,7 +444,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
 
-      expect(latestSurfaceModelArgs?.session).toBe(liveTranscriptSession);
+      expect(latestSurfaceModelArgs?.session).toEqual(liveTranscriptSession);
       expect(latestSurfaceModelArgs?.isTaskHydrating).toBe(false);
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
       expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });

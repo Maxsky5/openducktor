@@ -26,6 +26,7 @@ import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
+import { isWorkflowAgentSession } from "../support/session-purpose";
 import { clearSubagentPendingPermissionFromSessions } from "../support/subagent-permission-overlay";
 import { createStartAgentSession } from "./start-session";
 
@@ -174,6 +175,9 @@ export const createAgentSessionActions = ({
 
     const currentSession = sessionsRef.current[sessionId];
     if (currentSession) {
+      if (!isWorkflowAgentSession(currentSession)) {
+        throw new Error(`Session '${sessionId}' is not a workflow session.`);
+      }
       const task = taskRef.current.find((entry) => entry.id === currentSession.taskId);
       if (task && !isRoleAvailableForTask(task, currentSession.role)) {
         throw new Error(unavailableRoleErrorMessage(task, currentSession.role));

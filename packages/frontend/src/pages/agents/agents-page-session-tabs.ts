@@ -45,6 +45,15 @@ export type SessionCreateOption = {
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
   Pick<AgentSessionSummary, "taskId" | "pendingPermissions" | "pendingQuestions">;
 
+type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
+  role: AgentRole;
+  scenario: AgentScenario;
+};
+
+const isWorkflowSessionSummary = (
+  session: AgentSessionWorkflowSummary | null | undefined,
+): session is WorkflowSessionSummary => session?.role !== null && session?.scenario !== null;
+
 const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 
 const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
@@ -135,10 +144,13 @@ const createRoleRecord = <Value>(build: (role: AgentRole) => Value): Record<Agen
 
 const buildSessionsByRole = (
   sessionsForTask: AgentSessionWorkflowSummary[],
-): Record<AgentRole, AgentSessionWorkflowSummary[]> => {
-  const sessionsByRole = createRoleRecord<AgentSessionWorkflowSummary[]>(() => []);
+): Record<AgentRole, WorkflowSessionSummary[]> => {
+  const sessionsByRole = createRoleRecord<WorkflowSessionSummary[]>(() => []);
 
   for (const session of [...sessionsForTask].sort(compareAgentSessionRecency)) {
+    if (!isWorkflowSessionSummary(session)) {
+      continue;
+    }
     sessionsByRole[session.role].push(session);
   }
 

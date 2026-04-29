@@ -28,6 +28,9 @@ import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory, SessionRecord } from "./types";
 
+type RuntimeReplyPermissionInput = OpencodeRuntimeClientInput &
+  Pick<ReplyPermissionInput, "requestId" | "reply" | "message">;
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
@@ -621,9 +624,12 @@ export const replyPermission = async (
 
 export const replyRuntimeSessionPermission = async (
   createClient: ClientFactory,
-  input: OpencodeRuntimeClientInput & ReplyPermissionInput,
+  input: RuntimeReplyPermissionInput,
 ): Promise<void> => {
-  const client = createClient({ runtimeEndpoint: input.runtimeEndpoint });
+  const client = createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+    workingDirectory: input.workingDirectory,
+  });
   await client.permission.reply({
     directory: input.workingDirectory,
     requestID: input.requestId,

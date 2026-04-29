@@ -2430,6 +2430,114 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
+  test("retries runtime transcript attachment after an attach failure clears the dedupe gate", async () => {
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
+    const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+    const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
+    const originalAgentSessionUpsert = host.agentSessionUpsert;
+    const attachSessionCalls: Parameters<OpencodeSdkAdapter["attachSession"]>[0][] = [];
+    let loadSessionHistoryCalls = 0;
+
+    host.agentSessionUpsert = async () => {};
+    OpencodeSdkAdapter.prototype.hasSession = () => false;
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
+      attachSessionCalls.push(input);
+
+      if (attachSessionCalls.length === 1) {
+        throw new Error("attach unavailable");
+      }
+
+      return {
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T09:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      };
+    };
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
+      loadSessionHistoryCalls += 1;
+      return [
+        {
+          messageId: "history-subagent-1",
+          role: "assistant",
+          timestamp: "2026-02-22T09:00:01.000Z",
+          text: "Subagent output",
+          parts: [
+            {
+              kind: "text",
+              messageId: "history-subagent-1",
+              partId: "part-1",
+              text: "Subagent output",
+              completed: true,
+            },
+          ],
+        },
+      ];
+    };
+    OpencodeSdkAdapter.prototype.subscribeEvents = () => () => {};
+    OpencodeSdkAdapter.prototype.detachSession = async () => {};
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [],
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+
+      await expect(
+        harness.run(async () => {
+          await harness.getLatest().operations.attachRuntimeTranscriptSession({
+            repoPath: "/tmp/repo",
+            sessionId: "session-transcript",
+            externalSessionId: "external-subagent",
+            runtimeKind: "opencode",
+            runtimeId: "runtime-1",
+            runtimeConnection: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4444",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+          });
+        }),
+      ).rejects.toThrow("attach unavailable");
+
+      expect(attachSessionCalls).toHaveLength(1);
+
+      await harness.run(async () => {
+        await harness.getLatest().operations.attachRuntimeTranscriptSession({
+          repoPath: "/tmp/repo",
+          sessionId: "session-transcript",
+          externalSessionId: "external-subagent",
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          runtimeConnection: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        });
+      });
+
+      expect(attachSessionCalls).toHaveLength(2);
+      expect(loadSessionHistoryCalls).toBe(1);
+    } finally {
+      await harness.unmount();
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
+      OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+      OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
+      host.agentSessionUpsert = originalAgentSessionUpsert;
+    }
+  });
+
   test("attaches runtime transcript sessions to existing live events without persisted prompt metadata", async () => {
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
@@ -2529,9 +2637,19 @@ describe("use-agent-orchestrator-operations", () => {
       expect(attachSessionCalls[0]).toMatchObject({
         sessionId: "session-transcript",
         externalSessionId: "external-subagent",
+        purpose: "transcript",
         taskId: "",
-        role: "build",
-        scenario: "build_implementation_start",
+        role: null,
+        scenario: null,
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+        workingDirectory: "/tmp/repo/worktree",
         systemPrompt: "",
       });
 

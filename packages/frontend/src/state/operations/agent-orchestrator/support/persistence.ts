@@ -22,6 +22,7 @@ import {
 } from "./assistant-turn-duration";
 import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
+import { isWorkflowAgentSession } from "./session-purpose";
 import {
   readPersistedRuntimeKind,
   requirePersistedSelectedModelRuntimeKind,
@@ -49,6 +50,9 @@ type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
 type HydratedSubagentMessage = SubagentMessage;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
+  if (!isWorkflowAgentSession(session)) {
+    throw new Error(`Session '${session.sessionId}' is not a workflow session.`);
+  }
   const runtimeKind = requireSessionRuntimeKindForPersistence(session);
 
   return {

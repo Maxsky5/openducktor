@@ -1,5 +1,5 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { getAgentScenarioDefinition } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -39,7 +39,7 @@ type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
 type SessionStartContextSession = {
   sessionId: string;
   taskId: string;
-  role: AgentRole;
+  role: AgentSessionSummary["role"];
 };
 
 type BuildSessionStartModalRequestArgs = {

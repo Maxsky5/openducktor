@@ -28,10 +28,26 @@ export type ResumeAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   externalSessionId: string;
 };
 
-export type AttachAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
-  sessionId: string;
-  externalSessionId: string;
-};
+export type AttachAgentSessionInput =
+  | (Omit<AgentSessionContext, "sessionId"> & {
+      sessionId: string;
+      externalSessionId: string;
+      purpose?: "primary";
+    })
+  | {
+      purpose: "transcript";
+      sessionId: string;
+      externalSessionId: string;
+      repoPath: string;
+      runtimeKind: RuntimeKind;
+      runtimeId: string;
+      runtimeConnection: AgentRuntimeConnection;
+      workingDirectory: string;
+      taskId: "";
+      role: null;
+      scenario: null;
+      systemPrompt: "";
+    };
 
 export type ForkAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   sessionId?: string;
@@ -186,8 +202,8 @@ export type AgentSessionSummary = {
   sessionId: string;
   externalSessionId: string;
   runtimeKind?: string;
-  role: AgentRole;
-  scenario: AgentScenario;
+  role: AgentRole | null;
+  scenario: AgentScenario | null;
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };

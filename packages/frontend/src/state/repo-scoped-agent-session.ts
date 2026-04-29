@@ -1,9 +1,11 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export const createRepoScopedAgentSessionState = (
-  session: Omit<AgentSessionState, "repoPath">,
+export const createRepoScopedAgentSessionState = <
+  TSession extends Omit<AgentSessionState, "repoPath">,
+>(
+  session: TSession,
   repoPath: string,
-): AgentSessionState => ({
+): TSession & Pick<AgentSessionState, "repoPath"> => ({
   ...session,
   repoPath,
 });

@@ -1,5 +1,11 @@
-import type { StartAgentSessionInput } from "@openducktor/core";
+import type { AgentRole, AgentScenario, StartAgentSessionInput } from "@openducktor/core";
 import type { SessionInput } from "./types";
+
+type SessionInputSource = Omit<StartAgentSessionInput, "sessionId" | "role" | "scenario"> & {
+  sessionId: string;
+  role: AgentRole | null;
+  scenario: AgentScenario | null;
+};
 
 export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -9,9 +15,7 @@ export const toIsoFromEpoch = (value: unknown, fallback: () => string): string =
   return Number.isNaN(new Date(iso).getTime()) ? fallback() : iso;
 };
 
-export const toSessionInput = (
-  input: Omit<StartAgentSessionInput, "sessionId"> & { sessionId: string },
-): SessionInput => {
+export const toSessionInput = (input: SessionInputSource): SessionInput => {
   return {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,

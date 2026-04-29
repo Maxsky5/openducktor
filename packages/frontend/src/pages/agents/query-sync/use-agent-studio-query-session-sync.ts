@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useEffect } from "react";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
@@ -104,7 +105,7 @@ export function useAgentStudioQuerySessionSync({
     if (isRepoNavigationBoundaryPending) {
       return;
     }
-    if (!activeSession) {
+    if (!isWorkflowAgentSession(activeSession)) {
       return;
     }
     if (!sessionParam) {

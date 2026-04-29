@@ -7,6 +7,7 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentRole,
   AgentRuntimeConnection,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
@@ -20,7 +21,6 @@ import type { SessionRepoReadinessState } from "@/state/operations/agent-orchest
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
-  AgentSessionState,
   RuntimeConnectionPreloadIndex,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -93,10 +93,7 @@ type CreatePublicOperationsArgs = {
   ) => Promise<AgentFileSearchResult[]>;
   replyRuntimeSessionPermission?: AgentOperationsContextValue["replyRuntimeSessionPermission"];
   removeAgentSession: (sessionId: string) => Promise<void>;
-  removeAgentSessions: (input: {
-    taskId: string;
-    roles?: AgentSessionState["role"][];
-  }) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   sessionActions: SessionActions;
 };
 

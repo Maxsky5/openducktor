@@ -1,7 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 
 export type KanbanSessionPresentationState = "active" | "waiting_input";
 
@@ -15,7 +15,7 @@ export type ActiveTaskSessionContext = {
 export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionContext>;
 
 export type KanbanTaskSession = Pick<
-  AgentSessionState,
+  WorkflowAgentSessionState,
   "sessionId" | "role" | "scenario" | "status"
 > & {
   startedAt?: AgentSessionState["startedAt"];

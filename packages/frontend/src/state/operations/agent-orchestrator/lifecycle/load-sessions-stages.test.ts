@@ -1120,6 +1120,52 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["session-1"]?.purpose).toBe("transcript");
   });
 
+  test("keeps requested-history persisted workflow records as primary sessions", async () => {
+    const stateHarness = createStateHarness({});
+
+    await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        mode: "requested_history",
+        requestedSessionId: "session-1",
+        shouldHydrateRequestedSession: true,
+        historyPolicy: "requested_only",
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [createRecord()],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const requestedSession = stateHarness.getState()["session-1"];
+    expect(requestedSession?.purpose).toBe("primary");
+    expect(requestedSession?.role).toBe("build");
+    expect(requestedSession?.scenario).toBe("build_implementation_start");
+  });
+
+  test("keeps recovered workflow records primary when runtime attachment is retried", async () => {
+    const stateHarness = createStateHarness({ "session-1": createSession() });
+
+    await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        mode: "recover_runtime_attachment",
+        requestedSessionId: "session-1",
+        historyPolicy: "none",
+        shouldReconcileLiveSessions: true,
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [createRecord()],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const recoveredSession = stateHarness.getState()["session-1"];
+    expect(recoveredSession?.purpose).toBe("primary");
+    expect(recoveredSession?.role).toBe("build");
+    expect(recoveredSession?.scenario).toBe("build_implementation_start");
+  });
+
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
     const stateHarness = createStateHarness({ "session-1": createSession() });
     let promptLoads = 0;

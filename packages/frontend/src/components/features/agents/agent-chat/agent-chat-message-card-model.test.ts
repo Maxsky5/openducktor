@@ -93,16 +93,27 @@ describe("agent-chat-message-card-model", () => {
       const assistantMessage = createMessage({
         meta: {
           kind: "assistant",
-          agentRole: "planner",
         },
       });
 
-      expect(assistantRoleFromMessage(assistantMessage)).toBe("planner");
-      expect(roleLabel("assistant", assistantMessage)).toBe("Planner");
+      expect(assistantRoleFromMessage(assistantMessage)).toBeNull();
+      expect(roleLabel("assistant", assistantMessage)).toBe("Assistant");
 
       const noMetaMessage = createMessage();
       expect(assistantRoleFromMessage(noMetaMessage)).toBeNull();
       expect(roleLabel("assistant", noMetaMessage)).toBe("Assistant");
+    });
+
+    test("keeps planner assistant labels when metadata includes the planner role", () => {
+      const plannerMessage = createMessage({
+        meta: {
+          kind: "assistant",
+          agentRole: "planner",
+        },
+      });
+
+      expect(assistantRoleFromMessage(plannerMessage)).toBe("planner");
+      expect(roleLabel("assistant", plannerMessage)).toBe("Planner");
     });
 
     test("returns non-assistant role labels", () => {
