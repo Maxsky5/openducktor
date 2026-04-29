@@ -55,4 +55,19 @@ describe("AgentChatMarkdownRenderer", () => {
       rendered.unmount();
     }
   });
+
+  test("preserves surrounding streaming whitespace in the rendered text", () => {
+    const rendered = render(
+      createElement(AgentChatMarkdownRenderer, {
+        markdown: "  Plain transcript line  ",
+        streaming: true,
+      }),
+    );
+
+    try {
+      expect(rendered.container.querySelector("p")?.textContent).toBe("  Plain transcript line  ");
+    } finally {
+      rendered.unmount();
+    }
+  });
 });

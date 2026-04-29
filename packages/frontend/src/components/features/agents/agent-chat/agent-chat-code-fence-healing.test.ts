@@ -28,8 +28,16 @@ describe("agent-chat-code-fence-healing", () => {
       marker: "~~~",
       char: "~",
       size: 3,
+      closePattern: expect.any(RegExp),
     });
     expect(findUnclosedCodeFence("~~~sh\necho hi\n~~~")).toBeNull();
+  });
+
+  test("rejects backtick fences when the info string contains backticks", () => {
+    const markdown = "```markdown `literal`\nThis remains plain streaming text";
+
+    expect(findUnclosedCodeFence(markdown)).toBeNull();
+    expect(closeOpenStreamingCodeFence(markdown, true)).toBe(markdown);
   });
 
   test("does not heal non-streaming markdown", () => {
@@ -41,5 +49,11 @@ describe("agent-chat-code-fence-healing", () => {
   test("preserves input whitespace when no streaming fence healing is needed", () => {
     expect(closeOpenStreamingCodeFence("  plain text  ", false)).toBe("  plain text  ");
     expect(closeOpenStreamingCodeFence("  plain text  ", true)).toBe("  plain text  ");
+  });
+
+  test("preserves surrounding whitespace when healing an open fence", () => {
+    expect(closeOpenStreamingCodeFence("\n  ```ts\nconst value = 1;  ", true)).toBe(
+      "\n  ```ts\nconst value = 1;  \n```",
+    );
   });
 });

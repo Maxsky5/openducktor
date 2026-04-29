@@ -41,13 +41,14 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
   variant = "document",
   className,
 }: AgentChatMarkdownRendererProps): ReactElement | null {
-  const content = markdown.trim();
+  const content = markdown;
+  const trimmedContent = content.trim();
   const classNameProps = className ? { className } : {};
-  if (!content) {
+  if (!trimmedContent) {
     return null;
   }
 
-  if (!hasMarkdownSyntaxHint(content)) {
+  if (!hasMarkdownSyntaxHint(trimmedContent)) {
     return <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />;
   }
 
