@@ -44,7 +44,7 @@ const COMPACT_COMPONENTS: Components = {
   pre: ({ node: _node, className, ...props }) => (
     <pre
       {...props}
-      className={cn("overflow-x-auto rounded-lg border border-border bg-muted/30 p-2.5", className)}
+      className={cn("overflow-x-auto bg-transparent p-0", className)}
     />
   ),
 };
