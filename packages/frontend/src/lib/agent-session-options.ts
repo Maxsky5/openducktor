@@ -43,6 +43,9 @@ export const formatAgentSessionOptionLabel = (params: {
   scenarioLabels: Record<AgentScenario, string>;
   roleLabelByRole: Record<AgentRole, string>;
 }): string => {
+  if (params.session.role === null || params.session.scenario === null) {
+    throw new Error(`Session ${params.session.sessionId} is not a workflow session.`);
+  }
   const scenarioLabel = params.scenarioLabels[params.session.scenario];
   const roleLabel = params.roleLabelByRole[params.session.role];
   const baseLabel = scenarioLabel === roleLabel ? roleLabel : `${scenarioLabel} · ${roleLabel}`;

@@ -308,8 +308,9 @@ const updateMessageAtIndex = (
 export const createSessionMessagesState = (
   sessionId: string,
   messages: readonly AgentChatMessage[] = [],
+  version = 0,
 ): SessionMessagesState => {
-  return createInternalState(sessionId, [...messages], 0);
+  return createInternalState(sessionId, [...messages], version);
 };
 
 export const getSessionMessageCount = (owner: SessionMessageOwner): number => {

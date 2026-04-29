@@ -519,6 +519,8 @@ export function useAgentStudioPageModels({
     permissions: permissionsModel,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
+    subagentPendingPermissionsBySessionId:
+      core.activeSession?.subagentPendingPermissionsBySessionId,
     subagentPendingPermissionCountBySessionId,
   });
   const composerModel = surfaceModel.composer;

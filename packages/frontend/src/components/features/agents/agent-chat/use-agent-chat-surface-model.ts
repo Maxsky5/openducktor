@@ -20,6 +20,9 @@ import { useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
 const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+const EMPTY_SUBAGENT_PENDING_PERMISSIONS = Object.freeze({}) as NonNullable<
+  AgentSessionState["subagentPendingPermissionsBySessionId"]
+>;
 
 const parseDraftStateKey = (draftStateKey: string) => {
   const [taskId = "", role = "", sessionId = "", contextSwitchVersion = ""] =
@@ -163,6 +166,7 @@ type UseAgentChatSurfaceModelArgs = {
   permissions: AgentChatPendingPermissionActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
+  subagentPendingPermissionsBySessionId?: AgentSessionState["subagentPendingPermissionsBySessionId"];
   subagentPendingPermissionCountBySessionId?: Record<string, number>;
 };
 
@@ -183,6 +187,7 @@ export function useAgentChatSurfaceModel({
   permissions,
   composer,
   sessionAgentColors,
+  subagentPendingPermissionsBySessionId,
   subagentPendingPermissionCountBySessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
@@ -246,6 +251,8 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
+      subagentPendingPermissionsBySessionId:
+        subagentPendingPermissionsBySessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS,
       subagentPendingPermissionCountBySessionId:
         subagentPendingPermissionCountBySessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
       canSubmitQuestionAnswers:
@@ -283,6 +290,7 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       sessionRuntimeDataError,
       showThinkingMessages,
+      subagentPendingPermissionsBySessionId,
       subagentPendingPermissionCountBySessionId,
       threadSession,
     ],

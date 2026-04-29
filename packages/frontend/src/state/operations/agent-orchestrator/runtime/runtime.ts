@@ -364,7 +364,7 @@ export const createEnsureRuntime = ({
         bootstrap.workingDirectory,
       );
       return toRuntimeInfo({
-        runtimeId: null,
+        runtimeId: bootstrap.runtimeId,
         runtimeRoute: bootstrap.runtimeRoute,
         runtimeConnection,
         workingDirectory: bootstrap.workingDirectory,

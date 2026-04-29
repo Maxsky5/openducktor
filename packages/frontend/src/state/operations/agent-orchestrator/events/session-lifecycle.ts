@@ -91,7 +91,7 @@ const resolvePermissionPolicyRole = (
     }
   }
 
-  return context.store.sessionsRef.current[context.store.sessionId]?.role;
+  return context.store.sessionsRef.current[context.store.sessionId]?.role ?? undefined;
 };
 
 const patchParentSubagentSessionLink = (

@@ -17,6 +17,7 @@ import {
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
@@ -132,7 +133,7 @@ export function useAgentStudioSessionStartFlow({
               ? (selectionForNewSession ?? null)
               : null,
           taskSessions: sessionsForTask,
-          activeSession,
+          activeSession: isWorkflowAgentSession(activeSession) ? activeSession : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
         }),
         async ({ decision }) => executeWithDecision(decision),

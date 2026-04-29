@@ -22,6 +22,7 @@ import {
 } from "./assistant-turn-duration";
 import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
+import { isWorkflowAgentSession } from "./session-purpose";
 import {
   readPersistedRuntimeKind,
   requirePersistedSelectedModelRuntimeKind,
@@ -49,6 +50,9 @@ type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
 type HydratedSubagentMessage = SubagentMessage;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
+  if (!isWorkflowAgentSession(session)) {
+    throw new Error(`Session '${session.sessionId}' is not a workflow session.`);
+  }
   const runtimeKind = requireSessionRuntimeKindForPersistence(session);
 
   return {
@@ -133,7 +137,7 @@ export const fromPersistedSessionRecord = (
 };
 
 const assistantMessageMeta = (
-  role: AgentRole,
+  role: AgentRole | null,
   selectedModel: AgentModelSelection | null,
   messageModel: AgentModelSelection | undefined,
   isFinal: boolean,
@@ -143,7 +147,7 @@ const assistantMessageMeta = (
   const effectiveModel = mergeModelSelection(selectedModel, messageModel);
   return {
     kind: "assistant",
-    agentRole: role,
+    ...(role ? { agentRole: role } : {}),
     isFinal,
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
@@ -340,7 +344,7 @@ const mergeHydratedSubagentMessages = (
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
-    role: AgentRole;
+    role: AgentRole | null;
     selectedModel: AgentModelSelection | null;
   },
 ): AgentChatMessage[] => {

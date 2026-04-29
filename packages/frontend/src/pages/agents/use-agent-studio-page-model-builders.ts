@@ -86,7 +86,8 @@ export const buildWorkflowModelContext = ({
   const sessionSelectorAutofocusByValue = Object.fromEntries(
     sessionsForTask.map((session) => [
       session.sessionId,
-      roleWorkflowsByTask[session.role].available &&
+      session.role !== null &&
+        roleWorkflowsByTask[session.role].available &&
         session.pendingPermissions.length === 0 &&
         session.pendingQuestions.length === 0,
     ]),

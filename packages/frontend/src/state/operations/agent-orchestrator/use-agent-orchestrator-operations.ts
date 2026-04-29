@@ -1,5 +1,5 @@
 import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
+import type { AgentEnginePort, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
@@ -41,7 +41,11 @@ import {
   readAssistantActivityStartedAtMsFromMessages,
   resolveAssistantTurnDurationMs,
 } from "./support/assistant-turn-duration";
+import { mergeHydratedMessages } from "./support/hydrated-message-merge";
+import { getSessionMessageCount } from "./support/messages";
+import { createRuntimeTranscriptSession } from "./support/runtime-transcript-session";
 import { isTranscriptAgentSession } from "./support/session-purpose";
+import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
@@ -86,6 +90,10 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
 };
+
+type AttachRuntimeTranscriptSessionInput = Parameters<
+  AgentOperationsContextValue["attachRuntimeTranscriptSession"]
+>[0];
 
 export function useAgentOrchestratorOperations({
   activeWorkspace,
@@ -164,6 +172,7 @@ export function useAgentOrchestratorOperations({
       if (!current) {
         return;
       }
+      const shouldPersist = options?.persist === true && !isTranscriptAgentSession(current);
       const nextSession = updater(current);
       if (nextSession === current) {
         return;
@@ -187,7 +196,7 @@ export function useAgentOrchestratorOperations({
       };
       commitSessions(nextSessions);
 
-      if (options?.persist === true) {
+      if (shouldPersist) {
         runOrchestratorSideEffect(
           "operations-persist-session-snapshot",
           persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession)),
@@ -203,6 +212,32 @@ export function useAgentOrchestratorOperations({
       }
     },
     [workspaceRepoPath, commitSessions, persistSessionRecord, sessionsRef],
+  );
+
+  const replyRuntimeSessionPermission = useCallback(
+    async (input: {
+      runtimeKind: RuntimeKind;
+      runtimeConnection: AgentRuntimeConnection;
+      targetSessionId: string;
+      requestId: string;
+      reply: "once" | "always" | "reject";
+      message?: string;
+    }) => {
+      await agentEngine.replyRuntimeSessionPermission({
+        runtimeKind: input.runtimeKind,
+        runtimeConnection: input.runtimeConnection,
+        requestId: input.requestId,
+        reply: input.reply,
+        ...(input.message ? { message: input.message } : {}),
+      });
+      clearSubagentPendingPermissionFromSessions({
+        sessionsRef,
+        updateSession,
+        targetSessionId: input.targetSessionId,
+        requestId: input.requestId,
+      });
+    },
+    [agentEngine, sessionsRef, updateSession],
   );
 
   const resolveTurnDurationMs = useCallback(
@@ -269,6 +304,20 @@ export function useAgentOrchestratorOperations({
       externalSessionId: string,
     ) =>
       agentEngine.loadSessionTodos({
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+      }),
+    [agentEngine],
+  );
+
+  const readSessionHistory = useCallback(
+    (
+      runtimeKind: RuntimeKind,
+      runtimeConnection: AgentRuntimeConnection,
+      externalSessionId: string,
+    ) =>
+      agentEngine.loadSessionHistory({
         runtimeKind,
         runtimeConnection,
         externalSessionId,
@@ -345,17 +394,12 @@ export function useAgentOrchestratorOperations({
   );
 
   const removeAgentSessions = useCallback(
-    async ({
-      taskId,
-      roles,
-    }: {
-      taskId: string;
-      roles?: AgentSessionState["role"][];
-    }): Promise<void> => {
+    async ({ taskId, roles }: { taskId: string; roles?: AgentRole[] }): Promise<void> => {
       const matchingRoles = roles ? new Set(roles) : null;
       const matchingSessions = Object.values(sessionsRef.current).filter(
         (session) =>
-          session.taskId === taskId && (matchingRoles === null || matchingRoles.has(session.role)),
+          session.taskId === taskId &&
+          (matchingRoles === null || (session.role !== null && matchingRoles.has(session.role))),
       );
       await Promise.all(
         matchingSessions.map(async (session) => {
@@ -415,6 +459,168 @@ export function useAgentOrchestratorOperations({
       recordTurnActivityTimestamp,
       recordTurnUserMessageTimestamp,
       resolveTurnDurationMs,
+      unsubscribersRef,
+      updateSession,
+    ],
+  );
+
+  const attachRuntimeTranscriptSession = useCallback(
+    async (input: AttachRuntimeTranscriptSessionInput): Promise<void> => {
+      const existingSession = sessionsRef.current[input.sessionId];
+      if (existingSession && !isTranscriptAgentSession(existingSession)) {
+        throw new Error(`Session ${input.sessionId} is already active and is not a transcript.`);
+      }
+      if (!input.runtimeId.trim()) {
+        throw new Error("Runtime identity is unavailable for this transcript.");
+      }
+
+      const hadRuntimeSession = agentEngine.hasSession(input.sessionId);
+      let attachedListener = false;
+      const unsubscribeTranscriptListener = (): void => {
+        const unsubscribe = unsubscribersRef.current.get(input.sessionId);
+        unsubscribe?.();
+        unsubscribersRef.current.delete(input.sessionId);
+      };
+      const detachRuntimeSessionIfPresent = async (): Promise<void> => {
+        unsubscribeTranscriptListener();
+        if (agentEngine.hasSession(input.sessionId)) {
+          await agentEngine.detachSession(input.sessionId);
+        }
+      };
+      const isCurrentTranscriptRequest = (): boolean => {
+        const current = sessionsRef.current[input.sessionId];
+        return (
+          current !== undefined &&
+          isTranscriptAgentSession(current) &&
+          current.externalSessionId === input.externalSessionId &&
+          current.runtimeKind === input.runtimeKind &&
+          current.runtimeId === input.runtimeId
+        );
+      };
+      const hasMatchingLocalSession = isCurrentTranscriptRequest();
+      const hadLocalSession = hasMatchingLocalSession;
+      if (existingSession && hadRuntimeSession && !hasMatchingLocalSession) {
+        throw new Error(
+          "Transcript session identity does not match the requested runtime session.",
+        );
+      }
+      if (hasMatchingLocalSession && hadRuntimeSession) {
+        attachSessionListener(input.repoPath, input.sessionId);
+        return;
+      }
+      if (!hasMatchingLocalSession) {
+        unsubscribeTranscriptListener();
+        const initialSession = createRuntimeTranscriptSession({
+          repoPath: input.repoPath,
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          runtimeKind: input.runtimeKind,
+          runtimeId: input.runtimeId,
+          runtimeConnection: input.runtimeConnection,
+          history: [],
+          isLive: true,
+          pendingPermissions: input.pendingPermissions ?? [],
+        });
+        commitSessions((current) => ({
+          ...current,
+          [input.sessionId]: initialSession,
+        }));
+      }
+
+      try {
+        const summaryPromise = hadRuntimeSession
+          ? Promise.resolve(null)
+          : agentEngine.attachSession({
+              sessionId: input.sessionId,
+              externalSessionId: input.externalSessionId,
+              repoPath: input.repoPath,
+              runtimeKind: input.runtimeKind,
+              runtimeId: input.runtimeId,
+              runtimeConnection: input.runtimeConnection,
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              purpose: "transcript",
+              taskId: "",
+              role: null,
+              scenario: null,
+              systemPrompt: "",
+            });
+
+        attachSessionListener(input.repoPath, input.sessionId);
+        attachedListener = true;
+        const summary = await summaryPromise;
+        if (!isCurrentTranscriptRequest()) {
+          await detachRuntimeSessionIfPresent();
+          return;
+        }
+
+        const history = await agentEngine.loadSessionHistory({
+          runtimeKind: input.runtimeKind,
+          runtimeConnection: input.runtimeConnection,
+          externalSessionId: input.externalSessionId,
+        });
+        if (!isCurrentTranscriptRequest()) {
+          await detachRuntimeSessionIfPresent();
+          return;
+        }
+        const hydratedSession = createRuntimeTranscriptSession({
+          repoPath: input.repoPath,
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          runtimeKind: input.runtimeKind,
+          runtimeId: input.runtimeId,
+          runtimeConnection: input.runtimeConnection,
+          history,
+          isLive: true,
+          pendingPermissions: input.pendingPermissions ?? [],
+        });
+
+        updateSession(
+          input.sessionId,
+          (current) => {
+            const messages =
+              getSessionMessageCount(current) === 0
+                ? hydratedSession.messages
+                : mergeHydratedMessages(
+                    input.sessionId,
+                    hydratedSession.messages,
+                    current.messages,
+                  );
+
+            return {
+              ...current,
+              startedAt: summary?.startedAt ?? hydratedSession.startedAt,
+              status: summary?.status ?? current.status,
+              runtimeKind: input.runtimeKind,
+              runtimeId: input.runtimeId,
+              runtimeRoute: hydratedSession.runtimeRoute,
+              workingDirectory: input.runtimeConnection.workingDirectory,
+              historyHydrationState: "hydrated",
+              runtimeRecoveryState: "idle",
+              pendingPermissions: hydratedSession.pendingPermissions,
+              messages,
+            };
+          },
+          { persist: false },
+        );
+      } catch (error) {
+        if (attachedListener && !hadLocalSession) {
+          unsubscribeTranscriptListener();
+        }
+        if (!hadRuntimeSession && agentEngine.hasSession(input.sessionId)) {
+          await agentEngine.detachSession(input.sessionId);
+        }
+        if (!hadLocalSession) {
+          removeSessionIds([input.sessionId]);
+        }
+        throw error;
+      }
+    },
+    [
+      agentEngine,
+      attachSessionListener,
+      commitSessions,
+      removeSessionIds,
+      sessionsRef,
       unsubscribersRef,
       updateSession,
     ],
@@ -744,8 +950,11 @@ export function useAgentOrchestratorOperations({
       loadAgentSessions,
       readSessionModelCatalog,
       readSessionTodos,
+      readSessionHistory,
+      attachRuntimeTranscriptSession,
       readSessionSlashCommands,
       readSessionFileSearch,
+      replyRuntimeSessionPermission,
       removeAgentSession,
       removeAgentSessions,
       sessionActions,
@@ -768,10 +977,13 @@ export function useAgentOrchestratorOperations({
     loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
+    readSessionHistory,
+    attachRuntimeTranscriptSession,
     retrySessionRuntimeAttachment,
     ensureSessionReadyForView,
     readSessionSlashCommands,
     readSessionFileSearch,
+    replyRuntimeSessionPermission,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

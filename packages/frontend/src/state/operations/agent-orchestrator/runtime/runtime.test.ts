@@ -24,6 +24,7 @@ import {
 
 const buildBootstrapFixture: BuildSessionBootstrap = {
   runtimeKind: "opencode",
+  runtimeId: "runtime-build",
   runtimeRoute: {
     type: "local_http",
     endpoint: "http://127.0.0.1:4444",
@@ -223,7 +224,7 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: null,
+      runtimeId: "runtime-build",
       runtimeConnection: {
         type: "local_http",
         endpoint: "http://127.0.0.1:4444",
@@ -256,7 +257,7 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(raceResult).toEqual({
       runtimeKind: "opencode",
-      runtimeId: null,
+      runtimeId: "runtime-build",
       runtimeConnection: {
         type: "local_http",
         endpoint: "http://127.0.0.1:4444",

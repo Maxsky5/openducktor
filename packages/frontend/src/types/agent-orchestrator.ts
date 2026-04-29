@@ -1,4 +1,10 @@
-import type { RepoPromptOverrides, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RepoPromptOverrides,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+  RuntimeRoute,
+} from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -9,6 +15,7 @@ import type {
   AgentSubagentStatus,
   AgentUserMessageDisplayPart,
   AgentUserMessageState,
+  LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import type { RuntimeConnectionPreloadIndex } from "@/state/operations/agent-orchestrator/lifecycle/live-agent-session-cache";
 
@@ -40,7 +47,7 @@ export type AgentChatMessageMeta =
     }
   | {
       kind: "assistant";
-      agentRole: AgentRole;
+      agentRole?: AgentRole;
       providerId?: string;
       modelId?: string;
       variant?: string;
@@ -162,8 +169,8 @@ export type AgentSessionState = {
   taskId: string;
   repoPath: string;
   runtimeKind?: RuntimeKind;
-  role: AgentRole;
-  scenario: AgentScenario;
+  role: AgentRole | null;
+  scenario: AgentScenario | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   runtimeId: string | null;
@@ -189,6 +196,15 @@ export type AgentSessionState = {
   stopRequestedAt?: string | null;
 };
 
+export type WorkflowAgentSessionState = AgentSessionState & {
+  role: AgentRole;
+  scenario: AgentScenario;
+};
+
+export type TranscriptAgentSessionState = AgentSessionState & {
+  purpose: "transcript";
+};
+
 export type AgentSessionLoadMode =
   | "bootstrap"
   | "requested_history"
@@ -203,15 +219,9 @@ export type AgentSessionLoadOptions = {
   historyPolicy?: AgentSessionHistoryHydrationPolicy;
   historyPreludeMode?: AgentSessionHistoryPreludeMode;
   allowLiveSessionResume?: boolean;
-  persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
-  preloadedRuntimeLists?: Map<
-    import("@openducktor/contracts").RuntimeKind,
-    import("@openducktor/contracts").RuntimeInstanceSummary[]
-  >;
+  persistedRecords?: AgentSessionRecord[];
+  preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
   preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
-  preloadedLiveAgentSessionsByKey?: Map<
-    string,
-    import("@openducktor/core").LiveAgentSessionSnapshot[]
-  >;
+  preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
   allowRuntimeEnsure?: boolean;
 };

@@ -28,10 +28,26 @@ export type ResumeAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   externalSessionId: string;
 };
 
-export type AttachAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
-  sessionId: string;
-  externalSessionId: string;
-};
+export type AttachAgentSessionInput =
+  | (Omit<AgentSessionContext, "sessionId"> & {
+      sessionId: string;
+      externalSessionId: string;
+      purpose?: "primary";
+    })
+  | {
+      purpose: "transcript";
+      sessionId: string;
+      externalSessionId: string;
+      repoPath: string;
+      runtimeKind: RuntimeKind;
+      runtimeId: string;
+      runtimeConnection: AgentRuntimeConnection;
+      workingDirectory: string;
+      taskId: "";
+      role: null;
+      scenario: null;
+      systemPrompt: "";
+    };
 
 export type ForkAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   sessionId?: string;
@@ -165,6 +181,14 @@ export type ReplyPermissionInput = {
   message?: string;
 };
 
+export type ReplyRuntimeSessionPermissionInput = {
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+  requestId: string;
+  reply: "once" | "always" | "reject";
+  message?: string;
+};
+
 export type ReplyQuestionInput = {
   sessionId: string;
   requestId: string;
@@ -177,8 +201,8 @@ export type AgentSessionSummary = {
   sessionId: string;
   externalSessionId: string;
   runtimeKind?: string;
-  role: AgentRole;
-  scenario: AgentScenario;
+  role: AgentRole | null;
+  scenario: AgentScenario | null;
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };
@@ -212,6 +236,7 @@ export interface AgentSessionPort {
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
+  replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
   stopSession(sessionId: string): Promise<void>;

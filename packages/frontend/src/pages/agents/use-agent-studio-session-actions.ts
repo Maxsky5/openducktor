@@ -19,7 +19,10 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type { SessionStartLaunchRequest } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  type AgentSessionSummary,
+  isWorkflowAgentSessionSummary,
+} from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
@@ -410,7 +413,7 @@ export function useAgentStudioSessionActions({
       }
 
       const session = sessionsForTask.find((entry) => entry.sessionId === sessionId);
-      if (!session) {
+      if (!isWorkflowAgentSessionSummary(session)) {
         return;
       }
 
@@ -457,7 +460,7 @@ export function useAgentStudioSessionActions({
       }
 
       const selectedSession = sessionsForTask.find((entry) => entry.sessionId === nextValue);
-      if (!selectedSession) {
+      if (!isWorkflowAgentSessionSummary(selectedSession)) {
         return;
       }
 

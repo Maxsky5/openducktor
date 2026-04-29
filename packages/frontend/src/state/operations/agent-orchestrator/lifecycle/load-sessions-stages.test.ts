@@ -1102,7 +1102,11 @@ describe("load-sessions-stages", () => {
   });
 
   test("preserves transcript-purpose sessions on non-requested loads", async () => {
-    const existingSession = createSession({ purpose: "transcript" });
+    const existingSession = createSession({
+      purpose: "transcript",
+      role: "spec",
+      scenario: "spec_initial",
+    });
     const stateHarness = createStateHarness({ "session-1": existingSession });
 
     await preparePersistedSessionMergeStage({
@@ -1117,7 +1121,68 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]?.purpose).toBe("transcript");
+    const nextSession = stateHarness.getState()["session-1"];
+    expect(nextSession?.purpose).toBe("transcript");
+    expect(nextSession?.role).toBe("spec");
+    expect(nextSession?.scenario).toBe("spec_initial");
+  });
+
+  test("keeps requested-history persisted workflow records as primary sessions", async () => {
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        purpose: "transcript",
+        role: null,
+        scenario: null,
+      }),
+    });
+
+    await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        mode: "requested_history",
+        requestedSessionId: "session-1",
+        shouldHydrateRequestedSession: true,
+        historyPolicy: "requested_only",
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [createRecord()],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const requestedSession = stateHarness.getState()["session-1"];
+    expect(requestedSession?.purpose).toBe("primary");
+    expect(requestedSession?.role).toBe("build");
+    expect(requestedSession?.scenario).toBe("build_implementation_start");
+  });
+
+  test("keeps recovered workflow records primary when runtime attachment is retried", async () => {
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        purpose: "transcript",
+        role: null,
+        scenario: null,
+      }),
+    });
+
+    await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        mode: "recover_runtime_attachment",
+        requestedSessionId: "session-1",
+        historyPolicy: "none",
+        shouldReconcileLiveSessions: true,
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [createRecord()],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const recoveredSession = stateHarness.getState()["session-1"];
+    expect(recoveredSession?.purpose).toBe("primary");
+    expect(recoveredSession?.role).toBe("build");
+    expect(recoveredSession?.scenario).toBe("build_implementation_start");
   });
 
   test("marks requested-history hydration failed when runtime resolution fails", async () => {

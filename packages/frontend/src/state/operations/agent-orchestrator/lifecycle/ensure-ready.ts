@@ -1,5 +1,5 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort, AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -12,6 +12,7 @@ import {
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
+import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
   assertSessionRuntimeKindMatchesEnsuredRuntime,
   requireSessionRuntimeKind,
@@ -35,15 +36,11 @@ type EnsureSessionReadyDependencies = {
   ensureRuntime: (
     repoPath: string,
     taskId: string,
-    role: AgentSessionState["role"],
+    role: AgentRole,
     options?: {
       workspaceId?: string | null;
       targetWorkingDirectory?: string | null;
-      runtimeKind?: AgentSessionState["selectedModel"] extends infer T
-        ? T extends { runtimeKind?: infer K }
-          ? K | null
-          : never
-        : never;
+      runtimeKind?: RuntimeKind | null;
     },
   ) => Promise<RuntimeInfo>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -154,6 +151,9 @@ export const createEnsureSessionReady = ({
     const session = sessionsRef.current[sessionId];
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
+    }
+    if (!isWorkflowAgentSession(session)) {
+      throw new Error(`Session '${sessionId}' is not a workflow session.`);
     }
 
     if (adapter.hasSession(sessionId)) {

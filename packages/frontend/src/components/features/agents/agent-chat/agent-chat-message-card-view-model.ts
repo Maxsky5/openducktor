@@ -24,7 +24,6 @@ const SESSION_NOTICE_TONE_CLASS_NAMES = {
 
 type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
-  sessionRole: AgentRole | null;
   sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors: Record<string, string> | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
@@ -134,7 +133,6 @@ const toArticleClassName = (
 
 export const buildAgentChatMessageCardViewModel = ({
   message,
-  sessionRole,
   sessionSelectedModel: _sessionSelectedModel,
   sessionAgentColors,
   workflowToolAliasesByCanonical,
@@ -156,7 +154,7 @@ export const buildAgentChatMessageCardViewModel = ({
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage =
     isToolMessage || isSubagentMessage || isSessionNoticeMessage || isSystemPromptMessage;
-  const assistantRole = assistantRoleFromMessage(message, sessionRole);
+  const assistantRole = assistantRoleFromMessage(message);
   const assistantAccentColor = resolveAssistantAgentColor(message, sessionAgentColors);
   const userAccentColor = resolveUserAgentColor(message, sessionAgentColors);
   const systemPromptBody = isSystemPromptMessage

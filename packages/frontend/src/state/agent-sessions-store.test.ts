@@ -84,6 +84,8 @@ describe("createAgentSessionsStore activity snapshots", () => {
       taskId: "task-1",
       status: "running",
       purpose: "transcript",
+      role: "build",
+      scenario: "build_implementation_start",
     });
 
     store.setSessionsById({ [session.sessionId]: session });

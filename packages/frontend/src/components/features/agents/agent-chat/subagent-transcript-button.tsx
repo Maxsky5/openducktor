@@ -1,42 +1,93 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
+import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./use-agent-session-transcript-dialog";
 
 type SubagentTranscriptButtonProps = {
-  taskId: string | null;
-  sessionRole?: AgentRole | null;
   sessionRuntimeKind?: RuntimeKind | null;
+  sessionRuntimeId?: string | null;
+  sessionRuntimeRoute?: RuntimeRoute | null;
   sessionWorkingDirectory?: string | null | undefined;
+  pendingPermissions?: AgentPermissionRequest[] | undefined;
   meta: SubagentMeta;
   className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
 };
 
+type TranscriptSourceInput = {
+  sessionRuntimeKind: RuntimeKind | null | undefined;
+  sessionRuntimeId: string | null | undefined;
+  sessionRuntimeRoute: RuntimeRoute | null | undefined;
+  sessionWorkingDirectory: string | null | undefined;
+  isLive: boolean;
+  pendingPermissions: AgentPermissionRequest[] | undefined;
+};
+
+const isLiveSubagentStatus = (status: SubagentMeta["status"]): boolean => {
+  return status === "pending" || status === "running";
+};
+
 const buildTranscriptRequest = (
-  taskId: string,
   sessionId: string,
-  fallbackSession?: OpenAgentSessionTranscriptRequest["fallbackSession"],
-): OpenAgentSessionTranscriptRequest => ({
-  taskId,
-  sessionId,
-  title: "Subagent activity",
-  description: "View what this subagent did.",
-  ...(fallbackSession ? { fallbackSession } : {}),
-});
+  source: RuntimeSessionTranscriptSource,
+): OpenAgentSessionTranscriptRequest => {
+  return {
+    sessionId,
+    title: "Subagent activity",
+    description: "View what this subagent did.",
+    source,
+  };
+};
+
+const buildTranscriptSource = ({
+  sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
+  sessionWorkingDirectory,
+  isLive,
+  pendingPermissions,
+}: TranscriptSourceInput): RuntimeSessionTranscriptSource | null => {
+  const runtimeId = sessionRuntimeId?.trim() || null;
+  const workingDirectory = sessionWorkingDirectory?.trim() || null;
+
+  if (!sessionRuntimeKind || !runtimeId || !workingDirectory) {
+    return null;
+  }
+
+  if (sessionRuntimeRoute) {
+    return {
+      runtimeKind: sessionRuntimeKind,
+      runtimeId,
+      runtimeRoute: sessionRuntimeRoute,
+      workingDirectory,
+      ...(isLive ? { isLive: true } : {}),
+      ...(pendingPermissions ? { pendingPermissions } : {}),
+    };
+  }
+
+  return {
+    runtimeKind: sessionRuntimeKind,
+    runtimeId,
+    workingDirectory,
+    ...(isLive ? { isLive: true } : {}),
+    ...(pendingPermissions ? { pendingPermissions } : {}),
+  };
+};
 
 export function SubagentTranscriptButton({
-  taskId,
-  sessionRole,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
   sessionWorkingDirectory,
+  pendingPermissions,
   meta,
   className,
   onOpenTranscript,
@@ -44,27 +95,23 @@ export function SubagentTranscriptButton({
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
   const sessionId = meta.sessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
-  const fallbackSession =
-    taskId &&
-    sessionRole &&
-    sessionRuntimeKind &&
-    sessionWorkingDirectory &&
-    sessionWorkingDirectory.trim().length > 0
-      ? {
-          role: sessionRole,
-          runtimeKind: sessionRuntimeKind,
-          workingDirectory: sessionWorkingDirectory,
-        }
-      : undefined;
+  const transcriptSource = buildTranscriptSource({
+    sessionRuntimeKind,
+    sessionRuntimeId,
+    sessionRuntimeRoute,
+    sessionWorkingDirectory,
+    isLive: isLiveSubagentStatus(meta.status),
+    pendingPermissions,
+  });
 
-  if (!taskId || !sessionId || !openTranscript) {
+  if (!sessionId || !openTranscript || !transcriptSource) {
     return null;
   }
 
   const handleOpen = (event: MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
     event.stopPropagation();
-    openTranscript(buildTranscriptRequest(taskId, sessionId, fallbackSession));
+    openTranscript(buildTranscriptRequest(sessionId, transcriptSource));
   };
 
   return (

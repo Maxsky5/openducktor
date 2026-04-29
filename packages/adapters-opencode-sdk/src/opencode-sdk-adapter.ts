@@ -3,6 +3,7 @@ import type {
   AgentCatalogPort,
   AgentEvent,
   AgentModelCatalog,
+  AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionSummary,
@@ -23,6 +24,7 @@ import type {
   LoadAgentSessionTodosInput,
   ReplyPermissionInput,
   ReplyQuestionInput,
+  ReplyRuntimeSessionPermissionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -56,6 +58,7 @@ import {
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
+  replyPermissionToTarget,
   replyQuestion,
 } from "./message-ops";
 import { toOpencodeRuntimeClientInput } from "./runtime-connection";
@@ -155,6 +158,13 @@ const requireSessionDirectory = (directory: unknown, sessionId: string): string 
     return normalized;
   }
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
+};
+
+const requireWorkflowRole = (session: SessionRecord): AgentRole => {
+  if (session.input.role !== null) {
+    return session.input.role;
+  }
+  throw new Error(`Session ${session.summary.sessionId} is a transcript and cannot send messages.`);
 };
 
 const mergeLiveAgentSessionPendingInput = (
@@ -318,7 +328,10 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Attached ${input.role} session (${input.scenario})`,
+      startedMessage:
+        input.purpose === "transcript"
+          ? "Attached transcript session"
+          : `Attached ${input.role} session (${input.scenario})`,
       emitStartedEvent: false,
       subscribeToEvents: false,
       now: this.now,
@@ -328,12 +341,6 @@ export class OpencodeSdkAdapter
 
     try {
       const session = requireSession(this.sessions, input.sessionId);
-      await loadAndSeedSessionHistory(this.createClient, this.now, {
-        runtimeEndpoint,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-        session,
-      });
       attachSessionToRuntimeEvents({
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
@@ -345,6 +352,12 @@ export class OpencodeSdkAdapter
         now: this.now,
         emit: this.emit.bind(this),
         ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      });
+      await loadAndSeedSessionHistory(this.createClient, this.now, {
+        runtimeEndpoint,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
+        session,
       });
     } catch (error) {
       const session = this.sessions.get(input.sessionId);
@@ -668,6 +681,24 @@ export class OpencodeSdkAdapter
     await replyPermission(session, input);
   }
 
+  async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "reply runtime session permission",
+    );
+    await replyPermissionToTarget(
+      {
+        client: this.createClient(runtimeClientInput),
+        workingDirectory: runtimeClientInput.workingDirectory,
+      },
+      {
+        requestId: input.requestId,
+        reply: input.reply,
+        ...(input.message ? { message: input.message } : {}),
+      },
+    );
+  }
+
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     const session = requireSession(this.sessions, input.sessionId);
     await replyQuestion(session, input);
@@ -726,7 +757,7 @@ export class OpencodeSdkAdapter
 
     const selection = await resolveWorkflowToolSelection({
       client: session.client,
-      role: session.input.role,
+      role: requireWorkflowRole(session),
       runtimeDescriptor: this.getRuntimeDefinition(),
       workingDirectory: session.input.workingDirectory,
     });

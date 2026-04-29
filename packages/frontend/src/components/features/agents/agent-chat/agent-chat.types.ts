@@ -43,6 +43,7 @@ export type AgentChatThreadModel = {
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
+  subagentPendingPermissionsBySessionId?: AgentSessionState["subagentPendingPermissionsBySessionId"];
   subagentPendingPermissionCountBySessionId?: Record<string, number>;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;

@@ -1,4 +1,5 @@
 import type {
+  AgentSessionRecord,
   BeadsCheck,
   GitBranch,
   GitCurrentBranch,
@@ -8,6 +9,7 @@ import type {
   PullRequest,
   RepoDevServerScript,
   RuntimeCheck,
+  RuntimeInstanceSummary,
   RuntimeKind,
   SettingsSnapshot,
   TaskCard,
@@ -23,9 +25,11 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
   AgentScenario,
+  AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
+  LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
@@ -164,16 +168,13 @@ export type SpecStateContextValue = {
 
 export type AgentStateContextValue = {
   sessions: AgentSessionState[];
-  bootstrapTaskSessions: (
-    taskId: string,
-    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[],
-  ) => Promise<void>;
+  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
     sessionId: string;
     historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
-    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+    persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
     taskId: string;
@@ -182,20 +183,14 @@ export type AgentStateContextValue = {
     recoveryDedupKey?: string | null;
     historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
-    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
+    persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {
     taskId: string;
-    persistedRecords?: import("@openducktor/contracts").AgentSessionRecord[];
-    preloadedRuntimeLists?: Map<
-      import("@openducktor/contracts").RuntimeKind,
-      import("@openducktor/contracts").RuntimeInstanceSummary[]
-    >;
+    persistedRecords?: AgentSessionRecord[];
+    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
     preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
-    preloadedLiveAgentSessionsByKey?: Map<
-      string,
-      import("@openducktor/core").LiveAgentSessionSnapshot[]
-    >;
+    preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
     allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
@@ -208,6 +203,20 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionHistory: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionHistoryMessage[]>;
+  attachRuntimeTranscriptSession: (input: {
+    repoPath: string;
+    sessionId: string;
+    externalSessionId: string;
+    runtimeKind: RuntimeKind;
+    runtimeId: string;
+    runtimeConnection: AgentRuntimeConnection;
+    pendingPermissions?: AgentSessionState["pendingPermissions"];
+  }) => Promise<void>;
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
@@ -263,6 +272,14 @@ export type AgentStateContextValue = {
     reply: "once" | "always" | "reject",
     message?: string,
   ) => Promise<void>;
+  replyRuntimeSessionPermission: (input: {
+    runtimeKind: RuntimeKind;
+    runtimeConnection: AgentRuntimeConnection;
+    targetSessionId: string;
+    requestId: string;
+    reply: "once" | "always" | "reject";
+    message?: string;
+  }) => Promise<void>;
   answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };
 

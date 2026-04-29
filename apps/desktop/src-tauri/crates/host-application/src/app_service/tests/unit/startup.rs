@@ -457,6 +457,7 @@ fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
         bootstrap.runtime_kind,
         AgentRuntimeKind::from("test-runtime")
     );
+    assert!(!bootstrap.runtime_id.is_empty());
     assert_eq!(
         bootstrap.runtime_route,
         host_domain::RuntimeRoute::stdio("runtime-build-start-stdio")?

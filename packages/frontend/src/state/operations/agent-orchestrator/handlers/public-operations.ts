@@ -7,7 +7,9 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentRole,
   AgentRuntimeConnection,
+  AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
@@ -19,7 +21,6 @@ import type { SessionRepoReadinessState } from "@/state/operations/agent-orchest
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
-  AgentSessionState,
   RuntimeConnectionPreloadIndex,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -75,6 +76,12 @@ type CreatePublicOperationsArgs = {
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
+  readSessionHistory: (
+    runtimeKind: RuntimeKind,
+    runtimeConnection: AgentRuntimeConnection,
+    externalSessionId: string,
+  ) => Promise<AgentSessionHistoryMessage[]>;
+  attachRuntimeTranscriptSession: AgentOperationsContextValue["attachRuntimeTranscriptSession"];
   readSessionSlashCommands: (
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
@@ -84,11 +91,9 @@ type CreatePublicOperationsArgs = {
     runtimeConnection: AgentRuntimeConnection,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
+  replyRuntimeSessionPermission?: AgentOperationsContextValue["replyRuntimeSessionPermission"];
   removeAgentSession: (sessionId: string) => Promise<void>;
-  removeAgentSessions: (input: {
-    taskId: string;
-    roles?: AgentSessionState["role"][];
-  }) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   sessionActions: SessionActions;
 };
 
@@ -105,6 +110,10 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
   }
 };
 
+const missingRuntimeSessionPermissionReply = async (): Promise<void> => {
+  throw new Error("Runtime session permission replies are unavailable.");
+};
+
 export const createOrchestratorPublicOperations = ({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
@@ -113,8 +122,11 @@ export const createOrchestratorPublicOperations = ({
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
+  readSessionHistory,
+  attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
+  replyRuntimeSessionPermission = missingRuntimeSessionPermissionReply,
   removeAgentSession,
   removeAgentSessions,
   sessionActions,
@@ -135,8 +147,11 @@ export const createOrchestratorPublicOperations = ({
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,
   readSessionTodos,
+  readSessionHistory,
+  attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
+  replyRuntimeSessionPermission,
   removeAgentSession,
   removeAgentSessions: (input) => removeAgentSessions(input),
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>

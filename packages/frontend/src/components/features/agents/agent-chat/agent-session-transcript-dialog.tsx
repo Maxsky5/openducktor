@@ -1,5 +1,3 @@
-import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
 import {
   Dialog,
@@ -11,19 +9,13 @@ import {
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
+import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { useReadonlySessionTranscriptSurfaceModel } from "./use-readonly-session-transcript-surface-model";
 
 type AgentSessionTranscriptDialogProps = {
   activeWorkspace: ActiveWorkspace | null;
-  taskId: string;
   sessionId: string | null;
-  persistedRecords?: AgentSessionRecord[];
-  fallbackSession?: {
-    role: AgentRole;
-    runtimeKind: RuntimeKind;
-    workingDirectory: string;
-  };
-  isResolvingRequestedSession: boolean;
+  source: RuntimeSessionTranscriptSource | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -32,11 +24,8 @@ type AgentSessionTranscriptDialogProps = {
 
 export function AgentSessionTranscriptDialog({
   activeWorkspace,
-  taskId,
   sessionId,
-  persistedRecords,
-  fallbackSession,
-  isResolvingRequestedSession,
+  source,
   open,
   onOpenChange,
   title,
@@ -45,11 +34,8 @@ export function AgentSessionTranscriptDialog({
   const { model } = useReadonlySessionTranscriptSurfaceModel({
     isOpen: open,
     activeWorkspace,
-    taskId,
     sessionId,
-    ...(persistedRecords ? { persistedRecords } : {}),
-    ...(fallbackSession ? { fallbackSession } : {}),
-    isResolvingRequestedSession,
+    source,
   });
   const resolvedTitle = resolveAgentSessionDialogTitle(title, model.thread.session?.title);
 

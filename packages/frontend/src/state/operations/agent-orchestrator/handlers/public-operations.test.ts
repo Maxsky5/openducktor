@@ -25,6 +25,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
 };
 
 const ensureSessionReadyForView = async (): Promise<boolean> => false;
+const attachRuntimeTranscriptSession = async (): Promise<void> => {};
 
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
@@ -50,6 +51,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -86,6 +89,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -131,6 +136,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -173,6 +180,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -215,6 +224,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -254,6 +265,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession,
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -282,6 +295,8 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionSlashCommands: async () => ({ commands: [] }),
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions,
       sessionActions: createSessionActions(),

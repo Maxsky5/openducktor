@@ -10,11 +10,12 @@ type AgentChatWindowRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionTaskId?: string | null;
-  sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel?: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
+  sessionRuntimeId?: AgentSessionState["runtimeId"] | null | undefined;
+  sessionRuntimeRoute?: AgentSessionState["runtimeRoute"] | null | undefined;
+  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
 };
 
@@ -22,11 +23,12 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   isStreamingAssistantMessage,
   sessionAgentColors,
-  sessionTaskId,
-  sessionRole,
   sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
+  sessionRuntimeId,
+  sessionRuntimeRoute,
+  subagentPendingPermissions,
   subagentPendingPermissionCount = 0,
 }: AgentChatWindowRowProps): ReactElement {
   switch (row.kind) {
@@ -40,12 +42,13 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
           <AgentChatMessageCard
             message={row.message}
             isStreamingAssistantMessage={isStreamingAssistantMessage}
-            sessionTaskId={sessionTaskId ?? null}
-            sessionRole={sessionRole}
             sessionSelectedModel={sessionSelectedModel ?? null}
             sessionAgentColors={sessionAgentColors}
             sessionWorkingDirectory={sessionWorkingDirectory}
             sessionRuntimeKind={sessionRuntimeKind}
+            sessionRuntimeId={sessionRuntimeId}
+            sessionRuntimeRoute={sessionRuntimeRoute}
+            subagentPendingPermissions={subagentPendingPermissions}
             subagentPendingPermissionCount={subagentPendingPermissionCount}
           />
         </div>

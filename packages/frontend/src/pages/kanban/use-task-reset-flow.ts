@@ -1,10 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
@@ -16,7 +16,7 @@ type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   loadAgentSessions: (taskId: string) => Promise<void>;
-  removeAgentSessions: (input: { taskId: string; roles?: AgentSessionState["role"][] }) => void;
+  removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => void;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
 };
