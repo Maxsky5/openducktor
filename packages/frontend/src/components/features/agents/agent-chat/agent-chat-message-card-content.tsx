@@ -7,11 +7,9 @@ import {
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
   Fragment,
-  lazy,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
-  Suspense,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -19,14 +17,13 @@ import {
   useState,
 } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
-import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
-import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
+import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import {
   getAssistantFooterData,
   roleLabel,
@@ -41,15 +38,6 @@ import {
 import { formatAgentDuration } from "./format-agent-duration";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
-const LazyMarkdownRenderer = lazy(async () => {
-  const module = await import("@/components/ui/markdown-renderer");
-  return { default: module.MarkdownRenderer };
-});
-
-const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
-  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-foreground",
-  document: "whitespace-pre-wrap leading-6 py-4 text-foreground",
-};
 const TEXT_RENDER_PACE_MS = 24;
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/;
 
@@ -135,53 +123,6 @@ const usePacedStreamingText = (text: string, streaming: boolean): string => {
   return visibleText;
 };
 
-type PlainTextMarkdownFallbackProps = {
-  content: string;
-  variant: MarkdownRendererVariant;
-  className?: string;
-};
-
-const PlainTextMarkdownFallback = ({
-  content,
-  variant,
-  className,
-}: PlainTextMarkdownFallbackProps): ReactElement => {
-  return <p className={cn(PLAIN_TEXT_CLASSES[variant], className)}>{content}</p>;
-};
-
-type DeferredMarkdownRendererProps = {
-  markdown: string;
-  variant?: MarkdownRendererVariant;
-  className?: string;
-};
-
-const DeferredMarkdownRenderer = ({
-  markdown,
-  variant = "document",
-  className,
-}: DeferredMarkdownRendererProps): ReactElement | null => {
-  const content = markdown.trim();
-  const classNameProps = className ? { className } : {};
-
-  if (!content) {
-    return null;
-  }
-
-  if (!hasMarkdownSyntaxHint(content)) {
-    return <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />;
-  }
-
-  return (
-    <Suspense
-      fallback={
-        <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />
-      }
-    >
-      <LazyMarkdownRenderer markdown={content} variant={variant} {...classNameProps} />
-    </Suspense>
-  );
-};
-
 type MessageHeaderProps = {
   message: AgentChatMessage;
   sessionRole: AgentRole | null;
@@ -246,8 +187,9 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
       <div className="space-y-0.5 text-[13px] leading-relaxed">
         <span className="block text-[11px] font-medium text-muted-foreground">Thinking:</span>
         <div className="min-w-0">
-          <DeferredMarkdownRenderer
+          <AgentChatMarkdownRenderer
             markdown={streaming ? renderedContent : pacedContent}
+            streaming={streaming}
             variant="compact"
             className={REASONING_MARKDOWN_CLASS_NAME}
           />
@@ -313,8 +255,9 @@ const AssistantMessage = ({
   return (
     <div className="group/message relative space-y-2 pr-9">
       {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
-      <DeferredMarkdownRenderer
+      <AgentChatMarkdownRenderer
         markdown={streaming ? renderedContent : pacedContent}
+        streaming={streaming}
         variant="document"
       />
       {footer.infoParts.length > 0 ? (
@@ -676,7 +619,7 @@ export const MessageBody = ({
           Show system prompt
         </summary>
         <div className="border-t border-border px-2 py-2">
-          <DeferredMarkdownRenderer markdown={systemPromptBody} variant="compact" />
+          <AgentChatMarkdownRenderer markdown={systemPromptBody} variant="compact" />
         </div>
       </details>
     );
@@ -743,5 +686,5 @@ export const MessageBody = ({
     );
   }
 
-  return <DeferredMarkdownRenderer markdown={message.content} variant="document" />;
+  return <AgentChatMarkdownRenderer markdown={message.content} variant="document" />;
 };
